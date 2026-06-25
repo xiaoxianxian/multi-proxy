@@ -40,6 +40,17 @@ start_codex() {
     return 1
   fi
 
+  # Check and install dependencies if node_modules missing
+  if [ ! -d "$CODEx_PROXY_DIR/node_modules" ]; then
+    print_warning "Codex Proxy 依赖未安装，正在安装..."
+    (cd "$CODEx_PROXY_DIR" && npm install --production) 2>/dev/null
+    if [ $? -ne 0 ]; then
+      print_error "Codex Proxy 依赖安装失败"
+      return 1
+    fi
+    print_status "Codex Proxy 依赖安装完成"
+  fi
+
   if is_port_in_use $CODEx_PORT; then
     print_warning "Codex Proxy 已在运行 (端口 $CODEx_PORT)"
     return 0
@@ -89,6 +100,17 @@ start_hermes() {
 
 # 启动 Cursor Proxy
 start_cursor() {
+  # Check and compile TypeScript if dist missing
+  if [ ! -d "$CURSOR_PROXY_DIR/dist" ]; then
+    print_warning "Cursor Proxy 未编译，正在编译..."
+    (cd "$CURSOR_PROXY_DIR" && npm run build) 2>/dev/null
+    if [ $? -ne 0 ]; then
+      print_error "Cursor Proxy 编译失败"
+      return 1
+    fi
+    print_status "Cursor Proxy 编译完成"
+  fi
+
   if [ ! -f "$CURSOR_PROXY_DIR/dist/server/start.js" ]; then
     print_warning "Cursor Proxy 未编译: $CURSOR_PROXY_DIR/dist/server/start.js 不存在"
     print_warning "请先运行: cd cursor-multi-model-proxy && npm run build"
