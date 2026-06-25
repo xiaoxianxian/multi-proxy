@@ -1,0 +1,8 @@
+node_modules/
+*.log
+*.db-wal
+*.db-shm
+.DS_Store
+.env
+multi-proxy-manager/public/*.png
+multi-proxy-manager/check-*.mjs
