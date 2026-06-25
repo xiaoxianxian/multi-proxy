@@ -1,0 +1,17 @@
+{
+  "name": "codex-multi-model-proxy",
+  "version": "4.0.0",
+  "description": "Node.js 代理，支持 Codex 桌面端自由切换 DeepSeek、Kimi、Agnes 等多模型",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "dev": "node proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "dotenv": "^16.4.5"
+  },
+  "keywords": ["codex", "proxy", "multi-model"],
+  "author": "",
+  "license": "MIT"
+}
