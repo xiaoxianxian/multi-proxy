@@ -44,7 +44,7 @@ LAUNCHD_NAME="com.multi-proxy-manager"
 # ===================== 工具函数 =====================
 
 is_port_in_use() {
-  lsof -i :$1 >/dev/null 2>&1
+  /usr/sbin/lsof -i :$1 >/dev/null 2>&1
   return $?
 }
 
@@ -161,11 +161,8 @@ install_manager() {
 uninstall_codex() {
   print_step "卸载 Codex Proxy..."
   local dir="$ROOT_DIR/codex-proxy"
-  if [ -d "$dir/node_modules" ]; then
-    rm -rf "$dir/node_modules"
-    print_ok "Codex Proxy 依赖已移除"
-  fi
   [ -f "$dir/.env" ] && rm -f "$dir/.env" && print_ok ".env 已移除"
+  print_info "Codex Proxy 文件保留（如需完全删除请手动 rm -rf $dir）"
 }
 
 uninstall_hermes() {
@@ -177,24 +174,14 @@ uninstall_hermes() {
 uninstall_cursor() {
   print_step "卸载 Cursor Proxy..."
   local dir="$ROOT_DIR/cursor-multi-model-proxy"
-  if [ -d "$dir/node_modules" ]; then
-    rm -rf "$dir/node_modules"
-    print_ok "Cursor Proxy 依赖已移除"
-  fi
-  if [ -d "$dir/dist" ]; then
-    rm -rf "$dir/dist"
-    print_ok "编译产物已移除"
-  fi
   [ -f "$dir/.env" ] && rm -f "$dir/.env" && print_ok ".env 已移除"
+  print_info "Cursor Proxy 文件保留（如需完全删除请手动 rm -rf $dir）"
 }
 
 uninstall_manager() {
   print_step "卸载 Multi-Proxy Manager..."
   local dir="$ROOT_DIR/multi-proxy-manager"
-  if [ -d "$dir/node_modules" ]; then
-    rm -rf "$dir/node_modules"
-    print_ok "Multi-Proxy Manager 依赖已移除"
-  fi
+  print_info "Multi-Proxy Manager 文件保留（如需完全删除请手动 rm -rf $dir）"
 }
 
 uninstall_launchd() {
@@ -252,10 +239,10 @@ start_manager() {
   is_port_in_use $MANAGER_PORT && print_ok "Manager Shell 已启动" || print_err "Manager Shell 启动失败"
 }
 
-stop_codex()  { lsof -ti :$CODEx_PORT | xargs kill -9 2>/dev/null; true; }
-stop_hermes() { lsof -ti :$HERMES_PORT | xargs kill -9 2>/dev/null; true; }
-stop_cursor() { lsof -ti :$CURSOR_PORT | xargs kill -9 2>/dev/null; true; }
-stop_manager() { lsof -ti :$MANAGER_PORT | xargs kill -9 2>/dev/null; true; }
+stop_codex()  { /usr/sbin/lsof -ti :$CODEx_PORT | xargs kill -9 2>/dev/null; true; }
+stop_hermes() { /usr/sbin/lsof -ti :$HERMES_PORT | xargs kill -9 2>/dev/null; true; }
+stop_cursor() { /usr/sbin/lsof -ti :$CURSOR_PORT | xargs kill -9 2>/dev/null; true; }
+stop_manager() { /usr/sbin/lsof -ti :$MANAGER_PORT | xargs kill -9 2>/dev/null; true; }
 
 show_status() {
   print_bold "=== Multi-Proxy Manager 状态 ==="
@@ -440,7 +427,9 @@ usage() {
   echo "  $0 --start          # 启动所有服务"
   echo "  $0 --autostart      # 开机自启"
   echo "  $0 --status         # 查看状态"
-  echo "  $0 --uninstall      # 卸载"
+  echo "  $0 --uninstall      # 卸载（仅移除 .env，保留 node_modules）"
+  echo ""
+  print_info "注意: 安装后请先编辑各代理的 .env 文件配置 API Key"
   echo ""
 }
 
