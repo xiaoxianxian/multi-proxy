@@ -351,7 +351,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${provider.apiKey}`
       },
-      body: JSON.stringify(req.body)
+      body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(120000),
     });
 
     if (!response.ok) {
@@ -364,7 +365,14 @@ app.post('/v1/chat/completions', async (req, res) => {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      response.body.pipe(res);
+      try {
+        await response.body.pipeTo(res);
+      } catch (err) {
+        console.error(`[Stream] Pipe error: ${err.message}`);
+        if (!res.headersSent) {
+          res.status(504).json({ error: { message: 'Stream timeout or upstream disconnected' } });
+        }
+      }
     } else {
       const data = await response.json();
       res.json(data);

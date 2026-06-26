@@ -1637,6 +1637,96 @@
     loadStatus();
     loadAutostartStatus();
     refreshTimer = setInterval(loadStatus, 10000); // Refresh every 10s
+
+    // ==================== Auth ====================
+    let authToken = sessionStorage.getItem('auth_token');
+
+    async function checkAuthStatus() {
+      try {
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        if (data.needsSetup && !authToken) {
+          showLoginPage(true);
+          return false;
+        }
+        return true;
+      } catch {
+        return true;
+      }
+    }
+
+    function showLoginPage(isSetup = false) {
+      document.getElementById('dashboard').style.display = 'none';
+      const loginPage = document.getElementById('login-page');
+      if (!loginPage) {
+        // Create login page dynamically
+        const main = document.querySelector('main');
+        if (main) {
+          main.innerHTML = \`
+            <div id="login-page" style="display:flex;align-items:center;justify-content:center;height:100vh;">
+              <div style="background:var(--bg-secondary);padding:40px;border-radius:var(--radius);width:360px;box-shadow:var(--shadow);">
+                <h2 style="margin-bottom:24px;font-size:18px;">\${isSetup ? '设置管理员密码' : '登录'}</h2>
+                <input id="login-password" type="password" placeholder="密码"
+                  style="width:100%;padding:10px 12px;margin-bottom:16px;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);font-size:14px;"
+                  onkeydown="if(event.key==='Enter')handleLogin()">
+                <button onclick="handleLogin()"
+                  style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;">
+                  \${isSetup ? '设置并登录' : '登录'}
+                </button>
+                <p id="login-error" style="color:var(--red);margin-top:12px;font-size:13px;display:none;"></p>
+              </div>
+            </div>
+          \`;
+        }
+      }
+    }
+
+    async function handleLogin() {
+      const password = document.getElementById('login-password')?.value;
+      if (!password) return;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          authToken = data.token;
+          sessionStorage.setItem('auth_token', authToken);
+          document.getElementById('login-page')?.remove();
+          showDashboard();
+          loadStatus();
+          loadAutostartStatus();
+        } else {
+          const errEl = document.getElementById('login-error');
+          if (errEl) { errEl.textContent = data.error || '登录失败'; errEl.style.display = 'block'; }
+        }
+      } catch (e) {
+        const errEl = document.getElementById('login-error');
+        if (errEl) { errEl.textContent = '网络错误'; errEl.style.display = 'block'; }
+      }
+    }
+
+    function showDashboard() {
+      const el = document.getElementById('dashboard');
+      if (el) el.style.display = 'flex';
+    }
+
+    // Attach token to all API requests
+    const _origFetch = window.fetch;
+    window.fetch = async function(url, options = {}) {
+      if (typeof url === 'string' && url.startsWith('/api/')) {
+        if (!options.headers) options.headers = {};
+        if (typeof options.headers !== 'object') options.headers = {};
+        if (authToken) {
+          if (typeof options.headers === 'object') {
+            options.headers['x-auth-token'] = authToken;
+          }
+        }
+      }
+      return _origFetch.call(this, url, options);
+    };
   </script>
 </body>
 </html>

@@ -6,6 +6,76 @@ const { spawn } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+
+// ==================== Auth ====================
+const AUTH_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
+const TOKEN_EXPIRY = '8h';
+const PASSWORD_FILE = path.join(os.homedir(), '.multi-proxy-password');
+
+function getPassword() {
+  try {
+    if (fs.existsSync(PASSWORD_FILE)) {
+      return fs.readFileSync(PASSWORD_FILE, 'utf8').trim();
+    }
+  } catch {}
+  return null;
+}
+
+function setPassword(hash) {
+  fs.writeFileSync(PASSWORD_FILE, hash, { mode: 0o600 });
+}
+
+function needsPasswordSetup() {
+  const envPassword = process.env.MANAGER_PASSWORD;
+  if (envPassword && envPassword.length > 0) return false;
+  return getPassword() === null;
+}
+
+function verifyPassword(input) {
+  const envPassword = process.env.MANAGER_PASSWORD;
+  if (envPassword && envPassword.length > 0) {
+    return input === envPassword;
+  }
+  const stored = getPassword();
+  if (!stored) return false;
+  return bcrypt.compareSync(input, stored);
+}
+
+function generateToken(password) {
+  const payload = { authenticated: true, ts: Date.now() };
+  return jwt.sign(payload, AUTH_SECRET, { expiresIn: TOKEN_EXPIRY });
+}
+
+function requireAuth(req, res, next) {
+  const envPassword = process.env.MANAGER_PASSWORD;
+  if (envPassword && envPassword.length > 0) {
+    // Dev mode: skip auth if MANAGER_PASSWORD is set (trust env)
+    return next();
+  }
+  const token = req.headers['x-auth-token'] || (req.cookies && req.cookies.auth_token);
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const decoded = jwt.verify(token, AUTH_SECRET);
+    req.auth = decoded;
+    next();
+  } catch {
+    res.status(401).json({ error: 'Token expired' });
+  }
+}
+
+function isReadOnlyEndpoint(path, method) {
+  const readOnlyPaths = ['/api/status', '/api/logs', '/api/logs/raw', '/health', '/v1/models'];
+  if (method === 'GET' && readOnlyPaths.some(p => path.startsWith(p))) return true;
+  return false;
+}
+
+console.log('[Auth] Management auth ' + (needsPasswordSetup() ? 'disabled (first-run)' : 'enabled'));
+
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
@@ -211,7 +281,7 @@ app.get('/api/status', async (_req, res) => {
 });
 
 // 启动代理
-app.post('/api/start/:name', async (req, res) => {
+app.post('/api/start/:name', requireAuth, async (req, res) => {
   const { name } = req.params;
   const config = PROXY_CONFIGS[name];
 
@@ -266,7 +336,7 @@ app.post('/api/start/:name', async (req, res) => {
 });
 
 // 停止代理
-app.post('/api/stop/:name', async (req, res) => {
+app.post('/api/stop/:name', requireAuth, async (req, res) => {
   const { name } = req.params;
   const config = PROXY_CONFIGS[name];
 
@@ -323,7 +393,7 @@ app.post('/api/stop/:name', async (req, res) => {
 });
 
 // 重启代理
-app.post('/api/restart/:name', async (req, res) => {
+app.post('/api/restart/:name', requireAuth, async (req, res) => {
   const { name } = req.params;
   const config = PROXY_CONFIGS[name];
 
@@ -418,7 +488,7 @@ app.get('/api/logs/raw', (_req, res) => {
   }
 });
 
-app.post('/api/logs/clear', (_req, res) => {
+app.post('/api/logs/clear', requireAuth, (_req, res) => {
   try {
     fs.writeFileSync(LOG_FILE, '');
     appendLog('info', 'system', 'Logs cleared');
@@ -480,7 +550,102 @@ async function forwardProxy(req, res) {
   }
 }
 
-app.all('/api/:proxy/*', forwardProxy);
+// Forward proxy whitelist - only allow known endpoints
+const FORWARD_ENDPOINTS = {
+  codex: {
+    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection'],
+    POST: ['/v1/chat/completions', '/api/set-routing-mode', '/api/switch-model', '/api/clear-history'],
+  },
+  hermes: {
+    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection'],
+    POST: ['/v1/chat/completions', '/api/set-routing-mode', '/api/switch-model', '/api/clear-history'],
+  },
+  cursor: {
+    GET: ['/v1/models', '/health', '/v1/chat/completions', '/admin-api/providers', '/admin-api/models', '/admin-api/routes', '/admin-api/logs', '/admin-api/health', '/admin-api/settings'],
+    POST: ['/v1/chat/completions', '/admin-api/providers', '/admin-api/models', '/admin-api/routes', '/admin-api/settings'],
+    PUT: ['/admin-api/providers/:id', '/admin-api/settings'],
+    DELETE: ['/admin-api/providers/:id', '/admin-api/models/:id'],
+  },
+};
+
+function isAllowedEndpoint(proxy, method, path) {
+  const config = FORWARD_ENDPOINTS[proxy];
+  if (!config) return false;
+  const allowed = config[method.toUpperCase()] || config[(method.toUpperCase())];
+  if (!allowed) return false;
+  // Match wildcard params like :id
+  for (const pattern of allowed) {
+    if (pattern === path) return true;
+    // Simple wildcard match for :param patterns
+    const patternParts = pattern.split('/');
+    const pathParts = path.split('/');
+    if (patternParts.length !== pathParts.length) continue;
+    let match = true;
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i].startsWith(':')) continue; // param placeholder
+      if (patternParts[i] !== pathParts[i]) { match = false; break; }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
+app.all('/api/:proxy/*', (req, res, next) => {
+  const proxy = req.params.proxy;
+  const path = '/' + req.params[0];
+  const method = req.method;
+
+  if (isAllowedEndpoint(proxy, method, path)) {
+    forwardProxy(req, res);
+  } else {
+    console.log(`[WHITELIST] Blocked ${method} ${proxy}/${path}`);
+    res.status(404).json({ error: 'Not found' });
+  }
+});
+
+
+// ==================== Auth Routes ====================
+
+// POST /api/auth/login
+app.post('/api/auth/login', (req, res) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: 'Password required' });
+  }
+
+  const envPassword = process.env.MANAGER_PASSWORD;
+  if (envPassword && envPassword.length > 0) {
+    if (password === envPassword) {
+      return res.json({ success: true, token: generateToken(password) });
+    }
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+
+  // Setup mode or verify
+  if (needsPasswordSetup()) {
+    try {
+      const hash = bcrypt.hashSync(password, 10);
+      setPassword(hash);
+      console.log('[Auth] Password set successfully');
+      return res.json({ success: true, token: generateToken(password), setup: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (verifyPassword(password)) {
+    return res.json({ success: true, token: generateToken(password) });
+  }
+  res.status(401).json({ error: 'Invalid password' });
+});
+
+// GET /api/auth/status
+app.get('/api/auth/status', (_req, res) => {
+  res.json({
+    needsSetup: needsPasswordSetup(),
+    hasPassword: getPassword() !== null || (process.env.MANAGER_PASSWORD && process.env.MANAGER_PASSWORD.length > 0),
+  });
+});
 
 // ==================== 开机自启管理 ====================
 const LAUNCHD_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.multi-proxy-manager.plist');
@@ -490,7 +655,7 @@ app.get('/api/autostart', (_req, res) => {
   res.json({ enabled: fs.existsSync(LAUNCHD_PLIST) });
 });
 
-app.post('/api/autostart', async (req, res) => {
+app.post('/api/autostart', requireAuth, async (req, res) => {
   try {
     const { enable } = req.body;
     if (enable) {
