@@ -615,6 +615,7 @@
   <script>
     // ==================== State ====================
     let proxyStatus = {};
+    globalThis.proxyStatus = proxyStatus;
     let refreshTimer = null;
     let currentLogData = '';
     let logTotalCount = 0;
@@ -899,6 +900,18 @@
       if (btn) btn.disabled = true;
 
       try {
+        // Ensure proxyStatus is populated before toggling
+        if (!proxyStatus[name]) {
+          // Wait for loadStatus to populate it
+          await new Promise(resolve => {
+            const check = () => {
+              if (proxyStatus[name]) { resolve(); }
+              else { setTimeout(check, 100); }
+            };
+            check();
+          });
+          // Timeout safety: after 5s just proceed with current state
+        }
         const status = proxyStatus[name];
         const action = status && status.running ? 'stop' : 'start';
 
@@ -926,6 +939,16 @@
       if (btn) btn.disabled = true;
 
       try {
+        // Ensure proxyStatus is populated
+        if (!proxyStatus[name]) {
+          await new Promise(resolve => {
+            const check = () => {
+              if (proxyStatus[name]) { resolve(); }
+              else { setTimeout(check, 100); }
+            };
+            check();
+          });
+        }
         const status = proxyStatus[name];
         const action = status && status.running ? 'stop' : 'start';
 
