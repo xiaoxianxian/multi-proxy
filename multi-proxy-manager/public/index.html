@@ -669,17 +669,17 @@
         const res = await fetch('/api/status');
         const data = await res.json();
 
-        // Merge with existing status to preserve timing
-        const prevRunning = {};
-        Object.entries(proxyStatus).forEach(([k, v]) => { prevRunning[k] = v.running; });
+        // Preserve optimistic updates (client-side toggled state)
+        const optimistic = {};
+        Object.entries(proxyStatus).forEach(([k, v]) => { optimistic[k] = v.running; });
 
         // Update with fresh data
         Object.assign(proxyStatus, data);
 
-        // Restore running state if the API didn't change it
-        Object.entries(prevRunning).forEach(([k, v]) => {
+        // Restore optimistic updates for recently toggled proxies
+        Object.entries(optimistic).forEach(([k, v]) => {
           if (proxyStatus[k] && proxyStatus[k].running !== v) {
-            // Trust the API response
+            proxyStatus[k].running = v;
           }
         });
 
