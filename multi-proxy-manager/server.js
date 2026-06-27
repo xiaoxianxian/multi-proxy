@@ -166,6 +166,14 @@ let PROXY_CONFIGS = buildProxyConfigs();
 
 // 进程跟踪
 const proxyProcesses = {};
+const proxyCrashRecovery = {}; // name -> { restartCount, lastRestartTime, consecutiveFailures }
+
+function getCrashRecovery(name) {
+  if (!proxyCrashRecovery[name]) {
+    proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
+  }
+  return proxyCrashRecovery[name];
+}
 
 // ==================== 辅助函数 ====================
 const LSOF = '/usr/sbin/lsof';
@@ -254,6 +262,83 @@ async function fetchProxyApi(proxyName, endpoint, method = 'GET', body = null) {
   }
 }
 
+// ==================== Crash Recovery ====================
+
+/**
+ * Restart a proxy with exponential backoff. Used by both the initial spawn's
+ * close handler and subsequent auto-restarts.
+ * @param {string} name - proxy name (e.g. 'codex')
+ * @param {number} delay - ms to wait before spawning (0 = immediate)
+ */
+async function restartProxy(name, delay = 0) {
+  const config = PROXY_CONFIGS[name];
+  if (!config) return;
+
+  if (delay > 0) {
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  if (isProcessRunning(name)) return;
+  const recovery = getCrashRecovery(name);
+  if (recovery.consecutiveFailures >= 5) return;
+
+  try {
+    const proc = spawn(config.startCommand, config.startArgs, {
+      cwd: config.cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+
+    proxyProcesses[name] = proc;
+
+    proc.stdout.on('data', (data) => {
+      console.log(`[${config.name}]`, data.toString());
+    });
+
+    proc.stderr.on('data', (data) => {
+      console.error(`[${config.name} error]`, data.toString());
+    });
+
+    proc.on('close', async (exitCode) => {
+      delete proxyProcesses[name];
+
+      if (exitCode === 0) {
+        recovery.restartCount = 0;
+        recovery.consecutiveFailures = 0;
+        return;
+      }
+
+      recovery.consecutiveFailures++;
+      recovery.lastRestartTime = Date.now();
+
+      if (recovery.consecutiveFailures >= 5) {
+        appendLog('error', name, `Process crashed 5 times consecutively — entering fault state`);
+        console.log(`[${config.name}] FAULT: 5 consecutive crashes`);
+        return;
+      }
+
+      const backoff = Math.min(1000 * Math.pow(2, recovery.restartCount), 16000);
+      recovery.restartCount++;
+      appendLog('warn', name, `Process crashed (exit code ${exitCode}), restarting in ${backoff}ms (attempt ${recovery.restartCount})`);
+      console.log(`[${config.name}] Crashed, retrying in ${backoff}ms`);
+
+      await waitForPortFree(config.port, 3000);
+      restartProxy(name, backoff);
+    });
+
+    const bound = await waitForPortBound(config.port, 5000);
+    if (!bound) {
+      appendLog('error', name, `Failed to start (port not bound)`);
+      recovery.consecutiveFailures++;
+      recovery.lastRestartTime = Date.now();
+      delete proxyProcesses[name];
+      proc.kill('SIGKILL');
+    }
+  } catch (err) {
+    appendLog('error', name, `Auto-restart failed: ${err.message}`);
+  }
+}
+
 // ==================== API 路由 ====================
 
 // 获取所有代理状态
@@ -268,12 +353,14 @@ app.get('/api/status', async (_req, res) => {
       health = await fetchProxyApi(name, '/health');
     } catch { /* ignore */ }
 
+    const recovery = getCrashRecovery(name);
     status[name] = {
       running,
       health,
       port: config.port,
       name: config.name,
       scriptPath: config.scriptPath,
+      fault: recovery.consecutiveFailures >= 5,
     };
   }
 
@@ -292,6 +379,9 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
   if (isProcessRunning(name)) {
     return res.json({ success: true, message: `${config.name} is already running`, running: true });
   }
+
+  // Reset crash recovery state on manual start
+  proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
 
   appendLog('info', name, `Starting proxy via manager`);
 
@@ -312,10 +402,36 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
       console.error(`[${config.name} error]`, data.toString());
     });
 
-    proc.on('close', (code) => {
+    // Attach crash-recovery handler: delegates to restartProxy helper
+    proc.on('close', async (code) => {
       delete proxyProcesses[name];
-      console.log(`[${config.name}] exited with code ${code}`);
-      appendLog('warn', name, `Process exited with code ${code}`);
+
+      const recovery = getCrashRecovery(name);
+
+      if (code === 0) {
+        // Graceful exit: reset counter
+        recovery.restartCount = 0;
+        recovery.consecutiveFailures = 0;
+        return;
+      }
+
+      // Non-zero exit: trigger exponential backoff restart
+      recovery.consecutiveFailures++;
+      recovery.lastRestartTime = Date.now();
+
+      if (recovery.consecutiveFailures >= 5) {
+        appendLog('error', name, `Process crashed 5 times consecutively — entering fault state`);
+        console.log(`[${config.name}] FAULT: 5 consecutive crashes`);
+        return;
+      }
+
+      const backoff = Math.min(1000 * Math.pow(2, recovery.restartCount), 16000);
+      recovery.restartCount++;
+      appendLog('warn', name, `Process crashed (exit code ${code}), restarting in ${backoff}ms (attempt ${recovery.restartCount})`);
+      console.log(`[${config.name}] Crashed, retrying in ${backoff}ms`);
+
+      await waitForPortFree(config.port, 3000);
+      restartProxy(name, backoff);
     });
 
     // Poll for port binding
@@ -388,6 +504,7 @@ app.post('/api/stop/:name', requireAuth, async (req, res) => {
     res.json({ success: false, error: `Failed to stop ${config.name}, process still running` });
   } else {
     appendLog('info', name, `Stopped successfully`);
+    proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
     res.json({ success: true, message: `${config.name} stopped`, running: false });
   }
 });
@@ -550,6 +667,54 @@ async function forwardProxy(req, res) {
   }
 }
 
+// ==================== Auth Routes ====================
+
+// POST /api/auth/login
+app.post('/api/auth/login', (req, res) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: 'Password required' });
+  }
+
+  const envPassword = process.env.MANAGER_PASSWORD;
+  if (envPassword && envPassword.length > 0) {
+    if (password === envPassword) {
+      return res.json({ success: true, token: generateToken(password) });
+    }
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+
+  // Setup mode or verify
+  if (needsPasswordSetup()) {
+    try {
+      const hash = bcrypt.hashSync(password, 10);
+      setPassword(hash);
+      console.log('[Auth] Password set successfully');
+      return res.json({ success: true, token: generateToken(password), setup: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (verifyPassword(password)) {
+    return res.json({ success: true, token: generateToken(password) });
+  }
+  res.status(401).json({ error: 'Invalid password' });
+});
+
+// GET /api/auth/status
+app.get('/api/auth/status', (_req, res) => {
+  try {
+    const hasPassword = getPassword() !== null || (process.env.MANAGER_PASSWORD && process.env.MANAGER_PASSWORD.length > 0);
+    res.json({
+      needsSetup: needsPasswordSetup(),
+      hasPassword: hasPassword,
+    });
+  } catch (e) {
+    res.json({ needsSetup: true, hasPassword: false, error: e.message });
+  }
+});
+
 // Forward proxy whitelist - only allow known endpoints
 const FORWARD_ENDPOINTS = {
   codex: {
@@ -603,49 +768,6 @@ app.all('/api/:proxy/*', (req, res, next) => {
   }
 });
 
-
-// ==================== Auth Routes ====================
-
-// POST /api/auth/login
-app.post('/api/auth/login', (req, res) => {
-  const { password } = req.body;
-  if (!password) {
-    return res.status(400).json({ error: 'Password required' });
-  }
-
-  const envPassword = process.env.MANAGER_PASSWORD;
-  if (envPassword && envPassword.length > 0) {
-    if (password === envPassword) {
-      return res.json({ success: true, token: generateToken(password) });
-    }
-    return res.status(401).json({ error: 'Invalid password' });
-  }
-
-  // Setup mode or verify
-  if (needsPasswordSetup()) {
-    try {
-      const hash = bcrypt.hashSync(password, 10);
-      setPassword(hash);
-      console.log('[Auth] Password set successfully');
-      return res.json({ success: true, token: generateToken(password), setup: true });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  }
-
-  if (verifyPassword(password)) {
-    return res.json({ success: true, token: generateToken(password) });
-  }
-  res.status(401).json({ error: 'Invalid password' });
-});
-
-// GET /api/auth/status
-app.get('/api/auth/status', (_req, res) => {
-  res.json({
-    needsSetup: needsPasswordSetup(),
-    hasPassword: getPassword() !== null || (process.env.MANAGER_PASSWORD && process.env.MANAGER_PASSWORD.length > 0),
-  });
-});
 
 // ==================== 开机自启管理 ====================
 const LAUNCHD_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.multi-proxy-manager.plist');
