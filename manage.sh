@@ -67,6 +67,7 @@ start_codex() {
     return 0
   else
     print_error "Codex Proxy 启动失败"
+    print_warning "查看日志: ./manage.sh logs codex"
     return 1
   fi
 }
@@ -94,6 +95,7 @@ start_hermes() {
     return 0
   else
     print_error "Hermes Proxy 启动失败"
+    print_warning "查看日志: ./manage.sh logs hermes"
     return 1
   fi
 }
@@ -103,9 +105,12 @@ start_cursor() {
   # Check and compile TypeScript if dist missing
   if [ ! -d "$CURSOR_PROXY_DIR/dist" ]; then
     print_warning "Cursor Proxy 未编译，正在编译..."
-    (cd "$CURSOR_PROXY_DIR" && npm run build) 2>/dev/null
-    if [ $? -ne 0 ]; then
-      print_error "Cursor Proxy 编译失败"
+    BUILD_LOG="/tmp/cursor-build.log"
+    (cd "$CURSOR_PROXY_DIR" && npm run build 2>&1) > "$BUILD_LOG"
+    BUILD_EXIT=$?
+    if [ $BUILD_EXIT -ne 0 ]; then
+      print_error "Cursor Proxy 编译失败，详情: $BUILD_LOG"
+      print_warning "查看日志: cat $BUILD_LOG"
       return 1
     fi
     print_status "Cursor Proxy 编译完成"
@@ -133,6 +138,7 @@ start_cursor() {
     return 0
   else
     print_error "Cursor Proxy 启动失败"
+    print_warning "查看日志: ./manage.sh logs cursor"
     return 1
   fi
 }
@@ -161,6 +167,7 @@ start_manager() {
     return 0
   else
     print_error "Manager Shell 启动失败"
+    print_warning "查看日志: ./manage.sh logs manager"
     return 1
   fi
 }

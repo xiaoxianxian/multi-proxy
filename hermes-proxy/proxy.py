@@ -59,16 +59,23 @@ def load_routing_mode():
 
 
 def update_routing_mode(mode):
-    """Update routing mode to file."""
+    """Update routing mode to file using atomic rename to prevent race conditions."""
     global routing_mode
     try:
         os.makedirs(os.path.dirname(ROUTING_MODE_FILE), exist_ok=True)
-        with open(ROUTING_MODE_FILE, 'w') as f:
+        tmp_file = ROUTING_MODE_FILE + '.tmp'
+        with open(tmp_file, 'w') as f:
             json.dump({'mode': mode}, f, indent=2)
+        os.replace(tmp_file, ROUTING_MODE_FILE)
         routing_mode = mode
         logger.info(f"Routing mode updated to: {mode}")
         return True
     except Exception as e:
+        # Clean up temp file on failure
+        try:
+            os.unlink(ROUTING_MODE_FILE + '.tmp')
+        except OSError:
+            pass
         logger.error(f"Failed to update routing mode: {e}")
         return False
 
@@ -333,6 +340,14 @@ def get_providers_status():
     return jsonify({'providers': providers})
 
 
+KNOWN_BALANCE_DOMAINS = {
+    'api.openai.com': ('GET', '/dashboard/billing/credit_grants'),
+    'api.anthropic.com': None,  # No public balance API
+    'api.deepseek.com': ('GET', '/user/info'),
+    'api.moonshot.cn': ('GET', '/user/info'),
+}
+
+
 @app.route('/api/balances', methods=['GET'])
 def get_balances():
     """Get account balances (simplified - actual implementation depends on provider APIs)."""
@@ -340,11 +355,40 @@ def get_balances():
     config_path = find_config_yaml()
     config_data = parse_config_yaml(config_path) if os.path.exists(config_path) else {}
 
-    # This is a simplified implementation
-    # In a real scenario, you'd need to query each provider's balance API
     providers = config_data.get('providers', {})
-    for name in providers.keys():
-        balances[name] = '未配置'  # Placeholder
+    for name, config in providers.items():
+        if not isinstance(config, dict):
+            balances[name] = '不可查询'
+            continue
+        api_url = config.get('api', '')
+        if not api_url:
+            balances[name] = '不可查询'
+            continue
+        # Extract hostname and check against known providers
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(api_url)
+            host = parsed.hostname or ''
+        except Exception:
+            host = ''
+        if host in KNOWN_BALANCE_DOMAINS:
+            endpoint = KNOWN_BALANCE_DOMAINS[host]
+            if endpoint is None:
+                balances[name] = '无公开余额API'
+            else:
+                method, path = endpoint
+                try:
+                    url = f"{api_url.rstrip('/')}{path}"
+                    resp = requests.get(url, timeout=5)
+                    if resp.ok:
+                        data = resp.json()
+                        balances[name] = data.get('balance', data.get('amount', data.get('totalAmount', '未知')))
+                    else:
+                        balances[name] = f'查询失败 (HTTP {resp.status_code})'
+                except Exception as e:
+                    balances[name] = f'查询失败: {str(e)}'
+        else:
+            balances[name] = '不可查询'
 
     return jsonify({'balances': balances})
 

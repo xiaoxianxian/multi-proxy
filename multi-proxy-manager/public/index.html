@@ -566,6 +566,15 @@
         </div>
       </div>
 
+      <!-- Version Card -->
+      <div class="card" id="versionCard">
+        <div class="card-title">版本信息</div>
+        <div class="card-subtitle">系统版本和组件信息</div>
+        <div id="versionInfo">
+          <div class="spinner"></div> 加载中...
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">代理状态</div>
         <div class="card-subtitle">管理各代理服务的运行状态</div>
@@ -1633,9 +1642,32 @@
       }
     }
 
+    // ==================== Version ====================
+    async function loadVersion() {
+      try {
+        const res = await fetch('/api/version');
+        const data = await res.json();
+        const el = document.getElementById('versionInfo');
+        if (el) {
+          el.innerHTML = `
+            <div style="font-size: 13px; color: var(--text-secondary); line-height: 2;">
+              <div>管理器版本: <strong style="color: var(--text-primary);">${data.version || '-'}</strong></div>
+              ${Object.entries(data.proxies || {}).map(([k, v]) => {
+                const info = PROXY_LABELS[k] || { label: k };
+                return `<div>${info.label}: <strong style="color: var(--text-primary);">${v || '-'}</strong></div>`;
+              }).join('')}
+            </div>`;
+        }
+      } catch {
+        const el = document.getElementById('versionInfo');
+        if (el) el.innerHTML = '<div style="color: var(--text-tertiary); font-size: 12px;">版本信息暂不可用</div>';
+      }
+    }
+
     // ==================== Init ====================
     loadStatus();
     loadAutostartStatus();
+    loadVersion();
     refreshTimer = setInterval(loadStatus, 10000); // Refresh every 10s
 
     // ==================== Auth ====================

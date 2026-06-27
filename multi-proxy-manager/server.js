@@ -262,6 +262,111 @@ async function fetchProxyApi(proxyName, endpoint, method = 'GET', body = null) {
   }
 }
 
+// ==================== Proxy Lifecycle Helpers ====================
+
+/**
+ * Spawn a proxy process with stdio forwarding and crash-recovery close handler.
+ * Used by both the manual start route and the auto-restart path.
+ */
+function spawnProxy(name) {
+  const config = PROXY_CONFIGS[name];
+  if (!config) throw new Error(`Unknown proxy: ${name}`);
+
+  const proc = spawn(config.startCommand, config.startArgs, {
+    cwd: config.cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env },
+  });
+
+  proxyProcesses[name] = proc;
+
+  proc.stdout.on('data', (data) => {
+    console.log(`[${config.name}]`, data.toString());
+  });
+
+  proc.stderr.on('data', (data) => {
+    console.error(`[${config.name} error]`, data.toString());
+  });
+
+  // Attach crash-recovery handler
+  proc.on('close', async (code) => {
+    delete proxyProcesses[name];
+
+    const recovery = getCrashRecovery(name);
+
+    if (code === 0) {
+      // Graceful exit: reset counter
+      recovery.restartCount = 0;
+      recovery.consecutiveFailures = 0;
+      return;
+    }
+
+    // Non-zero exit: trigger exponential backoff restart
+    recovery.consecutiveFailures++;
+    recovery.lastRestartTime = Date.now();
+
+    if (recovery.consecutiveFailures >= 5) {
+      appendLog('error', name, `Process crashed 5 times consecutively — entering fault state`);
+      console.log(`[${config.name}] FAULT: 5 consecutive crashes`);
+      return;
+    }
+
+    const backoff = Math.min(1000 * Math.pow(2, recovery.restartCount), 16000);
+    recovery.restartCount++;
+    appendLog('warn', name, `Process crashed (exit code ${code}), restarting in ${backoff}ms (attempt ${recovery.restartCount})`);
+    console.log(`[${config.name}] Crashed, retrying in ${backoff}ms`);
+
+    await waitForPortFree(config.port, 3000);
+    restartProxy(name, backoff);
+  });
+
+  return proc;
+}
+
+/**
+ * Stop a proxy: SIGTERM → wait → SIGKILL. Resets crash recovery state.
+ */
+async function stopProxy(name) {
+  const config = PROXY_CONFIGS[name];
+  if (!config) return false;
+
+  // Try to kill via tracked process first
+  const proc = proxyProcesses[name];
+  if (proc) {
+    try { proc.kill('SIGTERM'); } catch {}
+    delete proxyProcesses[name];
+  }
+
+  // Also kill via port
+  try {
+    const { execSync } = require('child_process');
+    const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
+    for (const pid of pids) {
+      try { process.kill(parseInt(pid), 'SIGTERM'); } catch {}
+    }
+  } catch {}
+
+  // Wait for port to free
+  const freed = await waitForPortFree(config.port, 5000);
+  if (!freed) {
+    // Force kill
+    try {
+      const { execSync } = require('child_process');
+      const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
+      for (const pid of pids) {
+        try { process.kill(parseInt(pid), 'SIGKILL'); } catch {}
+      }
+      await waitForPortFree(config.port, 2000);
+    } catch {}
+  }
+
+  const stillRunning = isProcessRunning(name);
+  if (!stillRunning) {
+    proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
+  }
+  return !stillRunning;
+}
+
 // ==================== Crash Recovery ====================
 
 /**
@@ -283,48 +388,7 @@ async function restartProxy(name, delay = 0) {
   if (recovery.consecutiveFailures >= 5) return;
 
   try {
-    const proc = spawn(config.startCommand, config.startArgs, {
-      cwd: config.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-
-    proxyProcesses[name] = proc;
-
-    proc.stdout.on('data', (data) => {
-      console.log(`[${config.name}]`, data.toString());
-    });
-
-    proc.stderr.on('data', (data) => {
-      console.error(`[${config.name} error]`, data.toString());
-    });
-
-    proc.on('close', async (exitCode) => {
-      delete proxyProcesses[name];
-
-      if (exitCode === 0) {
-        recovery.restartCount = 0;
-        recovery.consecutiveFailures = 0;
-        return;
-      }
-
-      recovery.consecutiveFailures++;
-      recovery.lastRestartTime = Date.now();
-
-      if (recovery.consecutiveFailures >= 5) {
-        appendLog('error', name, `Process crashed 5 times consecutively — entering fault state`);
-        console.log(`[${config.name}] FAULT: 5 consecutive crashes`);
-        return;
-      }
-
-      const backoff = Math.min(1000 * Math.pow(2, recovery.restartCount), 16000);
-      recovery.restartCount++;
-      appendLog('warn', name, `Process crashed (exit code ${exitCode}), restarting in ${backoff}ms (attempt ${recovery.restartCount})`);
-      console.log(`[${config.name}] Crashed, retrying in ${backoff}ms`);
-
-      await waitForPortFree(config.port, 3000);
-      restartProxy(name, backoff);
-    });
+    spawnProxy(name);
 
     const bound = await waitForPortBound(config.port, 5000);
     if (!bound) {
@@ -332,7 +396,7 @@ async function restartProxy(name, delay = 0) {
       recovery.consecutiveFailures++;
       recovery.lastRestartTime = Date.now();
       delete proxyProcesses[name];
-      proc.kill('SIGKILL');
+      if (proxyProcesses[name]) proxyProcesses[name].kill('SIGKILL');
     }
   } catch (err) {
     appendLog('error', name, `Auto-restart failed: ${err.message}`);
@@ -386,55 +450,8 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
   appendLog('info', name, `Starting proxy via manager`);
 
   try {
-    const proc = spawn(config.startCommand, config.startArgs, {
-      cwd: config.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
+    spawnProxy(name);
 
-    proxyProcesses[name] = proc;
-
-    proc.stdout.on('data', (data) => {
-      console.log(`[${config.name}]`, data.toString());
-    });
-
-    proc.stderr.on('data', (data) => {
-      console.error(`[${config.name} error]`, data.toString());
-    });
-
-    // Attach crash-recovery handler: delegates to restartProxy helper
-    proc.on('close', async (code) => {
-      delete proxyProcesses[name];
-
-      const recovery = getCrashRecovery(name);
-
-      if (code === 0) {
-        // Graceful exit: reset counter
-        recovery.restartCount = 0;
-        recovery.consecutiveFailures = 0;
-        return;
-      }
-
-      // Non-zero exit: trigger exponential backoff restart
-      recovery.consecutiveFailures++;
-      recovery.lastRestartTime = Date.now();
-
-      if (recovery.consecutiveFailures >= 5) {
-        appendLog('error', name, `Process crashed 5 times consecutively — entering fault state`);
-        console.log(`[${config.name}] FAULT: 5 consecutive crashes`);
-        return;
-      }
-
-      const backoff = Math.min(1000 * Math.pow(2, recovery.restartCount), 16000);
-      recovery.restartCount++;
-      appendLog('warn', name, `Process crashed (exit code ${code}), restarting in ${backoff}ms (attempt ${recovery.restartCount})`);
-      console.log(`[${config.name}] Crashed, retrying in ${backoff}ms`);
-
-      await waitForPortFree(config.port, 3000);
-      restartProxy(name, backoff);
-    });
-
-    // Poll for port binding
     const bound = await waitForPortBound(config.port, 5000);
     if (bound) {
       appendLog('info', name, `Started successfully`);
@@ -442,7 +459,7 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
     } else {
       appendLog('error', name, `Failed to start (port not bound)`);
       delete proxyProcesses[name];
-      proc.kill('SIGKILL');
+      if (proxyProcesses[name]) proxyProcesses[name].kill('SIGKILL');
       res.status(500).json({ success: false, error: `${config.name} failed to start` });
     }
   } catch (error) {
@@ -466,46 +483,13 @@ app.post('/api/stop/:name', requireAuth, async (req, res) => {
 
   appendLog('info', name, `Stopping proxy via manager`);
 
-  // Try to kill via tracked process first
-  const proc = proxyProcesses[name];
-  if (proc) {
-    try {
-      proc.kill('SIGTERM');
-      delete proxyProcesses[name];
-    } catch {}
-  }
-
-  // Also kill via port
-  try {
-    const { execSync } = require('child_process');
-    const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
-    for (const pid of pids) {
-      try { process.kill(parseInt(pid), 'SIGTERM'); } catch {}
-    }
-  } catch {}
-
-  // Wait for port to free
-  const freed = await waitForPortFree(config.port, 5000);
-  if (!freed) {
-    // Force kill
-    try {
-      const { execSync } = require('child_process');
-      const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
-      for (const pid of pids) {
-        try { process.kill(parseInt(pid), 'SIGKILL'); } catch {}
-      }
-      await waitForPortFree(config.port, 2000);
-    } catch {}
-  }
-
-  const stillRunning = isProcessRunning(name);
-  if (stillRunning) {
+  const stopped = await stopProxy(name);
+  if (stopped) {
+    appendLog('info', name, `Stopped successfully`);
+    res.json({ success: true, message: `${config.name} stopped`, running: false });
+  } else {
     appendLog('warn', name, `Stop failed, port still in use`);
     res.json({ success: false, error: `Failed to stop ${config.name}, process still running` });
-  } else {
-    appendLog('info', name, `Stopped successfully`);
-    proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
-    res.json({ success: true, message: `${config.name} stopped`, running: false });
   }
 });
 
@@ -522,44 +506,10 @@ app.post('/api/restart/:name', requireAuth, async (req, res) => {
 
   try {
     // Stop
-    const proc = proxyProcesses[name];
-    if (proc) {
-      try { proc.kill('SIGTERM'); } catch {}
-    }
-    delete proxyProcesses[name];
-
-    // Also kill via port
-    try {
-      const { execSync } = require('child_process');
-      const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
-      for (const pid of pids) {
-        try { process.kill(parseInt(pid), 'SIGTERM'); } catch {}
-      }
-    } catch {}
-
-    await waitForPortFree(config.port, 5000);
+    await stopProxy(name);
 
     // Start
-    const newProc = spawn(config.startCommand, config.startArgs, {
-      cwd: config.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-
-    proxyProcesses[name] = newProc;
-
-    newProc.stdout.on('data', (data) => {
-      console.log(`[${config.name}]`, data.toString());
-    });
-
-    newProc.stderr.on('data', (data) => {
-      console.error(`[${config.name} error]`, data.toString());
-    });
-
-    newProc.on('close', (code) => {
-      delete proxyProcesses[name];
-      console.log(`[${config.name}] exited with code ${code}`);
-    });
+    spawnProxy(name);
 
     const bound = await waitForPortBound(config.port, 5000);
     if (bound) {
@@ -568,7 +518,7 @@ app.post('/api/restart/:name', requireAuth, async (req, res) => {
     } else {
       appendLog('error', name, `Restart failed`);
       delete proxyProcesses[name];
-      newProc.kill('SIGKILL');
+      if (proxyProcesses[name]) proxyProcesses[name].kill('SIGKILL');
       res.status(500).json({ success: false, error: `${config.name} failed to restart` });
     }
   } catch (error) {
@@ -807,6 +757,25 @@ app.post('/api/autostart', requireAuth, async (req, res) => {
 // 健康检查
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 版本信息
+app.get('/api/version', (_req, res) => {
+  try {
+    const pkgPath = path.join(__dirname, '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    res.json({
+      version: pkg.version || '1.0.0',
+      date: '2026-06-27',
+      proxies: {
+        codex: '1.0.0',
+        hermes: '1.0.0',
+        cursor: '1.0.0',
+      },
+    });
+  } catch (e) {
+    res.json({ version: '1.0.0', date: '2026-06-27', proxies: {} });
+  }
 });
 
 // 启动服务

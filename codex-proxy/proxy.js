@@ -128,10 +128,14 @@ function loadRoutingMode() {
 function updateRoutingMode(mode) {
   try {
     const data = JSON.stringify({ mode }, null, 2);
-    fs.writeFileSync(ROUTING_MODE_FILE, data, 'utf-8');
+    const tmpFile = ROUTING_MODE_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, data, 'utf-8');
+    fs.renameSync(tmpFile, ROUTING_MODE_FILE);
     console.log(`[ROUTING MODE] 路由模式已更新为: ${mode}`);
     return true;
   } catch (e) {
+    // Clean up temp file on failure
+    try { fs.unlinkSync(ROUTING_MODE_FILE + '.tmp'); } catch {}
     console.error(`[ROUTING MODE] 更新路由模式失败: ${e.message}`);
     return false;
   }

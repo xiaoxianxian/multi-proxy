@@ -292,6 +292,22 @@ setup_autostart() {
 
   mkdir -p "$HOME/Library/LaunchAgents"
 
+  # Detect nvm and pyenv for PATH expansion
+  local nvm_path=""
+  local pyenv_path=""
+  if [ -d "$HOME/.nvm" ]; then
+    nvm_path="$HOME/.nvm/versions/node/*/bin"
+  fi
+  if [ -d "$HOME/.pyenv" ]; then
+    pyenv_path="$HOME/.pyenv/shims:$HOME/.pyenv/bin"
+  fi
+
+  # Build PATH with detected toolchains
+  local base_path="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin"
+  local full_path="$base_path"
+  [ -n "$nvm_path" ] && full_path="$full_path:$nvm_path"
+  [ -n "$pyenv_path" ] && full_path="$full_path:$pyenv_path"
+
   cat > "$plist" << PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -316,7 +332,7 @@ setup_autostart() {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <string>$full_path</string>
     </dict>
 </dict>
 </plist>
