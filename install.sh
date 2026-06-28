@@ -435,6 +435,7 @@ usage() {
   echo ""
   echo "命令:"
   echo "  (无参数)          交互式安装向导"
+  echo "  --all             静默安装全部组件"
   echo "  --start           启动所有服务"
   echo "  --stop            停止所有服务"
   echo "  --restart         重启所有服务"
@@ -447,6 +448,7 @@ usage() {
   echo ""
   echo "示例:"
   echo "  $0                  # 交互式安装"
+  echo "  $0 --all            # 静默安装全部"
   echo "  $0 --start          # 启动所有服务"
   echo "  $0 --autostart      # 开机自启"
   echo "  $0 --status         # 查看状态"
@@ -458,6 +460,42 @@ usage() {
 
 main() {
   case "${1:-}" in
+    --all)
+      # 静默安装全部组件
+      echo ""
+      print_bold "============================================"
+      print_bold "  Multi-Proxy Manager — 一键安装全部"
+      print_bold "============================================"
+      echo ""
+
+      if ! check_deps; then
+        print_err "请安装 Node.js 和 Python3 后重试"
+        print_info "安装命令: brew install node python"
+        exit 1
+      fi
+
+      install_codex
+      install_hermes
+      install_cursor
+      install_manager
+
+      echo ""
+      print_bold "============================================"
+      print_ok "  安装完成！"
+      print_bold "============================================"
+      echo ""
+      print_info "接下来："
+      echo ""
+      echo "  1. 编辑各代理的 .env 文件配置 API Key"
+      echo "     例如: nano codex-proxy/.env"
+      echo ""
+      echo "  2. 启动服务："
+      echo "     bash manage.sh start"
+      echo ""
+      echo "  3. 打开管理面板："
+      echo "     http://localhost:$MANAGER_PORT"
+      echo ""
+      ;;
     --start)
       start_codex; start_hermes; start_cursor; start_manager
       print_ok "所有服务已启动"
