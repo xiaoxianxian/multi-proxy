@@ -80,7 +80,7 @@ install_codex() {
       print_ok "Codex Proxy 依赖已安装"
     else
       print_info "安装 Node.js 依赖..."
-      (cd "$dir" && npm install --production) 2>/dev/null
+      (cd "$dir" && npm install --production)
       print_ok "Codex Proxy 依赖安装完成"
     fi
   fi
@@ -121,12 +121,19 @@ install_cursor() {
       print_ok "Cursor Proxy 依赖已安装"
     else
       print_info "安装 Node.js 依赖..."
-      (cd "$dir" && npm install) 2>/dev/null
+      (cd "$dir" && npm install)
       print_ok "Cursor Proxy 依赖安装完成"
     fi
 
     print_info "编译 TypeScript..."
-    (cd "$dir" && npm run build) 2>/dev/null
+    BUILD_LOG="/tmp/cursor-build.log"
+    (cd "$dir" && npm run build > "$BUILD_LOG" 2>&1)
+    BUILD_EXIT=$?
+    if [ $BUILD_EXIT -ne 0 ]; then
+      print_err "Cursor Proxy 编译失败，详情: $BUILD_LOG"
+      print_warn "查看日志: cat $BUILD_LOG"
+      return 1
+    fi
     print_ok "Cursor Proxy 编译完成"
   fi
 
@@ -150,7 +157,7 @@ install_manager() {
       print_ok "Multi-Proxy Manager 依赖已安装"
     else
       print_info "安装 Node.js 依赖..."
-      (cd "$dir" && npm install) 2>/dev/null
+      (cd "$dir" && npm install)
       print_ok "Multi-Proxy Manager 依赖安装完成"
     fi
   fi
@@ -460,9 +467,9 @@ main() {
       print_ok "所有服务已停止"
       ;;
     --restart)
-      $0 --stop
+      bash "$0" --stop
       sleep 1
-      $0 --start
+      bash "$0" --start
       ;;
     --status)
       show_status

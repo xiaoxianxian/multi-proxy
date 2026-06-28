@@ -29,7 +29,7 @@ print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 
 # 检查端口是否被占用
 is_port_in_use() {
-  lsof -i :$1 >/dev/null 2>&1
+  /usr/sbin/lsof -i :$1 >/dev/null 2>&1
   return $?
 }
 
@@ -182,7 +182,7 @@ stop_service() {
     return 0
   fi
 
-  local pid=$(lsof -ti :$port 2>/dev/null)
+  local pid=$(/usr/sbin/lsof -ti :$port 2>/dev/null)
   if [ -n "$pid" ]; then
     print_status "停止 $name (PID: $pid)..."
     kill $pid 2>/dev/null
@@ -217,7 +217,7 @@ show_status() {
 
   # Codex Proxy
   if is_port_in_use $CODEx_PORT; then
-    local codex_pid=$(lsof -ti :$CODEx_PORT 2>/dev/null)
+    local codex_pid=$(/usr/sbin/lsof -ti :$CODEx_PORT 2>/dev/null)
     echo -e "${GREEN}✓ Codex Proxy${NC} - 运行中 (PID: $codex_pid, 端口: $CODEx_PORT)"
   else
     echo -e "${RED}✗ Codex Proxy${NC} - 未运行"
@@ -225,7 +225,7 @@ show_status() {
 
   # Hermes Proxy
   if is_port_in_use $HERMES_PORT; then
-    local hermes_pid=$(lsof -ti :$HERMES_PORT 2>/dev/null)
+    local hermes_pid=$(/usr/sbin/lsof -ti :$HERMES_PORT 2>/dev/null)
     echo -e "${GREEN}✓ Hermes Proxy${NC} - 运行中 (PID: $hermes_pid, 端口: $HERMES_PORT)"
   else
     echo -e "${RED}✗ Hermes Proxy${NC} - 未运行"
@@ -233,7 +233,7 @@ show_status() {
 
   # Cursor Proxy
   if is_port_in_use $CURSOR_PORT; then
-    local cursor_pid=$(lsof -ti :$CURSOR_PORT 2>/dev/null)
+    local cursor_pid=$(/usr/sbin/lsof -ti :$CURSOR_PORT 2>/dev/null)
     echo -e "${GREEN}✓ Cursor Proxy${NC} - 运行中 (PID: $cursor_pid, 端口: $CURSOR_PORT)"
   else
     echo -e "${RED}✗ Cursor Proxy${NC} - 未运行"
@@ -241,7 +241,7 @@ show_status() {
 
   # Manager Shell
   if is_port_in_use $MANAGER_PORT; then
-    local manager_pid=$(lsof -ti :$MANAGER_PORT 2>/dev/null)
+    local manager_pid=$(/usr/sbin/lsof -ti :$MANAGER_PORT 2>/dev/null)
     echo -e "${GREEN}✓ Manager Shell${NC} - 运行中 (PID: $manager_pid, 端口: $MANAGER_PORT)"
     echo -e "  访问地址: ${YELLOW}http://localhost:$MANAGER_PORT${NC}"
   else
@@ -405,5 +405,6 @@ case "${1:-status}" in
     echo "  $0 hermes [start|stop|restart|status|logs]"
     echo "  $0 cursor [start|stop|restart|status|logs]"
     echo "  $0 manager [start|stop|restart|status|logs]"
+    exit 1
     ;;
 esac

@@ -1,0 +1,29 @@
+{
+  "name": "multi-proxy-manager",
+  "version": "1.0.0",
+  "description": "Multi-Proxy Manager — 共享 Web 管理后台，统一管理 Codex/Hermes/Cursor 多模型代理",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "jest --verbose --forceExit",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.5.0",
+    "jsonwebtoken": "^9.0.0",
+    "playwright": "^1.61.1"
+  }
+}

@@ -9,6 +9,8 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 
 // ==================== Auth ====================
 const AUTH_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
@@ -77,6 +79,7 @@ function isReadOnlyEndpoint(path, method) {
 console.log('[Auth] Management auth ' + (needsPasswordSetup() ? 'disabled (first-run)' : 'enabled'));
 
 const app = express();
+app.use(cors({ origin: 'http://localhost:18792' }));
 app.use(express.json({ limit: '10mb' }));
 
 // Disable caching for HTML so browser always gets latest version
@@ -84,6 +87,18 @@ app.use((req, res, next) => {
   if (req.path.endsWith('.html') || req.path === '/') {
     res.set('Cache-Control', 'no-cache');
   }
+  next();
+});
+
+// Security headers middleware
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+  );
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   next();
 });
 app.use(express.static(path.join(__dirname, 'public')));
@@ -104,7 +119,7 @@ function appendLog(level, proxyName, message, meta = {}) {
       level,
       proxy: proxyName || 'system',
       msg: message,
-      ...meta,
+      meta: meta,
     };
     const line = `[${entry.ts}] [${entry.level.toUpperCase()}] [${entry.proxy}] ${entry.msg}${Object.keys(entry.meta || {}).length ? ' ' + JSON.stringify(entry.meta) : ''}`;
     fs.appendFileSync(LOG_FILE, line + '\n');
@@ -264,6 +279,29 @@ async function fetchProxyApi(proxyName, endpoint, method = 'GET', body = null) {
 
 // ==================== Proxy Lifecycle Helpers ====================
 
+// Allowed base directories for proxy spawning
+const ALLOWED_CWD_PREFIXES = [
+  path.join(__dirname, '..'),
+];
+
+/**
+ * Validate that a candidate path is safely within an allowed directory.
+ * Prevents path traversal attacks.
+ */
+function isSafePath(candidate) {
+  const resolved = path.resolve(candidate);
+  return ALLOWED_CWD_PREFIXES.some(prefix => resolved === path.resolve(prefix) || resolved.startsWith(path.resolve(prefix) + path.sep));
+}
+
+// Allowed spawn commands (deny arbitrary binaries)
+const ALLOWED_COMMANDS = new Set(['node', 'python3']);
+
+// Allowed startArgs: arrays of safe string tokens only
+function isValidStartArgs(args) {
+  if (!Array.isArray(args)) return false;
+  return args.every(a => typeof a === 'string' && /^[a-zA-Z0-9_./-]+$/.test(a));
+}
+
 /**
  * Spawn a proxy process with stdio forwarding and crash-recovery close handler.
  * Used by both the manual start route and the auto-restart path.
@@ -271,6 +309,22 @@ async function fetchProxyApi(proxyName, endpoint, method = 'GET', body = null) {
 function spawnProxy(name) {
   const config = PROXY_CONFIGS[name];
   if (!config) throw new Error(`Unknown proxy: ${name}`);
+
+  // Validate cwd is within allowed project directories
+  if (!isSafePath(config.cwd)) {
+    throw new Error('Spawn rejected: cwd is outside allowed project directories');
+  }
+
+  // Validate startCommand is in the allowlist
+  const cmd = path.basename(config.startCommand);
+  if (!ALLOWED_COMMANDS.has(cmd)) {
+    throw new Error('Spawn rejected: startCommand "' + cmd + '" is not in the allowlist');
+  }
+
+  // Validate startArgs contain no dangerous characters
+  if (!isValidStartArgs(config.startArgs)) {
+    throw new Error('Spawn rejected: startArgs contain invalid characters');
+  }
 
   const proc = spawn(config.startCommand, config.startArgs, {
     cwd: config.cwd,
@@ -464,7 +518,7 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
     }
   } catch (error) {
     appendLog('error', name, `Start failed: ${error.message}`);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -523,7 +577,7 @@ app.post('/api/restart/:name', requireAuth, async (req, res) => {
     }
   } catch (error) {
     appendLog('error', name, `Restart failed: ${error.message}`);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -539,7 +593,7 @@ app.get('/api/logs', (req, res) => {
     const recent = lines.slice(-parseInt(limit));
     res.json({ logs: recent.join('\n'), count: lines.length, recent: recent.length });
   } catch (e) {
-    res.json({ logs: '', count: 0, error: e.message });
+    res.json({ logs: '', count: 0, error: 'Internal server error' });
   }
 });
 
@@ -551,7 +605,7 @@ app.get('/api/logs/raw', (_req, res) => {
     res.set('Content-Type', 'text/plain');
     res.send(fs.readFileSync(LOG_FILE, 'utf8'));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -561,7 +615,7 @@ app.post('/api/logs/clear', requireAuth, (_req, res) => {
     appendLog('info', 'system', 'Logs cleared');
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -617,11 +671,41 @@ async function forwardProxy(req, res) {
   }
 }
 
+// ==================== Rate Limiting ====================
+
+// Strict rate limit on login endpoint: 5 attempts per minute window
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+  },
+});
+
+// Longer lockout after many rapid failures: 5 failed logins in 15 minutes
+const lockoutLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Account locked due to too many failed attempts. Try again in 15 minutes.' });
+  },
+});
+
 // ==================== Auth Routes ====================
 
 // POST /api/auth/login
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', lockoutLimiter, authLimiter, function(req, res) {
   const { password } = req.body;
+  // DoS protection: reject passwords > 1KB
+  if (password && Buffer.byteLength(password, 'utf8') > 1024) {
+    return res.status(413).json({ error: 'Password too long (max 1KB)' });
+  }
   if (!password) {
     return res.status(400).json({ error: 'Password required' });
   }
@@ -642,7 +726,7 @@ app.post('/api/auth/login', (req, res) => {
       console.log('[Auth] Password set successfully');
       return res.json({ success: true, token: generateToken(password), setup: true });
     } catch (e) {
-      return res.status(500).json({ error: e.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -661,7 +745,7 @@ app.get('/api/auth/status', (_req, res) => {
       hasPassword: hasPassword,
     });
   } catch (e) {
-    res.json({ needsSetup: true, hasPassword: false, error: e.message });
+    res.json({ needsSetup: true, hasPassword: false, error: 'Internal server error' });
   }
 });
 
@@ -697,7 +781,18 @@ function isAllowedEndpoint(proxy, method, path) {
     if (patternParts.length !== pathParts.length) continue;
     let match = true;
     for (let i = 0; i < patternParts.length; i++) {
-      if (patternParts[i].startsWith(':')) continue; // param placeholder
+      if (patternParts[i].startsWith(':')) {
+        // Strict validation for :id parameters – only allow UUID or alphanumeric
+        const idParam = patternParts[i].substring(1);
+        if (idParam === 'id') {
+          // Only accept safe ID formats: hex strings, alphanum, or short alphanumeric
+          if (!/^[a-zA-Z0-9_-]{1,64}$/.test(pathParts[i])) {
+            match = false;
+            break;
+          }
+        }
+        continue; // param placeholder – already validated above
+      }
       if (patternParts[i] !== pathParts[i]) { match = false; break; }
     }
     if (match) return true;
@@ -719,6 +814,7 @@ app.all('/api/:proxy/*', (req, res, next) => {
 });
 
 
+
 // ==================== 开机自启管理 ====================
 const LAUNCHD_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.multi-proxy-manager.plist');
 const INSTALL_SH = path.join(__dirname, '..', 'install.sh');
@@ -734,7 +830,7 @@ app.post('/api/autostart', requireAuth, async (req, res) => {
       const { exec } = require('child_process');
       exec(`bash "${INSTALL_SH}" --autostart`, (error) => {
         if (error) {
-          res.status(500).json({ success: false, error: error.message });
+          res.status(500).json({ success: false, error: 'Internal server error' });
         } else {
           res.json({ success: true, enabled: true });
         }
@@ -743,14 +839,14 @@ app.post('/api/autostart', requireAuth, async (req, res) => {
       const { exec } = require('child_process');
       exec(`bash "${INSTALL_SH}" --autostop`, (error) => {
         if (error) {
-          res.status(500).json({ success: false, error: error.message });
+          res.status(500).json({ success: false, error: 'Internal server error' });
         } else {
           res.json({ success: true, enabled: false });
         }
       });
     }
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -778,13 +874,38 @@ app.get('/api/version', (_req, res) => {
   }
 });
 
-// 启动服务
-app.listen(PORT, () => {
-  console.log('\n========================================');
+// 已安装的代理列表
+app.get('/api/installed', (_req, res) => {
+  res.json(Object.keys(PROXY_CONFIGS));
+});
+
+// SPA fallback: serve correct HTML page based on route
+// Placed AFTER all route handlers so explicit routes like /health take priority
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api/') && req.path.indexOf('.') === -1) {
+    // Map routes to HTML files
+    const routeMap = {
+      '/': 'dashboard.html',
+      '/dashboard': 'dashboard.html',
+      '/logs': 'logs.html',
+      '/proxy-config': 'proxy-config.html',
+    };
+    const page = routeMap[req.path] || 'dashboard.html';
+    return res.sendFile(path.join(__dirname, 'public', page));
+  }
+  next();
+});
+
+// 启动服务（跳过测试环境）
+if (process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    console.log('\n========================================');
   console.log('  Multi-Proxy Manager Shell');
   console.log(`  Access: http://localhost:${PORT}`);
   console.log(`  Managed proxies: ${Object.keys(PROXY_CONFIGS).join(', ') || 'none'}`);
   console.log('========================================\n');
 });
+}
+
 
 module.exports = app;

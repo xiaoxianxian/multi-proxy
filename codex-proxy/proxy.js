@@ -127,6 +127,8 @@ function loadRoutingMode() {
 
 function updateRoutingMode(mode) {
   try {
+    const dir = path.dirname(ROUTING_MODE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const data = JSON.stringify({ mode }, null, 2);
     const tmpFile = ROUTING_MODE_FILE + '.tmp';
     fs.writeFileSync(tmpFile, data, 'utf-8');
@@ -214,7 +216,9 @@ app.post('/api/set-routing-mode', (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid mode' });
   }
   try {
-    updateRoutingMode(mode);
+    if (!updateRoutingMode(mode)) {
+      return res.status(500).json({ success: false, error: 'Failed to write routing mode file' });
+    }
     routingMode = mode;
     console.log(`[ADMIN] 路由模式设置为: ${mode}`);
     res.json({ success: true, mode });

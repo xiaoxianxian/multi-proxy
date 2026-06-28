@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cursor Proxy - 配置</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+    </head>
+<body>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h1>
+          <span class="logo-icon">P</span>
+          Proxy Manager
+        </h1>
+        <button class="sidebar-close" onclick="closeSidebar()" aria-label="关闭侧边栏">&times;</button>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="dashboard.html">
+        <span class="icon">&#8592;</span> 返回概览
+      </a>
+      <div class="nav-section-label">代理服务</div>
+      <a class="nav-item" href="proxy-config.html?proxy=codex">
+        <span class="icon">&#129392;</span> Codex Proxy
+      </a>
+      <a class="nav-item" href="proxy-config.html?proxy=hermes">
+        <span class="icon">&#9889;</span> Hermes Proxy
+      </a>
+      <a class="nav-item active" href="proxy-config.html?proxy=cursor">
+        <span class="icon">&#9729;</span> Cursor Proxy
+      </a>
+      <div class="nav-section-label">系统</div>
+      <a class="nav-item" href="logs.html">
+        <span class="icon">&#9998;</span> 日志
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="version-info">v1.0.0</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="打开侧边栏">&#9776;</button>
+    <div class="proxy-header">
+      <div class="proxy-header-left">
+        <div class="proxy-icon">C</div>
+        <div class="proxy-title-group">
+          <h2>Cursor Proxy</h2>
+          <div class="proxy-meta">
+            <span class="status-badge online" id="proxyStatusBadge">
+              <span class="dot"></span>
+              <span id="proxyStatusText">运行中</span>
+            </span>
+            <span class="port-badge">Port 18794</span>
+          </div>
+        </div>
+      </div>
+      <div class="proxy-header-actions">
+        <button class="btn" id="btnStartStop" onclick="toggleProxyStatus()">
+          &#9654; 停止
+        </button>
+        <button class="btn" onclick="refreshPage()">
+          &#8635; 刷新
+        </button>
+      </div>
+    </div>
+
+    <div class="tabs-container">
+      <div class="section-tabs">
+        <div class="section-tab active" data-tab="config" onclick="switchTab(this, 'config')">配置</div>
+        <div class="section-tab" data-tab="providers" onclick="switchTab(this, 'providers')">供应商</div>
+        <div class="section-tab" data-tab="models" onclick="switchTab(this, 'models')">模型</div>
+        <div class="section-tab" data-tab="balances" onclick="switchTab(this, 'balances')">余额</div>
+      </div>
+
+      <div class="tab-content active" id="tab-config">
+        <div class="card">
+          <div class="card-title">当前配置</div>
+          <div class="card-subtitle">查看和修改代理的配置参数</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">配置文件路径</span>
+              <span class="info-value mono">~/.cursor/multi-model-config.json</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">当前模型</span>
+              <span class="info-value">claude-sonnet-4-20250514</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">路由模式</span>
+              <div class="select-wrapper">
+                <select id="routingModeSelect" onchange="changeRoutingMode(this.value)">
+                  <option value="failover" selected>Failover</option>
+                  <option value="round-robin">Round Robin</option>
+                  <option value="weighted">Weighted</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-providers">
+        <div class="card">
+          <div class="card-title">供应商管理</div>
+          <div class="card-subtitle">管理供应商配置，支持增删改查操作</div>
+          <div style="margin-bottom: 16px;">
+            <button class="btn btn-sm btn-primary" onclick="showAddProviderModal()">+ 添加供应商</button>
+          </div>
+          <div class="table-wrapper">
+            <table id="providersTable">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>Provider ID</th>
+                  <th>Base URL</th>
+                  <th>API Key <button class="key-toggle-btn" onclick="toggleKeyVisibility()" title="显示/隐藏密钥">&#9786;</button></th>
+                  <th>启用</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="providersBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-models">
+        <div class="card">
+          <div class="card-title">模型切换</div>
+          <div class="card-subtitle">选择并切换到新的模型</div>
+          <div class="model-switcher">
+            <div class="select-wrapper">
+              <select id="modelSelect"></select>
+            </div>
+            <button class="btn btn-primary" onclick="switchCurrentModel()">切换模型</button>
+          </div>
+          <div class="current-model-info">
+            当前模型: <strong id="currentModelDisplay">claude-sonnet-4-20250514</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-balances">
+        <div class="card">
+          <div class="card-title">账户余额</div>
+          <div class="card-subtitle">查看各供应商账户余额信息</div>
+          <div class="balance-grid" id="balanceGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+      <div class="history-header">
+        <div>
+          <div class="card-title" style="margin-bottom: 0;">切换历史</div>
+          <div class="card-subtitle" style="margin-bottom: 0;">最近 20 条模型切换记录</div>
+        </div>
+        <button class="btn btn-sm" onclick="clearHistory()">&#9855; 清除历史</button>
+      </div>
+      <div class="table-wrapper" style="margin-top: 12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>动作</th>
+              <th>旧模型</th>
+              <th>新模型</th>
+              <th>结果</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    var MOCK_PROVIDERS = [
+      { id: 'prov_001', name: 'OpenAI', provider_id: 'openai', base_url: 'https://api.example.com/v1', api_key: 'sk-test-key-xxxxx', enabled: true },
+      { id: 'prov_002', name: 'Anthropic', provider_id: 'anthropic', base_url: 'https://api.example-anthropic.com', api_key: 'sk-ant-test-xxxxx', enabled: true },
+      { id: 'prov_003', name: 'Google Gemini', provider_id: 'google', base_url: 'https://api.example-gemini.com/v1', api_key: 'AIzaSy-test-xxxxx', enabled: false },
+      { id: 'prov_004', name: 'Azure OpenAI', provider_id: 'azure', base_url: 'https://example-resource.openai.azure.com/openai/deployments', api_key: 'test-key-xxxxx', enabled: true },
+    ];
+
+    var MOCK_MODELS = [
+      { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
+      { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
+      { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet' },
+      { id: 'o3-mini', name: 'o3 mini' },
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-2.5-pro-preview-05-06', name: 'Gemini 2.5 Pro' },
+    ];
+
+    var MOCK_BALANCES = [
+      { name: 'OpenAI', amount: 12.50, currency: 'USD' },
+      { name: 'Anthropic', amount: 8.75, currency: 'USD' },
+      { name: 'Google AI', amount: 200.00, currency: 'USD' },
+      { name: 'Azure', amount: 45.20, currency: 'USD' },
+    ];
+
+    var MOCK_HISTORY = [
+      { timestamp: '2026-06-27T10:30:00Z', action: '手动切换', from: 'gpt-4o', to: 'claude-sonnet-4-20250514', success: true },
+      { timestamp: '2026-06-27T09:15:00Z', action: '自动切换', from: 'claude-3-5-sonnet-latest', to: 'gpt-4o', success: true },
+      { timestamp: '2026-06-27T08:45:00Z', action: '手动切换', from: 'o3-mini', to: 'claude-3-5-sonnet-latest', success: false },
+      { timestamp: '2026-06-26T22:10:00Z', action: 'Failover', from: 'claude-opus-4-20250514', to: 'claude-sonnet-4-20250514', success: true },
+      { timestamp: '2026-06-26T18:30:00Z', action: '手动切换', from: 'gpt-4o-mini', to: 'o3-mini', success: true },
+      { timestamp: '2026-06-26T14:20:00Z', action: '自动切换', from: 'gemini-2.0-flash', to: 'gpt-4o-mini', success: true },
+      { timestamp: '2026-06-26T11:00:00Z', action: '手动切换', from: 'claude-sonnet-4-20250514', to: 'gemini-2.0-flash', success: true },
+      { timestamp: '2026-06-25T20:45:00Z', action: 'Failover', from: 'gpt-4o', to: 'claude-sonnet-4-20250514', success: false },
+      { timestamp: '2026-06-25T16:30:00Z', action: '手动切换', from: 'o3-mini', to: 'gpt-4o', success: true },
+      { timestamp: '2026-06-25T09:00:00Z', action: '自动切换', from: 'claude-3-5-sonnet-latest', to: 'o3-mini', success: true },
+      { timestamp: '2026-06-24T23:15:00Z', action: '手动切换', from: 'gemini-2.5-pro-preview-05-06', to: 'claude-3-5-sonnet-latest', success: true },
+      { timestamp: '2026-06-24T19:40:00Z', action: 'Failover', from: 'gpt-4o', to: 'gemini-2.5-pro-preview-05-06', success: true },
+    ];
+
+    var providers = MOCK_PROVIDERS.slice();
+    var isRunning = true;
+    var currentModel = 'claude-sonnet-4-20250514';
+    var keyVisible = false;
+    var currentProxyName = 'cursor';
+
+    // ==================== API Layer ====================
+    function apiBase() {
+      // Try /admin-api first (cursor), fall back to forwarding through manager
+      return '';
+    }
+
+    async function fetchAdminApi(path, options = {}) {
+      const url = '/admin-api' + path;
+      const headers = { 'Content-Type': 'application/json' };
+      const token = sessionStorage.getItem('auth_token');
+      if (token) headers['x-auth-token'] = token;
+
+      try {
+        const res = await fetch(url, {
+          headers,
+          ...options,
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      } catch (e) {
+        // Fallback: try through proxy forwarder
+        const fwdUrl = '/api/' + currentProxyName + path;
+        const res2 = await fetch(fwdUrl, {
+          headers,
+          ...options,
+        });
+        if (!res2.ok) throw new Error('HTTP ' + res2.status);
+        return await res2.json();
+      }
+    }
+
+    async function loadProviders() {
+      try {
+        const data = await fetchAdminApi('/providers');
+        if (data && Array.isArray(data.providers)) {
+          providers = data.providers;
+        } else if (data && Array.isArray(data)) {
+          providers = data;
+        }
+      } catch {
+        providers = MOCK_PROVIDERS.slice();
+      }
+    }
+
+    async function addProvider(name, pid, url, key, enabled) {
+      try {
+        await fetchAdminApi('/providers', {
+          method: 'POST',
+          body: JSON.stringify({ name, provider_id: pid, base_url: url, api_key: key, enabled }),
+        });
+        await loadProviders();
+      } catch {
+        providers.push({ id: 'prov_' + Date.now(), name, provider_id: pid, base_url: url, api_key: key, enabled });
+        renderProviders();
+      }
+    }
+
+    async function updateProvider(id, name, url, key, enabled) {
+      try {
+        const body = { name, base_url: url, enabled };
+        if (key) body.api_key = key;
+        await fetchAdminApi('/providers/' + encodeURIComponent(id), {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        });
+        await loadProviders();
+      } catch {
+        for (var i = 0; i < providers.length; i++) {
+          if (providers[i].id === id) {
+            providers[i].name = name;
+            providers[i].base_url = url;
+            if (key) providers[i].api_key = key;
+            providers[i].enabled = enabled;
+            break;
+          }
+        }
+        renderProviders();
+      }
+    }
+
+    async function deleteProviderById(id) {
+      try {
+        await fetchAdminApi('/providers/' + encodeURIComponent(id), { method: 'DELETE' });
+        await loadProviders();
+      } catch {
+        for (var i = 0; i < providers.length; i++) {
+          if (providers[i].id === id) { providers.splice(i, 1); break; }
+        }
+        renderProviders();
+      }
+    }
+
+    async function toggleProviderEnabledApi(id, enabled) {
+      for (var i = 0; i < providers.length; i++) {
+        if (providers[i].id === id) { providers[i].enabled = enabled; break; }
+      }
+      renderProviders();
+      try {
+        await fetchAdminApi('/providers/' + encodeURIComponent(id), {
+          method: 'PUT',
+          body: JSON.stringify({ enabled }),
+        });
+      } catch {}
+    }
+
+    async function loadModels() {
+      try {
+        const data = await fetchAdminApi('/models');
+        if (data && Array.isArray(data.models)) {
+          return data.models;
+        } else if (data && Array.isArray(data)) {
+          return data;
+        }
+      } catch {}
+      return null;
+    }
+
+    async function switchModel(modelId) {
+      try {
+        await fetchAdminApi('/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ key: 'current_model', value: modelId }),
+        });
+      } catch {
+        // Fallback to in-memory only
+      }
+    }
+
+    async function loadBalances() {
+      try {
+        const data = await fetchAdminApi('/providers/balance');
+        if (data && Array.isArray(data.balances)) {
+          return data.balances;
+        }
+      } catch {}
+      return null;
+    }
+
+    function getProxyFromUrl() {
+      var params = new URLSearchParams(window.location.search);
+      return params.get('proxy') || 'cursor';
+    }
+
+    var proxyDisplayNameMap = {
+      codex: 'Codex Proxy',
+      hermes: 'Hermes Proxy',
+      cursor: 'Cursor Proxy',
+    };
+
+    var proxyIconMap = {
+      codex: '&#129392;',
+      hermes: '&#9889;',
+      cursor: '&#9729;',
+    };
+
+    var proxyColorMap = {
+      codex: { bg: '#ede9fe', color: '#7c3aed', letter: 'C' },
+      hermes: { bg: '#fef3c7', color: '#d97706', letter: 'H' },
+      cursor: { bg: '#dbeafe', color: '#2563eb', letter: 'C' },
+    };
+
+    var displayName; // module-scoped so toggleProxyStatus can use it
+
+    // ==================== Core Init ====================
+    function init() {
+      currentProxyName = getProxyFromUrl();
+
+      // Dynamic title (T13)
+      displayName = proxyDisplayNameMap[currentProxyName] || currentProxyName;
+      document.title = displayName + ' - 配置';
+
+      // Update header with proxy-specific info
+      updateProxyHeader(displayName);
+
+      // Highlight active nav item
+      highlightActiveNav();
+
+      // Restore tab from URL hash
+      var tabName = getTabFromHash();
+      var tabEl = document.querySelector('.section-tab[data-tab="' + tabName + '"]');
+      if (tabEl) {
+        switchTab(tabEl, tabName);
+      }
+
+      // Load data
+      renderProviders();
+      renderModels();
+      renderBalances();
+      renderHistory();
+      loadConfigData();
+
+      // Fetch real status
+      fetchStatus();
+    }
+
+    function highlightActiveNav() {
+      var items = document.querySelectorAll('.nav-item');
+      for (var i = 0; i < items.length; i++) {
+        var href = items[i].getAttribute('href') || '';
+        items[i].classList.remove('active');
+        if (href.indexOf('proxy=' + currentProxyName) !== -1) {
+          items[i].classList.add('active');
+        }
+      }
+    }
+
+    function updateProxyHeader(name) {
+      var h2 = document.querySelector('.proxy-title-group h2');
+      if (h2) h2.textContent = name;
+      var icon = document.querySelector('.proxy-icon');
+      if (icon) {
+        var colors = proxyColorMap[currentProxyName] || proxyColorMap.cursor;
+        icon.textContent = colors.letter;
+        icon.style.background = 'linear-gradient(135deg, ' + colors.color + ' 0%, ' + adjustColor(colors.color, 40) + ' 100%)';
+      }
+      var portBadge = document.querySelector('.port-badge');
+      if (portBadge) {
+        var ports = { codex: 18790, hermes: 18793, cursor: 18794 };
+        portBadge.textContent = 'Port ' + (ports[currentProxyName] || 0);
+      }
+    }
+
+    function adjustColor(hex, amount) {
+      hex = hex.replace('#', '');
+      var r = Math.min(255, parseInt(hex.substring(0, 2), 16) + amount);
+      var g = Math.min(255, parseInt(hex.substring(2, 4), 16) + amount);
+      var b = Math.min(255, parseInt(hex.substring(4, 6), 16) + amount);
+      return '#' + [r, g, b].map(function(c) { return c.toString(16).padStart(2, '0'); }).join('');
+    }
+
+    async function loadModelsData() {
+      var models = await loadModels();
+      if (models) {
+        MOCK_MODELS.length = 0;
+        for (var i = 0; i < models.length; i++) {
+          MOCK_MODELS.push({ id: models[i].id || models[i].model_id || models[i], name: models[i].name || models[i].display_name || models[i] });
+        }
+        if (MOCK_MODELS.length === 0) {
+          MOCK_MODELS.push({ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' });
+        }
+      }
+    }
+
+    async function loadBalancesData() {
+      var balances = await loadBalances();
+      if (balances && balances.length > 0) {
+        MOCK_BALANCES.length = 0;
+        for (var i = 0; i < balances.length; i++) {
+          MOCK_BALANCES.push({
+            name: balances[i].name || balances[i].provider_name || 'Unknown',
+            amount: parseFloat(balances[i].amount || balances[i].balance || 0),
+            currency: balances[i].currency || 'USD',
+          });
+        }
+      }
+    }
+
+    async function loadConfigData() {
+      try {
+        var res = await fetch('/api/' + currentProxyName + '/admin-api/settings', {
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        });
+        if (!res.ok) return;
+        var data = await res.json();
+        if (!data.settings) return;
+        var s = data.settings;
+        if (s.current_model) {
+          currentModel = s.current_model;
+          var disp = document.getElementById('currentModelDisplay');
+          if (disp) disp.textContent = s.current_model;
+          var sel = document.getElementById('modelSelect');
+          if (sel) {
+            for (var i = 0; i < sel.options.length; i++) {
+              if (sel.options[i].value === s.current_model) { sel.selectedIndex = i; break; }
+            }
+          }
+        }
+        if (s.routing_mode) {
+          var sel2 = document.getElementById('routingModeSelect');
+          if (sel2) sel2.value = s.routing_mode;
+        }
+      } catch {}
+    }
+
+    function getAuthHeaders() {
+      var token = sessionStorage.getItem('auth_token');
+      var h = { 'Content-Type': 'application/json' };
+      if (token) h['x-auth-token'] = token;
+      return h;
+    }
+
+    async function fetchStatus() {
+      try {
+        var res = await fetch('/api/status');
+        if (res.ok) {
+          var data = await res.json();
+          if (data[currentProxyName]) {
+            var st = data[currentProxyName];
+            isRunning = st.running;
+            var badge = document.getElementById('proxyStatusBadge');
+            var text = document.getElementById('proxyStatusText');
+            var btn = document.getElementById('btnStartStop');
+            if (st.running) {
+              badge.className = 'status-badge online';
+              text.textContent = '运行中';
+              btn.innerHTML = '&#9654; 停止';
+            } else {
+              badge.className = 'status-badge offline';
+              text.textContent = '未运行';
+              btn.innerHTML = '&#9655; 启动';
+            }
+          }
+        }
+      } catch {}
+    }
+
+    async function toggleProxyStatus() {
+      var name = currentProxyName;
+      var btn = document.getElementById('btnStartStop');
+      var badge = document.getElementById('proxyStatusBadge');
+      var text = document.getElementById('proxyStatusText');
+
+      if (isRunning) {
+        // Stop
+        try {
+          var res = await fetch('/api/stop/' + name, { method: 'POST' });
+          var data = await res.json();
+          if (data.success) {
+            isRunning = false;
+            badge.className = 'status-badge offline';
+            text.textContent = '未运行';
+            btn.innerHTML = '&#9655; 启动';
+            showToast(displayName + ' 已停止', 'info');
+            return;
+          }
+        } catch {}
+        // Fallback
+        isRunning = false;
+        badge.className = 'status-badge offline';
+        text.textContent = '未运行';
+        btn.innerHTML = '&#9655; 启动';
+        showToast('模拟模式: ' + name + ' 已停止', 'info', 2000);
+      } else {
+        // Start
+        try {
+          var res = await fetch('/api/start/' + name, { method: 'POST' });
+          var data = await res.json();
+          if (data.success) {
+            isRunning = true;
+            badge.className = 'status-badge online';
+            text.textContent = '运行中';
+            btn.innerHTML = '&#9654; 停止';
+            showToast(displayName + ' 已启动', 'success');
+            return;
+          }
+        } catch {}
+        // Fallback
+        isRunning = true;
+        badge.className = 'status-badge online';
+        text.textContent = '运行中';
+        btn.innerHTML = '&#9654; 停止';
+        showToast('模拟模式: ' + name + ' 已启动', 'success', 2000);
+      }
+    }
+
+    function goBack() {
+      window.location.href = 'dashboard.html';
+    }
+
+    function toggleKeyVisibility() {
+      keyVisible = !keyVisible;
+      renderProviders();
+    }
+
+    function switchTab(tabEl, tabName) {
+      document.querySelectorAll('.section-tab').forEach(function(t) { t.classList.remove('active'); });
+      tabEl.classList.add('active');
+      document.querySelectorAll('.tab-content').forEach(function(tc) { tc.classList.remove('active'); });
+      document.getElementById('tab-' + tabName).classList.add('active');
+      history.replaceState(null, '', '#' + tabName);
+    }
+
+    function getTabFromHash() {
+      var hash = location.hash.replace('#', '');
+      if (hash) return hash;
+      return 'config'; // default tab
+    }
+
+    function renderProviders() {
+      var tbody = document.getElementById('providersBody');
+      var html = '';
+      for (var i = 0; i < providers.length; i++) {
+        var p = providers[i];
+        html += '<tr data-provider-id="' + esc(p.id) + '">' +
+          '<td><strong>' + esc(p.name) + '</strong></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;">' + esc(p.provider_id) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(p.base_url) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;">' + (keyVisible ? esc(p.api_key) : maskKey(p.api_key)) + '</code></td>' +
+          '<td><label class="toggle"><input type="checkbox" class="provider-enable-toggle" ' + (p.enabled ? 'checked' : '') + '><span class="toggle-slider"></span></label></td>' +
+          '<td class="actions">' +
+            '<button class="btn btn-sm edit-provider-btn" data-id="' + esc(p.id) + '">编辑</button>' +
+            '<button class="btn btn-sm btn-danger delete-provider-btn" data-id="' + esc(p.id) + '">删除</button>' +
+          '</td></tr>';
+      }
+      tbody.innerHTML = html;
+    }
+
+    function maskKey(key) {
+      if (!key || key.length < 12) return '***';
+      return key.substring(0, 4) + '•'.repeat(Math.max(key.length - 8, 4)) + key.substring(key.length - 4);
+    }
+
+    function toggleProviderEnabled(id, enabled) {
+      toggleProviderEnabledApi(id, enabled);
+    }
+
+    function deleteProvider(id) {
+      var idx = -1;
+      for (var i = 0; i < providers.length; i++) {
+        if (providers[i].id === id) { idx = i; break; }
+      }
+      if (idx === -1) return;
+      if (!confirm('确定要删除供应商 "' + providers[idx].name + '" 吗？')) return;
+      var removed = providers.splice(idx, 1)[0];
+      deleteProviderById(removed.id).catch(function() {
+        // Fallback: already removed from array
+        renderProviders();
+        showToast('已删除 ' + removed.name, 'success');
+      });
+    }
+
+    function createFormField(labelText, inputType, inputId, opts) {
+      opts = opts || {};
+      var group = document.createElement('div');
+      group.className = 'form-group';
+      var label = document.createElement('label');
+      label.setAttribute('for', inputId);
+      label.textContent = labelText;
+      group.appendChild(label);
+
+      var input = document.createElement('input');
+      input.type = inputType;
+      input.id = inputId;
+      if (opts.placeholder) input.placeholder = opts.placeholder;
+      if (opts.value !== undefined) input.value = opts.value;
+      if (opts.disabled) input.disabled = true;
+      if (opts.defaultChecked) input.defaultChecked = true;
+      group.appendChild(input);
+
+      if (opts.hint) {
+        var hint = document.createElement('div');
+        hint.className = 'hint';
+        hint.textContent = opts.hint;
+        group.appendChild(hint);
+      }
+
+      return group;
+    }
+
+    function createCheckboxField(checkboxId, labelText, checked) {
+      var row = document.createElement('div');
+      row.className = 'form-check';
+
+      var labelMain = document.createElement('label');
+      labelMain.style.cssText = 'display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text-secondary);';
+      labelMain.setAttribute('for', checkboxId);
+
+      var toggleWrapper = document.createElement('label');
+      toggleWrapper.style.cssText = 'position:relative;width:40px;height:24px;display:inline-block;flex-shrink:0;cursor:pointer;';
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.id = checkboxId;
+      if (checked) chk.checked = true;
+      var slider = document.createElement('span');
+      slider.className = 'toggle-slider';
+      toggleWrapper.appendChild(chk);
+      toggleWrapper.appendChild(slider);
+
+      var spanLabel = document.createElement('span');
+      spanLabel.textContent = labelText;
+
+      labelMain.appendChild(toggleWrapper);
+      labelMain.appendChild(spanLabel);
+      row.appendChild(labelMain);
+      return row;
+    }
+
+    function showAddProviderModal() {
+      var modal = document.createElement('div');
+      modal.className = 'modal';
+
+      var title = document.createElement('div');
+      title.className = 'modal-title';
+      title.textContent = '添加供应商';
+      modal.appendChild(title);
+
+      modal.appendChild(createFormField('名称 *', 'text', 'modal-name', { placeholder: '如: OpenAI' }));
+      modal.appendChild(createFormField('Provider ID *', 'text', 'modal-provider-id', { placeholder: '如: openai', hint: '唯一标识符，用于路由配置' }));
+      modal.appendChild(createFormField('Base URL *', 'text', 'modal-base-url', { placeholder: 'https://api.openai.com/v1' }));
+      modal.appendChild(createFormField('API Key *', 'password', 'modal-api-key', { placeholder: 'sk-...' }));
+      modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', true));
+
+      // Action buttons
+      var actions = document.createElement('div');
+      actions.className = 'modal-actions';
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn';
+      cancelBtn.id = 'modal-cancel';
+      cancelBtn.textContent = '取消';
+
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary';
+      saveBtn.id = 'modal-save';
+      saveBtn.textContent = '保存';
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+      modal.appendChild(actions);
+
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.appendChild(modal);
+
+      document.body.appendChild(overlay);
+      cancelBtn.onclick = function() { overlay.remove(); };
+      saveBtn.onclick = function() {
+        var nameEl = document.getElementById('modal-name');
+        var pidEl = document.getElementById('modal-provider-id');
+        var urlEl = document.getElementById('modal-base-url');
+        var keyEl = document.getElementById('modal-api-key');
+        var enEl = document.getElementById('modal-enabled');
+        var name = nameEl.value.trim();
+        var pid = pidEl.value.trim();
+        var url = urlEl.value.trim();
+        var key = keyEl.value.trim();
+        var en = enEl.checked;
+        if (!name || !pid || !url || !key) { showToast('请填写所有必填字段', 'error'); return; }
+        // T14: URL format validation
+        if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
+        // T14: API Key basic validation
+        if (key.length < 8) { showToast('API Key 长度至少 8 个字符', 'error'); return; }
+        addProvider(name, pid, url, key, en);
+        overlay.remove();
+        showToast('已添加供应商 ' + name, 'success');
+      };
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    }
+
+    function showEditProviderModal(id) {
+      var provider = null;
+      for (var i = 0; i < providers.length; i++) {
+        if (providers[i].id === id) { provider = providers[i]; break; }
+      }
+      if (!provider) { showToast('未找到供应商', 'error'); return; }
+
+      var modal = document.createElement('div');
+      modal.className = 'modal';
+
+      var title = document.createElement('div');
+      title.className = 'modal-title';
+      title.textContent = '编辑供应商';
+      modal.appendChild(title);
+
+      var nameField = document.createElement('div');
+      nameField.className = 'form-group';
+      var nameLabel = document.createElement('label');
+      nameLabel.setAttribute('for', 'modal-name');
+      nameLabel.textContent = '名称 *';
+      nameField.appendChild(nameLabel);
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.id = 'modal-name';
+      nameInput.value = provider.name;
+      nameField.appendChild(nameInput);
+      modal.appendChild(nameField);
+
+      var pidField = document.createElement('div');
+      pidField.className = 'form-group';
+      var pidLabel = document.createElement('label');
+      pidLabel.setAttribute('for', 'modal-provider-id');
+      pidLabel.textContent = 'Provider ID';
+      pidField.appendChild(pidLabel);
+      var pidInput = document.createElement('input');
+      pidInput.type = 'text';
+      pidInput.id = 'modal-provider-id';
+      pidInput.value = provider.provider_id;
+      pidInput.disabled = true;
+      pidField.appendChild(pidInput);
+      var pidHint = document.createElement('div');
+      pidHint.className = 'hint';
+      pidHint.textContent = 'Provider ID 不可修改';
+      pidField.appendChild(pidHint);
+      modal.appendChild(pidField);
+
+      var urlField = document.createElement('div');
+      urlField.className = 'form-group';
+      var urlLabel = document.createElement('label');
+      urlLabel.setAttribute('for', 'modal-base-url');
+      urlLabel.textContent = 'Base URL *';
+      urlField.appendChild(urlLabel);
+      var urlInput = document.createElement('input');
+      urlInput.type = 'text';
+      urlInput.id = 'modal-base-url';
+      urlInput.value = provider.base_url;
+      urlField.appendChild(urlInput);
+      modal.appendChild(urlField);
+
+      var keyField = document.createElement('div');
+      keyField.className = 'form-group';
+      var keyLabel = document.createElement('label');
+      keyLabel.setAttribute('for', 'modal-api-key');
+      keyLabel.textContent = 'API Key';
+      keyField.appendChild(keyLabel);
+      var keyInput = document.createElement('input');
+      keyInput.type = 'password';
+      keyInput.id = 'modal-api-key';
+      keyInput.placeholder = '留空则不修改';
+      keyField.appendChild(keyInput);
+      var keyHint = document.createElement('div');
+      keyHint.className = 'hint';
+      keyHint.textContent = '留空表示不修改当前密钥';
+      keyField.appendChild(keyHint);
+      modal.appendChild(keyField);
+
+      modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', provider.enabled));
+
+      var actions = document.createElement('div');
+      actions.className = 'modal-actions';
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn';
+      cancelBtn.id = 'modal-cancel';
+      cancelBtn.textContent = '取消';
+
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary';
+      saveBtn.id = 'modal-save';
+      saveBtn.textContent = '保存';
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+      modal.appendChild(actions);
+
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.appendChild(modal);
+
+      document.body.appendChild(overlay);
+      cancelBtn.onclick = function() { overlay.remove(); };
+      saveBtn.onclick = function() {
+        var nameEl = document.getElementById('modal-name');
+        var urlEl = document.getElementById('modal-base-url');
+        var keyEl = document.getElementById('modal-api-key');
+        var enEl = document.getElementById('modal-enabled');
+        var name = nameEl.value.trim();
+        var url = urlEl.value.trim();
+        var key = keyEl.value.trim();
+        var en = enEl.checked;
+        if (!name || !url) { showToast('请填写所有必填字段', 'error'); return; }
+        // T14: URL format validation
+        if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
+        updateProvider(provider.id, name, url, key, en);
+        overlay.remove();
+        showToast('已更新 ' + name, 'success');
+      };
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    }
+
+    function esc(str) {
+      var d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function renderModels() {
+      var sel = document.getElementById('modelSelect');
+      var html = '';
+      for (var i = 0; i < MOCK_MODELS.length; i++) {
+        var m = MOCK_MODELS[i];
+        html += '<option value="' + esc(m.id) + '"' + (m.id === currentModel ? ' selected' : '') + '>' + esc(m.name) + ' (' + m.id + ')</option>';
+      }
+      sel.innerHTML = html;
+    }
+
+    function switchCurrentModel() {
+      var sel = document.getElementById('modelSelect');
+      var nm = sel.value;
+      if (nm === currentModel) { showToast('已经是当前模型', 'info'); return; }
+      currentModel = nm;
+      document.getElementById('currentModelDisplay').textContent = nm;
+      switchModel(nm).catch(function() {
+        showToast('模拟模式: 模型已切换为 ' + nm, 'info', 2000);
+      });
+    }
+
+    function renderBalances() {
+      var grid = document.getElementById('balanceGrid');
+      var html = '';
+      for (var i = 0; i < MOCK_BALANCES.length; i++) {
+        var b = MOCK_BALANCES[i];
+        html += '<div class="balance-card"><span class="balance-name">' + esc(b.name) + '</span><span class="balance-amount">' + b.amount.toFixed(2) + ' <span class="balance-currency">' + b.currency + '</span></span></div>';
+      }
+      grid.innerHTML = html;
+    }
+
+    function renderHistory() {
+      var tbody = document.getElementById('historyBody');
+      var html = '';
+      var list = MOCK_HISTORY.slice(0, 20).reverse();
+      for (var i = 0; i < list.length; i++) {
+        var h = list[i];
+        html += '<tr>' +
+          '<td><span class="ts">' + fmtTime(h.timestamp) + '</span></td>' +
+          '<td>' + esc(h.action) + '</td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;">' + esc(h.from) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;">' + esc(h.to) + '</code></td>' +
+          '<td><span class="result-dot ' + (h.success ? 'success' : 'fail') + '"><span class="dot"></span>' + (h.success ? '成功' : '失败') + '</span></td>' +
+        '</tr>';
+      }
+      tbody.innerHTML = html;
+    }
+
+    function fmtTime(ts) {
+      var d = new Date(ts);
+      var now = new Date();
+      var ms = now - d;
+      var h = Math.floor(ms / 3600000);
+      var m = Math.floor(ms / 60000);
+      if (h < 1) return m + '分钟前';
+      if (h < 24) return h + '小时前';
+      return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function clearHistory() {
+      if (!confirm('确定要清除所有切换历史吗？')) return;
+      MOCK_HISTORY.length = 0;
+      renderHistory();
+      showToast('历史记录已清除', 'success');
+    }
+
+    async function refreshPage() {
+      var loadingBtn = document.getElementById('refreshBtn');
+      if (loadingBtn) loadingBtn.disabled = true;
+
+      try {
+        await Promise.all([
+          loadProviders(),
+          loadModelsData(),
+          loadBalancesData(),
+          fetchStatus(),
+          loadConfigData(),
+        ]);
+        renderProviders();
+        renderModels();
+        renderBalances();
+        showToast('数据已刷新', 'success');
+      } catch (e) {
+        showToast('刷新失败: ' + e.message, 'error');
+      } finally {
+        if (loadingBtn) loadingBtn.disabled = false;
+      }
+    }
+
+    async function changeRoutingMode(mode) {
+      try {
+        await fetchAdminApi('/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ key: 'routing_mode', value: mode }),
+        });
+        showToast('路由模式已切换为 ' + mode, 'success');
+      } catch {
+        // Fallback: optimistic update
+        showToast('路由模式已切换为 ' + mode, 'info');
+      }
+    }
+
+    function showToast(msg, type) {
+      type = type || 'info';
+      var c = document.getElementById('toastContainer');
+      var t = document.createElement('div');
+      t.className = 'toast ' + type;
+      t.textContent = msg;
+      c.appendChild(t);
+      setTimeout(function() {
+        t.style.transition = 'opacity 0.3s ease';
+        t.style.opacity = '0';
+        setTimeout(function() { t.remove(); }, 300);
+      }, 2500);
+    }
+
+    function toggleSidebar() {
+      var sb = document.getElementById('sidebar');
+      if (sb) sb.classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      var sb = document.getElementById('sidebar');
+      if (sb) sb.classList.remove('open');
+    }
+
+    init();
+
+    // ==================== Event Delegation for Provider Table ====================
+    document.addEventListener('click', function(e) {
+      var editBtn = e.target.closest('.edit-provider-btn');
+      if (editBtn) {
+        var id = editBtn.getAttribute('data-id');
+        showEditProviderModal(id);
+        return;
+      }
+      var delBtn = e.target.closest('.delete-provider-btn');
+      if (delBtn) {
+        var id = delBtn.getAttribute('data-id');
+        deleteProvider(id);
+        return;
+      }
+    });
+
+    document.addEventListener('change', function(e) {
+      var toggle = e.target.closest('.provider-enable-toggle');
+      if (toggle) {
+        var row = toggle.closest('tr');
+        if (!row) return;
+        var id = row.getAttribute('data-provider-id');
+        toggleProviderEnabled(id, toggle.checked);
+      }
+    });
+  </script>
+
+    <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg-primary: #ffffff;
+      --bg-secondary: #f8fafc;
+      --bg-tertiary: #f1f5f9;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-tertiary: #94a3b8;
+      --border: #e2e8f0;
+      --border-light: #f1f5f9;
+      --success: #10b981;
+      --success-bg: #ecfdf5;
+      --error: #ef4444;
+      --error-bg: #fef2f2;
+      --warning: #f59e0b;
+      --warning-bg: #fffbeb;
+      --radius: 8px;
+      --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.5;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 220px;
+      background: var(--bg-primary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 100;
+    }
+
+    .sidebar-header {
+      padding: 20px 16px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-header h1 .logo-icon {
+      width: 24px;
+      height: 24px;
+      background: var(--primary);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 12px 8px;
+      overflow-y: auto;
+    }
+
+    .nav-section-label {
+      padding: 8px 8px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      margin: 1px 0;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 400;
+      transition: all 0.15s ease;
+      user-select: none;
+      text-decoration: none;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: #eff6ff;
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .nav-item .icon {
+      margin-right: 8px;
+      font-size: 15px;
+      width: 18px;
+      text-align: center;
+    }
+
+    .main {
+      flex: 1;
+      margin-left: 220px;
+      overflow-y: auto;
+      padding: 24px 32px 48px;
+      min-height: 100vh;
+    }
+
+    .proxy-header {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .proxy-header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .proxy-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 20px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .proxy-title-group h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .proxy-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-badge.online {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .status-badge.offline {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .port-badge {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      background: var(--bg-tertiary);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+      font-family: 'SF Mono', 'Menlo', monospace;
+    }
+
+    .proxy-header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      transition: all 0.15s ease;
+      user-select: none;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: var(--bg-secondary);
+      border-color: #cbd5e1;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+    }
+
+    .btn-danger {
+      color: var(--error);
+      border-color: #fecaca;
+    }
+
+    .btn-danger:hover {
+      background: var(--error-bg);
+      border-color: var(--error);
+    }
+
+    .btn-sm {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .tabs-container {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .section-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 0 4px;
+      background: var(--bg-secondary);
+    }
+
+    .section-tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .section-tab:hover {
+      color: var(--text-primary);
+    }
+
+    .section-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: var(--bg-primary);
+    }
+
+    .tab-content {
+      display: none;
+      padding: 24px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .card {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card:last-child {
+      margin-bottom: 0;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text-primary);
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 16px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-label {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .info-value {
+      font-size: 14px;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .info-value.mono {
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 13px;
+      background: var(--bg-secondary);
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border-light);
+      display: inline-block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .select-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .select-wrapper select {
+      appearance: none;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 32px 6px 10px;
+      font-size: 13px;
+      color: var(--text-primary);
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      min-width: 180px;
+    }
+
+    .select-wrapper select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .select-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--text-tertiary);
+      pointer-events: none;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead {
+      background: var(--bg-secondary);
+    }
+
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-light);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover td {
+      background: #f8fafc;
+    }
+
+    td.actions {
+      white-space: nowrap;
+      display: flex;
+      gap: 6px;
+    }
+
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 24px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #d1d5db;
+      border-radius: 24px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      top: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: var(--success);
+    }
+
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+    }
+
+    .balance-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .balance-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .balance-card .balance-name {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .balance-card .balance-amount {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--success);
+    }
+
+    .balance-card .balance-currency {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-weight: 400;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .ts {
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .result-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .result-dot .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .result-dot.success .dot { background: var(--success); }
+    .result-dot.success { color: var(--success); }
+    .result-dot.fail .dot { background: var(--error); }
+    .result-dot.fail { color: var(--error); }
+
+    .key-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--text-tertiary);
+      font-size: 12px;
+      padding: 0;
+      margin-left: 4px;
+      vertical-align: middle;
+      border-radius: 3px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+
+    .key-toggle-btn:hover {
+      color: var(--primary);
+      background: var(--primary-bg);
+    }
+
+    .model-switcher {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .model-switcher .select-wrapper select {
+      min-width: 240px;
+    }
+
+    .current-model-info {
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .current-model-info strong {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal {
+      background: var(--bg-primary);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      width: 480px;
+      max-width: 90vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+      animation: slideUp 0.2s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-primary);
+      transition: all 0.15s ease;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .form-group input[type="password"] {
+      font-family: 'SF Mono', 'Menlo', monospace;
+    }
+
+    .form-group .hint {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    .form-check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .form-check label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-md);
+      animation: slideInRight 0.3s ease;
+      max-width: 360px;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .toast.success {
+      background: white;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .toast.error {
+      background: white;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .toast.info {
+      background: white;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .sidebar-footer {
+      padding: 16px 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .sidebar-footer .version-info {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 768px) {
+      .hamburger-btn {
+        display: flex;
+      }
+      .sidebar {
+        display: none;
+        width: 260px;
+        z-index: 200;
+        box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+      }
+      .sidebar.open {
+        display: flex;
+      }
+      .sidebar-close {
+        display: block;
+      }
+      .main {
+        margin-left: 0;
+        padding: 16px 16px 48px;
+      }
+      .proxy-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .proxy-header-actions { width: 100%; }
+      .proxy-header-actions .btn { flex: 1; justify-content: center; }
+      .info-grid { grid-template-columns: 1fr; }
+      .balance-grid { grid-template-columns: 1fr; }
+      .model-switcher { flex-direction: column; align-items: stretch; }
+      .section-tab { padding: 10px 14px; font-size: 12px; }
+    }
+  </style>
+</body>
+</html>

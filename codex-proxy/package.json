@@ -1,0 +1,17 @@
+{
+  "name": "codex-proxy",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node proxy.js",
+    "test": "jest --verbose --forceExit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}
