@@ -126,7 +126,7 @@ install_cursor() {
     fi
 
     print_info "编译 TypeScript..."
-    BUILD_LOG="/tmp/cursor-build.log"
+    BUILD_LOG="$SCRIPT_DIR/logs/cursor-build.log"
     (cd "$dir" && npm run build > "$BUILD_LOG" 2>&1)
     BUILD_EXIT=$?
     if [ $BUILD_EXIT -ne 0 ]; then
@@ -207,7 +207,7 @@ start_codex() {
     print_warn "Codex Proxy 已在运行"
     return 0
   fi
-  (cd "$ROOT_DIR/codex-proxy" && node proxy.js > /tmp/codex-proxy.log 2>&1 &)
+  (cd "$ROOT_DIR/codex-proxy" && node proxy.js > "$SCRIPT_DIR/logs/codex-proxy.log" 2>&1 &)
   sleep 1
   is_port_in_use $CODEx_PORT && print_ok "Codex Proxy 已启动" || print_err "Codex Proxy 启动失败"
 }
@@ -217,7 +217,7 @@ start_hermes() {
     print_warn "Hermes Proxy 已在运行"
     return 0
   fi
-  (cd "$ROOT_DIR/hermes-proxy" && python3 proxy.py > /tmp/hermes-proxy.log 2>&1 &)
+  (cd "$ROOT_DIR/hermes-proxy" && python3 proxy.py > "$SCRIPT_DIR/logs/hermes-proxy.log" 2>&1 &)
   sleep 1
   is_port_in_use $HERMES_PORT && print_ok "Hermes Proxy 已启动" || print_err "Hermes Proxy 启动失败"
 }
@@ -231,7 +231,7 @@ start_cursor() {
     print_err "Cursor Proxy 未编译，请先运行: cd cursor-multi-model-proxy && npm run build"
     return 1
   fi
-  (cd "$ROOT_DIR/cursor-multi-model-proxy" && node dist/server/start.js > /tmp/cursor-proxy.log 2>&1 &)
+  (cd "$ROOT_DIR/cursor-multi-model-proxy" && node dist/server/start.js > "$SCRIPT_DIR/logs/cursor-proxy.log" 2>&1 &)
   sleep 1
   is_port_in_use $CURSOR_PORT && print_ok "Cursor Proxy 已启动" || print_err "Cursor Proxy 启动失败"
 }
@@ -241,7 +241,7 @@ start_manager() {
     print_warn "Manager Shell 已在运行"
     return 0
   fi
-  (cd "$ROOT_DIR/multi-proxy-manager" && node server.js > /tmp/manager.log 2>&1 &)
+  (cd "$ROOT_DIR/multi-proxy-manager" && node server.js > "$SCRIPT_DIR/logs/manager.log" 2>&1 &)
   sleep 1
   is_port_in_use $MANAGER_PORT && print_ok "Manager Shell 已启动" || print_err "Manager Shell 启动失败"
 }

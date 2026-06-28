@@ -5,6 +5,10 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# 日志目录
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR" 2>/dev/null
+
 # 各代理目录（扁平结构，平级关系）
 CODEx_PROXY_DIR="$SCRIPT_DIR/codex-proxy"
 HERMES_PROXY_DIR="$SCRIPT_DIR/hermes-proxy"
@@ -58,7 +62,7 @@ start_codex() {
 
   cd "$CODEx_PROXY_DIR" || exit 1
   print_status "启动 Codex Proxy..."
-  node proxy.js > /tmp/codex-proxy.log 2>&1 &
+  node proxy.js > "$LOG_DIR/codex-proxy.log" 2>&1 &
   local pid=$!
 
   sleep 2
@@ -86,7 +90,7 @@ start_hermes() {
 
   cd "$HERMES_PROXY_DIR" || exit 1
   print_status "启动 Hermes Proxy..."
-  python3 proxy.py > /tmp/hermes-proxy.log 2>&1 &
+  python3 proxy.py > "$LOG_DIR/hermes-proxy.log" 2>&1 &
   local pid=$!
 
   sleep 2
@@ -105,7 +109,7 @@ start_cursor() {
   # Check and compile TypeScript if dist missing
   if [ ! -d "$CURSOR_PROXY_DIR/dist" ]; then
     print_warning "Cursor Proxy 未编译，正在编译..."
-    BUILD_LOG="/tmp/cursor-build.log"
+    BUILD_LOG="$LOG_DIR/cursor-build.log"
     (cd "$CURSOR_PROXY_DIR" && npm run build 2>&1) > "$BUILD_LOG"
     BUILD_EXIT=$?
     if [ $BUILD_EXIT -ne 0 ]; then
@@ -129,7 +133,7 @@ start_cursor() {
 
   cd "$CURSOR_PROXY_DIR" || exit 1
   print_status "启动 Cursor Proxy..."
-  node dist/server/start.js > /tmp/cursor-proxy.log 2>&1 &
+  node dist/server/start.js > "$LOG_DIR/cursor-proxy.log" 2>&1 &
   local pid=$!
 
   sleep 2
@@ -157,7 +161,7 @@ start_manager() {
 
   cd "$MANAGER_DIR" || exit 1
   print_status "启动 Multi-Proxy Manager Shell..."
-  node server.js > /tmp/manager.log 2>&1 &
+  node server.js > "$LOG_DIR/manager.log" 2>&1 &
   local pid=$!
 
   sleep 2
@@ -259,32 +263,32 @@ show_logs() {
   case $service in
     codex)
       echo "=== Codex Proxy 日志 ==="
-      tail -50 /tmp/codex-proxy.log 2>/dev/null || echo "日志文件不存在"
+      tail -50 "$LOG_DIR/codex-proxy.log" 2>/dev/null || echo "日志文件不存在"
       ;;
     hermes)
       echo "=== Hermes Proxy 日志 ==="
-      tail -50 /tmp/hermes-proxy.log 2>/dev/null || echo "日志文件不存在"
+      tail -50 "$LOG_DIR/hermes-proxy.log" 2>/dev/null || echo "日志文件不存在"
       ;;
     cursor)
       echo "=== Cursor Proxy 日志 ==="
-      tail -50 /tmp/cursor-proxy.log 2>/dev/null || echo "日志文件不存在"
+      tail -50 "$LOG_DIR/cursor-proxy.log" 2>/dev/null || echo "日志文件不存在"
       ;;
     manager)
       echo "=== Manager Shell 日志 ==="
-      tail -50 /tmp/manager.log 2>/dev/null || echo "日志文件不存在"
+      tail -50 "$LOG_DIR/manager.log" 2>/dev/null || echo "日志文件不存在"
       ;;
     all)
       echo "=== Codex Proxy 日志 ==="
-      tail -20 /tmp/codex-proxy.log 2>/dev/null || echo "日志文件不存在"
+      tail -20 "$LOG_DIR/codex-proxy.log" 2>/dev/null || echo "日志文件不存在"
       echo ""
       echo "=== Hermes Proxy 日志 ==="
-      tail -20 /tmp/hermes-proxy.log 2>/dev/null || echo "日志文件不存在"
+      tail -20 "$LOG_DIR/hermes-proxy.log" 2>/dev/null || echo "日志文件不存在"
       echo ""
       echo "=== Cursor Proxy 日志 ==="
-      tail -20 /tmp/cursor-proxy.log 2>/dev/null || echo "日志文件不存在"
+      tail -20 "$LOG_DIR/cursor-proxy.log" 2>/dev/null || echo "日志文件不存在"
       echo ""
       echo "=== Manager Shell 日志 ==="
-      tail -20 /tmp/manager.log 2>/dev/null || echo "日志文件不存在"
+      tail -20 "$LOG_DIR/manager.log" 2>/dev/null || echo "日志文件不存在"
       ;;
   esac
 }
