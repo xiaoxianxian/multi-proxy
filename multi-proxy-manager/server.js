@@ -12,8 +12,39 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 
+// ==================== JWT Secret ====================
+const JWT_SECRET_FILE = path.join(os.homedir(), '.multi-proxy-jwt-secret');
+
+function getOrGenerateJwtSecret() {
+  // 1. Environment variable takes highest priority
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.length > 0) {
+    return process.env.JWT_SECRET;
+  }
+
+  // 2. Try to read persisted secret file
+  try {
+    const stored = fs.readFileSync(JWT_SECRET_FILE, 'utf8').trim();
+    if (stored.length > 0) {
+      return stored;
+    }
+  } catch (e) {
+    // File does not exist — fall through to generation
+  }
+
+  // 3. Generate new secret and persist it
+  const newSecret = crypto.randomBytes(64).toString('hex');
+  try {
+    fs.writeFileSync(JWT_SECRET_FILE, newSecret, { mode: 0o600 });
+    console.log('[Auth] Generated new JWT secret, persisted to ' + JWT_SECRET_FILE);
+  } catch (e) {
+    console.error('[Auth] Failed to persist JWT secret:', e.message);
+  }
+  return newSecret;
+}
+
+const AUTH_SECRET = getOrGenerateJwtSecret();
+
 // ==================== Auth ====================
-const AUTH_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
 const TOKEN_EXPIRY = '8h';
 const PASSWORD_FILE = path.join(os.homedir(), '.multi-proxy-password');
 
@@ -59,14 +90,14 @@ function requireAuth(req, res, next) {
   }
   const token = req.headers['x-auth-token'] || (req.cookies && req.cookies.auth_token);
   if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
   try {
     const decoded = jwt.verify(token, AUTH_SECRET);
     req.auth = decoded;
     next();
   } catch {
-    res.status(401).json({ error: 'Token expired' });
+    res.status(401).json({ success: false, error: 'Token expired' });
   }
 }
 
@@ -79,7 +110,10 @@ function isReadOnlyEndpoint(path, method) {
 console.log('[Auth] Management auth ' + (needsPasswordSetup() ? 'disabled (first-run)' : 'enabled'));
 
 const app = express();
-app.use(cors({ origin: 'http://localhost:18792' }));
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:18792';
+console.log('[CORS] Origin: ' + CORS_ORIGIN);
+
+app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json({ limit: '10mb' }));
 
 // Disable caching for HTML so browser always gets latest version
@@ -593,7 +627,7 @@ app.get('/api/logs', (req, res) => {
     const recent = lines.slice(-parseInt(limit));
     res.json({ logs: recent.join('\n'), count: lines.length, recent: recent.length });
   } catch (e) {
-    res.json({ logs: '', count: 0, error: 'Internal server error' });
+    res.json({ logs: '', count: 0, success: false, error: 'Internal server error' });
   }
 });
 
@@ -605,7 +639,7 @@ app.get('/api/logs/raw', (_req, res) => {
     res.set('Content-Type', 'text/plain');
     res.send(fs.readFileSync(LOG_FILE, 'utf8'));
   } catch (e) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -626,7 +660,7 @@ async function forwardProxy(req, res) {
   const config = PROXY_CONFIGS[proxyName];
 
   if (!config) {
-    return res.status(404).json({ error: `Unknown proxy: ${proxyName}` });
+    return res.status(404).json({ success: false, error: `Unknown proxy: ${proxyName}` });
   }
 
   const method = req.method.toLowerCase();
@@ -664,9 +698,9 @@ async function forwardProxy(req, res) {
     console.log(`[FORWARD ERR] ${method} ${proxyName}/${rest} -> ${error.message} (${elapsed}ms)`);
     appendLog('error', proxyName, `${method.toUpperCase()} ${rest} failed after ${elapsed}ms: ${error.message}`);
     if (error.response) {
-      res.status(error.response.status).json({ error: error.response.statusText, data: error.response.data });
+      res.status(error.response.status).json({ success: false, error: error.response.statusText, data: error.response.data });
     } else {
-      res.status(503).json({ error: `${config.name} is not reachable` });
+      res.status(503).json({ success: false, error: `${config.name} is not reachable` });
     }
   }
 }
@@ -681,7 +715,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
   handler: (req, res) => {
-    res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+    res.status(429).json({ success: false, error: 'Too many login attempts. Please try again later.' });
   },
 });
 
@@ -693,7 +727,7 @@ const lockoutLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
   handler: (req, res) => {
-    res.status(429).json({ error: 'Account locked due to too many failed attempts. Try again in 15 minutes.' });
+    res.status(429).json({ success: false, error: 'Account locked due to too many failed attempts. Try again in 15 minutes.' });
   },
 });
 
@@ -704,10 +738,10 @@ app.post('/api/auth/login', lockoutLimiter, authLimiter, function(req, res) {
   const { password } = req.body;
   // DoS protection: reject passwords > 1KB
   if (password && Buffer.byteLength(password, 'utf8') > 1024) {
-    return res.status(413).json({ error: 'Password too long (max 1KB)' });
+    return res.status(413).json({ success: false, error: 'Password too long (max 1KB)' });
   }
   if (!password) {
-    return res.status(400).json({ error: 'Password required' });
+    return res.status(400).json({ success: false, error: 'Password required' });
   }
 
   const envPassword = process.env.MANAGER_PASSWORD;
@@ -715,7 +749,7 @@ app.post('/api/auth/login', lockoutLimiter, authLimiter, function(req, res) {
     if (password === envPassword) {
       return res.json({ success: true, token: generateToken(password) });
     }
-    return res.status(401).json({ error: 'Invalid password' });
+    return res.status(401).json({ success: false, error: 'Invalid password' });
   }
 
   // Setup mode or verify
@@ -726,14 +760,14 @@ app.post('/api/auth/login', lockoutLimiter, authLimiter, function(req, res) {
       console.log('[Auth] Password set successfully');
       return res.json({ success: true, token: generateToken(password), setup: true });
     } catch (e) {
-      return res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
 
   if (verifyPassword(password)) {
     return res.json({ success: true, token: generateToken(password) });
   }
-  res.status(401).json({ error: 'Invalid password' });
+  res.status(401).json({ success: false, error: 'Invalid password' });
 });
 
 // GET /api/auth/status
@@ -809,11 +843,96 @@ app.all('/api/:proxy/*', (req, res, next) => {
     forwardProxy(req, res);
   } else {
     console.log(`[WHITELIST] Blocked ${method} ${proxy}/${path}`);
-    res.status(404).json({ error: 'Not found' });
+    res.status(404).json({ success: false, error: 'Not found' });
   }
 });
 
 
+
+// ==================== 模型列表获取 ====================
+
+/** Normalize raw provider response to canonical {id, name, displayName} */
+function normalizeModels(rawModels, format) {
+  var list = [];
+  if (format === 'openai') {
+    for (var i = 0; i < rawModels.length; i++) {
+      var m = rawModels[i];
+      list.push({ id: m.id, name: m.id, displayName: m.id });
+    }
+  } else if (format === 'anthropic') {
+    for (var i = 0; i < rawModels.length; i++) {
+      var m = rawModels[i];
+      list.push({ id: m.identifier, name: m.identifier, displayName: m.name || m.identifier });
+    }
+  } else if (format === 'gemini') {
+    for (var i = 0; i < rawModels.length; i++) {
+      var m = rawModels[i];
+      var id = m.name.replace('models/', '');
+      var displayName = m.displayName || id;
+      list.push({ id: id, name: id, displayName: displayName });
+    }
+  } else if (format === 'ollama') {
+    for (var i = 0; i < rawModels.length; i++) {
+      var m = rawModels[i];
+      list.push({ id: m.name, name: m.name, displayName: m.name });
+    }
+  }
+  return list;
+}
+
+app.post('/api/fetch-models', requireAuth, async (req, res) => {
+  var providerId = (req.body.providerId || '').toLowerCase();
+  var apiKey = req.body.apiKey || '';
+  var baseUrl = (req.body.baseUrl || '').replace(/\/$/, '');
+
+  if (!apiKey) {
+    return res.status(400).json({ success: false, error: 'API Key 不能为空' });
+  }
+
+  var url, headers, format;
+
+  if (providerId === 'openai-compatible' || providerId === 'openai' || providerId === 'azure') {
+    url = baseUrl + '/v1/models';
+    headers = { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' };
+    format = 'openai';
+  } else if (providerId === 'anthropic') {
+    url = 'https://api.anthropic.com/v1/messages/models';
+    headers = { 'X-Api-Key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
+    format = 'anthropic';
+  } else if (providerId === 'google' || providerId === 'google-gemini') {
+    url = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey;
+    headers = { 'Content-Type': 'application/json' };
+    format = 'gemini';
+  } else if (providerId === 'ollama') {
+    url = baseUrl + '/api/tags';
+    headers = { 'Content-Type': 'application/json' };
+    format = 'ollama';
+  } else {
+    return res.status(400).json({ success: false, error: '不支持的供应商类型: ' + providerId });
+  }
+
+  try {
+    var response = await axios.get(url, { headers, timeout: 10000 });
+    var data = response.data;
+    var rawModels = [];
+
+    if (format === 'openai' && Array.isArray(data.data)) {
+      rawModels = data.data;
+    } else if (format === 'anthropic' && Array.isArray(data.data)) {
+      rawModels = data.data;
+    } else if (format === 'gemini' && Array.isArray(data.models)) {
+      rawModels = data.models;
+    } else if (format === 'ollama' && Array.isArray(data.models)) {
+      rawModels = data.models;
+    }
+
+    var models = normalizeModels(rawModels, format);
+    res.json({ success: true, models: models });
+  } catch (err) {
+    appendLog('warn', 'fetch-models', 'Failed to fetch models: ' + err.message);
+    res.status(502).json({ success: false, error: '无法连接到供应商 API，请检查地址和密钥' });
+  }
+});
 
 // ==================== 开机自启管理 ====================
 const LAUNCHD_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.multi-proxy-manager.plist');
@@ -877,6 +996,31 @@ app.get('/api/version', (_req, res) => {
 // 已安装的代理列表
 app.get('/api/installed', (_req, res) => {
   res.json(Object.keys(PROXY_CONFIGS));
+});
+
+// API Key 完整性检查
+app.get('/api/env-check', (_req, res) => {
+  const baseDir = path.join(__dirname, '..');
+  const emptyKeys = [];
+
+  for (const proxy of ['codex-proxy', 'hermes-proxy']) {
+    const envPath = path.join(baseDir, proxy, '.env');
+    if (!fs.existsSync(envPath)) continue;
+    try {
+      const content = fs.readFileSync(envPath, 'utf8');
+      for (const key of ['DEEPSEEK_API_KEY', 'MOONSHOT_API_KEY', 'AGNES_API_KEY']) {
+        const match = content.match(new RegExp(`^${key}=(.*)`, 'm'));
+        const val = match ? match[1].trim() : '';
+        if (!val) {
+          emptyKeys.push({ proxy, key });
+        }
+      }
+    } catch (e) {
+      // skip unreadable files
+    }
+  }
+
+  res.json({ emptyKeys, totalCount: emptyKeys.length });
 });
 
 // SPA fallback: serve correct HTML page based on route

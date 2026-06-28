@@ -213,18 +213,18 @@ app.get('/api/routing-mode', (req, res) => {
 app.post('/api/set-routing-mode', (req, res) => {
   const { mode } = req.body;
   if (!['codex', 'config', 'both'].includes(mode)) {
-    return res.status(400).json({ success: false, error: 'Invalid mode' });
+    return res.status(400).json({ success: false, error: 'Invalid mode', code: 'INVALID_MODE' });
   }
   try {
     if (!updateRoutingMode(mode)) {
-      return res.status(500).json({ success: false, error: 'Failed to write routing mode file' });
+      return res.status(500).json({ success: false, error: 'Failed to write routing mode file', code: 'WRITE_FAILED' });
     }
     routingMode = mode;
     console.log(`[ADMIN] 路由模式设置为: ${mode}`);
     res.json({ success: true, mode });
   } catch (e) {
     console.error(`[ADMIN] 设置路由模式失败: ${e.message}`);
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: e.message, code: 'INTERNAL_ERROR' });
   }
 });
 
@@ -276,11 +276,11 @@ app.get('/api/history', (req, res) => {
 app.post('/api/switch-model', (req, res) => {
   const { model } = req.body;
   if (!model) {
-    return res.status(400).json({ success: false, error: '缺少 model 参数' });
+    return res.status(400).json({ success: false, error: '缺少 model 参数', code: 'MISSING_MODEL' });
   }
   const provider = findProvider(model);
   if (!provider) {
-    return res.status(400).json({ success: false, error: `不支持的模型: ${model}` });
+    return res.status(400).json({ success: false, error: `不支持的模型: ${model}`, code: 'UNSUPPORTED_MODEL' });
   }
   try {
     const configTomlPath = findConfigToml();
@@ -306,18 +306,18 @@ app.post('/api/switch-model', (req, res) => {
   } catch (e) {
     console.error(`[ADMIN] 切换模型失败: ${e.message}`);
     addHistory('切换模型', '', model, '', false);
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: e.message, code: 'SWITCH_FAILED' });
   }
 });
 
 app.post('/api/test-connection', async (req, res) => {
   const { model } = req.body;
   if (!model) {
-    return res.status(400).json({ success: false, error: '缺少 model 参数' });
+    return res.status(400).json({ success: false, error: '缺少 model 参数', code: 'MISSING_MODEL' });
   }
   const provider = findProvider(model);
   if (!provider) {
-    return res.status(400).json({ success: false, error: `不支持的模型: ${model}` });
+    return res.status(400).json({ success: false, error: `不支持的模型: ${model}`, code: 'UNSUPPORTED_MODEL' });
   }
   try {
     const response = await fetch(`${provider.baseUrl}/models`, {
@@ -326,10 +326,10 @@ app.post('/api/test-connection', async (req, res) => {
     if (response.ok) {
       res.json({ success: true, message: '连接成功' });
     } else {
-      res.json({ success: false, error: `HTTP ${response.status}` });
+      res.json({ success: false, error: `HTTP ${response.status}`, code: 'UPSTREAM_HTTP_ERROR' });
     }
   } catch (e) {
-    res.json({ success: false, error: e.message });
+    res.json({ success: false, error: e.message, code: 'CONNECTION_FAILED' });
   }
 });
 
@@ -349,7 +349,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     const { model } = req.body;
     const provider = findProvider(model);
     if (!provider) {
-      return res.status(400).json({ error: { message: `Unsupported model: ${model}` } });
+      return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
 
     const upstreamUrl = `${provider.baseUrl}/chat/completions`;
@@ -366,7 +366,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     if (!response.ok) {
       const err = await response.text();
       console.error(`Chat upstream error: ${err}`);
-      return res.status(response.status).json({ error: { message: err } });
+      return res.status(response.status).json({ success: false, error: err, code: 'UPSTREAM_ERROR' });
     }
 
     if (req.body.stream) {
@@ -378,7 +378,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       } catch (err) {
         console.error(`[Stream] Pipe error: ${err.message}`);
         if (!res.headersSent) {
-          res.status(504).json({ error: { message: 'Stream timeout or upstream disconnected' } });
+          res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
         }
       }
     } else {
@@ -387,7 +387,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
   } catch (e) {
     console.error(`Chat error: ${e.message}`);
-    res.status(500).json({ error: { message: e.message } });
+    res.status(500).json({ success: false, error: e.message, code: 'CHAT_ERROR' });
   }
 });
 

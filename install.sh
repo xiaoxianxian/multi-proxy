@@ -102,7 +102,7 @@ install_hermes() {
 
   if has_python && [ -f "$dir/requirements.txt" ]; then
     print_info "安装 Python 依赖..."
-    pip3 install -r "$dir/requirements.txt" --quiet 2>/dev/null
+    pip3 install -r "$dir/requirements.txt" --quiet --break-system-packages 2>/dev/null
     print_ok "Hermes Proxy Python 依赖安装完成"
   fi
 }
@@ -478,6 +478,31 @@ main() {
       install_hermes
       install_cursor
       install_manager
+
+      echo ""
+      # ===== .env API Key 完整性检查 =====
+      ENV_WARNING=0
+      MISSING_KEYS=""
+
+      for proxy_dir in codex-proxy hermes-proxy; do
+        local env_file="$ROOT_DIR/$proxy_dir/.env"
+        if [ -f "$env_file" ]; then
+          for key in DEEPSEEK_API_KEY MOONSHOT_API_KEY AGNES_API_KEY; do
+            local val
+            val=$(grep "^${key}=" "$env_file" 2>/dev/null | cut -d'=' -f2-)
+            if [ -z "$val" ]; then
+              ENV_WARNING=1
+              MISSING_KEYS="${MISSING_KEYS}    - $proxy_dir: $key\n"
+            fi
+          done
+        fi
+      done
+
+      if [ $ENV_WARNING -eq 1 ]; then
+        print_warn "API Key 未配置检查："
+        echo -e " $MISSING_KEYS"
+        print_info "请编辑各模块的 .env 文件配置必要的 API Key"
+      fi
 
       echo ""
       print_bold "============================================"

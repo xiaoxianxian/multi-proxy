@@ -5,6 +5,6 @@ module.exports = {
   moduleNameMapper: {
     "^../server$": "<rootDir>/server",
   },
-  forceExit: true,
   clearMocks: true,
+  coverageThreshold: { global: { branches: 60, functions: 70, lines: 70 } },
 };

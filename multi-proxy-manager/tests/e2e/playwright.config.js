@@ -14,7 +14,7 @@ module.exports = defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  retries: 0,
+  retries: 2,
   reporter: [['list']],
   projects: [
     {

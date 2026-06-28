@@ -307,7 +307,7 @@ def set_routing_mode():
     mode = data.get('mode') if data else None
 
     if mode not in ['codex', 'config', 'both']:
-        return jsonify({'success': False, 'error': 'Invalid mode'}), 400
+        return jsonify({'success': False, 'error': 'Invalid mode', 'code': 'INVALID_MODE'}), 400
 
     if update_routing_mode(mode):
         return jsonify({'success': True, 'mode': mode})
@@ -406,7 +406,7 @@ def switch_model():
     """Switch to a different model."""
     data = request.get_json()
     if not data or 'model' not in data:
-        return jsonify({'success': False, 'error': 'Missing model parameter'}), 400
+        return jsonify({'success': False, 'error': 'Missing model parameter', 'code': 'MISSING_MODEL'}), 400
 
     new_model = data['model']
     config_path = find_config_yaml()
@@ -417,12 +417,12 @@ def switch_model():
     # Validate model exists
     provider = find_provider(new_model, config_data)
     if not provider:
-        return jsonify({'success': False, 'error': f'Unsupported model: {new_model}'}), 400
+        return jsonify({'success': False, 'error': f'Unsupported model: {new_model}', 'code': 'UNSUPPORTED_MODEL'}), 400
 
     # Update config
     result = update_config_yaml(config_path, new_model)
     if not result['success']:
-        return jsonify({'success': False, 'error': result['error']}), 500
+        return jsonify({'success': False, 'error': result['error'], 'code': 'CONFIG_UPDATE_FAILED'}), 500
 
     # Auto-switch to config routing mode
     update_routing_mode('config')
@@ -446,7 +446,7 @@ def test_connection():
     """Test connection to a model's provider."""
     data = request.get_json()
     if not data or 'model' not in data:
-        return jsonify({'success': False, 'error': 'Missing model parameter'}), 400
+        return jsonify({'success': False, 'error': 'Missing model parameter', 'code': 'MISSING_MODEL'}), 400
 
     model = data['model']
     config_path = find_config_yaml()
@@ -464,12 +464,12 @@ def test_connection():
             if response.ok:
                 return jsonify({'success': True, 'message': 'Connection successful'})
             else:
-                return jsonify({'success': False, 'error': f'HTTP {response.status_code}'}), 200
+                return jsonify({'success': False, 'error': f'HTTP {response.status_code}', 'code': 'UPSTREAM_HTTP_ERROR'}), 200
         else:
-            return jsonify({'success': False, 'error': 'No API URL configured'}), 200
+            return jsonify({'success': False, 'error': 'No API URL configured', 'code': 'NO_API_URL'}), 200
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': str(e), 'code': 'CONNECTION_FAILED'})
 
 
 @app.route('/api/clear-history', methods=['POST'])

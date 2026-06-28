@@ -169,6 +169,23 @@
         <p class="footer-text">Forgot password? <a href="#" id="resetLink">Contact administrator</a></p>
       </div>
     </div>
+
+    <!-- Forgot Password Modal -->
+    <div class="modal-overlay" id="forgotModal" style="display:none;">
+      <div class="modal">
+        <div class="modal-title">忘记密码？</div>
+        <ol style="padding-left:20px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.8;">
+          <li>关闭 Manager 服务</li>
+          <li>删除密码文件：<code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:3px;font-size:12px;font-family:'JetBrains Mono',monospace;">rm ~/.multi-proxy-password</code></li>
+          <li>重启 Manager 服务：<code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:3px;font-size:12px;font-family:'JetBrains Mono',monospace;">bash manage.sh restart manager</code></li>
+          <li>重新访问 <a href="http://localhost:18792" style="color:var(--primary);">http://localhost:18792</a> 设置新密码</li>
+        </ol>
+        <button class="btn btn-primary" id="copyCmdBtn" onclick="copyResetCommand()">复制命令</button>
+        <div style="margin-top:24px;text-align:right;">
+          <button class="btn" onclick="closeForgotModal()">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -445,6 +462,44 @@
         switchMode('setup');
       }
     });
+
+  // ============================================
+  // Forgot Password Modal (P6)
+  // ============================================
+  if (elements.resetLink) {
+    elements.resetLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      var modal = document.getElementById('forgotModal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+
+  function closeForgotModal() {
+    var modal = document.getElementById('forgotModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  // Close modal on overlay click
+  document.addEventListener('click', function(e) {
+    var modal = document.getElementById('forgotModal');
+    if (modal && e.target === modal) {
+      modal.style.display = 'none';
+    }
+  });
+
+  function copyResetCommand() {
+    var cmd = 'rm ~/.multi-proxy-password';
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(cmd).then(function() {
+        var btn = document.getElementById('copyCmdBtn');
+        if (btn) {
+          var orig = btn.textContent;
+          btn.textContent = '已复制!';
+          setTimeout(function() { btn.textContent = orig; }, 2000);
+        }
+      });
+    }
+  }
 
 })();
 </script>
@@ -942,6 +997,52 @@ body::after {
   padding: 1px 5px;
   border-radius: 3px;
   color: var(--text-secondary);
+}
+
+/* ============================================
+   Mode Switching
+   ============================================ */
+
+/* ============================================
+   Forgot Password Modal (P6)
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.modal {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.2s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--text);
 }
 
 /* ============================================

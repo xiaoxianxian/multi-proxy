@@ -40,11 +40,17 @@
 
     <div class="sidebar-footer">
       <div class="version-info">v1.0.0</div>
+      <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
     </div>
   </aside>
 
   <main class="main">
     <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="打开侧边栏">&#9776;</button>
+    <!-- Offline Banner (P2) -->
+    <div class="offline-banner hidden" id="offlineBanner">
+      <span class="offline-banner-icon">&#9888;</span>
+      <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
+    </div>
     <div class="proxy-header">
       <div class="proxy-header-left">
         <div class="proxy-icon">C</div>
@@ -72,9 +78,9 @@
     <div class="tabs-container">
       <div class="section-tabs">
         <div class="section-tab active" data-tab="config" onclick="switchTab(this, 'config')">配置</div>
-        <div class="section-tab" data-tab="providers" onclick="switchTab(this, 'providers')">供应商</div>
+        <div class="section-tab" data-tab="providers" onclick="switchTab(this, 'providers')" id="tab-providers-btn" disabled title="该代理暂不支持供应商管理">供应商</div>
         <div class="section-tab" data-tab="models" onclick="switchTab(this, 'models')">模型</div>
-        <div class="section-tab" data-tab="balances" onclick="switchTab(this, 'balances')">余额</div>
+        <div class="section-tab" data-tab="balances" onclick="switchTab(this, 'balances')" id="tab-balances-btn" disabled title="该代理暂不支持余额查询">余额</div>
       </div>
 
       <div class="tab-content active" id="tab-config">
@@ -405,6 +411,9 @@
       // Highlight active nav item
       highlightActiveNav();
 
+      // P4: Dynamic tabs based on proxy type
+      setupDynamicTabs();
+
       // Restore tab from URL hash
       var tabName = getTabFromHash();
       var tabEl = document.querySelector('.section-tab[data-tab="' + tabName + '"]');
@@ -421,6 +430,31 @@
 
       // Fetch real status
       fetchStatus();
+    }
+
+    // ==================== P4: Dynamic Tabs ====================
+    function setupDynamicTabs() {
+      var isCursor = (currentProxyName === 'cursor');
+      var providersBtn = document.getElementById('tab-providers-btn');
+      var balancesBtn = document.getElementById('tab-balances-btn');
+      var providersTab = document.getElementById('tab-providers');
+      var balancesTab = document.getElementById('tab-balances');
+
+      if (!isCursor) {
+        // Disable Supplier and Balance tabs for Codex/Hermes
+        if (providersBtn) {
+          providersBtn.disabled = true;
+          providersBtn.style.color = '#94a3b8';
+          providersBtn.style.cursor = 'not-allowed';
+          providersBtn.style.background = '#f8fafc';
+        }
+        if (balancesBtn) {
+          balancesBtn.disabled = true;
+          balancesBtn.style.color = '#94a3b8';
+          balancesBtn.style.cursor = 'not-allowed';
+          balancesBtn.style.background = '#f8fafc';
+        }
+      }
     }
 
     function highlightActiveNav() {
@@ -523,6 +557,7 @@
       try {
         var res = await fetch('/api/status');
         if (res.ok) {
+          hideOfflineBanner();
           var data = await res.json();
           if (data[currentProxyName]) {
             var st = data[currentProxyName];
@@ -540,8 +575,29 @@
               btn.innerHTML = '&#9655; 启动';
             }
           }
+        } else {
+          showOfflineBanner();
         }
-      } catch {}
+      } catch {
+        showOfflineBanner();
+      }
+    }
+
+    // ==================== P2: Offline Banner ====================
+    function showOfflineBanner() {
+      var banner = document.getElementById('offlineBanner');
+      if (banner) banner.classList.remove('hidden');
+    }
+
+    function hideOfflineBanner() {
+      var banner = document.getElementById('offlineBanner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    // ==================== P1: Logout ====================
+    function handleLogout() {
+      sessionStorage.removeItem('auth_token');
+      window.location.href = 'login.html';
     }
 
     async function toggleProxyStatus() {
@@ -603,6 +659,7 @@
     }
 
     function switchTab(tabEl, tabName) {
+      if (tabEl.disabled) return;
       document.querySelectorAll('.section-tab').forEach(function(t) { t.classList.remove('active'); });
       tabEl.classList.add('active');
       document.querySelectorAll('.tab-content').forEach(function(tc) { tc.classList.remove('active'); });
@@ -730,6 +787,18 @@
       modal.appendChild(createFormField('API Key *', 'password', 'modal-api-key', { placeholder: 'sk-...' }));
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', true));
 
+      // Fetch Models button (shown when provider_id, base_url, and api_key are filled)
+      var fetchRow = document.createElement('div');
+      fetchRow.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);';
+      var fetchBtn = document.createElement('button');
+      fetchBtn.type = 'button';
+      fetchBtn.className = 'btn';
+      fetchBtn.id = 'modal-fetch-models';
+      fetchBtn.textContent = '\u{1F50D} 拉取模型列表';
+      fetchBtn.disabled = true;
+      fetchRow.appendChild(fetchBtn);
+      modal.appendChild(fetchRow);
+
       // Action buttons
       var actions = document.createElement('div');
       actions.className = 'modal-actions';
@@ -775,6 +844,27 @@
         showToast('已添加供应商 ' + name, 'success');
       };
       overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Enable/disable fetch models button based on field values
+      var fetchEl = fetchBtn;
+      var pidEl2 = document.getElementById('modal-provider-id');
+      var urlEl2 = document.getElementById('modal-base-url');
+      var keyEl2 = document.getElementById('modal-api-key');
+
+      function updateFetchBtn() {
+        fetchEl.disabled = !(pidEl2.value.trim() && urlEl2.value.trim() && keyEl2.value.trim());
+      }
+      fetchEl.addEventListener('click', function() {
+        var pid = pidEl2.value.trim();
+        var url = urlEl2.value.trim();
+        var key = keyEl2.value.trim();
+        fetchAndShowModels(pid, url, key);
+      });
+      [pidEl2, urlEl2, keyEl2].forEach(function(el) {
+        el.addEventListener('input', updateFetchBtn);
+        el.addEventListener('blur', updateFetchBtn);
+      });
+      updateFetchBtn();
     }
 
     function showEditProviderModal(id) {
@@ -855,6 +945,17 @@
 
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', provider.enabled));
 
+      // Fetch Models button
+      var fetchRow2 = document.createElement('div');
+      fetchRow2.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);';
+      var fetchBtn2 = document.createElement('button');
+      fetchBtn2.type = 'button';
+      fetchBtn2.className = 'btn';
+      fetchBtn2.id = 'modal-fetch-models';
+      fetchBtn2.textContent = '\u{1F50D} 拉取模型列表';
+      fetchRow2.appendChild(fetchBtn2);
+      modal.appendChild(fetchRow2);
+
       var actions = document.createElement('div');
       actions.className = 'modal-actions';
 
@@ -895,6 +996,26 @@
         showToast('已更新 ' + name, 'success');
       };
       overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Enable/disable fetch models button for edit modal
+      var fetchEl = fetchBtn2;
+      var urlEl3 = document.getElementById('modal-base-url');
+      var keyEl3 = document.getElementById('modal-api-key');
+
+      function updateFetchBtn2() {
+        fetchEl.disabled = !(urlEl3.value.trim() && keyEl3.value.trim());
+      }
+      fetchEl.addEventListener('click', function() {
+        var pid = provider.provider_id;
+        var url = urlEl3.value.trim();
+        var key = keyEl3.value.trim();
+        fetchAndShowModels(pid, url, key);
+      });
+      [urlEl3, keyEl3].forEach(function(el) {
+        el.addEventListener('input', updateFetchBtn2);
+        el.addEventListener('blur', updateFetchBtn2);
+      });
+      updateFetchBtn2();
     }
 
     function esc(str) {
@@ -1027,6 +1148,143 @@
     function closeSidebar() {
       var sb = document.getElementById('sidebar');
       if (sb) sb.classList.remove('open');
+    }
+
+    // ==================== Fetch Models Modal ====================
+    function fetchAndShowModels(providerId, baseUrl, apiKey) {
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+
+      var modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.style.width = '520px';
+
+      var title = document.createElement('div');
+      title.className = 'modal-title';
+      title.style.display = 'flex';
+      title.style.justifyContent = 'space-between';
+      title.style.alignItems = 'center';
+
+      var titleText = document.createElement('span');
+      titleText.textContent = '\u{1F9E0} 选择模型 (' + providerId + ')';
+      title.appendChild(titleText);
+
+      var ctrlBar = document.createElement('div');
+      ctrlBar.style.display = 'flex';
+      ctrlBar.style.gap = '8px';
+
+      var selectAllBtn = document.createElement('button');
+      selectAllBtn.className = 'btn btn-sm';
+      selectAllBtn.textContent = '全选';
+      selectAllBtn.style.fontSize = '11px';
+      selectAllBtn.style.padding = '3px 8px';
+
+      var invertBtn = document.createElement('button');
+      invertBtn.className = 'btn btn-sm';
+      invertBtn.textContent = '反选';
+      invertBtn.style.fontSize = '11px';
+      invertBtn.style.padding = '3px 8px';
+
+      ctrlBar.appendChild(selectAllBtn);
+      ctrlBar.appendChild(invertBtn);
+      title.appendChild(ctrlBar);
+      modal.appendChild(title);
+
+      // Loading area
+      var modelsArea = document.createElement('div');
+      modelsArea.id = 'models-area';
+      modelsArea.style.cssText = 'max-height:400px;overflow-y:auto;margin-top:16px;';
+      modelsArea.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-tertiary);">\u{23F3} 正在拉取...</div>';
+      modal.appendChild(modelsArea);
+
+      var footer = document.createElement('div');
+      footer.className = 'modal-actions';
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn';
+      cancelBtn.textContent = '取消';
+      cancelBtn.style.display = 'none';
+      cancelBtn.id = 'models-cancel';
+
+      var confirmBtn = document.createElement('button');
+      confirmBtn.className = 'btn btn-primary';
+      confirmBtn.textContent = '确认';
+      confirmBtn.id = 'models-confirm';
+      confirmBtn.disabled = true;
+
+      footer.appendChild(cancelBtn);
+      footer.appendChild(confirmBtn);
+      modal.appendChild(footer);
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+
+      cancelBtn.onclick = function() { overlay.remove(); };
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+      var allCheckboxes = [];
+      var modelsAreaEl = document.getElementById('models-area');
+
+      selectAllBtn.onclick = function() {
+        allCheckboxes.forEach(function(cb) { cb.checked = true; });
+      };
+      invertBtn.onclick = function() {
+        allCheckboxes.forEach(function(cb) { cb.checked = !cb.checked; });
+      };
+
+      // Call API
+      var token = sessionStorage.getItem('auth_token');
+      fetch('/api/fetch-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token || '' },
+        body: JSON.stringify({ providerId: providerId, baseUrl: baseUrl, apiKey: apiKey }),
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.models && data.models.length > 0) {
+          var html = '';
+          for (var i = 0; i < data.models.length; i++) {
+            var m = data.models[i];
+            allCheckboxes.push('cb_' + i);
+            html += '<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--bg-secondary)\'" onmouseout="this.style.background=\'\'">' +
+              '<input type="checkbox" class="model-cb" data-index="' + i + '" value="' + esc(m.id) + '" style="flex-shrink:0;cursor:pointer;" />' +
+              '<div style="display:flex;flex-direction:column;gap:1px;">' +
+                '<span style="font-weight:500;color:var(--text-primary);">' + esc(m.displayName || m.name) + '</span>' +
+                '<code style="font-size:11px;color:var(--text-tertiary);font-family:\'SF Mono\',Menlo,monospace;">' + esc(m.id) + '</code>' +
+              '</div>' +
+            '</label>' +
+            ((i < data.models.length - 1) ? '<hr style="border:none;border-top:1px solid var(--border-light);margin:0 4px;">' : '');
+          }
+          modelsAreaEl.innerHTML = html;
+
+          // Wire up checkboxes to enable/disable confirm
+          modelsAreaEl.querySelectorAll('.model-cb').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+              var checked = modelsAreaEl.querySelectorAll('.model-cb:checked');
+              confirmBtn.disabled = checked.length === 0;
+            });
+          });
+
+          cancelBtn.style.display = 'inline-flex';
+          confirmBtn.onclick = function() {
+            var selected = [];
+            modelsAreaEl.querySelectorAll('.model-cb:checked').forEach(function(cb) {
+              selected.push(cb.value);
+            });
+            overlay.remove();
+            showToast('已选择 ' + selected.length + ' 个模型', 'success');
+          };
+        } else {
+          modelsAreaEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-secondary);">没有可用的模型，请检查 API Key 和 Base URL。</div>';
+          cancelBtn.style.display = 'inline-flex';
+          confirmBtn.style.display = 'none';
+        }
+      })
+      .catch(function(err) {
+        modelsAreaEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--error);">拉取失败: ' + esc(err.message) + '</div>';
+        cancelBtn.style.display = 'inline-flex';
+        confirmBtn.style.display = 'none';
+      });
     }
 
     init();
@@ -1856,6 +2114,45 @@
       text-align: center;
       line-height: 1.5;
     }
+
+    .sidebar-footer .btn-logout {
+      display: block;
+      margin-top: 8px;
+      width: 100%;
+      padding: 6px 0;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #dc2626;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .sidebar-footer .btn-logout:hover {
+      background: #fef2f2;
+      border-color: #dc2626;
+    }
+
+    /* Offline Banner */
+    .offline-banner {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #92400e;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+    }
+    .offline-banner.hidden { display: none; }
+    .offline-banner-icon { font-size: 16px; flex-shrink: 0; }
 
     @media (max-width: 768px) {
       .hamburger-btn {
