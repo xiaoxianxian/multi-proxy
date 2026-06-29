@@ -364,9 +364,11 @@ app.post('/v1/chat/completions', async (req, res) => {
     });
 
     if (!response.ok) {
+      // Log the raw upstream error internally for debugging
       const err = await response.text();
-      console.error(`Chat upstream error: ${err}`);
-      return res.status(response.status).json({ success: false, error: err, code: 'UPSTREAM_ERROR' });
+      console.error(`Chat upstream error (status ${response.status}): ${err}`);
+      // Sanitize: never leak provider diagnostic details to the client
+      return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
 
     if (req.body.stream) {

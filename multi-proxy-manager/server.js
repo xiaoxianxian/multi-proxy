@@ -2,7 +2,7 @@
 const express = require('express');
 const path = require('path');
 const axios = require('axios');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 
@@ -67,14 +67,14 @@ function needsPasswordSetup() {
   return getPassword() === null;
 }
 
-function verifyPassword(input) {
+async function verifyPassword(input) {
   const envPassword = process.env.MANAGER_PASSWORD;
   if (envPassword && envPassword.length > 0) {
     return input === envPassword;
   }
   const stored = getPassword();
   if (!stored) return false;
-  return bcrypt.compareSync(input, stored);
+  return await bcrypt.compare(input, stored);
 }
 
 function generateToken(password) {
@@ -109,6 +109,11 @@ function isReadOnlyEndpoint(path, method) {
 
 console.log('[Auth] Management auth ' + (needsPasswordSetup() ? 'disabled (first-run)' : 'enabled'));
 
+// Warn if MANAGER_PASSWORD is set in plaintext (dev convenience, not production)
+if (process.env.MANAGER_PASSWORD && process.env.MANAGER_PASSWORD.length > 0) {
+  console.log('[Auth] WARNING: MANAGER_PASSWORD is set in plaintext. This bypasses all authentication. Only use for development.');
+}
+
 const app = express();
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:18792';
 console.log('[CORS] Origin: ' + CORS_ORIGIN);
@@ -141,7 +146,7 @@ const PORT = parseInt(process.env.PORT) || 18792;
 const HOME = os.homedir();
 
 // ==================== 日志系统 ====================
-const LOG_DIR = path.join(os.tmpdir(), 'multi-proxy-manager');
+const LOG_DIR = path.join(os.homedir(), '.multi-proxy-manager', 'logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 const LOG_FILE = path.join(LOG_DIR, 'requests.log');
 
@@ -467,6 +472,10 @@ async function restartProxy(name, delay = 0) {
   const config = PROXY_CONFIGS[name];
   if (!config) return;
 
+  // Guard: if another spawn/restart already tracks this process, skip
+  const existing = proxyProcesses[name];
+  if (existing && existing.kill) return;
+
   if (delay > 0) {
     await new Promise(resolve => setTimeout(resolve, delay));
   }
@@ -675,6 +684,8 @@ async function forwardProxy(req, res) {
       url: rest,
       method,
       timeout: 15000,
+      maxContentLength: 100 * 1024 * 1024,
+      maxBodyLength: 100 * 1024 * 1024,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -734,7 +745,7 @@ const lockoutLimiter = rateLimit({
 // ==================== Auth Routes ====================
 
 // POST /api/auth/login
-app.post('/api/auth/login', lockoutLimiter, authLimiter, function(req, res) {
+app.post('/api/auth/login', lockoutLimiter, authLimiter, async function(req, res) {
   const { password } = req.body;
   // DoS protection: reject passwords > 1KB
   if (password && Buffer.byteLength(password, 'utf8') > 1024) {
@@ -764,7 +775,7 @@ app.post('/api/auth/login', lockoutLimiter, authLimiter, function(req, res) {
     }
   }
 
-  if (verifyPassword(password)) {
+  if (await verifyPassword(password)) {
     return res.json({ success: true, token: generateToken(password) });
   }
   res.status(401).json({ success: false, error: 'Invalid password' });
@@ -773,13 +784,16 @@ app.post('/api/auth/login', lockoutLimiter, authLimiter, function(req, res) {
 // GET /api/auth/status
 app.get('/api/auth/status', (_req, res) => {
   try {
-    const hasPassword = getPassword() !== null || (process.env.MANAGER_PASSWORD && process.env.MANAGER_PASSWORD.length > 0);
+    const envPwd = process.env.MANAGER_PASSWORD;
+    const authDisabled = !!(envPwd && envPwd.length > 0);
+    const hasPassword = getPassword() !== null || authDisabled;
     res.json({
       needsSetup: needsPasswordSetup(),
       hasPassword: hasPassword,
+      authDisabled: authDisabled,
     });
   } catch (e) {
-    res.json({ needsSetup: true, hasPassword: false, error: 'Internal server error' });
+    res.json({ needsSetup: true, hasPassword: false, authDisabled: false, error: 'Internal server error' });
   }
 });
 
@@ -835,6 +849,12 @@ function isAllowedEndpoint(proxy, method, path) {
 }
 
 app.all('/api/:proxy/*', (req, res, next) => {
+  const method = req.method.toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    return requireAuth(req, res, next);
+  }
+  next();
+}, (req, res, next) => {
   const proxy = req.params.proxy;
   const path = '/' + req.params[0];
   const method = req.method;
@@ -946,8 +966,7 @@ app.post('/api/autostart', requireAuth, async (req, res) => {
   try {
     const { enable } = req.body;
     if (enable) {
-      const { exec } = require('child_process');
-      exec(`bash "${INSTALL_SH}" --autostart`, (error) => {
+      execFile('bash', [INSTALL_SH, '--autostart'], (error) => {
         if (error) {
           res.status(500).json({ success: false, error: 'Internal server error' });
         } else {
@@ -955,8 +974,7 @@ app.post('/api/autostart', requireAuth, async (req, res) => {
         }
       });
     } else {
-      const { exec } = require('child_process');
-      exec(`bash "${INSTALL_SH}" --autostop`, (error) => {
+      execFile('bash', [INSTALL_SH, '--autostop'], (error) => {
         if (error) {
           res.status(500).json({ success: false, error: 'Internal server error' });
         } else {

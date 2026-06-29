@@ -246,10 +246,10 @@ start_manager() {
   is_port_in_use $MANAGER_PORT && print_ok "Manager Shell 已启动" || print_err "Manager Shell 启动失败"
 }
 
-stop_codex()  { /usr/sbin/lsof -ti :$CODEx_PORT | xargs kill -9 2>/dev/null; true; }
-stop_hermes() { /usr/sbin/lsof -ti :$HERMES_PORT | xargs kill -9 2>/dev/null; true; }
-stop_cursor() { /usr/sbin/lsof -ti :$CURSOR_PORT | xargs kill -9 2>/dev/null; true; }
-stop_manager() { /usr/sbin/lsof -ti :$MANAGER_PORT | xargs kill -9 2>/dev/null; true; }
+stop_codex()  { /usr/sbin/lsof -ti :$CODEx_PORT | xargs -r kill -9 2>/dev/null; true; }
+stop_hermes() { /usr/sbin/lsof -ti :$HERMES_PORT | xargs -r kill -9 2>/dev/null; true; }
+stop_cursor() { /usr/sbin/lsof -ti :$CURSOR_PORT | xargs -r kill -9 2>/dev/null; true; }
+stop_manager() { /usr/sbin/lsof -ti :$MANAGER_PORT | xargs -r kill -9 2>/dev/null; true; }
 
 show_status() {
   print_bold "=== Multi-Proxy Manager 状态 ==="
@@ -303,10 +303,17 @@ setup_autostart() {
   local nvm_path=""
   local pyenv_path=""
   if [ -d "$HOME/.nvm" ]; then
-    nvm_path="$HOME/.nvm/versions/node/*/bin"
+    nvm_bin=$(ls -d "$HOME/.nvm/versions/node/"*/bin 2>/dev/null | tail -1)
+    if [ -n "$nvm_bin" ]; then
+      nvm_path="$nvm_bin"
+    fi
   fi
   if [ -d "$HOME/.pyenv" ]; then
-    pyenv_path="$HOME/.pyenv/shims:$HOME/.pyenv/bin"
+    pyenv_shims=$(ls -d "$HOME/.pyenv/shims" 2>/dev/null | head -1)
+    pyenv_bins=$(ls -d "$HOME/.pyenv/bin" 2>/dev/null | head -1)
+    pyenv_path=""
+    [ -n "$pyenv_shims" ] && pyenv_path="$pyenv_shims"
+    [ -n "$pyenv_bins" ] && pyenv_path="${pyenv_path:+$pyenv_path:}$pyenv_bins"
   fi
 
   # Build PATH with detected toolchains
@@ -333,9 +340,9 @@ setup_autostart() {
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/multi-proxy-manager-stdout.log</string>
+    <string>$HOME/.multi-proxy-manager/logs/stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/multi-proxy-manager-stderr.log</string>
+    <string>$HOME/.multi-proxy-manager/logs/stderr.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

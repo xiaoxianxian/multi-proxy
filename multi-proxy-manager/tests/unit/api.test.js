@@ -115,8 +115,10 @@ describe('Multi-Proxy Manager API', () => {
     });
 
     it('should block non-whitelisted HTTP method', async () => {
+      // DELETE on /api/codex/v1/models now requires auth (A3 fix)
+      // Previously returned 404 (whitelist block), now returns 401 (auth required)
       const res = await request(app).delete('/api/codex/v1/models');
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(401);
     });
   });
 });
