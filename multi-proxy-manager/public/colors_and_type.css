@@ -1,0 +1,91 @@
+:root {
+  /* ===== Brand Colors ===== */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #dbeafe;
+  --color-primary-bg: #eff6ff;
+
+  /* Success */
+  --color-success: #10b981;
+  --color-success-light: #d1fae5;
+
+  /* Warning */
+  --color-warning: #f59e0b;
+  --color-warning-light: #fef3c7;
+
+  /* Error */
+  --color-error: #ef4444;
+  --color-error-light: #fee2e2;
+
+  /* Info */
+  --color-info: #3b82f6;
+  --color-info-light: #dbeafe;
+
+  /* ===== Neutrals ===== */
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f8fafc;
+  --color-bg-tertiary: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+
+  /* ===== Text ===== */
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-tertiary: #94a3b8;
+
+  /* ===== Typography ===== */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  /* ===== Spacing ===== */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* ===== Shadows ===== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  /* ===== Transitions ===== */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+
+  /* ===== Layout ===== */
+  --sidebar-width: 240px;
+  --main-padding: 32px;
+}
+
+/* ===== Dark Mode ===== */
+:root.dark {
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-primary-light: #1e3a5f;
+  --color-primary-bg: #1e3a5f;
+
+  --color-success: #34d399;
+  --color-success-light: #064e3b;
+
+  --color-warning: #fbbf24;
+  --color-warning-light: #451a03;
+
+  --color-error: #f87171;
+  --color-error-light: #450a0a;
+
+  --color-info: #60a5fa;
+  --color-info-light: #1e3a5f;
+
+  --color-bg: #0f172a;
+  --color-bg-secondary: #1e293b;
+  --color-bg-tertiary: #334155;
+  --color-border: #334155;
+  --color-border-light: #1e293b;
+
+  --color-text: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-tertiary: #64748b;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+}

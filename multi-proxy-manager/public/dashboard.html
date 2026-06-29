@@ -1,771 +1,1489 @@
 <!DOCTYPE html>
 <html lang="zh-CN" class="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Proxy Manager - 概览</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
-    </head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Manager - Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="stylesheet" href="../colors_and_type.css">
+  <link rel="stylesheet" href="../shared-styles.css">
+</head>
+<style>
+/* ============================================
+   Reset & Base
+   ============================================ */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  line-height: 1.6;
+  display: flex;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ============================================
+   Mobile Menu Button
+   ============================================ */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+/* ============================================
+   Sidebar Overlay (mobile)
+   ============================================ */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 90;
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+/* Unified sidebar-header (Rule 1) */
+.sidebar-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-header .logo-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sidebar-header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+}
+
+/* Sidebar Navigation */
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-section-label {
+  padding: 8px 12px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  user-select: none;
+  gap: 10px;
+  position: relative;
+  text-decoration: none;
+}
+
+.nav-item:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.nav-item.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.nav-item .nav-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.nav-item .nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
+.nav-badge.running {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.nav-badge.stopped {
+  background: var(--color-error-light);
+  color: var(--color-error);
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+  padding: 16px 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.sidebar-footer .version-info {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.sidebar-footer .btn-logout {
+  display: block;
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  color: var(--color-error);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-footer .btn-logout:hover {
+  background: var(--color-error-light);
+  border-color: var(--color-error);
+}
+
+/* ============================================
+   Main Content
+   ============================================ */
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--main-padding);
+  min-width: 0;
+}
+
+/* ============================================
+   Page Header
+   ============================================ */
+.page-header {
+  margin-bottom: 28px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* ============================================
+   Banners
+   ============================================ */
+.offline-banner {
+  background: var(--color-warning-light);
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.offline-banner.hidden { display: none; }
+.offline-banner-icon { font-size: 16px; flex-shrink: 0; }
+
+.apikey-banner {
+  background: var(--color-warning-light);
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.apikey-banner.hidden { display: none; }
+.apikey-banner-icon { font-size: 16px; flex-shrink: 0; }
+
+.apikey-banner-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #92400e;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.apikey-banner-close:hover { background: #fef3c7; }
+
+/* ============================================
+   Auto-Refresh Control Panel
+   ============================================ */
+.auto-refresh-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.auto-refresh-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-border);
+  border-radius: 11px;
+  transition: all var(--transition-fast);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--color-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+
+.toggle-switch input:focus + .toggle-slider {
+  box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
+/* ============================================
+   Stat Cards
+   ============================================ */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stat-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 22px 24px;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.stat-card.accent-blue::before {
+  background: var(--color-primary);
+}
+
+.stat-card.accent-green::before {
+  background: var(--color-success);
+}
+
+.stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-icon {
+  font-size: 20px;
+  opacity: 0.6;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-value.blue { color: var(--color-primary); }
+.stat-value.green { color: var(--color-success); }
+
+.stat-detail {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* ============================================
+   Version List
+   ============================================ */
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.version-item .ver-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.version-item .ver-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+  background: var(--color-bg);
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+/* ============================================
+   Proxy Cards
+   ============================================ */
+.proxy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.proxy-card {
+  display: flex;
+  align-items: center;
+  padding: 18px 22px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+  gap: 16px;
+}
+
+.proxy-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: #cbd5e1;
+}
+
+.proxy-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.proxy-icon.codex {
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.proxy-icon.hermes {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.proxy-icon.cursor {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.proxy-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.proxy-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 3px;
+  flex-wrap: wrap;
+}
+
+.proxy-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.proxy-port-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.proxy-version-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
+.proxy-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  flex-wrap: wrap;
+}
+
+.proxy-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   Login Required Card
+   ============================================ */
+.login-required-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 20px;
+}
+
+.login-required-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 40px;
+  width: 380px;
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.login-required-icon {
+  font-size: 36px;
+  margin-bottom: 16px;
+}
+
+.login-required-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--color-text);
+}
+
+.login-required-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 24px;
+}
+
+.login-required-card .btn {
+  width: 100%;
+}
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.show {
+    display: block;
+  }
+
+  .main {
+    padding: 72px 20px 20px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .proxy-card {
+    flex-wrap: wrap;
+  }
+
+  .proxy-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .auto-refresh-panel {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* ============================================
+   Reduced Motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
 <body>
 
-  <!-- Mobile Menu Button -->
-  <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-    &#9776;
-  </button>
+<!-- Mobile Menu Button -->
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+  &#9776;
+</button>
 
-  <!-- Sidebar Overlay (mobile) -->
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+<!-- Sidebar Overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-      <div class="sidebar-brand-icon">P</div>
-      <div class="sidebar-brand-text">
-        <span class="brand-name">Proxy Manager</span>
-        <span class="brand-sub">Multi-Proxy Control</span>
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <!-- Rule 1: Unified sidebar-header (NO .sidebar-brand) -->
+  <div class="sidebar-header">
+    <div class="logo-icon">P</div>
+    <h1>Proxy Manager</h1>
+  </div>
+
+  <nav class="sidebar-nav" id="sidebarNav">
+    <div class="nav-section-label">总览</div>
+    <div class="nav-item active" data-page="dashboard" data-tooltip="概览" tabindex="0">
+      <span class="nav-icon">&#128202;</span>
+      概览
+    </div>
+
+    <div class="nav-section-label" id="proxySectionLabel">代理配置</div>
+    <div id="proxyNavItems"></div>
+
+    <div class="nav-section-label">系统</div>
+    <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
+      <span class="nav-icon">&#128221;</span>
+      日志
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="version-info" id="sidebarVersion">
+      v1.0.0
+    </div>
+    <button class="btn btn-sm btn-outline" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+      &#9789; 暗色模式
+    </button>
+    <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
+  </div>
+</aside>
+
+<!-- Main Content -->
+<main class="main" id="mainContent">
+  <!-- Offline Banner -->
+  <div class="offline-banner hidden" id="offlineBanner">
+    <span class="offline-banner-icon">&#9888;</span>
+    <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
+  </div>
+
+  <!-- API Key Banner -->
+  <div class="apikey-banner hidden" id="apiKeyBanner">
+    <span class="apikey-banner-icon">&#9888;</span>
+    <span>部分代理未配置 API Key，功能可能受限。请编辑各模块的 .env 文件。</span>
+    <button class="apikey-banner-close" onclick="dismissApiKeyBanner()" aria-label="关闭横幅">&times;</button>
+  </div>
+
+  <!-- Dashboard Page -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <h1 class="page-title">概览</h1>
+      <p class="page-subtitle">管理所有代理服务的运行状态与控制</p>
+    </div>
+
+    <!-- Auto-refresh Control Panel -->
+    <div class="auto-refresh-panel" id="autoRefreshPanel">
+      <label class="auto-refresh-label" for="autoRefreshToggle">自动刷新</label>
+      <label class="toggle-switch">
+        <input type="checkbox" id="autoRefreshToggle" checked>
+        <span class="toggle-slider"></span>
+      </label>
+      <label class="auto-refresh-label">间隔</label>
+      <select id="autoRefreshInterval">
+        <option value="5">5 秒</option>
+        <option value="10" selected>10 秒</option>
+        <option value="30">30 秒</option>
+        <option value="60">60 秒</option>
+        <option value="0">关闭</option>
+      </select>
+    </div>
+
+    <!-- Stat Cards Row -->
+    <div class="stat-grid">
+      <div class="stat-card accent-blue">
+        <div class="stat-card-header">
+          <span class="stat-label">代理服务</span>
+          <span class="stat-icon">&#9729;</span>
+        </div>
+        <div class="stat-value blue" id="proxyStatusCount">
+          <span class="loading-spinner"></span>
+        </div>
+        <div class="stat-detail" id="proxyStatusDetail">正在检测...</div>
+      </div>
+      <div class="stat-card accent-green">
+        <div class="stat-card-header">
+          <span class="stat-label">已安装代理</span>
+          <span class="stat-icon">&#9742;</span>
+        </div>
+        <div class="stat-value green" id="installedCount">
+          <span class="loading-spinner"></span>
+        </div>
+        <div class="stat-detail" id="installedDetail">正在加载...</div>
       </div>
     </div>
 
-    <nav class="sidebar-nav" id="sidebarNav">
-      <div class="nav-section-label">总览</div>
-      <div class="nav-item active" data-page="dashboard" data-tooltip="概览" tabindex="0">
-        <span class="nav-icon">&#128200;</span>
-        概览
+    <!-- Version Info Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">版本信息</div>
+        <div class="card-subtitle">系统版本和组件信息</div>
       </div>
-
-      <div class="nav-section-label" id="proxySectionLabel">代理配置</div>
-      <div id="proxyNavItems"></div>
-
-      <div class="nav-section-label">系统</div>
-      <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
-        <span class="nav-icon">&#128221;</span>
-        日志
-      </div>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="version-info" id="sidebarVersion">
-        v1.0.0
-      </div>
-      <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
-    </div>
-  </aside>
-
-  <!-- Main Content -->
-  <main class="main" id="mainContent">
-    <!-- Offline Banner (P2) -->
-    <div class="offline-banner hidden" id="offlineBanner">
-      <span class="offline-banner-icon">&#9888;</span>
-      <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
-    </div>
-
-    <!-- API Key Banner (U2) -->
-    <div class="apikey-banner hidden" id="apiKeyBanner">
-      <span class="apikey-banner-icon">&#9888;</span>
-      <span>部分代理未配置 API Key，功能可能受限。请编辑各模块的 .env 文件。</span>
-      <button class="apikey-banner-close" onclick="dismissApiKeyBanner()" aria-label="关闭横幅">&times;</button>
-    </div>
-
-    <!-- Demo Mode Banner (T10) -->
-    <div class="demo-banner hidden" id="demoBanner">
-      <span class="demo-banner-icon">&#9888;</span>
-      <span>当前处于演示模式，数据为模拟数据。后端 API 不可用。</span>
-      <button class="demo-banner-close" onclick="dismissDemoBanner()" aria-label="关闭横幅">&times;</button>
-    </div>
-
-    <!-- Dashboard Page -->
-    <div class="page active" id="page-dashboard">
-      <div class="page-header">
-        <h1 class="page-title">概览</h1>
-        <p class="page-subtitle">管理所有代理服务的运行状态与控制</p>
-      </div>
-
-      <!-- Auto-refresh Control Panel (T20) -->
-      <div class="auto-refresh-panel" id="autoRefreshPanel">
-        <label class="auto-refresh-label" for="autoRefreshToggle">自动刷新</label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="autoRefreshToggle" checked>
-          <span class="toggle-slider"></span>
-        </label>
-        <label class="auto-refresh-label">间隔</label>
-        <select id="autoRefreshInterval">
-          <option value="5">5 秒</option>
-          <option value="10" selected>10 秒</option>
-          <option value="30">30 秒</option>
-          <option value="60">60 秒</option>
-          <option value="0">关闭</option>
-        </select>
-      </div>
-
-      <!-- Stat Cards Row -->
-      <div class="stat-grid">
-        <div class="stat-card accent-blue">
-          <div class="stat-card-header">
-            <span class="stat-label">代理服务</span>
-            <span class="stat-icon">&#9729;</span>
+      <div class="card-body">
+        <div class="version-list" id="versionInfo">
+          <div class="version-item">
+            <span class="ver-label">管理器版本</span>
+            <span class="ver-value"><span class="loading-spinner"></span></span>
           </div>
-          <div class="stat-value blue" id="proxyStatusCount">
-            <span class="loading-spinner"></span>
+          <div class="version-item">
+            <span class="ver-label">Codex Proxy</span>
+            <span class="ver-value"><span class="loading-spinner"></span></span>
           </div>
-          <div class="stat-detail" id="proxyStatusDetail">正在检测...</div>
-        </div>
-        <div class="stat-card accent-green">
-          <div class="stat-card-header">
-            <span class="stat-label">已安装代理</span>
-            <span class="stat-icon">&#9742;</span>
+          <div class="version-item">
+            <span class="ver-label">Hermes Proxy</span>
+            <span class="ver-value"><span class="loading-spinner"></span></span>
           </div>
-          <div class="stat-value green" id="installedCount">
-            <span class="loading-spinner"></span>
-          </div>
-          <div class="stat-detail" id="installedDetail">正在加载...</div>
-        </div>
-      </div>
-
-      <!-- Version Info Card -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">版本信息</div>
-          <div class="card-subtitle">系统版本和组件信息</div>
-        </div>
-        <div class="card-body">
-          <div class="version-list" id="versionInfo">
-            <div class="version-item">
-              <span class="ver-label">管理器版本</span>
-              <span class="ver-value"><span class="loading-spinner"></span></span>
-            </div>
-            <div class="version-item">
-              <span class="ver-label">Codex Proxy</span>
-              <span class="ver-value"><span class="loading-spinner"></span></span>
-            </div>
-            <div class="version-item">
-              <span class="ver-label">Hermes Proxy</span>
-              <span class="ver-value"><span class="loading-spinner"></span></span>
-            </div>
-            <div class="version-item">
-              <span class="ver-label">Cursor Proxy</span>
-              <span class="ver-value"><span class="loading-spinner"></span></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Proxy Status Cards -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">代理状态</div>
-          <div class="card-subtitle">管理各代理服务的运行状态</div>
-        </div>
-        <div class="card-body">
-          <div class="proxy-list" id="proxyStatusList">
-            <div class="empty-state">
-              <div class="empty-icon">&#128200;</div>
-              <div class="empty-text">正在加载代理服务状态...</div>
-            </div>
+          <div class="version-item">
+            <span class="ver-label">Cursor Proxy</span>
+            <span class="ver-value"><span class="loading-spinner"></span></span>
           </div>
         </div>
       </div>
     </div>
-  </main>
 
-  <!-- Toast Container -->
-  <div class="toast-container" id="toastContainer"></div>
+    <!-- Proxy Status Cards -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">代理状态</div>
+        <div class="card-subtitle">管理各代理服务的运行状态</div>
+      </div>
+      <div class="card-body">
+        <div class="proxy-list" id="proxyStatusList">
+          <div class="empty-state">
+            <div class="empty-icon">&#128202;</div>
+            <div class="empty-text">正在加载代理服务状态...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
 
-  <script>
-    // ===== Configuration =====
-    const PROXY_CONFIGS = {
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ===== Configuration =====
+  var PROXY_CONFIGS = {
+    codex: {
+      name: 'Codex Proxy',
+      icon: '&#129392;',
+      iconClass: 'codex',
+      port: 18790,
+      defaultVersion: 'v1.2.0'
+    },
+    hermes: {
+      name: 'Hermes Proxy',
+      icon: '&#9889;',
+      iconClass: 'hermes',
+      port: 18793,
+      defaultVersion: 'v0.9.4'
+    },
+    cursor: {
+      name: 'Cursor Proxy',
+      icon: '&#9729;',
+      iconClass: 'cursor',
+      port: 18794,
+      defaultVersion: 'v2.1.0'
+    }
+  };
+
+  // ===== State =====
+  var proxyStatus = {};
+  var authToken = sessionStorage.getItem('auth_token');
+  var versionCache = {};
+
+  // ===== Toast System (Rule 5: light backgrounds with colored borders) =====
+  function showToast(message, type, duration) {
+    if (duration === undefined) duration = 3000;
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + (type || 'info');
+
+    var icons = { success: '\u2713', error: '\u2717', info: '\u2139\uFE0F' };
+    var iconSpan = document.createElement('span');
+    iconSpan.textContent = icons[type] || '';
+    var msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    toast.appendChild(iconSpan);
+    toast.appendChild(msgSpan);
+
+    container.appendChild(toast);
+
+    setTimeout(function() {
+      toast.style.animation = 'toast-out 0.3s ease forwards';
+      setTimeout(function() { toast.remove(); }, 300);
+    }, duration);
+  }
+
+  // ===== Navigation =====
+  function switchPage(pageId) {
+    // Stop status polling when leaving dashboard
+    if (pageId !== 'dashboard' && window.__statusInterval) {
+      clearInterval(window.__statusInterval);
+      window.__statusInterval = null;
+    }
+
+    var pages = document.querySelectorAll('.page');
+    for (var i = 0; i < pages.length; i++) {
+      pages[i].classList.remove('active');
+    }
+    var navItems = document.querySelectorAll('.nav-item');
+    for (var j = 0; j < navItems.length; j++) {
+      navItems[j].classList.remove('active');
+    }
+
+    var page = document.getElementById('page-' + pageId);
+    if (page) page.classList.add('active');
+
+    var nav = document.querySelector('.nav-item[data-page="' + pageId + '"]');
+    if (nav) nav.classList.add('active');
+
+    closeMobileSidebar();
+  }
+
+  document.getElementById('sidebarNav').addEventListener('click', function(e) {
+    var navItem = e.target.closest('.nav-item');
+    if (!navItem) return;
+    // Handle proxy nav items (anchor elements) — navigate to proxy-config page
+    if (navItem.classList.contains('proxy-nav-item')) {
+      closeMobileSidebar();
+      return;
+    }
+    var pageId = navItem.dataset.page;
+    if (pageId) {
+      switchPage(pageId);
+    }
+  });
+
+  // ===== Mobile Sidebar =====
+  var mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  var sidebar = document.getElementById('sidebar');
+  var sidebarOverlay = document.getElementById('sidebarOverlay');
+
+  mobileMenuBtn.addEventListener('click', function() {
+    sidebar.classList.toggle('open');
+    sidebarOverlay.classList.toggle('show');
+  });
+
+  sidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+  function closeMobileSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  }
+
+  // ===== Escaping Utility =====
+  function esc(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ===== Mock Data =====
+  function getMockStatus() {
+    return {
       codex: {
-        name: 'Codex Proxy',
-        icon: '&#129392;',
-        iconClass: 'codex',
+        running: true,
         port: 18790,
-        defaultVersion: 'v1.2.0'
+        pid: 12345,
+        uptime: '2h 34m',
+        health: { status: 'healthy', latency: '45ms' }
       },
       hermes: {
-        name: 'Hermes Proxy',
-        icon: '&#9889;',
-        iconClass: 'hermes',
+        running: true,
         port: 18793,
-        defaultVersion: 'v0.9.4'
+        pid: 12346,
+        uptime: '2h 34m',
+        health: { status: 'healthy', latency: '62ms' }
       },
       cursor: {
-        name: 'Cursor Proxy',
-        icon: '&#9729;',
-        iconClass: 'cursor',
+        running: false,
         port: 18794,
-        defaultVersion: 'v2.1.0'
+        pid: null,
+        uptime: null,
+        health: null
       }
     };
+  }
 
-    // ===== State =====
-    let proxyStatus = {};
-    let authToken = sessionStorage.getItem('auth_token');
-    let versionCache = {};
+  function getMockVersion() {
+    return {
+      version: '1.0.3',
+      proxies: {
+        codex: 'v1.2.0',
+        hermes: 'v0.9.4',
+        cursor: 'v2.1.0'
+      }
+    };
+  }
 
-    // ===== Toast System =====
-    function showToast(message, type = 'info', duration = 3000) {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = `toast ${type}`;
+  // ===== Dashboard Rendering =====
+  function updateDashboardDisplay(versionData) {
+    var proxies = Object.entries(proxyStatus);
+    var running = proxies.filter(function(entry) { return entry[1].running; }).length;
+    var total = proxies.length;
 
-      const icons = { success: '\u2713', error: '\u2717', info: '\u2139\uFE0F' };
-      const iconSpan = document.createElement('span');
-      iconSpan.textContent = icons[type] || '';
-      const msgSpan = document.createElement('span');
-      msgSpan.textContent = message;
-      toast.appendChild(iconSpan);
-      toast.appendChild(msgSpan);
+    // Stat cards
+    var statusEl = document.getElementById('proxyStatusCount');
+    var detailEl = document.getElementById('proxyStatusDetail');
+    var installedEl = document.getElementById('installedCount');
+    var installedDetailEl = document.getElementById('installedDetail');
 
-      container.appendChild(toast);
-
-      setTimeout(() => {
-        toast.style.animation = 'toast-out 0.3s ease forwards';
-        setTimeout(() => toast.remove(), 300);
-      }, duration);
+    if (statusEl) {
+      statusEl.textContent = total > 0 ? running + '/' + total : '0/0';
+    }
+    if (detailEl) {
+      detailEl.textContent = running > 0
+        ? running + ' 运行中' + (total - running > 0 ? ', ' + (total - running) + ' 已停止' : '')
+        : '暂无代理服务';
+    }
+    if (installedEl) {
+      installedEl.textContent = total;
+    }
+    if (installedDetailEl) {
+      installedDetailEl.textContent = total > 0 ? '已安装代理总数' : '尚未安装任何代理';
     }
 
-    // ===== Navigation =====
-    function switchPage(pageId) {
-      // Stop status polling when leaving dashboard
-      if (pageId !== 'dashboard' && window.__statusInterval) {
-        clearInterval(window.__statusInterval);
-        window.__statusInterval = null;
+    // Render proxy cards
+    renderProxyCards(proxies, versionData);
+
+    // Update nav items
+    renderProxyNavItems(proxies);
+  }
+
+  function renderProxyCards(proxies, versionData) {
+    var container = document.getElementById('proxyStatusList');
+    if (!container) return;
+
+    if (proxies.length === 0) {
+      container.innerHTML =
+        '<div class="empty-state">' +
+          '<div class="empty-icon">&#128202;</div>' +
+          '<div class="empty-text">暂无代理，请先安装代理程序</div>' +
+        '</div>';
+      return;
+    }
+
+    container.innerHTML = proxies.map(function(entry) {
+      var name = entry[0];
+      var status = entry[1];
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;', iconClass: '', port: 0, defaultVersion: '' };
+      var isRunning = status.running;
+      var statusClass = isRunning ? 'running' : 'stopped';
+      var statusText = isRunning ? '运行中' : '未运行';
+      var btnClass = isRunning ? 'btn-danger' : 'btn-success';
+      var btnText = isRunning ? '停止' : '启动';
+      var btnIcon = isRunning ? '\u23F8' : '\u25B6';
+
+      // Rule 10: Unified status badges (pill-shaped with dot)
+      var statusBadge = '<span class="status-badge ' + statusClass + '">' +
+        '<span class="dot"></span>' +
+        statusText +
+        '</span>';
+
+      var healthBadge = '';
+      if (status.health) {
+        var healthStatus = status.health.status;
+        var healthClass = healthStatus === 'healthy' ? 'status-badge online' : 'status-badge offline';
+        var healthText = healthStatus === 'healthy' ? '健康' : '异常';
+        healthBadge = '<span class="' + healthClass + '">' +
+          '<span class="dot"></span>' +
+          healthText +
+          '</span>';
+      } else if (!isRunning) {
+        healthBadge = '<span class="status-badge offline">' +
+          '<span class="dot"></span>' +
+          '未检测' +
+          '</span>';
       }
 
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      var uptimeText = status.uptime ? '运行 ' + status.uptime : '';
+      var latencyText = status.health && status.health.latency ? '延迟 ' + status.health.latency : '';
 
-      const page = document.getElementById(`page-${pageId}`);
-      if (page) page.classList.add('active');
-
-      const nav = document.querySelector(`.nav-item[data-page="${pageId}"]`);
-      if (nav) nav.classList.add('active');
-
-      // Close mobile sidebar
-      closeMobileSidebar();
-    }
-
-    document.getElementById('sidebarNav').addEventListener('click', (e) => {
-      const navItem = e.target.closest('.nav-item');
-      if (!navItem) return;
-      // Handle proxy nav items (anchor elements)
-      if (navItem.classList.contains('proxy-nav-item')) return; // handled by default anchor behavior
-      const pageId = navItem.dataset.page;
-      if (pageId) {
-        switchPage(pageId);
+      // Version from version data or config default
+      var versionValue = '';
+      if (versionData && versionData.proxies && versionData.proxies[name]) {
+        versionValue = versionData.proxies[name];
+      } else if (config.defaultVersion) {
+        versionValue = config.defaultVersion;
       }
-    });
+      var versionBadge = versionValue ? '<span class="proxy-version-badge">' + esc(versionValue) + '</span>' : '';
 
-    // ===== Mobile Sidebar =====
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const sidebar = document.getElementById('sidebar');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
+      return '<div class="proxy-card" id="proxy-card-' + name + '">' +
+        '<div class="proxy-icon ' + config.iconClass + '">' +
+          config.icon +
+        '</div>' +
+        '<div class="proxy-info">' +
+          '<div class="proxy-name-row">' +
+            '<span class="proxy-name">' + config.name + '</span>' +
+            '<span class="proxy-port-badge">:' + (status.port || config.port) + '</span>' +
+            versionBadge +
+          '</div>' +
+          '<div class="proxy-meta">' +
+            statusBadge +
+            (uptimeText ? '<span>' + esc(uptimeText) + '</span>' : '') +
+            (latencyText ? '<span>' + esc(latencyText) + '</span>' : '') +
+            healthBadge +
+          '</div>' +
+        '</div>' +
+        '<div class="proxy-actions">' +
+          '<button class="btn ' + btnClass + ' btn-sm" id="btn-toggle-' + name + '" onclick="toggleProxy(\'' + name + '\')">' +
+            btnIcon + ' ' + btnText +
+          '</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="window.location.href=\'proxy-config.html?proxy=' + name + '\'">' +
+            '配置' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
 
-    mobileMenuBtn.addEventListener('click', () => {
-      sidebar.classList.toggle('open');
-      sidebarOverlay.classList.toggle('show');
-    });
+  function renderProxyNavItems(proxies) {
+    var container = document.getElementById('proxyNavItems');
+    if (!container) return;
 
-    sidebarOverlay.addEventListener('click', closeMobileSidebar);
+    container.innerHTML = proxies.map(function(entry) {
+      var name = entry[0];
+      var status = entry[1];
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;' };
+      var badgeClass = status.running ? 'running' : 'stopped';
+      var badgeText = status.running ? 'ON' : 'OFF';
 
-    function closeMobileSidebar() {
-      sidebar.classList.remove('open');
-      sidebarOverlay.classList.remove('show');
-    }
+      return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
+        '<span class="nav-icon">' + config.icon + '</span>' +
+        config.name +
+        '<span class="nav-badge ' + badgeClass + '">' + badgeText + '</span>' +
+        '</a>';
+    }).join('');
+  }
 
-    // ===== Escaping Utility =====
-    function esc(str) {
-      var d = document.createElement('div');
-      d.textContent = str;
-      return d.innerHTML;
-    }
+  // ===== Version Info =====
+  function updateVersionDisplay(versionData) {
+    var container = document.getElementById('versionInfo');
+    var sidebarVer = document.getElementById('sidebarVersion');
 
-    // ===== Mock Data =====
-    function getMockStatus() {
-      return {
-        codex: {
-          running: true,
-          port: 18790,
-          pid: 12345,
-          uptime: '2h 34m',
-          health: { status: 'healthy', latency: '45ms' }
-        },
-        hermes: {
-          running: true,
-          port: 18793,
-          pid: 12346,
-          uptime: '2h 34m',
-          health: { status: 'healthy', latency: '62ms' }
-        },
-        cursor: {
-          running: false,
-          port: 18794,
-          pid: null,
-          uptime: null,
-          health: null
-        }
-      };
-    }
-
-    function getMockVersion() {
-      return {
-        version: '1.0.3',
-        proxies: {
-          codex: 'v1.2.0',
-          hermes: 'v0.9.4',
-          cursor: 'v2.1.0'
-        }
-      };
-    }
-
-    // ===== Dashboard Rendering =====
-    function updateDashboardDisplay(versionData) {
-      const proxies = Object.entries(proxyStatus);
-      const running = proxies.filter(([, s]) => s.running).length;
-      const total = proxies.length;
-
-      // Stat cards
-      const statusEl = document.getElementById('proxyStatusCount');
-      const detailEl = document.getElementById('proxyStatusDetail');
-      const installedEl = document.getElementById('installedCount');
-      const installedDetailEl = document.getElementById('installedDetail');
-
-      if (statusEl) {
-        statusEl.textContent = total > 0 ? `${running}/${total}` : '0/0';
+    if (container && versionData) {
+      var rows = [];
+      if (versionData.version) {
+        rows.push({ label: '管理器版本', value: versionData.version });
       }
-      if (detailEl) {
-        detailEl.textContent = running > 0
-          ? `${running} 运行中${total - running > 0 ? `, ${total - running} 已停止` : ''}`
-          : '暂无代理服务';
-      }
-      if (installedEl) {
-        installedEl.textContent = total;
-      }
-      if (installedDetailEl) {
-        installedDetailEl.textContent = total > 0 ? '已安装代理总数' : '尚未安装任何代理';
-      }
-
-      // Render proxy cards
-      renderProxyCards(proxies, versionData);
-
-      // Update nav items
-      renderProxyNavItems(proxies);
-    }
-
-    function renderProxyCards(proxies, versionData) {
-      const container = document.getElementById('proxyStatusList');
-      if (!container) return;
-
-      if (proxies.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">&#128200;</div>
-            <div class="empty-text">暂无代理，请先安装代理程序</div>
-          </div>`;
-        return;
-      }
-
-      container.innerHTML = proxies.map(([name, status]) => {
-        const config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;', iconClass: '', port: 0, defaultVersion: '' };
-        const isRunning = status.running;
-        const statusClass = isRunning ? 'running' : 'stopped';
-        const statusText = isRunning ? '运行中' : '未运行';
-        const btnClass = isRunning ? 'btn-danger' : 'btn-success';
-        const btnText = isRunning ? '停止' : '启动';
-        const btnIcon = isRunning ? '\u23F8' : '\u25B6';
-
-        let healthBadge = '';
-        if (status.health) {
-          var healthStatusEscaped = esc(status.health.status);
-          var healthClass = healthStatusEscaped === 'healthy' ? 'healthy' : 'unhealthy';
-          var healthText = healthStatusEscaped === 'healthy' ? esc('健康') : esc('异常');
-          healthBadge = '<span class="health-status ' + healthClass + '">' + healthText + '</span>';
-        } else if (!isRunning) {
-          healthBadge = '<span class="health-status unknown">' + esc('未检测') + '</span>';
-        }
-
-        var uptimeText = status.uptime ? esc('运行 ' + status.uptime) : '';
-        var latencyText = status.health && status.health.latency ? esc('延迟 ' + status.health.latency) : '';
-
-        // T12: Get version from version data or config default
-        var versionValue = '';
-        if (versionData && versionData.proxies && versionData.proxies[name]) {
-          versionValue = versionData.proxies[name];
-        } else if (config.defaultVersion) {
-          versionValue = config.defaultVersion;
-        }
-        var versionBadge = versionValue ? '<span class="proxy-version-badge">' + esc(versionValue) + '</span>' : '';
-
-        return `
-          <div class="proxy-card" id="proxy-card-${name}">
-            <div class="proxy-icon ${config.iconClass}">
-              ${config.icon}
-            </div>
-            <div class="proxy-info">
-              <div class="proxy-name-row">
-                <span class="proxy-name">${config.name}</span>
-                <span class="proxy-port-badge">:${status.port || config.port}</span>
-                ${versionBadge}
-              </div>
-              <div class="proxy-meta">
-                <span class="status-indicator">
-                  <span class="status-dot ${statusClass}"></span>
-                  ${statusText}
-                </span>
-                ${uptimeText ? `<span>${uptimeText}</span>` : ''}
-                ${latencyText ? `<span>${latencyText}</span>` : ''}
-                ${healthBadge}
-              </div>
-            </div>
-            <div class="proxy-actions">
-              <button class="btn ${btnClass} btn-sm" id="btn-toggle-${name}" onclick="toggleProxy('${name}')" ${isRunning ? '' : ''}>
-                ${btnIcon} ${btnText}
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="window.location.href='proxy-config.html?proxy=${name}'">
-                配置
-              </button>
-            </div>
-          </div>`;
-      }).join('');
-    }
-
-    function renderProxyNavItems(proxies) {
-      const container = document.getElementById('proxyNavItems');
-      if (!container) return;
-
-      container.innerHTML = proxies.map(([name, status]) => {
-        const config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;' };
-        const badgeClass = status.running ? 'running' : 'stopped';
-        const badgeText = status.running ? 'ON' : 'OFF';
-
-        return `
-          <a href="proxy-config.html?proxy=${name}" class="nav-item proxy-nav-item" data-proxy="${name}" data-tooltip="${esc(config.name)}" tabindex="0">
-            <span class="nav-icon">${config.icon}</span>
-            ${config.name}
-            <span class="nav-badge ${badgeClass}">${badgeText}</span>
-          </a>`;
-      }).join('');
-    }
-
-    // ===== Version Info =====
-    function updateVersionDisplay(versionData) {
-      const container = document.getElementById('versionInfo');
-      const sidebarVer = document.getElementById('sidebarVersion');
-
-      if (container && versionData) {
-        const rows = [];
-        if (versionData.version) {
-          rows.push({ label: '管理器版本', value: versionData.version });
-        }
-        if (versionData.proxies) {
-          Object.entries(versionData.proxies).forEach(([key, ver]) => {
-            const config = PROXY_CONFIGS[key];
-            rows.push({
-              label: config ? config.name : key,
-              value: ver
-            });
+      if (versionData.proxies) {
+        Object.keys(versionData.proxies).forEach(function(key) {
+          var ver = versionData.proxies[key];
+          var config = PROXY_CONFIGS[key];
+          rows.push({
+            label: config ? config.name : key,
+            value: ver
           });
-        }
-
-        container.innerHTML = rows.map(row => `
-          <div class="version-item">
-            <span class="ver-label">${row.label}</span>
-            <span class="ver-value">${row.value}</span>
-          </div>
-        `).join('');
+        });
       }
 
-      if (sidebarVer && versionData && versionData.version) {
-        sidebarVer.textContent = `Manager ${versionData.version}`;
-      }
+      container.innerHTML = rows.map(function(row) {
+        return '<div class="version-item">' +
+          '<span class="ver-label">' + row.label + '</span>' +
+          '<span class="ver-value">' + row.value + '</span>' +
+        '</div>';
+      }).join('');
     }
 
-    // ===== Proxy Control =====
-    async function toggleProxy(name) {
-      const btn = document.getElementById(`btn-toggle-${name}`);
-      if (!btn || btn.disabled) return;
-      btn.disabled = true;
+    if (sidebarVer && versionData && versionData.version) {
+      sidebarVer.textContent = 'Manager ' + versionData.version;
+    }
+  }
 
-      const originalContent = btn.innerHTML;
-      btn.innerHTML = '<span class="loading-spinner"></span>';
+  // ===== Proxy Control =====
+  window.toggleProxy = function(name) {
+    var btn = document.getElementById('btn-toggle-' + name);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
 
-      try {
-        // Try real API first
-        const status = proxyStatus[name];
-        const action = status && status.running ? 'stop' : 'start';
+    var originalContent = btn.innerHTML;
+    btn.innerHTML = '<span class="loading-spinner"></span>';
 
-        const res = await fetch(`/api/${action}/${name}`, { method: 'POST' });
-        const data = await res.json();
+    var status = proxyStatus[name];
+    var action = status && status.running ? 'stop' : 'start';
 
+    fetch('/api/' + action + '/' + name, { method: 'POST' })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
         if (data.success) {
-          const label = PROXY_CONFIGS[name]?.name || name;
-          showToast(`${label} 已${action === 'start' ? '启动' : '停止'}`, 'success');
-          proxyStatus[name] = { ...proxyStatus[name], running: action === 'start' };
+          var label = PROXY_CONFIGS[name] ? PROXY_CONFIGS[name].name : name;
+          showToast(label + ' 已' + (action === 'start' ? '启动' : '停止'), 'success');
+          proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
           updateDashboardDisplay(versionCache);
         } else {
-          // Fall back to mock data for demo
-          proxyStatus[name] = {
-            ...proxyStatus[name],
-            running: action === 'start'
-          };
-          showToast(`模拟模式: ${name} 已${action === 'start' ? '启动' : '停止'}`, 'info', 2000);
+          proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
+          showToast('模拟模式: ' + name + ' 已' + (action === 'start' ? '启动' : '停止'), 'info', 2000);
           updateDashboardDisplay(versionCache);
         }
-      } catch (e) {
-        // API unavailable - use mock data for demo
-        proxyStatus[name] = {
-          ...proxyStatus[name],
-          running: !(proxyStatus[name]?.running ?? false)
-        };
-        showToast(`演示模式: ${name} 状态已切换`, 'info', 2000);
+      })
+      .catch(function() {
+        proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: !(proxyStatus[name] ? proxyStatus[name].running : false) });
+        showToast('演示模式: ' + name + ' 状态已切换', 'info', 2000);
         updateDashboardDisplay(versionCache);
-      } finally {
+      })
+      .finally(function() {
         btn.disabled = false;
-      }
-    }
+      });
+  };
 
-    // ===== Data Loading =====
-    async function loadStatus() {
-      try {
-        const res = await fetch('/api/status');
-        if (res.ok) {
-          const data = await res.json();
-          Object.assign(proxyStatus, data);
-          updateDashboardDisplay(versionCache);
-          hideOfflineBanner();
-          hideDemoBanner();
-        } else {
-          throw new Error('API not available');
-        }
-      } catch {
-        // Demo mode: use mock data
+  // ===== Data Loading =====
+  function loadStatus() {
+    fetch('/api/status')
+      .then(function(res) {
+        if (!res.ok) throw new Error('API not available');
+        return res.json();
+      })
+      .then(function(data) {
+        Object.assign(proxyStatus, data);
+        updateDashboardDisplay(versionCache);
+        hideOfflineBanner();
+        hideDemoBanner();
+      })
+      .catch(function() {
         if (Object.keys(proxyStatus).length === 0) {
           proxyStatus = getMockStatus();
           updateDashboardDisplay(versionCache);
           showOfflineBanner();
         }
-      }
-    }
+      });
+  }
 
-    async function loadVersion() {
-      try {
-        const res = await fetch('/api/version');
-        if (res.ok) {
-          const data = await res.json();
-          versionCache = data;
-          updateVersionDisplay(data);
-          hideOfflineBanner();
-          hideDemoBanner();
-        } else {
-          throw new Error('API not available');
-        }
-      } catch {
-        // Demo mode: use mock data
+  function loadVersion() {
+    fetch('/api/version')
+      .then(function(res) {
+        if (!res.ok) throw new Error('API not available');
+        return res.json();
+      })
+      .then(function(data) {
+        versionCache = data;
+        updateVersionDisplay(data);
+        hideOfflineBanner();
+        hideDemoBanner();
+      })
+      .catch(function() {
         updateVersionDisplay(getMockVersion());
         showOfflineBanner();
-      }
-    }
+      });
+  }
 
-    // ===== Offline Banner (P2) =====
-    function showOfflineBanner() {
-      var banner = document.getElementById('offlineBanner');
-      if (banner) banner.classList.remove('hidden');
-    }
+  // ===== Offline Banner =====
+  function showOfflineBanner() {
+    var banner = document.getElementById('offlineBanner');
+    if (banner) banner.classList.remove('hidden');
+  }
 
-    function hideOfflineBanner() {
-      var banner = document.getElementById('offlineBanner');
-      if (banner) banner.classList.add('hidden');
-    }
+  function hideOfflineBanner() {
+    var banner = document.getElementById('offlineBanner');
+    if (banner) banner.classList.add('hidden');
+  }
 
-    // ===== Demo Banner (T10) =====
-    function showDemoBanner() {
-      var banner = document.getElementById('demoBanner');
-      if (banner) banner.classList.remove('hidden');
-    }
+  // ===== Demo Banner =====
+  function showDemoBanner() {
+    var banner = document.getElementById('demoBanner');
+    if (banner) banner.classList.remove('hidden');
+  }
 
-    function hideDemoBanner() {
-      var banner = document.getElementById('demoBanner');
-      if (banner) banner.classList.add('hidden');
-    }
+  function hideDemoBanner() {
+    var banner = document.getElementById('demoBanner');
+    if (banner) banner.classList.add('hidden');
+  }
 
-    function dismissDemoBanner() {
-      hideDemoBanner();
-    }
+  function dismissDemoBanner() {
+    hideDemoBanner();
+  }
 
-    // ===== Dynamic Proxy List (P3) =====
-    async function loadInstalledProxies() {
-      try {
-        const res = await fetch('/api/installed');
-        if (res.ok) {
-          const names = await res.json();
-          if (names && names.length > 0) {
-            return names;
-          }
-        }
-      } catch {}
-      // Fallback to hardcoded list
-      return Object.keys(PROXY_CONFIGS);
-    }
+  // ===== Dynamic Proxy List =====
+  function loadInstalledProxies() {
+    return fetch('/api/installed')
+      .then(function(res) {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(function(names) {
+        if (names && names.length > 0) return names;
+        throw new Error();
+      })
+      .catch(function() {
+        return Object.keys(PROXY_CONFIGS);
+      });
+  }
 
-    // ===== API Key Banner (U2) =====
-    function showApiKeyBanner() {
-      var banner = document.getElementById('apiKeyBanner');
-      if (banner) banner.classList.remove('hidden');
-    }
+  // ===== API Key Banner =====
+  function showApiKeyBanner() {
+    var banner = document.getElementById('apiKeyBanner');
+    if (banner) banner.classList.remove('hidden');
+  }
 
-    function hideApiKeyBanner() {
-      var banner = document.getElementById('apiKeyBanner');
-      if (banner) banner.classList.add('hidden');
-    }
+  function hideApiKeyBanner() {
+    var banner = document.getElementById('apiKeyBanner');
+    if (banner) banner.classList.add('hidden');
+  }
 
-    function dismissApiKeyBanner() {
-      hideApiKeyBanner();
-      try {
-        localStorage.setItem('apiKeyBannerDismissed', String(Date.now()));
-      } catch (e) { /* ignore */ }
-    }
+  function dismissApiKeyBanner() {
+    hideApiKeyBanner();
+    try {
+      localStorage.setItem('apiKeyBannerDismissed', String(Date.now()));
+    } catch (e) { /* ignore */ }
+  }
 
-    function isApiKeyBannerDismissed() {
-      try {
-        var ts = localStorage.getItem('apiKeyBannerDismissed');
-        if (ts === null) return false;
-        return (Date.now() - parseInt(ts, 10)) < 24 * 60 * 60 * 1000;
-      } catch (e) {
-        return false;
-      }
+  function isApiKeyBannerDismissed() {
+    try {
+      var ts = localStorage.getItem('apiKeyBannerDismissed');
+      if (ts === null) return false;
+      return (Date.now() - parseInt(ts, 10)) < 24 * 60 * 60 * 1000;
+    } catch (e) {
+      return false;
     }
+  }
 
-    // ===== Auth Check =====
-    async function checkAuth() {
-      try {
-        const res = await fetch('/api/auth/status');
-        const data = await res.json();
+  // ===== Auth Check =====
+  function checkAuth() {
+    return fetch('/api/auth/status')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
         if (data.needsSetup && !authToken) {
           showLoginRequired();
           return false;
         }
         return true;
-      } catch {
-        // Auth endpoint unavailable - backend offline
+      })
+      .catch(function() {
         showOfflineBanner();
         return true;
+      });
+  }
+
+  function showLoginRequired() {
+    var main = document.getElementById('mainContent');
+    main.innerHTML =
+      '<div class="login-required-container">' +
+        '<div class="login-required-card">' +
+          '<div class="login-required-icon">&#128274;</div>' +
+          '<h2 class="login-required-title">需要登录</h2>' +
+          '<p class="login-required-desc">请先配置认证密码后访问管理面板</p>' +
+          '<a href="login.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;">去设置密码</a>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ===== Intercept fetch for auth token =====
+  var _origFetch = window.fetch;
+  window.fetch = function(url, options) {
+    if (options === undefined) options = {};
+    if (typeof url === 'string' && url.indexOf('/api/') === 0 && authToken) {
+      if (!options.headers) options.headers = {};
+      if (typeof options.headers === 'object') {
+        options.headers['x-auth-token'] = authToken;
       }
     }
+    return _origFetch(url, options);
+  };
 
-    function showLoginRequired() {
-      const main = document.getElementById('mainContent');
-      main.innerHTML = `
-        <div class="login-required-container">
-          <div class="login-required-card">
-            <div class="login-required-icon">&#128274;</div>
-            <h2 class="login-required-title">需要登录</h2>
-            <p class="login-required-desc">请先配置认证密码后访问管理面板</p>
-            <a href="login.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;">去设置密码</a>
-          </div>
-        </div>`;
-    }
+  // ===== Auto-refresh Control =====
+  function getRefreshInterval() {
+    var saved = localStorage.getItem('autoRefreshInterval');
+    if (saved !== null) return parseInt(saved, 10);
+    return 10;
+  }
 
-    // ===== Intercept fetch for auth token =====
-    const _origFetch = window.fetch;
-    window.fetch = async function(url, options = {}) {
-      if (typeof url === 'string' && url.startsWith('/api/') && authToken) {
-        if (!options.headers) options.headers = {};
-        if (typeof options.headers === 'object') {
-          options.headers['x-auth-token'] = authToken;
-        }
-      }
-      return _origFetch(url, options);
-    };
+  function saveRefreshInterval(val) {
+    localStorage.setItem('autoRefreshInterval', String(val));
+  }
 
-    // ===== Auto-refresh Control (T20) =====
-    function getRefreshInterval() {
-      var saved = localStorage.getItem('autoRefreshInterval');
-      if (saved !== null) return parseInt(saved, 10);
-      return 10; // default 10 seconds
-    }
+  function applyRefreshInterval() {
+    var val = parseInt(document.getElementById('autoRefreshInterval').value, 10);
+    var toggle = document.getElementById('autoRefreshToggle');
 
-    function saveRefreshInterval(val) {
-      localStorage.setItem('autoRefreshInterval', String(val));
-    }
-
-    function applyRefreshInterval() {
-      var val = parseInt(document.getElementById('autoRefreshInterval').value, 10);
-      var toggle = document.getElementById('autoRefreshToggle');
-
-      if (val === 0 || !toggle.checked) {
-        // Disabled
-        if (window.__statusInterval) {
-          clearInterval(window.__statusInterval);
-          window.__statusInterval = null;
-        }
-        toggle.checked = false;
-        return;
-      }
-
-      // Clear existing interval and start a new one
+    if (val === 0 || !toggle.checked) {
       if (window.__statusInterval) {
         clearInterval(window.__statusInterval);
+        window.__statusInterval = null;
       }
-      window.__statusInterval = setInterval(loadStatus, val * 1000);
-
-      // Restore toggle state based on whether interval is active
-      toggle.checked = true;
+      toggle.checked = false;
+      return;
     }
 
-    // Wire up controls after DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-      var savedVal = getRefreshInterval();
-      var intervalSelect = document.getElementById('autoRefreshInterval');
-      var toggleCheck = document.getElementById('autoRefreshToggle');
+    if (window.__statusInterval) {
+      clearInterval(window.__statusInterval);
+    }
+    window.__statusInterval = setInterval(loadStatus, val * 1000);
+    toggle.checked = true;
+  }
 
-      if (intervalSelect) {
-        intervalSelect.value = String(savedVal);
-        intervalSelect.addEventListener('change', function() {
-          saveRefreshInterval(parseInt(this.value, 10));
-          applyRefreshInterval();
-        });
-      }
-      if (toggleCheck) {
-        toggleCheck.addEventListener('change', function() {
-          applyRefreshInterval();
-        });
-      }
-    });
+  // ===== Dynamic Proxy Nav =====
+  function renderDynamicProxyNav(proxyNames) {
+    var container = document.getElementById('proxyNavItems');
+    if (!container) return;
+    var label = document.getElementById('proxySectionLabel');
+    if (label) label.style.display = proxyNames.length > 0 ? '' : 'none';
 
-    // ===== Logout (P1) =====
-    function handleLogout() {
-      sessionStorage.removeItem('auth_token');
-      window.location.href = 'login.html';
+    if (proxyNames.length === 0) {
+      container.innerHTML = '<div class="nav-item" style="color:var(--color-text-tertiary);font-size:12px;padding:4px 12px;">暂无代理</div>';
+      return;
     }
 
-    // ===== Dynamic Proxy Nav (P3) =====
-    function renderDynamicProxyNav(proxyNames) {
-      const container = document.getElementById('proxyNavItems');
-      if (!container) return;
-      const label = document.getElementById('proxySectionLabel');
-      if (label) label.style.display = proxyNames.length > 0 ? '' : 'none';
+    container.innerHTML = proxyNames.map(function(name) {
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;', iconClass: '' };
+      var status = proxyStatus[name];
+      var badgeClass = status && status.running ? 'running' : 'stopped';
+      var badgeText = status && status.running ? 'ON' : 'OFF';
+      return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
+        '<span class="nav-icon">' + config.icon + '</span>' +
+        esc(config.name) +
+        '<span class="nav-badge ' + badgeClass + '">' + badgeText + '</span>' +
+        '</a>';
+    }).join('');
+  }
 
-      if (proxyNames.length === 0) {
-        container.innerHTML = '<div class="nav-item" style="color:var(--text-tertiary);font-size:12px;padding:4px 12px;">暂无代理</div>';
-        return;
-      }
+  // ===== Logout =====
+  window.handleLogout = function() {
+    sessionStorage.removeItem('auth_token');
+    window.location.href = 'login.html';
+  };
 
-      container.innerHTML = proxyNames.map(function(name) {
-        const config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;', iconClass: '' };
-        return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
-          '<span class="nav-icon">' + config.icon + '</span>' +
-          esc(config.name) +
-          '</a>';
-      }).join('');
+  // ===== Dark Mode Toggle =====
+  function initDarkMode() {
+    var toggle = document.getElementById('darkModeToggle');
+    var isDark = localStorage.getItem('darkMode') === 'true';
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      if (toggle) toggle.innerHTML = '&#9728; 亮色模式';
     }
+    if (toggle) {
+      toggle.addEventListener('click', function() {
+        var html = document.documentElement;
+        var isNowDark = html.classList.contains('dark');
+        if (isNowDark) {
+          html.classList.remove('dark');
+          html.classList.add('light');
+          localStorage.setItem('darkMode', 'false');
+          toggle.innerHTML = '&#9789; 暗色模式';
+        } else {
+          html.classList.add('dark');
+          html.classList.remove('light');
+          localStorage.setItem('darkMode', 'true');
+          toggle.innerHTML = '&#9728; 亮色模式';
+        }
+      });
+    }
+  }
 
-    // ===== Initialize (P3: dynamic proxy list) =====
-    async function init() {
-      const authOk = await checkAuth();
+  // ===== Initialize =====
+  function init() {
+    initDarkMode();
+    checkAuth().then(function(authOk) {
       if (!authOk) return;
 
-      // Load installed proxies dynamically
-      const installedNames = await loadInstalledProxies();
-      renderDynamicProxyNav(installedNames);
+      loadInstalledProxies().then(function(installedNames) {
+        renderDynamicProxyNav(installedNames);
+      });
 
       // Restore saved interval setting
       var savedVal = getRefreshInterval();
@@ -773,982 +1491,43 @@
       if (intervalSelect) intervalSelect.value = String(savedVal);
 
       // Load data
-      await Promise.all([loadStatus(), loadVersion()]);
+      Promise.all([
+        new Promise(function(resolve) { loadStatus(); resolve(); }),
+        new Promise(function(resolve) { loadVersion(); resolve(); })
+      ]).then(function() {
+        // Check API Key completeness
+        fetch('/api/env-check')
+          .then(function(res) { return res.json(); })
+          .then(function(envData) {
+            if (envData.totalCount > 0 && !isApiKeyBannerDismissed()) {
+              showApiKeyBanner();
+            }
+          })
+          .catch(function() { /* skip */ });
+      });
 
-      // Check API Key completeness (U2)
-      try {
-        const envRes = await fetch('/api/env-check');
-        if (envRes.ok && !isApiKeyBannerDismissed()) {
-          const envData = await envRes.json();
-          if (envData.totalCount > 0) {
-            showApiKeyBanner();
-          }
-        }
-      } catch (e) {
-        // API unavailable - skip check
-      }
-
-      // Start auto-refresh with saved interval
+      // Start auto-refresh
       applyRefreshInterval();
-    }
 
-    init();
-  </script>
-
-    <style>
-    /* ===== CSS Custom Properties ===== */
-    :root {
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --primary-light: #dbeafe;
-      --bg-white: #ffffff;
-      --bg-secondary: #f8fafc;
-      --bg-sidebar: #ffffff;
-      --text-primary: #0f172a;
-      --text-secondary: #475569;
-      --text-tertiary: #94a3b8;
-      --border: #e2e8f0;
-      --success: #10b981;
-      --success-light: #d1fae5;
-      --warning: #f59e0b;
-      --warning-light: #fef3c7;
-      --error: #ef4444;
-      --error-light: #fee2e2;
-      --sidebar-width: 240px;
-      --main-padding: 32px;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-      --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
-      --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
-      --transition-fast: 150ms ease;
-      --transition-normal: 200ms ease;
-    }
-
-    /* ===== Reset & Base ===== */
-    *, *::before, *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      font-size: 14px;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      line-height: 1.6;
-      display: flex;
-      min-height: 100vh;
-      overflow: hidden;
-    }
-
-    /* ===== Sidebar ===== */
-    .sidebar {
-      width: var(--sidebar-width);
-      background: var(--bg-sidebar);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      height: 100vh;
-      position: sticky;
-      top: 0;
-      overflow-y: auto;
-      z-index: 100;
-    }
-
-    .sidebar-brand {
-      padding: 24px 20px 20px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .sidebar-brand-icon {
-      width: 36px;
-      height: 36px;
-      background: var(--primary);
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 18px;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    .sidebar-brand-text {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .sidebar-brand-text .brand-name {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--text-primary);
-      letter-spacing: -0.2px;
-      line-height: 1.2;
-    }
-
-    .sidebar-brand-text .brand-sub {
-      font-size: 11px;
-      color: var(--text-tertiary);
-      font-weight: 500;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      padding: 16px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .nav-section-label {
-      padding: 8px 12px 6px;
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      padding: 8px 12px;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 500;
-      transition: all var(--transition-fast);
-      user-select: none;
-      gap: 10px;
-      position: relative;
-    }
-
-    .nav-item:hover {
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-    }
-
-    .nav-item.active {
-      background: var(--primary-light);
-      color: var(--primary);
-      font-weight: 600;
-    }
-
-    .nav-item .nav-icon {
-      font-size: 16px;
-      width: 20px;
-      text-align: center;
-      flex-shrink: 0;
-    }
-
-    .nav-item .nav-badge {
-      margin-left: auto;
-      font-size: 10px;
-      font-weight: 600;
-      padding: 1px 7px;
-      border-radius: 10px;
-      line-height: 1.5;
-    }
-
-    .nav-badge.running {
-      background: var(--success-light);
-      color: var(--success);
-    }
-
-    .nav-badge.stopped {
-      background: var(--error-light);
-      color: var(--error);
-    }
-
-    .sidebar-footer {
-      padding: 16px 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    .sidebar-footer .version-info {
-      font-size: 11px;
-      color: var(--text-tertiary);
-      text-align: center;
-      line-height: 1.5;
-    }
-
-    .sidebar-footer .btn-logout {
-      display: block;
-      margin-top: 8px;
-      width: 100%;
-      padding: 6px 0;
-      font-size: 12px;
-      font-weight: 500;
-      font-family: inherit;
-      color: var(--error);
-      background: var(--bg-white);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      transition: all var(--transition-fast);
-    }
-
-    .sidebar-footer .btn-logout:hover {
-      background: var(--error-light);
-      border-color: var(--error);
-    }
-
-    /* ===== Main Content ===== */
-    .main {
-      flex: 1;
-      overflow-y: auto;
-      padding: var(--main-padding);
-      min-width: 0;
-    }
-
-    /* ===== Header ===== */
-    .page-header {
-      margin-bottom: 28px;
-    }
-
-    .page-title {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--text-primary);
-      letter-spacing: -0.3px;
-      margin-bottom: 4px;
-    }
-
-    .page-subtitle {
-      font-size: 13px;
-      color: var(--text-secondary);
-      font-weight: 400;
-    }
-
-    /* ===== Stat Cards ===== */
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
-      margin-bottom: 28px;
-    }
-
-    .stat-card {
-      background: var(--bg-white);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 22px 24px;
-      box-shadow: var(--shadow-sm);
-      transition: all var(--transition-normal);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      border-radius: var(--radius-md) var(--radius-md) 0 0;
-    }
-
-    .stat-card.accent-blue::before {
-      background: var(--primary);
-    }
-
-    .stat-card.accent-green::before {
-      background: var(--success);
-    }
-
-    .stat-card:hover {
-      box-shadow: var(--shadow-md);
-      transform: translateY(-1px);
-    }
-
-    .stat-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-
-    .stat-label {
-      font-size: 12px;
-      color: var(--text-tertiary);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .stat-icon {
-      font-size: 20px;
-      opacity: 0.6;
-    }
-
-    .stat-value {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -1px;
-      line-height: 1;
-      margin-bottom: 4px;
-    }
-
-    .stat-value.blue { color: var(--primary); }
-    .stat-value.green { color: var(--success); }
-
-    .stat-detail {
-      font-size: 12px;
-      color: var(--text-secondary);
-      font-weight: 400;
-    }
-
-    /* ===== Version Card ===== */
-    .card {
-      background: var(--bg-white);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow-sm);
-      margin-bottom: 20px;
-      transition: box-shadow var(--transition-normal);
-    }
-
-    .card:hover {
-      box-shadow: var(--shadow-md);
-    }
-
-    .card-header {
-      padding: 20px 24px 0;
-    }
-
-    .card-title {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--text-primary);
-      letter-spacing: -0.1px;
-    }
-
-    .card-subtitle {
-      font-size: 12px;
-      color: var(--text-tertiary);
-      font-weight: 400;
-      margin-top: 2px;
-    }
-
-    .card-body {
-      padding: 16px 24px 20px;
-    }
-
-    .version-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .version-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: var(--bg-secondary);
-      border-radius: var(--radius-sm);
-    }
-
-    .version-item .ver-label {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-secondary);
-    }
-
-    .version-item .ver-value {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-primary);
-      background: var(--bg-white);
-      padding: 3px 10px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-    }
-
-    /* ===== Proxy Cards ===== */
-    .proxy-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .proxy-card {
-      display: flex;
-      align-items: center;
-      padding: 18px 22px;
-      background: var(--bg-white);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow-sm);
-      transition: all var(--transition-normal);
-      gap: 16px;
-    }
-
-    .proxy-card:hover {
-      box-shadow: var(--shadow-md);
-      border-color: #cbd5e1;
-    }
-
-    .proxy-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      flex-shrink: 0;
-    }
-
-    .proxy-icon.codex {
-      background: #ede9fe;
-      color: #7c3aed;
-    }
-
-    .proxy-icon.hermes {
-      background: #fef3c7;
-      color: #d97706;
-    }
-
-    .proxy-icon.cursor {
-      background: #dbeafe;
-      color: #2563eb;
-    }
-
-    .proxy-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .proxy-name-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 3px;
-    }
-
-    .proxy-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .proxy-port-badge {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      background: var(--bg-secondary);
-      padding: 2px 8px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-    }
-
-    .proxy-version-badge {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--primary);
-      background: var(--primary-light);
-      padding: 2px 8px;
-      border-radius: 4px;
-      border: 1px solid #bfdbfe;
-    }
-
-    .proxy-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 12px;
-      color: var(--text-tertiary);
-    }
-
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-weight: 500;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .status-dot.running {
-      background: var(--success);
-      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
-      animation: pulse-green 2s ease-in-out infinite;
-    }
-
-    .status-dot.stopped {
-      background: var(--error);
-      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-    }
-
-    @keyframes pulse-green {
-      0%, 100% { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
-      50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.35); }
-    }
-
-    .health-status {
-      font-size: 11px;
-      font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-
-    .health-status.healthy {
-      background: var(--success-light);
-      color: #059669;
-    }
-
-    .health-status.unhealthy {
-      background: var(--error-light);
-      color: #dc2626;
-    }
-
-    .health-status.unknown {
-      background: var(--bg-secondary);
-      color: var(--text-tertiary);
-    }
-
-    .proxy-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
-    /* ===== Buttons ===== */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 7px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      font-family: inherit;
-      cursor: pointer;
-      border: 1px solid transparent;
-      transition: all var(--transition-fast);
-      user-select: none;
-      white-space: nowrap;
-      gap: 5px;
-    }
-
-    .btn:active {
-      transform: scale(0.97);
-    }
-
-    .btn:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: var(--primary-hover);
-      border-color: var(--primary-hover);
-    }
-
-    .btn-outline {
-      background: var(--bg-white);
-      color: var(--text-secondary);
-      border-color: var(--border);
-    }
-
-    .btn-outline:hover:not(:disabled) {
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      border-color: #cbd5e1;
-    }
-
-    .btn-success {
-      background: var(--success);
-      color: white;
-      border-color: var(--success);
-    }
-
-    .btn-success:hover:not(:disabled) {
-      background: #059669;
-      border-color: #059669;
-    }
-
-    .btn-danger {
-      background: var(--error);
-      color: white;
-      border-color: var(--error);
-    }
-
-    .btn-danger:hover:not(:disabled) {
-      background: #dc2626;
-      border-color: #dc2626;
-    }
-
-    .btn-sm {
-      padding: 5px 12px;
-      font-size: 12px;
-    }
-
-    .btn-icon {
-      width: 32px;
-      height: 32px;
-      padding: 0;
-      border-radius: var(--radius-sm);
-    }
-
-    /* ===== Loading & Empty States ===== */
-    .loading-spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid var(--border);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 48px 20px;
-      color: var(--text-tertiary);
-    }
-
-    .empty-state .empty-icon {
-      font-size: 40px;
-      margin-bottom: 12px;
-      opacity: 0.5;
-    }
-
-    .empty-state .empty-text {
-      font-size: 13px;
-      font-weight: 500;
-    }
-
-    /* ===== Offline Banner (P2) ===== */
-    .offline-banner {
-      background: #fef3c7;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: #92400e;
-      font-weight: 500;
-    }
-    .offline-banner.hidden { display: none; }
-    .offline-banner-icon { font-size: 16px; flex-shrink: 0; }
-
-    /* ===== Demo Banner ===== */
-    .demo-banner {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius-sm);
-      padding: 10px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: #92400e;
-      font-weight: 500;
-    }
-    .demo-banner.hidden { display: none; }
-    .demo-banner-icon { font-size: 16px; flex-shrink: 0; }
-    .demo-banner-close {
-      margin-left: auto;
-      background: none;
-      border: none;
-      font-size: 18px;
-      color: #92400e;
-      cursor: pointer;
-      padding: 2px 6px;
-      line-height: 1;
-      border-radius: 4px;
-    }
-    .demo-banner-close:hover { background: #fef3c7; }
-
-    /* ===== API Key Banner (U2) ===== */
-    .apikey-banner {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius-sm);
-      padding: 10px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: #92400e;
-      font-weight: 500;
-    }
-    .apikey-banner.hidden { display: none; }
-    .apikey-banner-icon { font-size: 16px; flex-shrink: 0; }
-    .apikey-banner-close {
-      margin-left: auto;
-      background: none;
-      border: none;
-      font-size: 18px;
-      color: #92400e;
-      cursor: pointer;
-      padding: 2px 6px;
-      line-height: 1;
-      border-radius: 4px;
-    }
-    .apikey-banner-close:hover { background: #fef3c7; }
-
-    /* ===== Toast Notifications ===== */
-    .toast-container {
-      position: fixed;
-      top: 24px;
-      right: 24px;
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .toast {
-      padding: 12px 18px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      font-family: inherit;
-      box-shadow: var(--shadow-lg);
-      animation: toast-in 0.3s ease;
-      max-width: 380px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .toast.success {
-      background: #065f46;
-      color: #d1fae5;
-    }
-
-    .toast.error {
-      background: #991b1b;
-      color: #fee2e2;
-    }
-
-    .toast.info {
-      background: #1e40af;
-      color: #dbeafe;
-    }
-
-    @keyframes toast-in {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-
-    @keyframes toast-out {
-      from { transform: translateX(0); opacity: 1; }
-      to { transform: translateX(100%); opacity: 0; }
-    }
-
-    /* ===== Responsive ===== */
-    .mobile-menu-btn {
-      display: none;
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      z-index: 200;
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius-sm);
-      background: var(--bg-white);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow-md);
-      cursor: pointer;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      color: var(--text-primary);
-    }
-
-    .sidebar-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.3);
-      z-index: 90;
-    }
-
-    /* ===== Login Required Card ===== */
-    .login-required-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      padding: 20px;
-    }
-
-    .login-required-card {
-      background: var(--bg-white);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 40px;
-      width: 380px;
-      box-shadow: var(--shadow-md);
-      text-align: center;
-    }
-
-    .login-required-icon {
-      font-size: 36px;
-      margin-bottom: 16px;
-    }
-
-    .login-required-title {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 8px;
-      color: var(--text-primary);
-    }
-
-    .login-required-desc {
-      font-size: 13px;
-      color: var(--text-secondary);
-      margin-bottom: 24px;
-    }
-
-    .login-required-card .btn {
-      width: 100%;
-    }
-
-    @media (max-width: 768px) {
-      .mobile-menu-btn {
-        display: flex;
+      // Wire up controls
+      var intervalSelectCtrl = document.getElementById('autoRefreshInterval');
+      if (intervalSelectCtrl) {
+        intervalSelectCtrl.addEventListener('change', function() {
+          saveRefreshInterval(parseInt(this.value, 10));
+          applyRefreshInterval();
+        });
       }
-
-      .sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        transform: translateX(-100%);
-        transition: transform var(--transition-normal);
-        box-shadow: var(--shadow-lg);
+      var toggleCheck = document.getElementById('autoRefreshToggle');
+      if (toggleCheck) {
+        toggleCheck.addEventListener('change', function() {
+          applyRefreshInterval();
+        });
       }
+    });
+  }
 
-      .sidebar.open {
-        transform: translateX(0);
-      }
-
-      .sidebar-overlay.show {
-        display: block;
-      }
-
-      .main {
-        padding: 72px 20px 20px;
-      }
-
-      .stat-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .proxy-card {
-        flex-wrap: wrap;
-      }
-
-      .proxy-actions {
-        width: 100%;
-        justify-content: flex-end;
-        margin-top: 8px;
-        padding-top: 12px;
-        border-top: 1px solid var(--border);
-      }
-
-      /* ===== Nav tooltip (T18) ===== */
-      .nav-item[data-tooltip] {
-        position: relative;
-      }
-      .nav-item[data-tooltip]::after {
-        content: attr(data-tooltip);
-        position: absolute;
-        left: calc(100% + 8px);
-        top: 50%;
-        transform: translateY(-50%);
-        background: var(--text-primary);
-        color: var(--bg-white);
-        font-size: 12px;
-        font-weight: 500;
-        padding: 4px 10px;
-        border-radius: 4px;
-        white-space: nowrap;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity var(--transition-fast);
-        z-index: 150;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      }
-      .nav-item[data-tooltip]:hover::after,
-      .nav-item[data-tooltip]:focus::after {
-        opacity: 1;
-      }
-    }
-
-    /* ===== Scrollbar ===== */
-    .sidebar::-webkit-scrollbar,
-    .main::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    .sidebar::-webkit-scrollbar-track,
-    .main::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .sidebar::-webkit-scrollbar-thumb,
-    .main::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 4px;
-    }
-
-    /* ===== Utility ===== */
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border-width: 0;
-    }
-  </style>
+  init();
+})();
+</script>
 </body>
 </html>

@@ -1,1095 +1,1192 @@
 <!DOCTYPE html>
 <html lang="zh-CN" class="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Proxy Manager - 日志</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
-    </head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Manager - 日志</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="stylesheet" href="../colors_and_type.css">
+  <link rel="stylesheet" href="../shared-styles.css">
+</head>
+<style>
+/* ============================================
+   Reset & Base
+   ============================================ */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  line-height: 1.6;
+  display: flex;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ============================================
+   Mobile Menu Button
+   ============================================ */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+/* ============================================
+   Sidebar Overlay (mobile)
+   ============================================ */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 90;
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+/* Unified sidebar-header (Rule 1) */
+.sidebar-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-header .logo-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sidebar-header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+}
+
+/* Sidebar Navigation */
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-section-label {
+  padding: 8px 12px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  user-select: none;
+  gap: 10px;
+  position: relative;
+  text-decoration: none;
+}
+
+.nav-item:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.nav-item.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.nav-item .nav-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+  padding: 16px 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.sidebar-footer .version-info {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.sidebar-footer .btn-logout {
+  display: block;
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  color: var(--color-error);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-footer .btn-logout:hover {
+  background: var(--color-error-light);
+  border-color: var(--color-error);
+}
+
+/* ============================================
+   Main Content
+   ============================================ */
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--main-padding);
+  min-width: 0;
+}
+
+/* ============================================
+   Page Header
+   ============================================ */
+.page-header {
+  margin-bottom: 28px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* ============================================
+   Banners
+   ============================================ */
+.offline-banner {
+  background: var(--color-warning-light);
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.offline-banner.hidden { display: none; }
+.offline-banner-icon { font-size: 16px; flex-shrink: 0; }
+
+/* ============================================
+   Filter Bar
+   ============================================ */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-bar .filter-group {
+  display: flex;
+  align-items: center;
+}
+
+.filter-spacer {
+  flex: 1;
+}
+
+.log-count {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.time-range-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.time-range-btn.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.time-range-btn.active:hover {
+  background: var(--color-primary-hover);
+}
+
+/* ============================================
+   Log Viewer
+   ============================================ */
+.log-viewer {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--color-text-secondary);
+  min-height: 400px;
+  max-height: calc(100vh - 280px);
+}
+
+.log-viewer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.log-viewer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.log-viewer::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+.log-viewer::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+.log-viewer .log-line {
+  display: block;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.log-viewer .log-line:hover {
+  background: var(--color-bg-secondary);
+}
+
+.log-viewer .timestamp {
+  color: var(--color-text-tertiary);
+}
+
+.log-viewer .proxy-tag {
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.log-viewer .proxy-tag.codex {
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.log-viewer .proxy-tag.hermes {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.log-viewer .proxy-tag.cursor {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.log-viewer .proxy-tag.system {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.log-viewer .level-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+}
+
+.log-viewer .level-badge.INFO {
+  background: var(--color-info-light);
+  color: #1e40af;
+}
+
+.log-viewer .level-badge.WARN {
+  background: var(--color-warning-light);
+  color: #92400e;
+}
+
+.log-viewer .level-badge.ERROR {
+  background: var(--color-error-light);
+  color: #991b1b;
+}
+
+.log-viewer .log-message {
+  color: var(--color-text);
+  font-weight: 400;
+}
+
+.log-viewer .empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family);
+  font-size: 14px;
+}
+
+.log-viewer .empty-state small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.log-viewer .loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family);
+}
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.show {
+    display: block;
+  }
+
+  .main {
+    padding: 72px 20px 20px;
+  }
+
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .filter-bar .filter-group {
+    width: 100%;
+  }
+
+  .filter-bar .form-select,
+  .filter-bar .form-input {
+    width: 100% !important;
+  }
+
+  .log-viewer {
+    max-height: calc(100vh - 340px);
+  }
+}
+
+/* ============================================
+   Reduced Motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
 <body>
 
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <h1>
-        <span class="logo-icon">P</span>
-        Proxy Manager
-        <button class="sidebar-close" onclick="closeSidebar()" aria-label="关闭侧边栏">&times;</button>
-      </h1>
+<!-- Mobile Menu Button -->
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+  &#9776;
+</button>
+
+<!-- Sidebar Overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <!-- Rule 1: Unified sidebar-header (NO .sidebar-brand) -->
+  <div class="sidebar-header">
+    <div class="logo-icon">P</div>
+    <h1>Proxy Manager</h1>
+  </div>
+
+  <nav class="sidebar-nav" id="sidebarNav">
+    <div class="nav-section-label">总览</div>
+    <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
+      <span class="nav-icon">&#128202;</span>
+      概览
     </div>
 
-    <nav class="sidebar-nav">
-      <div class="nav-section-label">总览</div>
-      <a class="nav-item" href="dashboard.html">
-        <span class="nav-icon">&#128200;</span>
-        概览
-      </a>
+    <div class="nav-section-label" id="proxySectionLabel">代理配置</div>
+    <div id="proxyNavItems"></div>
 
-      <div class="nav-section-label">代理配置</div>
-      <a class="nav-item" href="proxy-config.html?proxy=codex">
-        <span class="nav-icon">&#129392;</span>
-        Codex Proxy
-      </a>
-      <a class="nav-item" href="proxy-config.html?proxy=hermes">
-        <span class="nav-icon">&#9889;</span>
-        Hermes Proxy
-      </a>
-      <a class="nav-item" href="proxy-config.html?proxy=cursor">
-        <span class="nav-icon">&#9729;</span>
-        Cursor Proxy
-      </a>
-
-      <div class="nav-section-label">系统</div>
-      <a href="logs.html" class="nav-item active">
-        <span class="nav-icon">&#128221;</span>
-        日志
-      </a>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="version-info">
-        v1.0.0
-      </div>
-      <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
+    <div class="nav-section-label">系统</div>
+    <div class="nav-item active" data-page="logs" data-tooltip="日志" tabindex="0">
+      <span class="nav-icon">&#128221;</span>
+      日志
     </div>
-  </aside>
+  </nav>
 
-  <!-- Main Content -->
-  <main class="main">
-    <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="打开侧边栏">&#9776;</button>
-    <!-- Offline Banner (P2) -->
-    <div class="offline-banner hidden" id="offlineBanner">
-      <span class="offline-banner-icon">&#9888;</span>
-      <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
+  <div class="sidebar-footer">
+    <div class="version-info" id="sidebarVersion">
+      v1.0.0
     </div>
-    <div class="content">
-      <div class="page-header">
-        <h2 class="page-title">日志</h2>
-        <p class="page-subtitle">查看各代理的请求记录和系统事件</p>
-      </div>
+    <button class="btn btn-sm btn-outline" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+      &#9789; 暗色模式
+    </button>
+    <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
+  </div>
+</aside>
 
-      <!-- Filter Bar -->
-      <div class="filter-bar">
-        <div class="filter-group">
-          <select id="proxyFilter" onchange="applyFilters()">
-            <option value="all">全部代理</option>
-            <option value="codex">Codex Proxy</option>
-            <option value="hermes">Hermes Proxy</option>
-            <option value="cursor">Cursor Proxy</option>
-          </select>
-        </div>
+<!-- Main Content -->
+<main class="main" id="mainContent">
+  <!-- Offline Banner -->
+  <div class="offline-banner hidden" id="offlineBanner">
+    <span class="offline-banner-icon">&#9888;</span>
+    <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
+  </div>
 
-        <div class="filter-group">
-          <select id="levelFilter" onchange="applyFilters()">
-            <option value="all">全部级别</option>
-            <option value="INFO">INFO</option>
-            <option value="WARN">WARN</option>
-            <option value="ERROR">ERROR</option>
-          </select>
-        </div>
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="page-title">日志</h1>
+    <p class="page-subtitle">查看各代理的请求记录和系统事件</p>
+  </div>
 
-        <div class="filter-group">
-          <input type="text" id="logSearch" placeholder="搜索日志..." class="size-md" oninput="applyFilters()" />
-        </div>
-
-        <div class="filter-group">
-          <span class="time-range-label">最近:</span>
-          <button class="btn btn-sm time-range-btn" data-hours="1" onclick="setTimeRange(1)">1小时</button>
-          <button class="btn btn-sm time-range-btn" data-hours="6" onclick="setTimeRange(6)">6小时</button>
-          <button class="btn btn-sm time-range-btn" data-hours="24" onclick="setTimeRange(24)">24小时</button>
-          <button class="btn btn-sm time-range-btn active" data-hours="0" onclick="setTimeRange(0)">全部</button>
-        </div>
-
-        <button class="btn btn-sm btn-outline" onclick="loadLogs()" id="refreshBtn">
-          &#8635; 刷新
-        </button>
-
-        <button class="btn btn-sm btn-outline" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
-          &#9203; 自动刷新
-        </button>
-
-        <div class="filter-group">
-          <button class="btn btn-sm btn-outline" onclick="exportLogs('txt')" title="导出为TXT">TXT</button>
-          <button class="btn btn-sm btn-outline" onclick="exportLogs('csv')" title="导出为CSV">CSV</button>
-        </div>
-
-        <button class="btn btn-sm btn-outline" onclick="copyLogs()" title="复制日志">&#9984;</button>
-
-        <span class="log-count" id="logCount">共 <strong>0</strong> 条</span>
-
-        <button class="btn btn-sm btn-danger" onclick="clearLogs()">
-          &#9855; 清空日志
-        </button>
-      </div>
-
-      <!-- Log Viewer -->
-      <div class="log-viewer" id="logViewer">
-        <div class="empty-state">暂无日志，点击"刷新"加载...</div>
-      </div>
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <select id="proxyFilter" class="form-select" onchange="applyFilters()">
+        <option value="all">全部代理</option>
+        <option value="codex">Codex Proxy</option>
+        <option value="hermes">Hermes Proxy</option>
+        <option value="cursor">Cursor Proxy</option>
+      </select>
     </div>
-  </main>
 
-  <div class="toast-container" id="toastContainer"></div>
+    <div class="filter-group">
+      <select id="levelFilter" class="form-select" onchange="applyFilters()">
+        <option value="all">全部级别</option>
+        <option value="INFO">INFO</option>
+        <option value="WARN">WARN</option>
+        <option value="ERROR">ERROR</option>
+      </select>
+    </div>
 
-  <script>
-    // ==================== State ====================
-    let autoRefreshInterval = null;
-    let allLogs = [];
-    let isBackendOnline = false;
+    <div class="filter-group">
+      <input type="text" id="logSearch" class="form-input" placeholder="搜索日志..." style="width:180px;" oninput="applyFilters()">
+    </div>
 
-    // ==================== Offline Banner (P2) ====================
-    function showOfflineBanner() {
-      var banner = document.getElementById('offlineBanner');
-      if (banner) {
-        banner.classList.remove('hidden');
+    <span class="time-range-label" style="font-size:12px;color:var(--color-text-tertiary);font-weight:500;margin-left:4px;">最近:</span>
+    <button class="btn btn-sm btn-outline time-range-btn" data-hours="1" onclick="setTimeRange(1)">1小时</button>
+    <button class="btn btn-sm btn-outline time-range-btn" data-hours="6" onclick="setTimeRange(6)">6小时</button>
+    <button class="btn btn-sm btn-outline time-range-btn" data-hours="24" onclick="setTimeRange(24)">24小时</button>
+    <button class="btn btn-sm btn-outline time-range-btn active" data-hours="0" onclick="setTimeRange(0)">全部</button>
+
+    <div class="filter-spacer"></div>
+
+    <button class="btn btn-sm btn-outline" onclick="loadLogs()" id="refreshBtn">
+      &#8635; 刷新
+    </button>
+
+    <button class="btn btn-sm btn-outline" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
+      &#9654; 自动刷新
+    </button>
+
+    <button class="btn btn-sm btn-outline" onclick="copyLogs()" title="复制日志">&#9984; 复制</button>
+
+    <span class="log-count" id="logCount"></span>
+
+    <button class="btn btn-sm btn-danger" onclick="clearLogs()">
+      &#9855; 清空
+    </button>
+  </div>
+
+  <!-- Log Viewer -->
+  <div class="log-viewer" id="logViewer">
+    <div class="empty-state">暂无日志，点击"刷新"加载日志数据。<br><small>也可以点击"自动刷新"开始实时监控。</small></div>
+  </div>
+</main>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ===== Configuration =====
+  var PROXY_CONFIGS = {
+    codex: { name: 'Codex Proxy', icon: '&#129392;', iconClass: 'codex' },
+    hermes: { name: 'Hermes Proxy', icon: '&#9889;', iconClass: 'hermes' },
+    cursor: { name: 'Cursor Proxy', icon: '&#9729;', iconClass: 'cursor' }
+  };
+
+  // ===== State =====
+  var autoRefreshInterval = null;
+  var allLogs = [];
+  var currentTimeRange = 0;
+  var authToken = sessionStorage.getItem('auth_token');
+  var versionCache = {};
+
+  // ===== Toast System (Rule 5: light backgrounds with colored borders) =====
+  function showToast(message, type, duration) {
+    if (duration === undefined) duration = 3000;
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + (type || 'info');
+
+    var icons = { success: '\u2713', error: '\u2717', info: '\u2139\uFE0F' };
+    var iconSpan = document.createElement('span');
+    iconSpan.textContent = icons[type] || '';
+    var msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    toast.appendChild(iconSpan);
+    toast.appendChild(msgSpan);
+
+    container.appendChild(toast);
+
+    setTimeout(function() {
+      toast.style.animation = 'toast-out 0.3s ease forwards';
+      setTimeout(function() { toast.remove(); }, 300);
+    }, duration);
+  }
+
+  // ===== Escaping Utility =====
+  function esc(str) {
+    if (str === null || str === undefined) return '';
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ===== Auth Header =====
+  function getAuthHeader() {
+    var token = sessionStorage.getItem('auth_token');
+    return token ? { 'x-auth-token': token } : {};
+  }
+
+  // ===== Intercept fetch for auth token =====
+  (function() {
+    var origFetch = window.fetch;
+    window.fetch = function(url, options) {
+      if (options === undefined) options = {};
+      if (typeof url === 'string' && url.indexOf('/api/') === 0 && authToken) {
+        if (!options.headers) options.headers = {};
+        if (typeof options.headers === 'object') {
+          options.headers['x-auth-token'] = authToken;
+        }
       }
-      isBackendOnline = false;
-    }
+      return origFetch(url, options);
+    };
+  })();
 
-    function hideOfflineBanner() {
-      var banner = document.getElementById('offlineBanner');
-      if (banner) {
-        banner.classList.add('hidden');
-      }
-      isBackendOnline = true;
-    }
-    let currentTimeRange = 0; // 0 = no time filter
+  // ===== Offline Banner =====
+  function showOfflineBanner() {
+    var banner = document.getElementById('offlineBanner');
+    if (banner) banner.classList.remove('hidden');
+  }
 
-    // ==================== Time Range Filter (T8) ====================
-    function setTimeRange(hours) {
-      currentTimeRange = hours;
-      document.querySelectorAll('.time-range-btn').forEach(function(btn) {
-        btn.classList.toggle('active', parseInt(btn.dataset.hours) === hours);
+  function hideOfflineBanner() {
+    var banner = document.getElementById('offlineBanner');
+    if (banner) banner.classList.add('hidden');
+  }
+
+  // ===== Time Range Filter =====
+  window.setTimeRange = function(hours) {
+    currentTimeRange = hours;
+    document.querySelectorAll('.time-range-btn').forEach(function(btn) {
+      btn.classList.toggle('active', parseInt(btn.dataset.hours) === hours);
+    });
+    applyFilters();
+  };
+
+  // ===== Fetch Logs from API =====
+  async function fetchLogs(limit) {
+    try {
+      var res = await fetch('/api/logs?limit=' + (limit || 500), {
+        headers: getAuthHeader()
       });
-      applyFilters();
-    }
-
-    // ==================== Real API ====================
-    function getAuthHeader() {
-      var token = sessionStorage.getItem('auth_token');
-      return token ? { 'x-auth-token': token } : {};
-    }
-
-    async function fetchLogs(limit) {
-      try {
-        var res = await fetch('/api/logs?limit=' + (limit || 500), {
-          headers: getAuthHeader(),
-        });
-        if (res.ok) {
-          hideOfflineBanner();
-          var data = await res.json();
-          return parseRawLogs(data.logs || '');
-        }
-        throw new Error('not ok');
-      } catch {
-        showOfflineBanner();
-        return [];
+      if (res.ok) {
+        hideOfflineBanner();
+        var data = await res.json();
+        return parseRawLogs(data.logs || '');
       }
+      throw new Error('not ok');
+    } catch (e) {
+      showOfflineBanner();
+      return [];
     }
+  }
 
-    function parseRawLogs(raw) {
-      if (!raw) return [];
-      var lines = raw.split('\n').filter(function(l) { return l.trim(); });
-      var logs = [];
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        // Format: [ISO-ts] [LEVEL] [PROXY] message {meta}
-        var m = line.match(/^\[([^\]]+)\]\s+\[(\w+)\]\s+\[([^\]]+)\]\s+(.*)$/);
-        if (m) {
-          logs.push({
-            timestamp: m[1],
-            level: m[2],
-            proxy: m[3].toLowerCase(),
-            message: m[4],
-          });
-        } else {
-          // Fallback: treat as INFO/system
-          logs.push({
-            timestamp: new Date().toISOString(),
-            level: 'INFO',
-            proxy: 'system',
-            message: line,
-          });
-        }
-      }
-      return logs;
-    }
-
-    // ==================== Mock Data (fallback) ====================
-    function generateMockLogs() {
-      const now = Date.now();
-      const proxyNames = ['codex', 'hermes', 'cursor'];
-      const levels = ['INFO', 'INFO', 'INFO', 'INFO', 'WARN', 'WARN', 'ERROR'];
-
-      const messages = {
-        codex: {
-          INFO: [
-            'Request received: POST /v1/chat/completions',
-            'Model switched to gpt-4o, routing mode: fallback',
-            'Health check passed, latency: 23ms',
-            'Configuration reloaded from config.yaml',
-            'Client connected from 127.0.0.1:52341',
-          ],
-          WARN: [
-            'Rate limit approaching: 85% of quota used (425/500)',
-            'Retry attempt 2/3 for upstream request, backing off 1.5s',
-            'Response time exceeded threshold: 3200ms > 2000ms',
-          ],
-          ERROR: [
-            'Upstream connection refused: codex-api service unavailable',
-            'Invalid API key format received from client',
-          ]
-        },
-        hermes: {
-          INFO: [
-            'Agent loop started, waiting for task queue',
-            'Tool execution completed: search_web (duration: 1.2s)',
-            'Memory store synced, 47 entries persisted',
-            'New session created',
-            'WebSocket connection established on proxy channel',
-          ],
-          WARN: [
-            'Task queue depth exceeding threshold: 23 pending tasks',
-            'Tool response validation warning: missing field "confidence"',
-            'Memory usage at 78%, consider garbage collection',
-          ],
-          ERROR: [
-            'Fatal: agent pipeline interrupted - unrecoverable state',
-            'Database connection pool exhausted, max connections: 50',
-          ]
-        },
-        cursor: {
-          INFO: [
-            'IDE extension connected',
-            'Model routing: selected claude-sonnet-4-20250514 (confidence: 0.94)',
-            'Cache hit for prompt template: code_completion_v3',
-            'Provider balance check: OpenAI $12.47, Anthropic $8.32',
-            'Request completed: 142 tokens input, 387 tokens output',
-          ],
-          WARN: [
-            'Provider response slow: anthropic took 4.2s (threshold: 3s)',
-            'Token budget warning: current session using 62% of daily limit',
-            'Fallback activated: switching from claude-opus to claude-sonnet',
-          ],
-          ERROR: [
-            'Provider error: OpenAI returned 429 Too Many Requests',
-            'Model initialization failed: claude-haiku-3 not available in region',
-          ]
-        }
-      };
-
-      const logs = [];
-      const count = 25;
-
-      for (let i = 0; i < count; i++) {
-        const proxy = proxyNames[Math.floor(Math.random() * proxyNames.length)];
-        const level = levels[Math.floor(Math.random() * levels.length)];
-        const msgs = messages[proxy][level];
-        const msg = msgs[Math.floor(Math.random() * msgs.length)];
-        const timestamp = new Date(now - (count - i) * 30000 + Math.random() * 15000);
-
+  // ===== Parse Raw Log Lines =====
+  function parseRawLogs(raw) {
+    if (!raw) return [];
+    var lines = raw.split('\n').filter(function(l) { return l.trim(); });
+    var logs = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var m = line.match(/^\[([^\]]+)\]\s+\[(\w+)\]\s+\[([^\]]+)\]\s+(.*)$/);
+      if (m) {
         logs.push({
-          timestamp: timestamp.toISOString().replace('T', ' ').substring(0, 23),
-          proxy: proxy,
-          level: level,
-          message: msg,
+          timestamp: m[1],
+          level: m[2],
+          proxy: m[3].toLowerCase(),
+          message: m[4]
+        });
+      } else {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          proxy: 'system',
+          message: line
         });
       }
-
-      return logs.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     }
+    return logs;
+  }
 
-    // ==================== Rendering ====================
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function renderLogLine(log) {
-      const ts = escapeHtml(log.timestamp);
-      const proxy = escapeHtml(log.proxy.toUpperCase());
-      const msg = escapeHtml(log.message);
-      let levelClass;
-
-      switch (log.level) {
-        case 'INFO': levelClass = 'level-info'; break;
-        case 'WARN': levelClass = 'level-warn'; break;
-        case 'ERROR': levelClass = 'level-error'; break;
-        default: levelClass = '';
+  // ===== Mock Data (fallback) =====
+  function generateMockLogs() {
+    var now = Date.now();
+    var proxyNames = ['codex', 'hermes', 'cursor'];
+    var levels = ['INFO', 'INFO', 'INFO', 'INFO', 'WARN', 'WARN', 'ERROR'];
+    var messages = {
+      codex: {
+        INFO: [
+          'Request received: POST /v1/chat/completions',
+          'Model switched to gpt-4o, routing mode: fallback',
+          'Health check passed, latency: 23ms',
+          'Configuration reloaded from config.yaml',
+          'Client connected from 127.0.0.1:52341'
+        ],
+        WARN: [
+          'Rate limit approaching: 85% of quota used (425/500)',
+          'Retry attempt 2/3 for upstream request, backing off 1.5s',
+          'Response time exceeded threshold: 3200ms > 2000ms'
+        ],
+        ERROR: [
+          'Upstream connection refused: codex-api service unavailable',
+          'Invalid API key format received from client'
+        ]
+      },
+      hermes: {
+        INFO: [
+          'Agent loop started, waiting for task queue',
+          'Tool execution completed: search_web (duration: 1.2s)',
+          'Memory store synced, 47 entries persisted',
+          'New session created',
+          'WebSocket connection established on proxy channel'
+        ],
+        WARN: [
+          'Task queue depth exceeding threshold: 23 pending tasks',
+          'Tool response validation warning: missing field "confidence"',
+          'Memory usage at 78%, consider garbage collection'
+        ],
+        ERROR: [
+          'Fatal: agent pipeline interrupted - unrecoverable state',
+          'Database connection pool exhausted, max connections: 50'
+        ]
+      },
+      cursor: {
+        INFO: [
+          'IDE extension connected',
+          'Model routing: selected claude-sonnet-4-20250514 (confidence: 0.94)',
+          'Cache hit for prompt template: code_completion_v3',
+          'Provider balance check: OpenAI $12.47, Anthropic $8.32',
+          'Request completed: 142 tokens input, 387 tokens output'
+        ],
+        WARN: [
+          'Provider response slow: anthropic took 4.2s (threshold: 3s)',
+          'Token budget warning: current session using 62% of daily limit',
+          'Fallback activated: switching from claude-opus to claude-sonnet'
+        ],
+        ERROR: [
+          'Provider error: OpenAI returned 429 Too Many Requests',
+          'Model initialization failed: claude-haiku-3 not available in region'
+        ]
       }
+    };
 
-      return `<span class="log-line"><span class="timestamp">${ts}</span> <span class="proxy-tag">[${proxy}]</span> <span class="${levelClass}">[${log.level}]</span> <span class="log-message">${msg}</span></span>\n`;
+    var logs = [];
+    var count = 25;
+    for (var i = 0; i < count; i++) {
+      var proxy = proxyNames[Math.floor(Math.random() * proxyNames.length)];
+      var level = levels[Math.floor(Math.random() * levels.length)];
+      var msgs = messages[proxy][level];
+      var msg = msgs[Math.floor(Math.random() * msgs.length)];
+      var timestamp = new Date(now - (count - i) * 30000 + Math.random() * 15000);
+      logs.push({
+        timestamp: timestamp.toISOString().replace('T', ' ').substring(0, 23),
+        proxy: proxy,
+        level: level,
+        message: msg
+      });
+    }
+    return logs.sort(function(a, b) { return a.timestamp.localeCompare(b.timestamp); });
+  }
+
+  // ===== Render Log Line =====
+  function renderLogLine(log) {
+    var ts = esc(log.timestamp);
+    var proxyName = esc(PROXY_CONFIGS[log.proxy] ? PROXY_CONFIGS[log.proxy].name : log.proxy.toUpperCase());
+    var msg = esc(log.message);
+    var proxyClass = log.proxy in PROXY_CONFIGS ? log.proxy : 'system';
+
+    return '<span class="log-line" title="点击复制日志内容">' +
+      '<span class="timestamp">' + ts + '</span> ' +
+      '<span class="proxy-tag ' + proxyClass + '">[' + proxyName + ']</span> ' +
+      '<span class="level-badge ' + esc(log.level) + '">' + esc(log.level) + '</span> ' +
+      '<span class="log-message">' + msg + '</span>' +
+      '</span>';
+  }
+
+  // ===== Render Logs =====
+  function renderLogs(logsToRender, totalCount, autoScroll) {
+    var viewer = document.getElementById('logViewer');
+    var countEl = document.getElementById('logCount');
+
+    if (logsToRender.length === 0) {
+      if (allLogs.length === 0) {
+        viewer.innerHTML = '<div class="empty-state">暂无日志，点击"刷新"加载日志数据。<br><small>也可以点击"自动刷新"开始实时监控。</small></div>';
+      } else if (totalCount > 0) {
+        viewer.innerHTML = '<div class="empty-state">无匹配的日志<br><small>试试调整筛选条件或时间范围</small></div>';
+      } else {
+        viewer.innerHTML = '<div class="empty-state">暂无日志，点击"刷新"加载...</div>';
+      }
+      countEl.innerHTML = totalCount > 0 ? '共 <strong>' + totalCount + '</strong> 条，显示 0 条' : '';
+      return;
     }
 
-    function renderLogs(logsToRender, totalCount, autoScroll) {
-      const viewer = document.getElementById('logViewer');
-      const countEl = document.getElementById('logCount');
+    viewer.innerHTML = logsToRender.map(renderLogLine).join('');
+    countEl.innerHTML = '共 <strong>' + totalCount + '</strong> 条，显示 <strong>' + logsToRender.length + '</strong> 条';
 
-      if (logsToRender.length === 0) {
-        if (allLogs.length === 0) {
-          viewer.innerHTML = '<div class="empty-state">暂无日志，点击"刷新"加载日志数据。<br>也可以点击"自动刷新"开始实时监控。</div>';
-        } else if (allLogs.length > 0 && totalCount > 0) {
-          viewer.innerHTML = '<div class="empty-state">无匹配的日志<br><small style="color:#64748b;">试试调整筛选条件或时间范围</small></div>';
-        } else {
-          viewer.innerHTML = '<div class="empty-state">暂无日志，点击"刷新"加载...</div>';
-        }
-        countEl.textContent = totalCount > 0 ? `共 ${totalCount} 条，显示 0 条` : '';
-        return;
-      }
-
-      viewer.innerHTML = logsToRender.map(renderLogLine).join('');
-      countEl.textContent = `共 ${totalCount} 条，显示 ${logsToRender.length} 条`;
-
-      // T19: Click-to-copy log lines
-      viewer.querySelectorAll('.log-line').forEach(function(line) {
-        line.style.cursor = 'pointer';
-        line.title = '点击复制日志内容';
-        line.addEventListener('click', function() {
+    // Click-to-copy log lines
+    var lines = viewer.querySelectorAll('.log-line');
+    for (var i = 0; i < lines.length; i++) {
+      lines[i].addEventListener('click', (function(line) {
+        return function() {
           var text = line.textContent;
           if (navigator.clipboard) {
             navigator.clipboard.writeText(text).then(function() {
               showToast('日志已复制到剪贴板', 'success', 1500);
             });
           }
-        });
+        };
+      })(lines[i]));
+    }
+
+    // Auto-scroll on initial load or auto-refresh
+    if (autoScroll) {
+      viewer.scrollTop = viewer.scrollHeight;
+    }
+  }
+
+  // ===== Filtering =====
+  window.applyFilters = function() {
+    var proxyFilter = document.getElementById('proxyFilter').value;
+    var levelFilter = document.getElementById('levelFilter').value;
+    var searchTerm = document.getElementById('logSearch').value.toLowerCase();
+
+    var filtered = allLogs;
+
+    // Apply time range filter
+    if (currentTimeRange > 0) {
+      var cutoff = Date.now() - currentTimeRange * 3600 * 1000;
+      filtered = filtered.filter(function(log) {
+        return new Date(log.timestamp).getTime() >= cutoff;
       });
-
-      // Only scroll to bottom on initial load or auto-refresh, not during manual filtering
-      if (autoScroll) {
-        viewer.scrollTop = viewer.scrollHeight;
-      }
     }
 
-    // ==================== Filtering ====================
-    function applyFilters() {
-      const proxyFilter = document.getElementById('proxyFilter').value;
-      const levelFilter = document.getElementById('levelFilter').value;
-      const searchTerm = document.getElementById('logSearch').value.toLowerCase();
-
-      let filtered = allLogs;
-
-      // Apply time range filter
-      if (currentTimeRange > 0) {
-        const cutoff = Date.now() - currentTimeRange * 3600 * 1000;
-        filtered = filtered.filter(function(log) {
-          return new Date(log.timestamp).getTime() >= cutoff;
-        });
-      }
-
-      if (proxyFilter !== 'all') {
-        filtered = filtered.filter(function(l) { return l.proxy === proxyFilter; });
-      }
-
-      if (levelFilter !== 'all') {
-        filtered = filtered.filter(function(l) { return l.level === levelFilter; });
-      }
-
-      if (searchTerm) {
-        filtered = filtered.filter(function(l) { return l.message.toLowerCase().includes(searchTerm); });
-      }
-
-      renderLogs(filtered, allLogs.length, false);
+    if (proxyFilter !== 'all') {
+      filtered = filtered.filter(function(l) { return l.proxy === proxyFilter; });
     }
 
-    // ==================== Actions ====================
-    async function loadLogs() {
-      const viewer = document.getElementById('logViewer');
-      viewer.innerHTML = '<div class="loading"><span class="spinner"></span> 加载中...</div>';
+    if (levelFilter !== 'all') {
+      filtered = filtered.filter(function(l) { return l.level === levelFilter; });
+    }
 
-      try {
-        allLogs = await fetchLogs(500);
-      } catch {
-        allLogs = generateMockLogs();
+    if (searchTerm) {
+      filtered = filtered.filter(function(l) { return l.message.toLowerCase().indexOf(searchTerm) !== -1; });
+    }
+
+    renderLogs(filtered, allLogs.length, false);
+  };
+
+  // ===== Load Logs =====
+  window.loadLogs = function() {
+    var viewer = document.getElementById('logViewer');
+    viewer.innerHTML = '<div class="loading"><span class="loading-spinner"></span> 加载中...</div>';
+
+    fetchLogs(500).then(function(logs) {
+      if (logs.length === 0) {
+        logs = generateMockLogs();
         showOfflineBanner();
       }
+      allLogs = logs;
       applyFilters();
 
-      // Scroll to bottom on initial load and auto-refresh
-      const logViewer = document.getElementById('logViewer');
+      var logViewer = document.getElementById('logViewer');
       if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
+    }).catch(function() {
+      allLogs = generateMockLogs();
+      showOfflineBanner();
+      applyFilters();
+    });
+  };
+
+  // ===== Clear Logs =====
+  window.clearLogs = function() {
+    if (!confirm('确定要清除所有日志吗？')) return;
+    fetch('/api/logs/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).catch(function() {});
+    allLogs = [];
+    document.getElementById('logViewer').innerHTML = '<div class="empty-state">日志已清除</div>';
+    document.getElementById('logCount').innerHTML = '共 <strong>0</strong> 条';
+    showToast('日志已清除', 'success');
+  };
+
+  // ===== Copy Logs =====
+  window.copyLogs = function() {
+    var proxyFilter = document.getElementById('proxyFilter').value;
+    var levelFilter = document.getElementById('levelFilter').value;
+    var searchTerm = document.getElementById('logSearch').value.toLowerCase();
+    var filtered = allLogs;
+
+    if (currentTimeRange > 0) {
+      var cutoff = Date.now() - currentTimeRange * 3600 * 1000;
+      filtered = filtered.filter(function(log) { return new Date(log.timestamp).getTime() >= cutoff; });
+    }
+    if (proxyFilter !== 'all') filtered = filtered.filter(function(l) { return l.proxy === proxyFilter; });
+    if (levelFilter !== 'all') filtered = filtered.filter(function(l) { return l.level === levelFilter; });
+    if (searchTerm) filtered = filtered.filter(function(l) { return l.message.toLowerCase().indexOf(searchTerm) !== -1; });
+
+    var text = filtered.map(function(log) {
+      return '[' + log.timestamp + '] [' + log.proxy.toUpperCase() + '] [' + log.level + '] ' + log.message;
+    }).join('\n');
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function() {
+        showToast('已复制 ' + filtered.length + ' 条日志到剪贴板', 'success');
+      });
+    }
+  };
+
+  // ===== Export Logs =====
+  window.exportLogs = function(format) {
+    var proxyFilter = document.getElementById('proxyFilter').value;
+    var levelFilter = document.getElementById('levelFilter').value;
+    var searchTerm = document.getElementById('logSearch').value.toLowerCase();
+    var filtered = allLogs;
+
+    if (currentTimeRange > 0) {
+      var cutoff = Date.now() - currentTimeRange * 3600 * 1000;
+      filtered = filtered.filter(function(log) { return new Date(log.timestamp).getTime() >= cutoff; });
+    }
+    if (proxyFilter !== 'all') filtered = filtered.filter(function(l) { return l.proxy === proxyFilter; });
+    if (levelFilter !== 'all') filtered = filtered.filter(function(l) { return l.level === levelFilter; });
+    if (searchTerm) filtered = filtered.filter(function(l) { return l.message.toLowerCase().indexOf(searchTerm) !== -1; });
+
+    if (filtered.length === 0) {
+      showToast('没有可导出的日志', 'error');
+      return;
     }
 
-    async function clearLogs() {
-      if (!confirm('确定要清除所有日志吗？')) return;
-      try {
-        await fetch('/api/logs/clear', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-        });
-      } catch {}
-      allLogs = [];
-      document.getElementById('logViewer').innerHTML = '<div class="empty-state">日志已清除</div>';
-      document.getElementById('logCount').innerHTML = '共 <strong>0</strong> 条';
+    var content, mimeType, extension;
+    if (format === 'csv') {
+      var csvRows = ['Timestamp,Proxy,Level,Message'];
+      for (var i = 0; i < filtered.length; i++) {
+        var row = filtered[i];
+        var msgEscaped = (row.message || '').replace(/"/g, '""');
+        csvRows.push([row.timestamp, row.proxy.toUpperCase(), row.level, '"' + msgEscaped + '"'].join(','));
+      }
+      content = csvRows.join('\n');
+      mimeType = 'text/csv';
+      extension = 'csv';
+    } else {
+      var txtLines = filtered.map(function(log) {
+        return '[' + log.timestamp + '] [' + log.proxy.toUpperCase() + '] [' + log.level + '] ' + log.message;
+      });
+      content = txtLines.join('\n');
+      mimeType = 'text/plain';
+      extension = 'txt';
     }
 
-    function copyLogs() {
-      const proxyFilter = document.getElementById('proxyFilter').value;
-      const levelFilter = document.getElementById('levelFilter').value;
-      const searchTerm = document.getElementById('logSearch').value.toLowerCase();
-      let filtered = allLogs;
+    var blob = new Blob([content], { type: mimeType });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'logs-' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-') + '.' + extension;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('已导出 ' + filtered.length + ' 条日志 (' + extension.toUpperCase() + ')', 'success');
+  };
 
-      if (currentTimeRange > 0) {
-        const cutoff = Date.now() - currentTimeRange * 3600 * 1000;
-        filtered = filtered.filter(function(log) { return new Date(log.timestamp).getTime() >= cutoff; });
-      }
-      if (proxyFilter !== 'all') filtered = filtered.filter(function(l) { return l.proxy === proxyFilter; });
-      if (levelFilter !== 'all') filtered = filtered.filter(function(l) { return l.level === levelFilter; });
-      if (searchTerm) filtered = filtered.filter(function(l) { return l.message.toLowerCase().includes(searchTerm); });
+  // ===== Toggle Auto Refresh =====
+  window.toggleAutoRefresh = function() {
+    var btn = document.getElementById('autoRefreshBtn');
 
-      var text = filtered.map(function(log) {
-        return '[' + log.timestamp + '] [' + log.proxy.toUpperCase() + '] ' + log.level + ': ' + log.message;
-      }).join('\n');
-
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(function() {
-          showToast('已复制 ' + filtered.length + ' 条日志到剪贴板', 'success');
-        });
-      }
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+      btn.innerHTML = '&#9654; 自动刷新';
+      btn.classList.remove('active');
+    } else {
+      loadLogs();
+      autoRefreshInterval = setInterval(loadLogs, 5000);
+      btn.innerHTML = '&#9632; 停止刷新';
+      btn.classList.add('active');
     }
+  };
 
-    // T9: Log export
-    function exportLogs(format) {
-      const proxyFilter = document.getElementById('proxyFilter').value;
-      const levelFilter = document.getElementById('levelFilter').value;
-      const searchTerm = document.getElementById('logSearch').value.toLowerCase();
-      let filtered = allLogs;
-
-      if (currentTimeRange > 0) {
-        const cutoff = Date.now() - currentTimeRange * 3600 * 1000;
-        filtered = filtered.filter(function(log) { return new Date(log.timestamp).getTime() >= cutoff; });
+  // ===== Navigation =====
+  document.getElementById('sidebarNav').addEventListener('click', function(e) {
+    var navItem = e.target.closest('.nav-item');
+    if (!navItem) return;
+    if (navItem.classList.contains('proxy-nav-item')) {
+      closeMobileSidebar();
+      return;
+    }
+    var pageId = navItem.dataset.page;
+    if (pageId) {
+      var pages = document.querySelectorAll('.page');
+      for (var i = 0; i < pages.length; i++) {
+        pages[i].classList.remove('active');
       }
-      if (proxyFilter !== 'all') filtered = filtered.filter(function(l) { return l.proxy === proxyFilter; });
-      if (levelFilter !== 'all') filtered = filtered.filter(function(l) { return l.level === levelFilter; });
-      if (searchTerm) filtered = filtered.filter(function(l) { return l.message.toLowerCase().includes(searchTerm); });
-
-      if (filtered.length === 0) {
-        showToast('没有可导出的日志', 'error');
-        return;
+      var navItems = document.querySelectorAll('.nav-item');
+      for (var j = 0; j < navItems.length; j++) {
+        navItems[j].classList.remove('active');
       }
+      var nav = document.querySelector('.nav-item[data-page="' + pageId + '"]');
+      if (nav) nav.classList.add('active');
+      closeMobileSidebar();
+    }
+  });
 
-      var content, mimeType, extension;
-      if (format === 'csv') {
-        var csvRows = ['Timestamp,Proxy,Level,Message'];
-        for (var i = 0; i < filtered.length; i++) {
-          var row = filtered[i];
-          var msgEscaped = (row.message || '').replace(/"/g, '""');
-          csvRows.push([
-            row.timestamp,
-            row.proxy.toUpperCase(),
-            row.level,
-            '"' + msgEscaped + '"'
-          ].join(','));
+  // ===== Mobile Sidebar =====
+  var mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  var sidebar = document.getElementById('sidebar');
+  var sidebarOverlay = document.getElementById('sidebarOverlay');
+
+  mobileMenuBtn.addEventListener('click', function() {
+    sidebar.classList.toggle('open');
+    sidebarOverlay.classList.toggle('show');
+  });
+
+  sidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+  function closeMobileSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  }
+
+  // ===== Logout =====
+  window.handleLogout = function() {
+    sessionStorage.removeItem('auth_token');
+    window.location.href = 'login.html';
+  };
+
+  // ===== Dark Mode Toggle =====
+  function initDarkMode() {
+    var toggle = document.getElementById('darkModeToggle');
+    var isDark = localStorage.getItem('darkMode') === 'true';
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      if (toggle) toggle.innerHTML = '&#9728; 亮色模式';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', function() {
+        var html = document.documentElement;
+        var isNowDark = html.classList.contains('dark');
+        if (isNowDark) {
+          html.classList.remove('dark');
+          html.classList.add('light');
+          localStorage.setItem('darkMode', 'false');
+          toggle.innerHTML = '&#9789; 暗色模式';
+        } else {
+          html.classList.add('dark');
+          html.classList.remove('light');
+          localStorage.setItem('darkMode', 'true');
+          toggle.innerHTML = '&#9728; 亮色模式';
         }
-        content = csvRows.join('\n');
-        mimeType = 'text/csv';
-        extension = 'csv';
-      } else {
-        var txtLines = filtered.map(function(log) {
-          return '[' + log.timestamp + '] [' + log.proxy.toUpperCase() + '] [' + log.level + '] ' + log.message;
-        });
-        content = txtLines.join('\n');
-        mimeType = 'text/plain';
-        extension = 'txt';
-      }
+      });
+    }
+  }
 
-      var blob = new Blob([content], { type: mimeType });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'logs-' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-') + '.' + extension;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('已导出 ' + filtered.length + ' 条日志 (' + extension.toUpperCase() + ')', 'success');
+  // ===== Dynamic Proxy Nav =====
+  function renderDynamicProxyNav(proxyNames) {
+    var container = document.getElementById('proxyNavItems');
+    if (!container) return;
+    var label = document.getElementById('proxySectionLabel');
+    if (label) label.style.display = proxyNames.length > 0 ? '' : 'none';
+
+    if (proxyNames.length === 0) {
+      container.innerHTML = '<div class="nav-item" style="color:var(--color-text-tertiary);font-size:12px;padding:4px 12px;">暂无代理</div>';
+      return;
     }
 
-    function showToast(message, type, duration) {
-      duration = duration || 3000;
-      type = type || 'info';
-      var container = document.getElementById('toastContainer');
-      if (!container) return;
-      var toast = document.createElement('div');
-      toast.className = 'toast ' + type;
-      toast.textContent = message;
-      container.appendChild(toast);
-      setTimeout(function() {
-        toast.style.transition = 'opacity 0.3s ease';
-        toast.style.opacity = '0';
-        setTimeout(function() { toast.remove(); }, 300);
-      }, duration);
-    }
+    container.innerHTML = proxyNames.map(function(name) {
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;' };
+      return '<a href="../proxy-manager-redesign/pages/proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
+        '<span class="nav-icon">' + config.icon + '</span>' +
+        esc(config.name) +
+        '</a>';
+    }).join('');
+  }
 
-    function toggleAutoRefresh() {
-      const btn = document.getElementById('autoRefreshBtn');
+  // ===== Mock Version Data =====
+  function getMockVersion() {
+    return {
+      version: '1.0.3',
+      proxies: { codex: 'v1.2.0', hermes: 'v0.9.4', cursor: 'v2.1.0' }
+    };
+  }
 
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-        btn.textContent = '\u25b6 自动刷新';
-        btn.classList.remove('active');
-      } else {
-        loadLogs();
-        autoRefreshInterval = setInterval(loadLogs, 5000);
-        btn.innerHTML = '\u25a0 停止刷新';
-        btn.classList.add('active');
-      }
-    }
+  // ===== Initialize =====
+  function init() {
+    initDarkMode();
+    // Load version info
+    fetch('/api/version')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        versionCache = data;
+        var sidebarVer = document.getElementById('sidebarVersion');
+        if (sidebarVer && data && data.version) {
+          sidebarVer.textContent = 'Manager ' + data.version;
+        }
+      })
+      .catch(function() {
+        var ver = getMockVersion();
+        versionCache = ver;
+        var sidebarVer = document.getElementById('sidebarVersion');
+        if (sidebarVer) sidebarVer.textContent = 'Manager ' + ver.version;
+      });
 
-    // ==================== Logout (P1) ====================
-    function handleLogout() {
-      sessionStorage.removeItem('auth_token');
-      window.location.href = 'login.html';
-    }
+    // Load dynamic proxy nav
+    fetch('/api/installed')
+      .then(function(res) {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(function(names) {
+        if (names && names.length > 0) renderDynamicProxyNav(names);
+        else throw new Error();
+      })
+      .catch(function() {
+        renderDynamicProxyNav(Object.keys(PROXY_CONFIGS));
+      });
 
-    // ==================== Init ====================
+    // Load logs
     loadLogs();
-
-    function toggleSidebar() {
-      var sb = document.getElementById('sidebar');
-      if (sb) sb.classList.toggle('open');
-    }
-
-    function closeSidebar() {
-      var sb = document.getElementById('sidebar');
-      if (sb) sb.classList.remove('open');
-    }
-  </script>
-
-    <style>
-    :root {
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --primary-light: #dbeafe;
-      --bg: #ffffff;
-      --bg-secondary: #f8fafc;
-      --text: #0f172a;
-      --text-secondary: #475569;
-      --text-muted: #94a3b8;
-      --border: #e2e8f0;
-      --log-bg: #0f172a;
-      --log-info: #34d399;
-      --log-warn: #fbbf24;
-      --log-error: #f87171;
-      --sidebar-width: 240px;
-      --radius: 8px;
-      --radius-sm: 6px;
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-      --transition-fast: 150ms ease;
-    }
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    html {
-      font-size: 14px;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg-secondary);
-      color: var(--text);
-      line-height: 1.6;
-      display: flex;
-      min-height: 100vh;
-      overflow: hidden;
-      font-size: 14px;
-    }
-
-    /* ===== Sidebar ===== */
-    .sidebar {
-      width: var(--sidebar-width);
-      background: var(--bg);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      height: 100vh;
-      position: sticky;
-      top: 0;
-      overflow-y: auto;
-      z-index: 100;
-    }
-
-    .sidebar-header {
-      padding: 20px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .sidebar-header h1 {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text);
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .logo-icon {
-      width: 28px;
-      height: 28px;
-      background: var(--primary);
-      color: white;
-      border-radius: 6px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      padding: 16px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .nav-section-label {
-      padding: 8px 12px 6px;
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      padding: 8px 12px;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 500;
-      transition: all var(--transition-fast);
-      user-select: none;
-      gap: 10px;
-      position: relative;
-      text-decoration: none;
-    }
-
-    .nav-item:hover {
-      background: var(--bg-secondary);
-      color: var(--text);
-    }
-
-    .nav-item.active {
-      background: var(--primary-bg);
-      color: var(--primary);
-      font-weight: 600;
-    }
-
-    .nav-item .nav-icon {
-      font-size: 16px;
-      width: 20px;
-      text-align: center;
-      flex-shrink: 0;
-    }
-
-    .sidebar-footer {
-      padding: 16px 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    .sidebar-footer .version-info {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-align: center;
-      line-height: 1.5;
-    }
-
-    .sidebar-footer .btn-logout {
-      display: block;
-      margin-top: 8px;
-      width: 100%;
-      padding: 6px 0;
-      font-size: 12px;
-      font-weight: 500;
-      font-family: inherit;
-      color: #dc2626;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      transition: all var(--transition-fast);
-    }
-
-    .sidebar-footer .btn-logout:hover {
-      background: #fef2f2;
-      border-color: #dc2626;
-    }
-
-    /* Offline Banner */
-    .offline-banner {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: #92400e;
-      font-weight: 500;
-      font-family: 'Inter', sans-serif;
-    }
-    .offline-banner.hidden { display: none; }
-    .offline-banner-icon { font-size: 16px; flex-shrink: 0; }
-
-    .sidebar-close {
-      display: none;
-      background: none;
-      border: none;
-      font-size: 24px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      padding: 4px;
-      line-height: 1;
-      margin-left: auto;
-    }
-
-    .hamburger-btn {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      z-index: 150;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      width: 40px;
-      height: 40px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-size: 20px;
-      color: var(--text-secondary);
-      box-shadow: var(--shadow-sm);
-      transition: all var(--transition-fast);
-    }
-
-    .hamburger-btn:hover {
-      background: var(--bg-secondary);
-      color: var(--text);
-    }
-
-    /* ===== Main Content ===== */
-    .main {
-      flex: 1;
-      overflow-y: auto;
-      padding: 32px;
-      min-width: 0;
-    }
-
-    /* ===== Header ===== */
-    .page-header {
-      margin-bottom: 28px;
-    }
-
-    .page-title {
-      font-size: 22px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .page-subtitle {
-      font-size: 13px;
-      color: var(--text-secondary);
-      margin-top: 2px;
-    }
-
-    /* Filter Bar */
-    .filter-bar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 16px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      margin-bottom: 12px;
-      flex-shrink: 0;
-      flex-wrap: wrap;
-    }
-
-    .filter-bar .filter-group {
-      display: flex;
-      align-items: center;
-    }
-
-    .filter-bar select,
-    .filter-bar input {
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236e6e73' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-      padding-right: 28px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: inherit;
-      color: var(--text);
-      background-color: var(--bg);
-      cursor: pointer;
-      outline: none;
-      transition: border-color 0.15s ease;
-    }
-
-    .filter-bar select:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
-    }
-
-    .filter-bar select.size-sm {
-      width: 150px;
-      padding: 6px 28px 6px 10px;
-    }
-
-    .filter-bar select.size-md {
-      width: 120px;
-      padding: 6px 28px 6px 10px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 6px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-family: inherit;
-      transition: all 0.15s ease;
-      user-select: none;
-      white-space: nowrap;
-    }
-
-    .btn:hover { background: #f1f5f9; }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-    }
-
-    .btn-primary:hover { background: var(--primary-hover); }
-
-    .btn-danger {
-      background: var(--bg);
-      color: #dc2626;
-      border-color: #fecaca;
-    }
-
-    .btn-danger:hover { background: #fef2f2; }
-
-    .btn.active {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-    }
-
-    .btn.active:hover {
-      background: var(--primary-hover);
-    }
-
-    .time-range-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .time-range-btn {
-      font-size: 11px;
-      padding: 4px 10px;
-    }
-
-    .time-range-btn.active {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-    }
-
-    .time-range-btn.active:hover {
-      background: var(--primary-hover);
-    }
-
-    .filter-spacer {
-      flex: 1;
-    }
-
-    .log-count {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    /* Log Viewer */
-    .log-viewer {
-      flex: 1;
-      background: var(--log-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace;
-      font-size: 12px;
-      line-height: 1.7;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
-      color: #cbd5e1;
-      min-height: 300px;
-    }
-
-    .log-viewer::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    .log-viewer::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .log-viewer::-webkit-scrollbar-thumb {
-      background: #334155;
-      border-radius: 4px;
-    }
-
-    .log-viewer::-webkit-scrollbar-thumb:hover {
-      background: #475569;
-    }
-
-    .log-viewer .log-line {
-      display: block;
-      padding: 1px 0;
-    }
-
-    .log-viewer .timestamp {
-      color: #64748b;
-    }
-
-    .log-viewer .proxy-tag {
-      color: #818cf8;
-      font-weight: 500;
-    }
-
-    .log-viewer .level-info {
-      color: var(--log-info);
-      font-weight: 600;
-    }
-
-    .log-viewer .level-warn {
-      color: var(--log-warn);
-      font-weight: 600;
-    }
-
-    .log-viewer .level-error {
-      color: var(--log-error);
-      font-weight: 600;
-    }
-
-    .log-viewer .log-message {
-      color: #cbd5e1;
-    }
-
-    .log-viewer .empty-state {
-      color: #64748b;
-      text-align: center;
-      padding: 60px 20px;
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
-    }
-
-    .log-viewer .loading {
-      color: #64748b;
-      text-align: center;
-      padding: 40px 20px;
-      font-family: 'Inter', sans-serif;
-    }
-
-    .spinner {
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-      border: 2px solid #334155;
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-      vertical-align: middle;
-      margin-right: 8px;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .hamburger-btn {
-        display: flex;
-      }
-      .sidebar {
-        display: none;
-        width: 260px;
-        z-index: 200;
-        box-shadow: 4px 0 20px rgba(0,0,0,0.1);
-      }
-      .sidebar.open {
-        display: flex;
-      }
-      .sidebar-close {
-        display: block;
-      }
-      .main {
-        padding: 16px 16px 48px;
-      }
-      .filter-bar {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .filter-bar .filter-group {
-        width: 100%;
-      }
-      .filter-bar select {
-        width: 100% !important;
-      }
-      .filter-bar .btn-danger {
-        width: 100%;
-        justify-content: center;
-      }
-    }
-
-    @media (min-width: 769px) {
-      .hamburger-btn {
-        display: none;
-      }
-    }
-
-    @media (max-width: 600px) {
-      .filter-bar {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .filter-bar select,
-      .filter-bar .btn {
-        width: 100%;
-      }
-
-      .filter-spacer {
-        display: none;
-      }
-    }
-  </style>
+  }
+
+  init();
+})();
+</script>
 </body>
 </html>

@@ -1,542 +1,15 @@
 <!DOCTYPE html>
 <html lang="zh-CN" class="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proxy Manager - Login</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
-    </head>
-<body>
-
-<div class="page-container">
-  <!-- Branding -->
-  <div class="branding">
-    <div class="brand-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        <line x1="8" y1="21" x2="16" y2="21"/>
-        <line x1="12" y1="17" x2="12" y2="21"/>
-      </svg>
-    </div>
-    <div class="brand-name">Proxy Manager</div>
-    <div class="brand-subtitle">Multi-Proxy Management Console</div>
-  </div>
-
-  <!-- Card -->
-  <div class="card">
-    <!-- ==========================================
-         SETUP MODE
-         Initial password setup for first-time users
-         ========================================== -->
-    <div class="mode-setup" id="setupMode">
-      <div class="form-header">
-        <h1 class="form-title">Set Admin Password</h1>
-        <p class="form-description">Create a secure password to protect your proxy management console.</p>
-      </div>
-
-      <form id="setupForm" novalidate>
-        <div class="error-message" id="setupError">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-          </svg>
-          <span></span>
-        </div>
-
-        <div class="success-message" id="setupSuccess">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-          <span>Password set successfully!</span>
-        </div>
-
-        <!-- Password Field -->
-        <div class="form-group">
-          <label class="form-label" for="setupPassword">Password</label>
-          <div class="input-wrapper">
-            <input
-              type="password"
-              id="setupPassword"
-              class="input-field"
-              placeholder="Enter a strong password"
-              autocomplete="new-password"
-              required
-            />
-            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <button type="button" class="password-toggle" aria-label="Toggle password visibility" tabindex="0">
-              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
-              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-            </button>
-          </div>
-          <div class="password-strength" id="strengthBars">
-            <div class="strength-bar"></div>
-            <div class="strength-bar"></div>
-            <div class="strength-bar"></div>
-            <div class="strength-bar"></div>
-          </div>
-          <div class="strength-text" id="strengthText"></div>
-        </div>
-
-        <!-- Confirm Password Field -->
-        <div class="form-group">
-          <label class="form-label" for="setupConfirm">Confirm Password</label>
-          <div class="input-wrapper">
-            <input
-              type="password"
-              id="setupConfirm"
-              class="input-field"
-              placeholder="Re-enter your password"
-              autocomplete="new-password"
-              required
-            />
-            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-            <button type="button" class="password-toggle" aria-label="Toggle password visibility" tabindex="0">
-              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
-              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <button type="submit" class="btn-submit" id="setupSubmit">
-          <span class="btn-text">Create Admin Account</span>
-          <span class="spinner"></span>
-        </button>
-      </form>
-    </div>
-
-    <!-- ==========================================
-         LOGIN MODE
-         Existing users authenticate with password
-         ========================================== -->
-    <div class="mode-login mode-hidden" id="loginMode">
-      <div class="form-header">
-        <h1 class="form-title">Welcome Back</h1>
-        <p class="form-description">Enter your password to access the proxy management console.</p>
-      </div>
-
-      <form id="loginForm" novalidate>
-        <div class="error-message" id="loginError">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-          </svg>
-          <span></span>
-        </div>
-
-        <!-- Password Field -->
-        <div class="form-group">
-          <label class="form-label" for="loginPassword">Password</label>
-          <div class="input-wrapper">
-            <input
-              type="password"
-              id="loginPassword"
-              class="input-field"
-              placeholder="Enter your password"
-              autocomplete="current-password"
-              required
-            />
-            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <button type="button" class="password-toggle" aria-label="Toggle password visibility" tabindex="0">
-              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
-              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <button type="submit" class="btn-submit" id="loginSubmit">
-          <span class="btn-text">Sign In</span>
-          <span class="spinner"></span>
-        </button>
-      </form>
-
-      <div class="card-footer">
-        <p class="footer-text">Forgot password? <a href="#" id="resetLink">Contact administrator</a></p>
-      </div>
-    </div>
-
-    <!-- Forgot Password Modal -->
-    <div class="modal-overlay" id="forgotModal" style="display:none;">
-      <div class="modal">
-        <div class="modal-title">忘记密码？</div>
-        <ol style="padding-left:20px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.8;">
-          <li>关闭 Manager 服务</li>
-          <li>删除密码文件：<code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:3px;font-size:12px;font-family:'JetBrains Mono',monospace;">rm ~/.multi-proxy-password</code></li>
-          <li>重启 Manager 服务：<code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:3px;font-size:12px;font-family:'JetBrains Mono',monospace;">bash manage.sh restart manager</code></li>
-          <li>重新访问 <a href="http://localhost:18792" style="color:var(--primary);">http://localhost:18792</a> 设置新密码</li>
-        </ol>
-        <button class="btn btn-primary" id="copyCmdBtn" onclick="copyResetCommand()">复制命令</button>
-        <div style="margin-top:24px;text-align:right;">
-          <button class="btn" onclick="closeForgotModal()">关闭</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-(function() {
-  'use strict';
-
-  // ============================================
-  // State Management
-  // ============================================
-  var state = {
-    mode: 'setup'
-  };
-
-  // ============================================
-  // DOM References
-  // ============================================
-  var elements = {
-    setupMode: document.getElementById('setupMode'),
-    loginMode: document.getElementById('loginMode'),
-    setupForm: document.getElementById('setupForm'),
-    loginForm: document.getElementById('loginForm'),
-    setupPassword: document.getElementById('setupPassword'),
-    setupConfirm: document.getElementById('setupConfirm'),
-    loginPassword: document.getElementById('loginPassword'),
-    setupSubmit: document.getElementById('setupSubmit'),
-    loginSubmit: document.getElementById('loginSubmit'),
-    setupError: document.getElementById('setupError'),
-    loginError: document.getElementById('loginError'),
-    setupSuccess: document.getElementById('setupSuccess'),
-    strengthBars: document.getElementById('strengthBars'),
-    strengthText: document.getElementById('strengthText'),
-    resetLink: document.getElementById('resetLink')
-  };
-
-  // ============================================
-  // Utility Functions
-  // ============================================
-  function showError(container, message) {
-    var errorSpan = container.querySelector('.error-message span');
-    errorSpan.textContent = message;
-    container.classList.add('visible');
-  }
-
-  function hideError(container) {
-    container.classList.remove('visible');
-  }
-
-  function showSuccess(container) {
-    container.classList.add('visible');
-  }
-
-  function hideSuccess(container) {
-    container.classList.remove('visible');
-  }
-
-  function setLoading(button, loading) {
-    if (loading) {
-      button.classList.add('loading');
-      button.disabled = true;
-    } else {
-      button.classList.remove('loading');
-      button.disabled = false;
-    }
-  }
-
-  function switchMode(mode) {
-    state.mode = mode;
-    if (mode === 'setup') {
-      elements.setupMode.classList.remove('mode-hidden');
-      elements.loginMode.classList.add('mode-hidden');
-    } else {
-      elements.setupMode.classList.add('mode-hidden');
-      elements.loginMode.classList.remove('mode-hidden');
-    }
-  }
-
-  // ============================================
-  // Password Visibility Toggle
-  // ============================================
-  var toggles = document.querySelectorAll('.password-toggle');
-  for (var i = 0; i < toggles.length; i++) {
-    (function(btn) {
-      btn.addEventListener('click', function() {
-        var wrapper = this.closest('.input-wrapper');
-        var input = wrapper.querySelector('.input-field');
-        var eyeOpen = this.querySelector('.eye-open');
-        var eyeClosed = this.querySelector('.eye-closed');
-
-        if (input.type === 'password') {
-          input.type = 'text';
-          eyeOpen.style.display = 'none';
-          eyeClosed.style.display = 'block';
-        } else {
-          input.type = 'password';
-          eyeOpen.style.display = 'block';
-          eyeClosed.style.display = 'none';
-        }
-      });
-    })(toggles[i]);
-  }
-
-  // ============================================
-  // Password Strength Calculator
-  // ============================================
-  function calculateStrength(password) {
-    var score = 0;
-    if (password.length >= 8) score++;
-    if (password.length >= 12) score++;
-    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
-    if (/\d/.test(password)) score++;
-    if (/[^a-zA-Z0-9]/.test(password)) score++;
-    return Math.min(score, 4);
-  }
-
-  function updateStrengthUI(strength) {
-    var bars = elements.strengthBars.querySelectorAll('.strength-bar');
-    var labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
-    var classes = ['', 'weak', 'weak', 'medium', 'strong'];
-
-    for (var i = 0; i < bars.length; i++) {
-      bars[i].className = 'strength-bar';
-      if (i < strength) {
-        bars[i].classList.add('active', classes[strength]);
-      }
-    }
-
-    elements.strengthText.textContent = strength > 0 ? labels[strength] : '';
-    if (strength <= 1) {
-      elements.strengthText.style.color = 'var(--error)';
-    } else if (strength === 2 || strength === 3) {
-      elements.strengthText.style.color = '#f59e0b';
-    } else {
-      elements.strengthText.style.color = 'var(--success)';
-    }
-  }
-
-  if (elements.setupPassword) {
-    elements.setupPassword.addEventListener('input', function() {
-      var strength = calculateStrength(this.value);
-      updateStrengthUI(strength);
-    });
-  }
-
-  // ============================================
-  // Setup Form Handler
-  // ============================================
-  if (elements.setupForm) {
-    elements.setupForm.addEventListener('submit', function(e) {
-      e.preventDefault();
-      hideError(elements.setupError);
-      hideSuccess(elements.setupSuccess);
-
-      var password = elements.setupPassword.value;
-      var confirm = elements.setupConfirm.value;
-
-      if (!password || password.length < 8) {
-        showError(elements.setupError, 'Password must be at least 8 characters long.');
-        return;
-      }
-
-      if (password !== confirm) {
-        showError(elements.setupError, 'Passwords do not match.');
-        elements.setupConfirm.classList.add('error');
-        setTimeout(function() {
-          elements.setupConfirm.classList.remove('error');
-        }, 2000);
-        return;
-      }
-
-      setLoading(elements.setupSubmit, true);
-
-      fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password })
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        setLoading(elements.setupSubmit, false);
-        if (data.success) {
-          sessionStorage.setItem('auth_token', data.token);
-          showSuccess(elements.setupSuccess);
-          setTimeout(function() {
-            window.location.href = 'dashboard.html';
-          }, 1500);
-        } else {
-          showError(elements.setupError, data.error || 'Setup failed. Please try again.');
-        }
-      })
-      .catch(function(err) {
-        setLoading(elements.setupSubmit, false);
-        showError(elements.setupError, 'Connection error. Please check the server is running.');
-        console.error('Setup error:', err);
-      });
-    });
-  }
-
-  // ============================================
-  // Login Form Handler
-  // ============================================
-  if (elements.loginForm) {
-    elements.loginForm.addEventListener('submit', function(e) {
-      e.preventDefault();
-      hideError(elements.loginError);
-
-      var password = elements.loginPassword.value;
-
-      if (!password) {
-        showError(elements.loginError, 'Please enter your password.');
-        return;
-      }
-
-      setLoading(elements.loginSubmit, true);
-
-      fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password })
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        setLoading(elements.loginSubmit, false);
-        if (data.success) {
-          sessionStorage.setItem('auth_token', data.token);
-          window.location.href = 'dashboard.html';
-        } else {
-          showError(elements.loginError, data.error || 'Invalid password. Please try again.');
-        }
-      })
-      .catch(function(err) {
-        setLoading(elements.loginSubmit, false);
-        showError(elements.loginError, 'Connection error. Please check the server is running.');
-        console.error('Login error:', err);
-      });
-    });
-  }
-
-  // ============================================
-  // Clear errors on input focus
-  // ============================================
-  var inputs = document.querySelectorAll('.input-field');
-  for (var j = 0; j < inputs.length; j++) {
-    (function(input) {
-      input.addEventListener('focus', function() {
-        this.classList.remove('error');
-        var form = this.closest('form');
-        if (form) {
-          var errorContainer = form.querySelector('.error-message');
-          if (errorContainer) hideError(errorContainer);
-        }
-      });
-    })(inputs[j]);
-  }
-
-  // ============================================
-  // Initialize: Detect mode from backend API
-  // ============================================
-  fetch('/api/auth/status')
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (data.needsSetup) {
-        switchMode('setup');
-      } else {
-        switchMode('login');
-      }
-    })
-    .catch(function() {
-      // Fallback to localStorage if backend unavailable
-      var hasPassword = localStorage.getItem('proxyManager_password');
-      if (hasPassword) {
-        switchMode('login');
-      } else {
-        switchMode('setup');
-      }
-    });
-
-  // ============================================
-  // Forgot Password Modal (P6)
-  // ============================================
-  if (elements.resetLink) {
-    elements.resetLink.addEventListener('click', function(e) {
-      e.preventDefault();
-      var modal = document.getElementById('forgotModal');
-      if (modal) modal.style.display = 'flex';
-    });
-  }
-
-  function closeForgotModal() {
-    var modal = document.getElementById('forgotModal');
-    if (modal) modal.style.display = 'none';
-  }
-
-  // Close modal on overlay click
-  document.addEventListener('click', function(e) {
-    var modal = document.getElementById('forgotModal');
-    if (modal && e.target === modal) {
-      modal.style.display = 'none';
-    }
-  });
-
-  function copyResetCommand() {
-    var cmd = 'rm ~/.multi-proxy-password';
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(cmd).then(function() {
-        var btn = document.getElementById('copyCmdBtn');
-        if (btn) {
-          var orig = btn.textContent;
-          btn.textContent = '已复制!';
-          setTimeout(function() { btn.textContent = orig; }, 2000);
-        }
-      });
-    }
-  }
-
-})();
-</script>
-
-    <style>
-/* ============================================
-   CSS Custom Properties
-   ============================================ */
-:root {
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-light: #dbeafe;
-  --primary-glow: rgba(37, 99, 235, 0.12);
-  --bg: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary: #f1f5f9;
-  --text: #0f172a;
-  --text-secondary: #475569;
-  --text-tertiary: #94a3b8;
-  --border: #e2e8f0;
-  --border-focus: #2563eb;
-  --success: #10b981;
-  --success-light: #d1fae5;
-  --error: #ef4444;
-  --error-light: #fee2e2;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 24px rgba(0, 0, 0, 0.06);
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Manager - Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+</head>
+<style>
 /* ============================================
    Reset & Base
    ============================================ */
@@ -547,15 +20,15 @@
 }
 
 html {
-  font-size: 16px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--bg-secondary);
-  color: var(--text);
+  font-family: var(--font-family);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -565,16 +38,13 @@ body {
   overflow: hidden;
 }
 
-/* ============================================
-   Background Pattern
-   ============================================ */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 50% -20%, var(--primary-glow), transparent),
-    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(37, 99, 235, 0.04), transparent);
+    radial-gradient(ellipse 80% 60% at 50% -20%, rgba(37, 99, 235, 0.08), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(37, 99, 235, 0.03), transparent);
   pointer-events: none;
   z-index: 0;
 }
@@ -583,10 +53,9 @@ body::after {
   content: '';
   position: fixed;
   inset: 0;
-  background-image:
-    radial-gradient(circle at 1px 1px, var(--border) 0.5px, transparent 0.5px);
+  background-image: radial-gradient(circle at 1px 1px, var(--color-border) 0.5px, transparent 0.5px);
   background-size: 32px 32px;
-  opacity: 0.4;
+  opacity: 0.35;
   pointer-events: none;
   z-index: 0;
 }
@@ -599,33 +68,27 @@ body::after {
   z-index: 1;
   width: 100%;
   max-width: 420px;
-  animation: fadeInUp 0.6s var(--transition-slow) both;
+  animation: fadeInUp 0.6s ease both;
 }
 
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ============================================
-   Branding Area
+   Branding
    ============================================ */
 .branding {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .brand-icon {
   width: 48px;
   height: 48px;
-  margin: 0 auto 16px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  margin: 0 auto 14px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -652,14 +115,14 @@ body::after {
 .brand-name {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--text);
+  color: var(--color-text);
   letter-spacing: -0.01em;
   margin-bottom: 4px;
 }
 
 .brand-subtitle {
   font-size: 0.8125rem;
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   font-weight: 400;
   letter-spacing: 0.02em;
 }
@@ -668,11 +131,11 @@ body::after {
    Card
    ============================================ */
 .card {
-  background: var(--bg);
+  background: var(--color-bg);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  border: 1px solid var(--border);
-  padding: 36px 32px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+  padding: 32px 28px;
   position: relative;
   overflow: hidden;
 }
@@ -684,9 +147,9 @@ body::after {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
   opacity: 0;
-  transition: opacity var(--transition-base);
+  transition: opacity 250ms ease;
 }
 
 .card:focus-within::before {
@@ -697,20 +160,20 @@ body::after {
    Form Header
    ============================================ */
 .form-header {
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .form-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: var(--text);
+  color: var(--color-text);
   letter-spacing: -0.01em;
   margin-bottom: 6px;
 }
 
 .form-description {
   font-size: 0.8125rem;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   line-height: 1.5;
 }
 
@@ -718,14 +181,14 @@ body::after {
    Form Groups
    ============================================ */
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .form-label {
   display: block;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
   letter-spacing: 0.01em;
 }
@@ -738,20 +201,20 @@ body::after {
 
 .input-field {
   width: 100%;
-  height: 42px;
+  height: 40px;
   padding: 0 44px 0 14px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-family);
   font-size: 0.875rem;
-  color: var(--text);
-  background: var(--bg);
-  border: 1.5px solid var(--border);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-sm);
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .input-field::placeholder {
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
 }
 
 .input-field:hover {
@@ -759,12 +222,12 @@ body::after {
 }
 
 .input-field:focus {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--primary-glow);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-bg);
 }
 
 .input-field.error {
-  border-color: var(--error);
+  border-color: var(--color-error);
 }
 
 .input-field.error:focus {
@@ -776,17 +239,19 @@ body::after {
   left: 14px;
   width: 18px;
   height: 18px;
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   pointer-events: none;
   transition: color var(--transition-fast);
 }
 
 .input-field:focus ~ .input-icon,
 .input-field:not(:placeholder-shown) ~ .input-icon {
-  color: var(--primary);
+  color: var(--color-primary);
 }
 
-/* Password toggle button */
+/* ============================================
+   Password Toggle Button
+   ============================================ */
 .password-toggle {
   position: absolute;
   right: 4px;
@@ -798,14 +263,19 @@ body::after {
   background: none;
   border: none;
   border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   cursor: pointer;
   transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .password-toggle:hover {
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
 }
 
 .password-toggle svg {
@@ -826,20 +296,21 @@ body::after {
 .strength-bar {
   flex: 1;
   height: 100%;
-  background: var(--bg-tertiary);
+  background: var(--color-bg-tertiary);
   border-radius: 2px;
-  transition: background var(--transition-base);
+  transition: background var(--transition-normal);
 }
 
-.strength-bar.active.weak { background: var(--error); }
-.strength-bar.active.medium { background: #f59e0b; }
-.strength-bar.active.strong { background: var(--success); }
+.strength-bar.active.weak { background: var(--color-error); }
+.strength-bar.active.medium { background: var(--color-warning); }
+.strength-bar.active.strong { background: var(--color-success); }
 
 .strength-text {
   font-size: 0.6875rem;
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   margin-top: 4px;
   transition: color var(--transition-fast);
+  font-family: var(--font-family);
 }
 
 /* ============================================
@@ -847,32 +318,32 @@ body::after {
    ============================================ */
 .btn-submit {
   width: 100%;
-  height: 42px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-family);
   font-size: 0.875rem;
   font-weight: 600;
   color: white;
-  background: var(--primary);
+  background: var(--color-primary);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
-  margin-top: 24px;
+  margin-top: 20px;
   position: relative;
   overflow: hidden;
 }
 
 .btn-submit:hover:not(:disabled) {
-  background: var(--primary-hover);
+  background: var(--color-primary-hover);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
 .btn-submit:active:not(:disabled) {
-  transform: scale(0.985);
+  transform: scale(0.97);
 }
 
 .btn-submit:disabled {
@@ -909,102 +380,107 @@ body::after {
 }
 
 /* ============================================
-   Error Message
+   Error / Success Messages
    ============================================ */
-.error-message {
+.message-box {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  margin-bottom: 20px;
-  background: var(--error-light);
-  border: 1px solid rgba(239, 68, 68, 0.15);
-  border-radius: var(--radius-sm);
+  margin-bottom: 18px;
   font-size: 0.8125rem;
-  color: var(--error);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
   opacity: 0;
   transform: translateY(-4px);
-  transition: opacity var(--transition-base), transform var(--transition-base);
+  transition: opacity var(--transition-normal), transform var(--transition-normal);
   pointer-events: none;
   visibility: hidden;
 }
 
-.error-message.visible {
+.message-box.visible {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
   visibility: visible;
 }
 
-.error-message svg {
+.message-box svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+}
+
+.message-box.error-msg {
+  background: var(--color-error-light);
+  color: #991b1b;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.message-box.success-msg {
+  background: var(--color-success-light);
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.15);
 }
 
 /* ============================================
-   Success Message
+   Rate Limiting Display
    ============================================ */
-.success-message {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.rate-limit-info {
+  margin-top: 16px;
   padding: 10px 14px;
-  margin-bottom: 20px;
-  background: var(--success-light);
-  border: 1px solid rgba(16, 185, 129, 0.15);
+  background: var(--color-bg-tertiary);
   border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
-  color: var(--success);
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity var(--transition-base), transform var(--transition-base);
-  pointer-events: none;
-  visibility: hidden;
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  line-height: 1.5;
+  transition: opacity var(--transition-normal);
 }
 
-.success-message.visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-  visibility: visible;
-}
-
-.success-message svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+.rate-limit-info .countdown {
+  font-weight: 600;
+  color: var(--color-error);
 }
 
 /* ============================================
    Footer
    ============================================ */
 .card-footer {
-  margin-top: 24px;
+  margin-top: 20px;
   text-align: center;
 }
 
 .footer-text {
   font-size: 0.75rem;
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   letter-spacing: 0.01em;
 }
 
-.footer-text code {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.6875rem;
-  background: var(--bg-tertiary);
-  padding: 1px 5px;
-  border-radius: 3px;
-  color: var(--text-secondary);
+.footer-text a {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.footer-text a:hover {
+  text-decoration: underline;
 }
 
 /* ============================================
    Mode Switching
    ============================================ */
+.mode-setup,
+.mode-login {
+  transition: opacity var(--transition-normal), transform var(--transition-normal);
+}
+
+.mode-hidden {
+  display: none;
+}
 
 /* ============================================
-   Forgot Password Modal (P6)
+   Forgot Password Modal
    ============================================ */
 .modal-overlay {
   position: fixed;
@@ -1019,12 +495,14 @@ body::after {
   z-index: 10000;
   animation: fadeIn 0.15s ease;
 }
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
 .modal {
-  background: var(--bg);
+  background: var(--color-bg);
   border-radius: var(--radius-lg);
   padding: 28px;
   width: 480px;
@@ -1034,27 +512,46 @@ body::after {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   animation: slideUp 0.2s ease;
 }
+
 @keyframes slideUp {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+
 .modal-title {
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 16px;
-  color: var(--text);
+  color: var(--color-text);
 }
 
-/* ============================================
-   Mode Switching
-   ============================================ */
-.mode-setup,
-.mode-login {
-  transition: opacity var(--transition-base), transform var(--transition-base);
+.modal ol {
+  padding-left: 20px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.8;
 }
 
-.mode-hidden {
-  display: none;
+.modal code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--color-bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--color-text-secondary);
+}
+
+.modal .btn-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.modal .btn-row .hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
 }
 
 /* ============================================
@@ -1068,11 +565,11 @@ body::after {
   }
 
   .card {
-    padding: 28px 24px;
+    padding: 24px 20px;
   }
 
   .branding {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
 
   .brand-icon {
@@ -1100,5 +597,563 @@ body::after {
   }
 }
 </style>
+<body>
+
+<div class="page-container">
+  <!-- Branding -->
+  <div class="branding">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+    </div>
+    <div class="brand-name">Proxy Manager</div>
+    <div class="brand-subtitle">Multi-Proxy Management Console</div>
+  </div>
+
+  <!-- Card -->
+  <div class="card">
+
+    <!-- ==========================================
+         SETUP MODE - Initial password creation
+         ========================================== -->
+    <div class="mode-setup" id="setupMode">
+      <div class="form-header">
+        <h1 class="form-title">设置管理员密码</h1>
+        <p class="form-description">创建一个安全的密码来保护您的代理管理控制台。</p>
+      </div>
+
+      <form id="setupForm" novalidate>
+        <div class="message-box error-msg" id="setupError">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+          <span></span>
+        </div>
+
+        <div class="message-box success-msg" id="setupSuccess">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          <span>密码设置成功！即将跳转...</span>
+        </div>
+
+        <!-- Password Field -->
+        <div class="form-group">
+          <label class="form-label" for="setupPassword">密码</label>
+          <div class="input-wrapper">
+            <input type="password" id="setupPassword" class="input-field" placeholder="输入密码" autocomplete="new-password" required />
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <button type="button" class="password-toggle" aria-label="显示密码" tabindex="0">
+              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
+          <div class="password-strength" id="strengthBars">
+            <div class="strength-bar"></div>
+            <div class="strength-bar"></div>
+            <div class="strength-bar"></div>
+            <div class="strength-bar"></div>
+          </div>
+          <div class="strength-text" id="strengthText"></div>
+        </div>
+
+        <!-- Confirm Password Field -->
+        <div class="form-group">
+          <label class="form-label" for="setupConfirm">确认密码</label>
+          <div class="input-wrapper">
+            <input type="password" id="setupConfirm" class="input-field" placeholder="再次输入密码" autocomplete="new-password" required />
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <button type="button" class="password-toggle" aria-label="显示密码" tabindex="0">
+              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit" id="setupSubmit">
+          <span class="btn-text">创建管理员账户</span>
+          <span class="spinner"></span>
+        </button>
+      </form>
+    </div>
+
+    <!-- ==========================================
+         LOGIN MODE - Existing user sign in
+         ========================================== -->
+    <div class="mode-login mode-hidden" id="loginMode">
+      <div class="form-header">
+        <h1 class="form-title">欢迎回来</h1>
+        <p class="form-description">输入密码以访问代理管理控制台。</p>
+      </div>
+
+      <form id="loginForm" novalidate>
+        <div class="message-box error-msg" id="loginError">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+          <span></span>
+        </div>
+
+        <!-- Password Field -->
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">密码</label>
+          <div class="input-wrapper">
+            <input type="password" id="loginPassword" class="input-field" placeholder="输入密码" autocomplete="current-password" required />
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <button type="button" class="password-toggle" aria-label="显示密码" tabindex="0">
+              <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit" id="loginSubmit">
+          <span class="btn-text">登录</span>
+          <span class="spinner"></span>
+        </button>
+      </form>
+
+      <div class="rate-limit-info" id="rateLimitInfo" style="display:none;"></div>
+
+      <div class="card-footer">
+        <p class="footer-text">忘记密码？<a href="#" id="resetLink">联系管理员</a></p>
+      </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div class="modal-overlay" id="forgotModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="forgotModalTitle">
+      <div class="modal">
+        <div class="modal-title" id="forgotModalTitle">忘记密码？</div>
+        <ol>
+          <li>关闭 Manager 服务</li>
+          <li>删除密码文件：<code>rm ~/.multi-proxy-password</code></li>
+          <li>重启 Manager 服务：<code>bash manage.sh restart manager</code></li>
+          <li>重新访问 <a href="http://localhost:18792" style="color:var(--color-primary);">http://localhost:18792</a> 设置新密码</li>
+        </ol>
+        <div class="btn-row">
+          <span class="hint">点击按钮复制重置命令</span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline" id="closeModalBtn">关闭</button>
+            <button class="btn btn-primary" id="copyCmdBtn">复制命令</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ============================================
+  // State
+  // ============================================
+  var state = {
+    mode: 'setup',
+    rateLimitRemaining: 0,
+    rateLimitLockedUntil: null
+  };
+
+  // ============================================
+  // DOM References
+  // ============================================
+  var els = {
+    setupMode: document.getElementById('setupMode'),
+    loginMode: document.getElementById('loginMode'),
+    setupForm: document.getElementById('setupForm'),
+    loginForm: document.getElementById('loginForm'),
+    setupPassword: document.getElementById('setupPassword'),
+    setupConfirm: document.getElementById('setupConfirm'),
+    loginPassword: document.getElementById('loginPassword'),
+    setupSubmit: document.getElementById('setupSubmit'),
+    loginSubmit: document.getElementById('loginSubmit'),
+    setupError: document.getElementById('setupError'),
+    loginError: document.getElementById('loginError'),
+    setupSuccess: document.getElementById('setupSuccess'),
+    strengthBars: document.getElementById('strengthBars'),
+    strengthText: document.getElementById('strengthText'),
+    rateLimitInfo: document.getElementById('rateLimitInfo'),
+    forgotModal: document.getElementById('forgotModal'),
+    resetLink: document.getElementById('resetLink'),
+    closeModalBtn: document.getElementById('closeModalBtn'),
+    copyCmdBtn: document.getElementById('copyCmdBtn')
+  };
+
+  // ============================================
+  // Utility Functions
+  // ============================================
+  function showError(container, message) {
+    var span = container.querySelector('span');
+    if (span) span.textContent = message;
+    container.classList.add('visible');
+  }
+
+  function hideError(container) {
+    container.classList.remove('visible');
+  }
+
+  function showSuccess(container) {
+    container.classList.add('visible');
+  }
+
+  function hideSuccess(container) {
+    container.classList.remove('visible');
+  }
+
+  function setLoading(button, loading) {
+    if (loading) {
+      button.classList.add('loading');
+      button.disabled = true;
+    } else {
+      button.classList.remove('loading');
+      button.disabled = false;
+    }
+  }
+
+  function switchMode(mode) {
+    state.mode = mode;
+    if (mode === 'setup') {
+      els.setupMode.classList.remove('mode-hidden');
+      els.loginMode.classList.add('mode-hidden');
+    } else {
+      els.setupMode.classList.add('mode-hidden');
+      els.loginMode.classList.remove('mode-hidden');
+    }
+  }
+
+  // ============================================
+  // Password Visibility Toggle
+  // ============================================
+  var toggles = document.querySelectorAll('.password-toggle');
+  for (var i = 0; i < toggles.length; i++) {
+    (function(btn) {
+      btn.addEventListener('click', function() {
+        var wrapper = btn.closest('.input-wrapper');
+        var input = wrapper.querySelector('.input-field');
+        var eyeOpen = btn.querySelector('.eye-open');
+        var eyeClosed = btn.querySelector('.eye-closed');
+
+        if (input.type === 'password') {
+          input.type = 'text';
+          eyeOpen.style.display = 'none';
+          eyeClosed.style.display = 'block';
+          btn.setAttribute('aria-label', '隐藏密码');
+        } else {
+          input.type = 'password';
+          eyeOpen.style.display = 'block';
+          eyeClosed.style.display = 'none';
+          btn.setAttribute('aria-label', '显示密码');
+        }
+      });
+    })(toggles[i]);
+  }
+
+  // ============================================
+  // Password Strength Calculator
+  // ============================================
+  function calculateStrength(password) {
+    if (!password) return 0;
+    var score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+    if (/\d/.test(password)) score++;
+    if (/[^a-zA-Z0-9]/.test(password)) score++;
+    return Math.min(score, 4);
+  }
+
+  function updateStrengthUI(strength) {
+    var bars = els.strengthBars.querySelectorAll('.strength-bar');
+    var labels = ['', '弱', '一般', '良好', '强'];
+    var classes = ['', 'weak', 'weak', 'medium', 'strong'];
+
+    for (var i = 0; i < bars.length; i++) {
+      bars[i].className = 'strength-bar';
+      if (i < strength) {
+        bars[i].classList.add('active', classes[strength]);
+      }
+    }
+
+    els.strengthText.textContent = strength > 0 ? labels[strength] : '';
+    if (strength <= 1) {
+      els.strengthText.style.color = 'var(--color-error)';
+    } else if (strength === 2 || strength === 3) {
+      els.strengthText.style.color = 'var(--color-warning)';
+    } else {
+      els.strengthText.style.color = 'var(--color-success)';
+    }
+  }
+
+  if (els.setupPassword) {
+    els.setupPassword.addEventListener('input', function() {
+      var strength = calculateStrength(this.value);
+      updateStrengthUI(strength);
+    });
+  }
+
+  // ============================================
+  // Rate Limiting
+  // ============================================
+  var MAX_ATTEMPTS_PER_MINUTE = 5;
+  var LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+  var attemptLog = [];
+
+  function checkRateLimit() {
+    var now = Date.now();
+    // Clean old attempts (older than 1 minute)
+    attemptLog = attemptLog.filter(function(t) { return now - t < 60000; });
+
+    if (attemptLog.length >= MAX_ATTEMPTS_PER_MINUTE) {
+      return { allowed: false, remaining: 0, lockedUntil: attemptLog[attemptLog.length - 1] + LOCKOUT_DURATION_MS };
+    }
+    return { allowed: true, remaining: MAX_ATTEMPTS_PER_MINUTE - attemptLog.length };
+  }
+
+  function recordAttempt(failed) {
+    if (failed) {
+      attemptLog.push(Date.now());
+    }
+  }
+
+  function updateRateLimitDisplay() {
+    var limit = checkRateLimit();
+    if (!limit.allowed) {
+      var remainingMs = limit.lockedUntil - Date.now();
+      if (remainingMs > 0) {
+        var mins = Math.ceil(remainingMs / 60000);
+        els.rateLimitInfo.innerHTML = '尝试次数过多，请 <span class="countdown">' + mins + ' 分钟</span> 后再试';
+        els.rateLimitInfo.style.display = 'block';
+        return;
+      }
+    }
+    els.rateLimitInfo.style.display = 'none';
+  }
+
+  // Countdown timer for rate limit
+  var rateLimitTimer = null;
+  function startRateLimitCountdown() {
+    if (rateLimitTimer) clearInterval(rateLimitTimer);
+    rateLimitTimer = setInterval(function() {
+      updateRateLimitDisplay();
+    }, 1000);
+  }
+
+  // ============================================
+  // Setup Form Handler
+  // ============================================
+  if (els.setupForm) {
+    els.setupForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      hideError(els.setupError);
+      hideSuccess(els.setupSuccess);
+
+      var password = els.setupPassword.value;
+      var confirm = els.setupConfirm.value;
+
+      if (!password || password.length < 8) {
+        showError(els.setupError, '密码长度至少为 8 个字符。');
+        return;
+      }
+
+      if (password !== confirm) {
+        showError(els.setupError, '两次输入的密码不一致。');
+        els.setupConfirm.classList.add('error');
+        setTimeout(function() { els.setupConfirm.classList.remove('error'); }, 2000);
+        return;
+      }
+
+      setLoading(els.setupSubmit, true);
+
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        setLoading(els.setupSubmit, false);
+        if (data.success) {
+          sessionStorage.setItem('auth_token', data.token);
+          showSuccess(els.setupSuccess);
+          setTimeout(function() {
+            window.location.href = 'dashboard.html';
+          }, 1500);
+        } else {
+          showError(els.setupError, data.error || '设置失败，请重试。');
+        }
+      })
+      .catch(function(err) {
+        setLoading(els.setupSubmit, false);
+        showError(els.setupError, '连接错误，请检查服务器是否运行。');
+        console.error('Setup error:', err);
+      });
+    });
+  }
+
+  // ============================================
+  // Login Form Handler
+  // ============================================
+  if (els.loginForm) {
+    els.loginForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      hideError(els.loginError);
+
+      var limit = checkRateLimit();
+      if (!limit.allowed) {
+        updateRateLimitDisplay();
+        startRateLimitCountdown();
+        return;
+      }
+
+      var password = els.loginPassword.value;
+      if (!password) {
+        showError(els.loginError, '请输入密码。');
+        return;
+      }
+
+      setLoading(els.loginSubmit, true);
+
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        setLoading(els.loginSubmit, false);
+        if (data.success) {
+          recordAttempt(false);
+          sessionStorage.setItem('auth_token', data.token);
+          window.location.href = 'dashboard.html';
+        } else {
+          recordAttempt(true);
+          updateRateLimitDisplay();
+          startRateLimitCountdown();
+          showError(els.loginError, data.error || '密码错误，请重试。');
+        }
+      })
+      .catch(function(err) {
+        setLoading(els.loginSubmit, false);
+        showError(els.loginError, '连接错误，请检查服务器是否运行。');
+        console.error('Login error:', err);
+      });
+    });
+  }
+
+  // ============================================
+  // Clear errors on input focus
+  // ============================================
+  var inputs = document.querySelectorAll('.input-field');
+  for (var j = 0; j < inputs.length; j++) {
+    (function(input) {
+      input.addEventListener('focus', function() {
+        this.classList.remove('error');
+        var form = this.closest('form');
+        if (form) {
+          var errorBox = form.querySelector('.message-box.error-msg');
+          if (errorBox) hideError(errorBox);
+        }
+      });
+    })(inputs[j]);
+  }
+
+  // ============================================
+  // Initialize: Detect mode from backend API
+  // ============================================
+  fetch('/api/auth/status')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.needsSetup) {
+        switchMode('setup');
+      } else {
+        switchMode('login');
+      }
+    })
+    .catch(function() {
+      // Fallback to localStorage if backend unavailable
+      var hasPassword = localStorage.getItem('proxyManager_password');
+      if (hasPassword) {
+        switchMode('login');
+      } else {
+        switchMode('setup');
+      }
+    });
+
+  // ============================================
+  // Forgot Password Modal
+  // ============================================
+  if (els.resetLink) {
+    els.resetLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      els.forgotModal.style.display = 'flex';
+    });
+  }
+
+  if (els.closeModalBtn) {
+    els.closeModalBtn.addEventListener('click', function() {
+      els.forgotModal.style.display = 'none';
+    });
+  }
+
+  // Close modal on overlay click
+  document.addEventListener('click', function(e) {
+    if (els.forgotModal && e.target === els.forgotModal) {
+      els.forgotModal.style.display = 'none';
+    }
+  });
+
+  // Close modal on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && els.forgotModal && els.forgotModal.style.display === 'flex') {
+      els.forgotModal.style.display = 'none';
+    }
+  });
+
+  function copyResetCommand() {
+    var cmd = 'rm ~/.multi-proxy-password\nbash manage.sh restart manager';
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(cmd).then(function() {
+        var btn = els.copyCmdBtn;
+        if (btn) {
+          var orig = btn.textContent;
+          btn.textContent = '已复制！';
+          btn.disabled = true;
+          setTimeout(function() {
+            btn.textContent = orig;
+            btn.disabled = false;
+          }, 2000);
+        }
+      });
+    }
+  }
+
+  if (els.copyCmdBtn) {
+    els.copyCmdBtn.addEventListener('click', copyResetCommand);
+  }
+
+})();
+</script>
 </body>
 </html>

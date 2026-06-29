@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cursor Proxy - 配置</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
-    </head>
+    <link rel="stylesheet" href="../colors_and_type.css">
+    <link rel="stylesheet" href="../shared-styles.css">
+</head>
 <body>
-
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
+    <div class="sidebar-brand">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <h1>
           <span class="logo-icon">P</span>
@@ -19,38 +20,40 @@
       </div>
     </div>
     <nav class="sidebar-nav">
-      <a class="nav-item" href="dashboard.html">
+      <a class="nav-item" href="dashboard.html" data-tooltip="返回概览">
         <span class="icon">&#8592;</span> 返回概览
       </a>
       <div class="nav-section-label">代理服务</div>
-      <a class="nav-item" href="proxy-config.html?proxy=codex">
+      <a class="nav-item" href="proxy-config.html?proxy=codex" data-tooltip="Codex Proxy">
         <span class="icon">&#129392;</span> Codex Proxy
       </a>
-      <a class="nav-item" href="proxy-config.html?proxy=hermes">
+      <a class="nav-item" href="proxy-config.html?proxy=hermes" data-tooltip="Hermes Proxy">
         <span class="icon">&#9889;</span> Hermes Proxy
       </a>
-      <a class="nav-item active" href="proxy-config.html?proxy=cursor">
+      <a class="nav-item active" href="proxy-config.html?proxy=cursor" data-tooltip="Cursor Proxy">
         <span class="icon">&#9729;</span> Cursor Proxy
       </a>
       <div class="nav-section-label">系统</div>
-      <a class="nav-item" href="logs.html">
-        <span class="icon">&#9998;</span> 日志
+      <a class="nav-item" href="logs.html" data-tooltip="查看系统日志">
+        <span class="icon">&#128221;</span> 日志
       </a>
     </nav>
-
     <div class="sidebar-footer">
       <div class="version-info">v1.0.0</div>
-      <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
+      <button class="btn btn-outline btn-sm" onclick="handleLogout()" title="退出登录">登出</button>
     </div>
   </aside>
 
   <main class="main">
     <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="打开侧边栏">&#9776;</button>
-    <!-- Offline Banner (P2) -->
+    
+    <!-- Offline Banner -->
     <div class="offline-banner hidden" id="offlineBanner">
       <span class="offline-banner-icon">&#9888;</span>
       <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
     </div>
+    
+    <!-- Proxy Header -->
     <div class="proxy-header">
       <div class="proxy-header-left">
         <div class="proxy-icon">C</div>
@@ -66,7 +69,7 @@
         </div>
       </div>
       <div class="proxy-header-actions">
-        <button class="btn" id="btnStartStop" onclick="toggleProxyStatus()">
+        <button class="btn btn-primary" id="btnStartStop" onclick="toggleProxyStatus()">
           &#9654; 停止
         </button>
         <button class="btn" onclick="refreshPage()">
@@ -75,6 +78,7 @@
       </div>
     </div>
 
+    <!-- Tabs Container -->
     <div class="tabs-container">
       <div class="section-tabs">
         <div class="section-tab active" data-tab="config" onclick="switchTab(this, 'config')">配置</div>
@@ -83,6 +87,7 @@
         <div class="section-tab" data-tab="balances" onclick="switchTab(this, 'balances')" id="tab-balances-btn" disabled title="该代理暂不支持余额查询">余额</div>
       </div>
 
+      <!-- Config Tab -->
       <div class="tab-content active" id="tab-config">
         <div class="card">
           <div class="card-title">当前配置</div>
@@ -99,7 +104,7 @@
             <div class="info-item">
               <span class="info-label">路由模式</span>
               <div class="select-wrapper">
-                <select id="routingModeSelect" onchange="changeRoutingMode(this.value)">
+                <select id="routingModeSelect" onchange="changeRoutingMode(this.value)" class="form-select">
                   <option value="failover" selected>Failover</option>
                   <option value="round-robin">Round Robin</option>
                   <option value="weighted">Weighted</option>
@@ -110,12 +115,13 @@
         </div>
       </div>
 
+      <!-- Providers Tab -->
       <div class="tab-content" id="tab-providers">
         <div class="card">
           <div class="card-title">供应商管理</div>
           <div class="card-subtitle">管理供应商配置，支持增删改查操作</div>
           <div style="margin-bottom: 16px;">
-            <button class="btn btn-sm btn-primary" onclick="showAddProviderModal()">+ 添加供应商</button>
+            <button class="btn btn-primary" onclick="showAddProviderModal()">+ 添加供应商</button>
           </div>
           <div class="table-wrapper">
             <table id="providersTable">
@@ -124,7 +130,7 @@
                   <th>名称</th>
                   <th>Provider ID</th>
                   <th>Base URL</th>
-                  <th>API Key <button class="key-toggle-btn" onclick="toggleKeyVisibility()" title="显示/隐藏密钥">&#9786;</button></th>
+                  <th>API Key <button class="key-toggle-btn" onclick="toggleKeyVisibility()" title="显示/隐藏密钥">&#128274;</button></th>
                   <th>启用</th>
                   <th>操作</th>
                 </tr>
@@ -135,13 +141,14 @@
         </div>
       </div>
 
+      <!-- Models Tab -->
       <div class="tab-content" id="tab-models">
         <div class="card">
           <div class="card-title">模型切换</div>
           <div class="card-subtitle">选择并切换到新的模型</div>
           <div class="model-switcher">
             <div class="select-wrapper">
-              <select id="modelSelect"></select>
+              <select id="modelSelect" class="form-select"></select>
             </div>
             <button class="btn btn-primary" onclick="switchCurrentModel()">切换模型</button>
           </div>
@@ -151,6 +158,7 @@
         </div>
       </div>
 
+      <!-- Balances Tab -->
       <div class="tab-content" id="tab-balances">
         <div class="card">
           <div class="card-title">账户余额</div>
@@ -160,13 +168,14 @@
       </div>
     </div>
 
-    <div class="card" style="margin-top: 20px;">
+    <!-- History Section -->
+    <div class="card">
       <div class="history-header">
         <div>
           <div class="card-title" style="margin-bottom: 0;">切换历史</div>
           <div class="card-subtitle" style="margin-bottom: 0;">最近 20 条模型切换记录</div>
         </div>
-        <button class="btn btn-sm" onclick="clearHistory()">&#9855; 清除历史</button>
+        <button class="btn" onclick="clearHistory()">&#128465; 清除历史</button>
       </div>
       <div class="table-wrapper" style="margin-top: 12px;">
         <table>
@@ -185,6 +194,7 @@
     </div>
   </main>
 
+  <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
   <script>
@@ -236,7 +246,6 @@
 
     // ==================== API Layer ====================
     function apiBase() {
-      // Try /admin-api first (cursor), fall back to forwarding through manager
       return '';
     }
 
@@ -254,7 +263,6 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return await res.json();
       } catch (e) {
-        // Fallback: try through proxy forwarder
         const fwdUrl = '/api/' + currentProxyName + path;
         const res2 = await fetch(fwdUrl, {
           headers,
@@ -395,40 +403,28 @@
       cursor: { bg: '#dbeafe', color: '#2563eb', letter: 'C' },
     };
 
-    var displayName; // module-scoped so toggleProxyStatus can use it
+    var displayName;
 
     // ==================== Core Init ====================
     function init() {
       currentProxyName = getProxyFromUrl();
-
-      // Dynamic title (T13)
       displayName = proxyDisplayNameMap[currentProxyName] || currentProxyName;
       document.title = displayName + ' - 配置';
-
-      // Update header with proxy-specific info
       updateProxyHeader(displayName);
-
-      // Highlight active nav item
       highlightActiveNav();
-
-      // P4: Dynamic tabs based on proxy type
       setupDynamicTabs();
 
-      // Restore tab from URL hash
       var tabName = getTabFromHash();
       var tabEl = document.querySelector('.section-tab[data-tab="' + tabName + '"]');
       if (tabEl) {
         switchTab(tabEl, tabName);
       }
 
-      // Load data
       renderProviders();
       renderModels();
       renderBalances();
       renderHistory();
       loadConfigData();
-
-      // Fetch real status
       fetchStatus();
     }
 
@@ -437,22 +433,19 @@
       var isCursor = (currentProxyName === 'cursor');
       var providersBtn = document.getElementById('tab-providers-btn');
       var balancesBtn = document.getElementById('tab-balances-btn');
-      var providersTab = document.getElementById('tab-providers');
-      var balancesTab = document.getElementById('tab-balances');
 
       if (!isCursor) {
-        // Disable Supplier and Balance tabs for Codex/Hermes
         if (providersBtn) {
           providersBtn.disabled = true;
-          providersBtn.style.color = '#94a3b8';
+          providersBtn.style.color = 'var(--text-tertiary)';
           providersBtn.style.cursor = 'not-allowed';
-          providersBtn.style.background = '#f8fafc';
+          providersBtn.style.background = 'var(--bg-secondary)';
         }
         if (balancesBtn) {
           balancesBtn.disabled = true;
-          balancesBtn.style.color = '#94a3b8';
+          balancesBtn.style.color = 'var(--text-tertiary)';
           balancesBtn.style.cursor = 'not-allowed';
-          balancesBtn.style.background = '#f8fafc';
+          balancesBtn.style.background = 'var(--bg-secondary)';
         }
       }
     }
@@ -583,7 +576,7 @@
       }
     }
 
-    // ==================== P2: Offline Banner ====================
+    // ==================== Offline Banner ====================
     function showOfflineBanner() {
       var banner = document.getElementById('offlineBanner');
       if (banner) banner.classList.remove('hidden');
@@ -594,7 +587,7 @@
       if (banner) banner.classList.add('hidden');
     }
 
-    // ==================== P1: Logout ====================
+    // ==================== Logout ====================
     function handleLogout() {
       sessionStorage.removeItem('auth_token');
       window.location.href = 'login.html';
@@ -607,7 +600,6 @@
       var text = document.getElementById('proxyStatusText');
 
       if (isRunning) {
-        // Stop
         try {
           var res = await fetch('/api/stop/' + name, { method: 'POST' });
           var data = await res.json();
@@ -620,14 +612,12 @@
             return;
           }
         } catch {}
-        // Fallback
         isRunning = false;
         badge.className = 'status-badge offline';
         text.textContent = '未运行';
         btn.innerHTML = '&#9655; 启动';
         showToast('模拟模式: ' + name + ' 已停止', 'info', 2000);
       } else {
-        // Start
         try {
           var res = await fetch('/api/start/' + name, { method: 'POST' });
           var data = await res.json();
@@ -640,7 +630,6 @@
             return;
           }
         } catch {}
-        // Fallback
         isRunning = true;
         badge.className = 'status-badge online';
         text.textContent = '运行中';
@@ -670,7 +659,7 @@
     function getTabFromHash() {
       var hash = location.hash.replace('#', '');
       if (hash) return hash;
-      return 'config'; // default tab
+      return 'config';
     }
 
     function renderProviders() {
@@ -710,7 +699,6 @@
       if (!confirm('确定要删除供应商 "' + providers[idx].name + '" 吗？')) return;
       var removed = providers.splice(idx, 1)[0];
       deleteProviderById(removed.id).catch(function() {
-        // Fallback: already removed from array
         renderProviders();
         showToast('已删除 ' + removed.name, 'success');
       });
@@ -787,7 +775,6 @@
       modal.appendChild(createFormField('API Key *', 'password', 'modal-api-key', { placeholder: 'sk-...' }));
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', true));
 
-      // Fetch Models button (shown when provider_id, base_url, and api_key are filled)
       var fetchRow = document.createElement('div');
       fetchRow.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);';
       var fetchBtn = document.createElement('button');
@@ -799,7 +786,6 @@
       fetchRow.appendChild(fetchBtn);
       modal.appendChild(fetchRow);
 
-      // Action buttons
       var actions = document.createElement('div');
       actions.className = 'modal-actions';
 
@@ -835,9 +821,7 @@
         var key = keyEl.value.trim();
         var en = enEl.checked;
         if (!name || !pid || !url || !key) { showToast('请填写所有必填字段', 'error'); return; }
-        // T14: URL format validation
         if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
-        // T14: API Key basic validation
         if (key.length < 8) { showToast('API Key 长度至少 8 个字符', 'error'); return; }
         addProvider(name, pid, url, key, en);
         overlay.remove();
@@ -845,7 +829,6 @@
       };
       overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 
-      // Enable/disable fetch models button based on field values
       var fetchEl = fetchBtn;
       var pidEl2 = document.getElementById('modal-provider-id');
       var urlEl2 = document.getElementById('modal-base-url');
@@ -945,7 +928,6 @@
 
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', provider.enabled));
 
-      // Fetch Models button
       var fetchRow2 = document.createElement('div');
       fetchRow2.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);';
       var fetchBtn2 = document.createElement('button');
@@ -989,7 +971,6 @@
         var key = keyEl.value.trim();
         var en = enEl.checked;
         if (!name || !url) { showToast('请填写所有必填字段', 'error'); return; }
-        // T14: URL format validation
         if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
         updateProvider(provider.id, name, url, key, en);
         overlay.remove();
@@ -997,7 +978,6 @@
       };
       overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 
-      // Enable/disable fetch models button for edit modal
       var fetchEl = fetchBtn2;
       var urlEl3 = document.getElementById('modal-base-url');
       var keyEl3 = document.getElementById('modal-api-key');
@@ -1121,7 +1101,6 @@
         });
         showToast('路由模式已切换为 ' + mode, 'success');
       } catch {
-        // Fallback: optimistic update
         showToast('路由模式已切换为 ' + mode, 'info');
       }
     }
@@ -1190,7 +1169,6 @@
       title.appendChild(ctrlBar);
       modal.appendChild(title);
 
-      // Loading area
       var modelsArea = document.createElement('div');
       modelsArea.id = 'models-area';
       modelsArea.style.cssText = 'max-height:400px;overflow-y:auto;margin-top:16px;';
@@ -1232,7 +1210,6 @@
         allCheckboxes.forEach(function(cb) { cb.checked = !cb.checked; });
       };
 
-      // Call API
       var token = sessionStorage.getItem('auth_token');
       fetch('/api/fetch-models', {
         method: 'POST',
@@ -1257,7 +1234,6 @@
           }
           modelsAreaEl.innerHTML = html;
 
-          // Wire up checkboxes to enable/disable confirm
           modelsAreaEl.querySelectorAll('.model-cb').forEach(function(cb) {
             cb.addEventListener('change', function() {
               var checked = modelsAreaEl.querySelectorAll('.model-cb:checked');
@@ -1315,873 +1291,5 @@
       }
     });
   </script>
-
-    <style>
-    :root {
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --bg-primary: #ffffff;
-      --bg-secondary: #f8fafc;
-      --bg-tertiary: #f1f5f9;
-      --text-primary: #0f172a;
-      --text-secondary: #475569;
-      --text-tertiary: #94a3b8;
-      --border: #e2e8f0;
-      --border-light: #f1f5f9;
-      --success: #10b981;
-      --success-bg: #ecfdf5;
-      --error: #ef4444;
-      --error-bg: #fef2f2;
-      --warning: #f59e0b;
-      --warning-bg: #fffbeb;
-      --radius: 8px;
-      --radius-lg: 12px;
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
-      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-    }
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      font-size: 14px;
-      line-height: 1.5;
-      display: flex;
-      min-height: 100vh;
-    }
-
-    .sidebar {
-      width: 220px;
-      background: var(--bg-primary);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      position: fixed;
-      top: 0;
-      left: 0;
-      bottom: 0;
-      z-index: 100;
-    }
-
-    .sidebar-header {
-      padding: 20px 16px 16px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .sidebar-header h1 {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--text-primary);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .sidebar-header h1 .logo-icon {
-      width: 24px;
-      height: 24px;
-      background: var(--primary);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 13px;
-      font-weight: 700;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      padding: 12px 8px;
-      overflow-y: auto;
-    }
-
-    .nav-section-label {
-      padding: 8px 8px 4px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      padding: 8px 12px;
-      margin: 1px 0;
-      border-radius: 6px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 400;
-      transition: all 0.15s ease;
-      user-select: none;
-      text-decoration: none;
-    }
-
-    .nav-item:hover {
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-    }
-
-    .nav-item.active {
-      background: #eff6ff;
-      color: var(--primary);
-      font-weight: 500;
-    }
-
-    .nav-item .icon {
-      margin-right: 8px;
-      font-size: 15px;
-      width: 18px;
-      text-align: center;
-    }
-
-    .main {
-      flex: 1;
-      margin-left: 220px;
-      overflow-y: auto;
-      padding: 24px 32px 48px;
-      min-height: 100vh;
-    }
-
-    .proxy-header {
-      background: var(--bg-primary);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 20px 24px;
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .proxy-header-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .proxy-icon {
-      width: 44px;
-      height: 44px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 20px;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    .proxy-title-group h2 {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 2px;
-    }
-
-    .proxy-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 13px;
-      color: var(--text-secondary);
-    }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    .status-badge.online {
-      background: var(--success-bg);
-      color: var(--success);
-    }
-
-    .status-badge.offline {
-      background: var(--error-bg);
-      color: var(--error);
-    }
-
-    .status-badge .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-
-    .port-badge {
-      font-size: 12px;
-      color: var(--text-tertiary);
-      background: var(--bg-tertiary);
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-weight: 500;
-      font-family: 'SF Mono', 'Menlo', monospace;
-    }
-
-    .proxy-header-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 7px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      transition: all 0.15s ease;
-      user-select: none;
-      font-family: inherit;
-      white-space: nowrap;
-    }
-
-    .btn:hover {
-      background: var(--bg-secondary);
-      border-color: #cbd5e1;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-hover);
-      border-color: var(--primary-hover);
-    }
-
-    .btn-danger {
-      color: var(--error);
-      border-color: #fecaca;
-    }
-
-    .btn-danger:hover {
-      background: var(--error-bg);
-      border-color: var(--error);
-    }
-
-    .btn-sm {
-      padding: 4px 10px;
-      font-size: 12px;
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .tabs-container {
-      background: var(--bg-primary);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
-      overflow: hidden;
-    }
-
-    .section-tabs {
-      display: flex;
-      gap: 0;
-      border-bottom: 1px solid var(--border);
-      padding: 0 4px;
-      background: var(--bg-secondary);
-    }
-
-    .section-tab {
-      padding: 12px 20px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 500;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      transition: all 0.15s ease;
-      user-select: none;
-    }
-
-    .section-tab:hover {
-      color: var(--text-primary);
-    }
-
-    .section-tab.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-      background: var(--bg-primary);
-    }
-
-    .tab-content {
-      display: none;
-      padding: 24px;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    .card {
-      background: var(--bg-primary);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      margin-bottom: 16px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .card:last-child {
-      margin-bottom: 0;
-    }
-
-    .card-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 4px;
-      color: var(--text-primary);
-    }
-
-    .card-subtitle {
-      font-size: 12px;
-      color: var(--text-tertiary);
-      margin-bottom: 16px;
-    }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 16px;
-    }
-
-    .info-item {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .info-label {
-      font-size: 12px;
-      color: var(--text-tertiary);
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-
-    .info-value {
-      font-size: 14px;
-      color: var(--text-primary);
-      font-weight: 500;
-    }
-
-    .info-value.mono {
-      font-family: 'SF Mono', 'Menlo', monospace;
-      font-size: 13px;
-      background: var(--bg-secondary);
-      padding: 4px 10px;
-      border-radius: 4px;
-      border: 1px solid var(--border-light);
-      display: inline-block;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .select-wrapper {
-      position: relative;
-      display: inline-block;
-    }
-
-    .select-wrapper select {
-      appearance: none;
-      background: var(--bg-primary);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px 32px 6px 10px;
-      font-size: 13px;
-      color: var(--text-primary);
-      font-family: inherit;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      min-width: 180px;
-    }
-
-    .select-wrapper select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    }
-
-    .select-wrapper::after {
-      content: '';
-      position: absolute;
-      right: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 0;
-      height: 0;
-      border-left: 4px solid transparent;
-      border-right: 4px solid transparent;
-      border-top: 5px solid var(--text-tertiary);
-      pointer-events: none;
-    }
-
-    .table-wrapper {
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    thead {
-      background: var(--bg-secondary);
-    }
-
-    th {
-      text-align: left;
-      padding: 10px 14px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      white-space: nowrap;
-    }
-
-    td {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border-light);
-      color: var(--text-primary);
-      vertical-align: middle;
-    }
-
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    tbody tr:hover td {
-      background: #f8fafc;
-    }
-
-    td.actions {
-      white-space: nowrap;
-      display: flex;
-      gap: 6px;
-    }
-
-    .toggle {
-      position: relative;
-      width: 40px;
-      height: 24px;
-      display: inline-block;
-      flex-shrink: 0;
-    }
-
-    .toggle input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .toggle-slider {
-      position: absolute;
-      inset: 0;
-      background: #d1d5db;
-      border-radius: 24px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
-
-    .toggle-slider::before {
-      content: '';
-      position: absolute;
-      width: 18px;
-      height: 18px;
-      left: 3px;
-      top: 3px;
-      background: white;
-      border-radius: 50%;
-      transition: 0.2s;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-    }
-
-    .toggle input:checked + .toggle-slider {
-      background: var(--success);
-    }
-
-    .toggle input:checked + .toggle-slider::before {
-      transform: translateX(16px);
-    }
-
-    .balance-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 12px;
-    }
-
-    .balance-card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .balance-card .balance-name {
-      font-size: 13px;
-      color: var(--text-secondary);
-      font-weight: 500;
-    }
-
-    .balance-card .balance-amount {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--success);
-    }
-
-    .balance-card .balance-currency {
-      font-size: 13px;
-      color: var(--text-tertiary);
-      font-weight: 400;
-    }
-
-    .history-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-
-    .ts {
-      font-family: 'SF Mono', 'Menlo', monospace;
-      font-size: 12px;
-      color: var(--text-tertiary);
-    }
-
-    .result-dot {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    .result-dot .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-    }
-
-    .result-dot.success .dot { background: var(--success); }
-    .result-dot.success { color: var(--success); }
-    .result-dot.fail .dot { background: var(--error); }
-    .result-dot.fail { color: var(--error); }
-
-    .key-toggle-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 20px;
-      height: 20px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      color: var(--text-tertiary);
-      font-size: 12px;
-      padding: 0;
-      margin-left: 4px;
-      vertical-align: middle;
-      border-radius: 3px;
-      transition: color 0.15s ease, background 0.15s ease;
-    }
-
-    .key-toggle-btn:hover {
-      color: var(--primary);
-      background: var(--primary-bg);
-    }
-
-    .model-switcher {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .model-switcher .select-wrapper select {
-      min-width: 240px;
-    }
-
-    .current-model-info {
-      font-size: 13px;
-      color: var(--text-secondary);
-      background: var(--bg-secondary);
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-    }
-
-    .current-model-info strong {
-      color: var(--primary);
-      font-weight: 600;
-    }
-
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-      animation: fadeIn 0.15s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    .modal {
-      background: var(--bg-primary);
-      border-radius: var(--radius-lg);
-      padding: 28px;
-      width: 480px;
-      max-width: 90vw;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-      animation: slideUp 0.2s ease;
-    }
-
-    @keyframes slideUp {
-      from { transform: translateY(20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-
-    .modal-title {
-      font-size: 17px;
-      font-weight: 700;
-      margin-bottom: 20px;
-      color: var(--text-primary);
-    }
-
-    .form-group {
-      margin-bottom: 16px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
-    }
-
-    .form-group input,
-    .form-group select {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: inherit;
-      color: var(--text-primary);
-      background: var(--bg-primary);
-      transition: all 0.15s ease;
-    }
-
-    .form-group input:focus,
-    .form-group select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    }
-
-    .form-group input[type="password"] {
-      font-family: 'SF Mono', 'Menlo', monospace;
-    }
-
-    .form-group .hint {
-      font-size: 11px;
-      color: var(--text-tertiary);
-      margin-top: 4px;
-    }
-
-    .form-check {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .form-check label {
-      font-size: 13px;
-      color: var(--text-secondary);
-      cursor: pointer;
-    }
-
-    .modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 24px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
-    }
-
-    .toast-container {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 99999;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .toast {
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      box-shadow: var(--shadow-md);
-      animation: slideInRight 0.3s ease;
-      max-width: 360px;
-      font-family: 'Inter', sans-serif;
-    }
-
-    .toast.success {
-      background: white;
-      color: #065f46;
-      border: 1px solid #a7f3d0;
-    }
-
-    .toast.error {
-      background: white;
-      color: #991b1b;
-      border: 1px solid #fecaca;
-    }
-
-    .toast.info {
-      background: white;
-      color: #1e40af;
-      border: 1px solid #bfdbfe;
-    }
-
-    @keyframes slideInRight {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-
-    .sidebar-footer {
-      padding: 16px 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    .sidebar-footer .version-info {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-align: center;
-      line-height: 1.5;
-    }
-
-    .sidebar-footer .btn-logout {
-      display: block;
-      margin-top: 8px;
-      width: 100%;
-      padding: 6px 0;
-      font-size: 12px;
-      font-weight: 500;
-      font-family: inherit;
-      color: #dc2626;
-      background: var(--bg-primary);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .sidebar-footer .btn-logout:hover {
-      background: #fef2f2;
-      border-color: #dc2626;
-    }
-
-    /* Offline Banner */
-    .offline-banner {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: #92400e;
-      font-weight: 500;
-      font-family: 'Inter', sans-serif;
-    }
-    .offline-banner.hidden { display: none; }
-    .offline-banner-icon { font-size: 16px; flex-shrink: 0; }
-
-    @media (max-width: 768px) {
-      .hamburger-btn {
-        display: flex;
-      }
-      .sidebar {
-        display: none;
-        width: 260px;
-        z-index: 200;
-        box-shadow: 4px 0 20px rgba(0,0,0,0.1);
-      }
-      .sidebar.open {
-        display: flex;
-      }
-      .sidebar-close {
-        display: block;
-      }
-      .main {
-        margin-left: 0;
-        padding: 16px 16px 48px;
-      }
-      .proxy-header { flex-direction: column; gap: 12px; align-items: flex-start; }
-      .proxy-header-actions { width: 100%; }
-      .proxy-header-actions .btn { flex: 1; justify-content: center; }
-      .info-grid { grid-template-columns: 1fr; }
-      .balance-grid { grid-template-columns: 1fr; }
-      .model-switcher { flex-direction: column; align-items: stretch; }
-      .section-tab { padding: 10px 14px; font-size: 12px; }
-    }
-  </style>
 </body>
 </html>
