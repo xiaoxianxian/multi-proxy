@@ -864,6 +864,7 @@ body {
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
+(
 (function() {
   'use strict';
 
@@ -894,31 +895,7 @@ body {
 
   // ===== State =====
   var proxyStatus = {};
-  var authToken = sessionStorage.getItem('auth_token');
   var versionCache = {};
-
-  // ===== Toast System (Rule 5: light backgrounds with colored borders) =====
-  function showToast(message, type, duration) {
-    if (duration === undefined) duration = 3000;
-    var container = document.getElementById('toastContainer');
-    var toast = document.createElement('div');
-    toast.className = 'toast ' + (type || 'info');
-
-    var icons = { success: '\u2713', error: '\u2717', info: '\u2139\uFE0F' };
-    var iconSpan = document.createElement('span');
-    iconSpan.textContent = icons[type] || '';
-    var msgSpan = document.createElement('span');
-    msgSpan.textContent = message;
-    toast.appendChild(iconSpan);
-    toast.appendChild(msgSpan);
-
-    container.appendChild(toast);
-
-    setTimeout(function() {
-      toast.style.animation = 'toast-out 0.3s ease forwards';
-      setTimeout(function() { toast.remove(); }, 300);
-    }, duration);
-  }
 
   // ===== Navigation =====
   function switchPage(pageId) {
@@ -943,15 +920,16 @@ body {
     var nav = document.querySelector('.nav-item[data-page="' + pageId + '"]');
     if (nav) nav.classList.add('active');
 
-    closeMobileSidebar();
+    window.closeMobileSidebar();
   }
 
+  // ===== Desktop sidebar nav click handler =====
   document.getElementById('sidebarNav').addEventListener('click', function(e) {
     var navItem = e.target.closest('.nav-item');
     if (!navItem) return;
     // Handle proxy nav items (anchor elements) — navigate to proxy-config page
     if (navItem.classList.contains('proxy-nav-item')) {
-      closeMobileSidebar();
+      window.closeMobileSidebar();
       return;
     }
     var pageId = navItem.dataset.page;
@@ -959,68 +937,6 @@ body {
       switchPage(pageId);
     }
   });
-
-  // ===== Mobile Sidebar =====
-  var mobileMenuBtn = document.getElementById('mobileMenuBtn');
-  var sidebar = document.getElementById('sidebar');
-  var sidebarOverlay = document.getElementById('sidebarOverlay');
-
-  mobileMenuBtn.addEventListener('click', function() {
-    sidebar.classList.toggle('open');
-    sidebarOverlay.classList.toggle('show');
-  });
-
-  sidebarOverlay.addEventListener('click', closeMobileSidebar);
-
-  function closeMobileSidebar() {
-    sidebar.classList.remove('open');
-    sidebarOverlay.classList.remove('show');
-  }
-
-  // ===== Escaping Utility =====
-  function esc(str) {
-    var d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
-  }
-
-  // ===== Mock Data =====
-  function getMockStatus() {
-    return {
-      codex: {
-        running: true,
-        port: 18790,
-        pid: 12345,
-        uptime: '2h 34m',
-        health: { status: 'healthy', latency: '45ms' }
-      },
-      hermes: {
-        running: true,
-        port: 18793,
-        pid: 12346,
-        uptime: '2h 34m',
-        health: { status: 'healthy', latency: '62ms' }
-      },
-      cursor: {
-        running: false,
-        port: 18794,
-        pid: null,
-        uptime: null,
-        health: null
-      }
-    };
-  }
-
-  function getMockVersion() {
-    return {
-      version: '1.0.3',
-      proxies: {
-        codex: 'v1.2.0',
-        hermes: 'v0.9.4',
-        cursor: 'v2.1.0'
-      }
-    };
-  }
 
   // ===== Dashboard Rendering =====
   function updateDashboardDisplay(versionData) {
@@ -1112,7 +1028,7 @@ body {
       } else if (config.defaultVersion) {
         versionValue = config.defaultVersion;
       }
-      var versionBadge = versionValue ? '<span class="proxy-version-badge">' + esc(versionValue) + '</span>' : '';
+      var versionBadge = versionValue ? '<span class="proxy-version-badge">' + window.esc(versionValue) + '</span>' : '';
 
       return '<div class="proxy-card" id="proxy-card-' + name + '">' +
         '<div class="proxy-icon ' + config.iconClass + '">' +
@@ -1126,8 +1042,8 @@ body {
           '</div>' +
           '<div class="proxy-meta">' +
             statusBadge +
-            (uptimeText ? '<span>' + esc(uptimeText) + '</span>' : '') +
-            (latencyText ? '<span>' + esc(latencyText) + '</span>' : '') +
+            (uptimeText ? '<span>' + window.esc(uptimeText) + '</span>' : '') +
+            (latencyText ? '<span>' + window.esc(latencyText) + '</span>' : '') +
             healthBadge +
           '</div>' +
         '</div>' +
@@ -1154,7 +1070,7 @@ body {
       var badgeClass = status.running ? 'running' : 'stopped';
       var badgeText = status.running ? 'ON' : 'OFF';
 
-      return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
+      return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + window.esc(name) + '" data-tooltip="' + window.esc(config.name) + '" tabindex="0">' +
         '<span class="nav-icon">' + config.icon + '</span>' +
         config.name +
         '<span class="nav-badge ' + badgeClass + '">' + badgeText + '</span>' +
@@ -1213,18 +1129,18 @@ body {
       .then(function(data) {
         if (data.success) {
           var label = PROXY_CONFIGS[name] ? PROXY_CONFIGS[name].name : name;
-          showToast(label + ' 已' + (action === 'start' ? '启动' : '停止'), 'success');
+          window.showToast(label + ' 已' + (action === 'start' ? '启动' : '停止'), 'success');
           proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
           updateDashboardDisplay(versionCache);
         } else {
           proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
-          showToast('模拟模式: ' + name + ' 已' + (action === 'start' ? '启动' : '停止'), 'info', 2000);
+          window.showToast('模拟模式: ' + name + ' 已' + (action === 'start' ? '启动' : '停止'), 'info', 2000);
           updateDashboardDisplay(versionCache);
         }
       })
       .catch(function() {
         proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: !(proxyStatus[name] ? proxyStatus[name].running : false) });
-        showToast('演示模式: ' + name + ' 状态已切换', 'info', 2000);
+        window.showToast('演示模式: ' + name + ' 状态已切换', 'info', 2000);
         updateDashboardDisplay(versionCache);
       })
       .finally(function() {
@@ -1247,7 +1163,7 @@ body {
       })
       .catch(function() {
         if (Object.keys(proxyStatus).length === 0) {
-          proxyStatus = getMockStatus();
+          proxyStatus = window.getMockStatus();
           updateDashboardDisplay(versionCache);
           showOfflineBanner();
         }
@@ -1267,7 +1183,7 @@ body {
         hideDemoBanner();
       })
       .catch(function() {
-        updateVersionDisplay(getMockVersion());
+        updateVersionDisplay(window.getMockVersion());
         showOfflineBanner();
       });
   }
@@ -1342,23 +1258,7 @@ body {
     }
   }
 
-  // ===== Auth Check =====
-  function checkAuth() {
-    return fetch('/api/auth/status')
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.needsSetup && !authToken) {
-          showLoginRequired();
-          return false;
-        }
-        return true;
-      })
-      .catch(function() {
-        showOfflineBanner();
-        return true;
-      });
-  }
-
+  // ===== Login Required =====
   function showLoginRequired() {
     var main = document.getElementById('mainContent');
     main.innerHTML =
@@ -1371,19 +1271,6 @@ body {
         '</div>' +
       '</div>';
   }
-
-  // ===== Intercept fetch for auth token =====
-  var _origFetch = window.fetch;
-  window.fetch = function(url, options) {
-    if (options === undefined) options = {};
-    if (typeof url === 'string' && url.indexOf('/api/') === 0 && authToken) {
-      if (!options.headers) options.headers = {};
-      if (typeof options.headers === 'object') {
-        options.headers['x-auth-token'] = authToken;
-      }
-    }
-    return _origFetch(url, options);
-  };
 
   // ===== Auto-refresh Control =====
   function getRefreshInterval() {
@@ -1416,73 +1303,17 @@ body {
     toggle.checked = true;
   }
 
-  // ===== Dynamic Proxy Nav =====
-  function renderDynamicProxyNav(proxyNames) {
-    var container = document.getElementById('proxyNavItems');
-    if (!container) return;
-    var label = document.getElementById('proxySectionLabel');
-    if (label) label.style.display = proxyNames.length > 0 ? '' : 'none';
-
-    if (proxyNames.length === 0) {
-      container.innerHTML = '<div class="nav-item" style="color:var(--color-text-tertiary);font-size:12px;padding:4px 12px;">暂无代理</div>';
-      return;
-    }
-
-    container.innerHTML = proxyNames.map(function(name) {
-      var config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;', iconClass: '' };
-      var status = proxyStatus[name];
-      var badgeClass = status && status.running ? 'running' : 'stopped';
-      var badgeText = status && status.running ? 'ON' : 'OFF';
-      return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
-        '<span class="nav-icon">' + config.icon + '</span>' +
-        esc(config.name) +
-        '<span class="nav-badge ' + badgeClass + '">' + badgeText + '</span>' +
-        '</a>';
-    }).join('');
-  }
-
-  // ===== Logout =====
-  window.handleLogout = function() {
-    sessionStorage.removeItem('auth_token');
-    window.location.href = 'login.html';
-  };
-
-  // ===== Dark Mode Toggle =====
-  function initDarkMode() {
-    var toggle = document.getElementById('darkModeToggle');
-    var isDark = localStorage.getItem('darkMode') === 'true';
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-      if (toggle) toggle.innerHTML = '&#9728; 亮色模式';
-    }
-    if (toggle) {
-      toggle.addEventListener('click', function() {
-        var html = document.documentElement;
-        var isNowDark = html.classList.contains('dark');
-        if (isNowDark) {
-          html.classList.remove('dark');
-          html.classList.add('light');
-          localStorage.setItem('darkMode', 'false');
-          toggle.innerHTML = '&#9789; 暗色模式';
-        } else {
-          html.classList.add('dark');
-          html.classList.remove('light');
-          localStorage.setItem('darkMode', 'true');
-          toggle.innerHTML = '&#9728; 亮色模式';
-        }
-      });
-    }
-  }
-
   // ===== Initialize =====
   function init() {
-    initDarkMode();
-    checkAuth().then(function(authOk) {
+    // Initialize shared modules
+    window.initDarkMode();
+    window.initMobileSidebar();
+
+    window.checkAuth(function() {}, showLoginRequired).then(function(authOk) {
       if (!authOk) return;
 
       loadInstalledProxies().then(function(installedNames) {
-        renderDynamicProxyNav(installedNames);
+        window.renderDynamicProxyNav(installedNames, PROXY_CONFIGS);
       });
 
       // Restore saved interval setting
@@ -1529,5 +1360,10 @@ body {
   init();
 })();
 </script>
+<!-- Shared JS libraries -->
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/toast.js"></script>
+<script src="js/sidebar.js"></script>
 </body>
 </html>

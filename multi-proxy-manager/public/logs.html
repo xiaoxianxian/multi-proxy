@@ -626,60 +626,7 @@ body {
   var autoRefreshInterval = null;
   var allLogs = [];
   var currentTimeRange = 0;
-  var authToken = sessionStorage.getItem('auth_token');
   var versionCache = {};
-
-  // ===== Toast System (Rule 5: light backgrounds with colored borders) =====
-  function showToast(message, type, duration) {
-    if (duration === undefined) duration = 3000;
-    var container = document.getElementById('toastContainer');
-    var toast = document.createElement('div');
-    toast.className = 'toast ' + (type || 'info');
-
-    var icons = { success: '\u2713', error: '\u2717', info: '\u2139\uFE0F' };
-    var iconSpan = document.createElement('span');
-    iconSpan.textContent = icons[type] || '';
-    var msgSpan = document.createElement('span');
-    msgSpan.textContent = message;
-    toast.appendChild(iconSpan);
-    toast.appendChild(msgSpan);
-
-    container.appendChild(toast);
-
-    setTimeout(function() {
-      toast.style.animation = 'toast-out 0.3s ease forwards';
-      setTimeout(function() { toast.remove(); }, 300);
-    }, duration);
-  }
-
-  // ===== Escaping Utility =====
-  function esc(str) {
-    if (str === null || str === undefined) return '';
-    var d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
-  }
-
-  // ===== Auth Header =====
-  function getAuthHeader() {
-    var token = sessionStorage.getItem('auth_token');
-    return token ? { 'x-auth-token': token } : {};
-  }
-
-  // ===== Intercept fetch for auth token =====
-  (function() {
-    var origFetch = window.fetch;
-    window.fetch = function(url, options) {
-      if (options === undefined) options = {};
-      if (typeof url === 'string' && url.indexOf('/api/') === 0 && authToken) {
-        if (!options.headers) options.headers = {};
-        if (typeof options.headers === 'object') {
-          options.headers['x-auth-token'] = authToken;
-        }
-      }
-      return origFetch(url, options);
-    };
-  })();
 
   // ===== Offline Banner =====
   function showOfflineBanner() {
@@ -704,9 +651,7 @@ body {
   // ===== Fetch Logs from API =====
   async function fetchLogs(limit) {
     try {
-      var res = await fetch('/api/logs?limit=' + (limit || 500), {
-        headers: getAuthHeader()
-      });
+      var res = await fetch('/api/logs?limit=' + (limit || 500));
       if (res.ok) {
         hideOfflineBanner();
         var data = await res.json();
@@ -828,15 +773,15 @@ body {
 
   // ===== Render Log Line =====
   function renderLogLine(log) {
-    var ts = esc(log.timestamp);
-    var proxyName = esc(PROXY_CONFIGS[log.proxy] ? PROXY_CONFIGS[log.proxy].name : log.proxy.toUpperCase());
-    var msg = esc(log.message);
+    var ts = window.esc(log.timestamp);
+    var proxyName = window.esc(PROXY_CONFIGS[log.proxy] ? PROXY_CONFIGS[log.proxy].name : log.proxy.toUpperCase());
+    var msg = window.esc(log.message);
     var proxyClass = log.proxy in PROXY_CONFIGS ? log.proxy : 'system';
 
     return '<span class="log-line" title="点击复制日志内容">' +
       '<span class="timestamp">' + ts + '</span> ' +
       '<span class="proxy-tag ' + proxyClass + '">[' + proxyName + ']</span> ' +
-      '<span class="level-badge ' + esc(log.level) + '">' + esc(log.level) + '</span> ' +
+      '<span class="level-badge ' + window.esc(log.level) + '">' + window.esc(log.level) + '</span> ' +
       '<span class="log-message">' + msg + '</span>' +
       '</span>';
   }
@@ -869,7 +814,7 @@ body {
           var text = line.textContent;
           if (navigator.clipboard) {
             navigator.clipboard.writeText(text).then(function() {
-              showToast('日志已复制到剪贴板', 'success', 1500);
+              window.showToast('日志已复制到剪贴板', 'success', 1500);
             });
           }
         };
@@ -938,14 +883,11 @@ body {
   // ===== Clear Logs =====
   window.clearLogs = function() {
     if (!confirm('确定要清除所有日志吗？')) return;
-    fetch('/api/logs/clear', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }).catch(function() {});
+    fetch('/api/logs/clear', { method: 'POST' }).catch(function() {});
     allLogs = [];
     document.getElementById('logViewer').innerHTML = '<div class="empty-state">日志已清除</div>';
     document.getElementById('logCount').innerHTML = '共 <strong>0</strong> 条';
-    showToast('日志已清除', 'success');
+    window.showToast('日志已清除', 'success');
   };
 
   // ===== Copy Logs =====
@@ -969,7 +911,7 @@ body {
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(function() {
-        showToast('已复制 ' + filtered.length + ' 条日志到剪贴板', 'success');
+        window.showToast('已复制 ' + filtered.length + ' 条日志到剪贴板', 'success');
       });
     }
   };
@@ -990,7 +932,7 @@ body {
     if (searchTerm) filtered = filtered.filter(function(l) { return l.message.toLowerCase().indexOf(searchTerm) !== -1; });
 
     if (filtered.length === 0) {
-      showToast('没有可导出的日志', 'error');
+      window.showToast('没有可导出的日志', 'error');
       return;
     }
 
@@ -1023,7 +965,7 @@ body {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('已导出 ' + filtered.length + ' 条日志 (' + extension.toUpperCase() + ')', 'success');
+    window.showToast('已导出 ' + filtered.length + ' 条日志 (' + extension.toUpperCase() + ')', 'success');
   };
 
   // ===== Toggle Auto Refresh =====
@@ -1048,7 +990,7 @@ body {
     var navItem = e.target.closest('.nav-item');
     if (!navItem) return;
     if (navItem.classList.contains('proxy-nav-item')) {
-      closeMobileSidebar();
+      window.closeMobileSidebar();
       return;
     }
     var pageId = navItem.dataset.page;
@@ -1063,93 +1005,19 @@ body {
       }
       var nav = document.querySelector('.nav-item[data-page="' + pageId + '"]');
       if (nav) nav.classList.add('active');
-      closeMobileSidebar();
+      window.closeMobileSidebar();
     }
   });
-
-  // ===== Mobile Sidebar =====
-  var mobileMenuBtn = document.getElementById('mobileMenuBtn');
-  var sidebar = document.getElementById('sidebar');
-  var sidebarOverlay = document.getElementById('sidebarOverlay');
-
-  mobileMenuBtn.addEventListener('click', function() {
-    sidebar.classList.toggle('open');
-    sidebarOverlay.classList.toggle('show');
-  });
-
-  sidebarOverlay.addEventListener('click', closeMobileSidebar);
-
-  function closeMobileSidebar() {
-    sidebar.classList.remove('open');
-    sidebarOverlay.classList.remove('show');
-  }
-
-  // ===== Logout =====
-  window.handleLogout = function() {
-    sessionStorage.removeItem('auth_token');
-    window.location.href = 'login.html';
-  };
-
-  // ===== Dark Mode Toggle =====
-  function initDarkMode() {
-    var toggle = document.getElementById('darkModeToggle');
-    var isDark = localStorage.getItem('darkMode') === 'true';
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-      if (toggle) toggle.innerHTML = '&#9728; 亮色模式';
-    }
-    if (toggle) {
-      toggle.addEventListener('click', function() {
-        var html = document.documentElement;
-        var isNowDark = html.classList.contains('dark');
-        if (isNowDark) {
-          html.classList.remove('dark');
-          html.classList.add('light');
-          localStorage.setItem('darkMode', 'false');
-          toggle.innerHTML = '&#9789; 暗色模式';
-        } else {
-          html.classList.add('dark');
-          html.classList.remove('light');
-          localStorage.setItem('darkMode', 'true');
-          toggle.innerHTML = '&#9728; 亮色模式';
-        }
-      });
-    }
-  }
-
-  // ===== Dynamic Proxy Nav =====
-  function renderDynamicProxyNav(proxyNames) {
-    var container = document.getElementById('proxyNavItems');
-    if (!container) return;
-    var label = document.getElementById('proxySectionLabel');
-    if (label) label.style.display = proxyNames.length > 0 ? '' : 'none';
-
-    if (proxyNames.length === 0) {
-      container.innerHTML = '<div class="nav-item" style="color:var(--color-text-tertiary);font-size:12px;padding:4px 12px;">暂无代理</div>';
-      return;
-    }
-
-    container.innerHTML = proxyNames.map(function(name) {
-      var config = PROXY_CONFIGS[name] || { name: name, icon: '&#9729;' };
-      return '<a href="../proxy-manager-redesign/pages/proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
-        '<span class="nav-icon">' + config.icon + '</span>' +
-        esc(config.name) +
-        '</a>';
-    }).join('');
-  }
 
   // ===== Mock Version Data =====
   function getMockVersion() {
-    return {
-      version: '1.0.3',
-      proxies: { codex: 'v1.2.0', hermes: 'v0.9.4', cursor: 'v2.1.0' }
-    };
+    return window.getMockVersion();
   }
 
   // ===== Initialize =====
   function init() {
-    initDarkMode();
+    window.initDarkMode();
+    window.initMobileSidebar();
     // Load version info
     fetch('/api/version')
       .then(function(res) { return res.json(); })
@@ -1174,11 +1042,11 @@ body {
         return res.json();
       })
       .then(function(names) {
-        if (names && names.length > 0) renderDynamicProxyNav(names);
+        if (names && names.length > 0) window.renderDynamicProxyNav(names, PROXY_CONFIGS);
         else throw new Error();
       })
       .catch(function() {
-        renderDynamicProxyNav(Object.keys(PROXY_CONFIGS));
+        window.renderDynamicProxyNav(Object.keys(PROXY_CONFIGS), PROXY_CONFIGS);
       });
 
     // Load logs
@@ -1188,5 +1056,10 @@ body {
   init();
 })();
 </script>
+<!-- Shared JS libraries -->
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/toast.js"></script>
+<script src="js/sidebar.js"></script>
 </body>
 </html>
