@@ -15,15 +15,20 @@ const cors = require('cors');
 // ==================== JWT Secret ====================
 const JWT_SECRET_FILE = path.join(os.homedir(), '.multi-proxy-jwt-secret');
 
-function getOrGenerateJwtSecret() {
+/**
+ * Load JWT secret: async-first, with sync fallback for module-load-time use.
+ * In async contexts (e.g., server startup), call loadJwtSecretAsync().
+ * During module load (synchronous), fall back to the sync helper.
+ */
+async function loadJwtSecretAsync() {
   // 1. Environment variable takes highest priority
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length > 0) {
     return process.env.JWT_SECRET;
   }
 
-  // 2. Try to read persisted secret file
+  // 2. Try to read persisted secret file (async)
   try {
-    const stored = fs.readFileSync(JWT_SECRET_FILE, 'utf8').trim();
+    const stored = await fs.promises.readFile(JWT_SECRET_FILE, 'utf8').then(s => s.trim());
     if (stored.length > 0) {
       return stored;
     }
@@ -34,6 +39,26 @@ function getOrGenerateJwtSecret() {
   // 3. Generate new secret and persist it
   const newSecret = crypto.randomBytes(64).toString('hex');
   try {
+    await fs.promises.writeFile(JWT_SECRET_FILE, newSecret, { mode: 0o600 });
+    console.log('[Auth] Generated new JWT secret, persisted to ' + JWT_SECRET_FILE);
+  } catch (e) {
+    console.error('[Auth] Failed to persist JWT secret:', e.message);
+  }
+  return newSecret;
+}
+
+/** Sync fallback for module-load-time (used when async not possible). */
+function getOrGenerateJwtSecret() {
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.length > 0) {
+    return process.env.JWT_SECRET;
+  }
+  try {
+    const stored = fs.readFileSync(JWT_SECRET_FILE, 'utf8').trim();
+    if (stored.length > 0) return stored;
+  } catch (e) { /* file doesn't exist */ }
+
+  const newSecret = crypto.randomBytes(64).toString('hex');
+  try {
     fs.writeFileSync(JWT_SECRET_FILE, newSecret, { mode: 0o600 });
     console.log('[Auth] Generated new JWT secret, persisted to ' + JWT_SECRET_FILE);
   } catch (e) {
@@ -42,6 +67,7 @@ function getOrGenerateJwtSecret() {
   return newSecret;
 }
 
+// Module-load-time sync fallback
 const AUTH_SECRET = getOrGenerateJwtSecret();
 
 // ==================== Auth ====================
@@ -119,7 +145,15 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:18792';
 console.log('[CORS] Origin: ' + CORS_ORIGIN);
 
 app.use(cors({ origin: CORS_ORIGIN }));
-app.use(express.json({ limit: '10mb' }));
+// A11: Per-route payload limits — /v1/chat/completions allows up to 50MB for large requests,
+// all other endpoints use 10MB limit.
+app.use((req, res, next) => {
+  if (req.path === '/v1/chat/completions' || req.path.startsWith('/v1/chat/completions/')) {
+    express.json({ limit: '50mb' })(req, res, next);
+  } else {
+    express.json({ limit: '10mb' })(req, res, next);
+  }
+});
 
 // Disable caching for HTML so browser always gets latest version
 app.use((req, res, next) => {
@@ -150,18 +184,26 @@ const LOG_DIR = path.join(os.homedir(), '.multi-proxy-manager', 'logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 const LOG_FILE = path.join(LOG_DIR, 'requests.log');
 
+/**
+ * Format a log entry as a JSON lines record.
+ * Unified output format: {"ts":"...","level":"...","proxy":"...","msg":"...","meta":{}}
+ * Used by both appendLog and formatLogEntry.
+ */
+function formatLogEntry(level, proxy, message, meta = {}) {
+  return {
+    ts: new Date().toISOString(),
+    level: level.toUpperCase(),
+    proxy: proxy || 'system',
+    msg: message,
+    meta: meta || {},
+  };
+}
+
 function appendLog(level, proxyName, message, meta = {}) {
   try {
     if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
-    const entry = {
-      ts: new Date().toISOString(),
-      level,
-      proxy: proxyName || 'system',
-      msg: message,
-      meta: meta,
-    };
-    const line = `[${entry.ts}] [${entry.level.toUpperCase()}] [${entry.proxy}] ${entry.msg}${Object.keys(entry.meta || {}).length ? ' ' + JSON.stringify(entry.meta) : ''}`;
-    fs.appendFileSync(LOG_FILE, line + '\n');
+    const entry = formatLogEntry(level, proxyName, message, meta);
+    fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
     // Keep last 5000 lines
     const content = fs.readFileSync(LOG_FILE, 'utf8');
     const lines = content.split('\n').slice(-5000);
@@ -221,12 +263,52 @@ let PROXY_CONFIGS = buildProxyConfigs();
 // 进程跟踪
 const proxyProcesses = {};
 const proxyCrashRecovery = {}; // name -> { restartCount, lastRestartTime, consecutiveFailures }
+const CRASH_RECOVERY_FILE = path.join(HOME, '.multi-proxy-manager', 'crash-recovery.json');
+
+/** Ensure the persistence directory exists */
+function ensureCrashRecoveryDir() {
+  const dir = path.dirname(CRASH_RECOVERY_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+/** Read crash-recovery state from disk; returns empty object on failure */
+function loadCrashRecoveryState() {
+  try {
+    ensureCrashRecoveryDir();
+    if (fs.existsSync(CRASH_RECOVERY_FILE)) {
+      const data = fs.readFileSync(CRASH_RECOVERY_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error('[CrashRecovery] Failed to load state:', e.message);
+  }
+  return {};
+}
+
+/** Write crash-recovery state to disk */
+function saveCrashRecoveryState() {
+  try {
+    ensureCrashRecoveryDir();
+    fs.writeFileSync(CRASH_RECOVERY_FILE, JSON.stringify(proxyCrashRecovery, null, 2));
+  } catch (e) {
+    console.error('[CrashRecovery] Failed to save state:', e.message);
+  }
+}
 
 function getCrashRecovery(name) {
   if (!proxyCrashRecovery[name]) {
     proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
   }
   return proxyCrashRecovery[name];
+}
+
+// Load persisted crash-recovery state on startup
+const persisted = loadCrashRecoveryState();
+for (const name of Object.keys(persisted)) {
+  proxyCrashRecovery[name] = persisted[name];
+}
+if (Object.keys(persisted).length > 0) {
+  console.log('[CrashRecovery] Loaded state for:', Object.keys(persisted).join(', '));
 }
 
 // ==================== 辅助函数 ====================
@@ -327,9 +409,23 @@ const ALLOWED_CWD_PREFIXES = [
  * Validate that a candidate path is safely within an allowed directory.
  * Prevents path traversal attacks.
  */
+/**
+ * Validate that a candidate path is safely within an allowed directory.
+ * Prevents path traversal attacks.
+ * A10: Added realpath resolution + symlink check to prevent escape via symlinks.
+ */
 function isSafePath(candidate) {
-  const resolved = path.resolve(candidate);
-  return ALLOWED_CWD_PREFIXES.some(prefix => resolved === path.resolve(prefix) || resolved.startsWith(path.resolve(prefix) + path.sep));
+  try {
+    const resolved = fs.realpathSync(candidate);
+    return ALLOWED_CWD_PREFIXES.some(prefix => {
+      const prefixResolved = path.resolve(prefix);
+      return resolved === prefixResolved || resolved.startsWith(prefixResolved + path.sep);
+    });
+  } catch (e) {
+    // realpathSync fails for non-existent paths — fall back to resolve()
+    const resolved = path.resolve(candidate);
+    return ALLOWED_CWD_PREFIXES.some(prefix => resolved === path.resolve(prefix) || resolved.startsWith(path.resolve(prefix) + path.sep));
+  }
 }
 
 // Allowed spawn commands (deny arbitrary binaries)
@@ -391,12 +487,14 @@ function spawnProxy(name) {
       // Graceful exit: reset counter
       recovery.restartCount = 0;
       recovery.consecutiveFailures = 0;
+      saveCrashRecoveryState();
       return;
     }
 
     // Non-zero exit: trigger exponential backoff restart
     recovery.consecutiveFailures++;
     recovery.lastRestartTime = Date.now();
+    saveCrashRecoveryState();
 
     if (recovery.consecutiveFailures >= 5) {
       appendLog('error', name, `Process crashed 5 times consecutively — entering fault state`);
@@ -406,6 +504,7 @@ function spawnProxy(name) {
 
     const backoff = Math.min(1000 * Math.pow(2, recovery.restartCount), 16000);
     recovery.restartCount++;
+    saveCrashRecoveryState();
     appendLog('warn', name, `Process crashed (exit code ${code}), restarting in ${backoff}ms (attempt ${recovery.restartCount})`);
     console.log(`[${config.name}] Crashed, retrying in ${backoff}ms`);
 
@@ -423,31 +522,58 @@ async function stopProxy(name) {
   const config = PROXY_CONFIGS[name];
   if (!config) return false;
 
-  // Try to kill via tracked process first
+  // Collect the set of PIDs we are authorized to kill for this proxy
+  const allowedPids = new Set();
+
+  // Add tracked process PID
   const proc = proxyProcesses[name];
   if (proc) {
+    allowedPids.add(proc.pid);
     try { proc.kill('SIGTERM'); } catch {}
     delete proxyProcesses[name];
   }
 
-  // Also kill via port
+  // Collect children of allowed PIDs via /proc on Linux, or ps on macOS
+  try {
+    const { execSync } = require('child_process');
+    for (const pid of allowedPids) {
+      try {
+        // Get child PIDs recursively (parent -> children -> grandchildren ...)
+        let children = [];
+        let pending = [pid];
+        while (pending.length > 0) {
+          const childCmd = `ps -o pid= --ppid ${pending.join(' ')}`;
+          const output = execSync(childCmd, { stdio: 'pipe' }).toString().trim();
+          children = children.concat(output.split('\n').map(l => l.trim()).filter(Boolean));
+          pending = children.slice(children.length - pending.length);
+        }
+        children.forEach(c => allowedPids.add(parseInt(c)));
+      } catch {}
+    }
+  } catch {}
+
+  // Kill via port with PID whitelist: only kill PIDs that belong to this proxy
   try {
     const { execSync } = require('child_process');
     const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
     for (const pid of pids) {
-      try { process.kill(parseInt(pid), 'SIGTERM'); } catch {}
+      const pidNum = parseInt(pid);
+      if (!allowedPids.has(pidNum)) continue;
+      try { process.kill(pidNum, 'SIGTERM'); } catch {}
     }
   } catch {}
 
   // Wait for port to free
   const freed = await waitForPortFree(config.port, 5000);
   if (!freed) {
-    // Force kill
+    // Force kill only trusted PIDs
     try {
       const { execSync } = require('child_process');
       const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
       for (const pid of pids) {
-        try { process.kill(parseInt(pid), 'SIGKILL'); } catch {}
+        const pidNum = parseInt(pid);
+        if (!allowedPids.has(pidNum)) continue;
+        try { process.kill(pidNum, 'SIGKILL'); } catch {}
       }
       await waitForPortFree(config.port, 2000);
     } catch {}
@@ -456,6 +582,7 @@ async function stopProxy(name) {
   const stillRunning = isProcessRunning(name);
   if (!stillRunning) {
     proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
+    saveCrashRecoveryState();
   }
   return !stillRunning;
 }
@@ -492,6 +619,7 @@ async function restartProxy(name, delay = 0) {
       appendLog('error', name, `Failed to start (port not bound)`);
       recovery.consecutiveFailures++;
       recovery.lastRestartTime = Date.now();
+      saveCrashRecoveryState();
       delete proxyProcesses[name];
       if (proxyProcesses[name]) proxyProcesses[name].kill('SIGKILL');
     }
@@ -520,7 +648,6 @@ app.get('/api/status', async (_req, res) => {
       health,
       port: config.port,
       name: config.name,
-      scriptPath: config.scriptPath,
       fault: recovery.consecutiveFailures >= 5,
     };
   }
@@ -543,6 +670,7 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
 
   // Reset crash recovery state on manual start
   proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
+  saveCrashRecoveryState();
 
   appendLog('info', name, `Starting proxy via manager`);
 
@@ -709,7 +837,12 @@ async function forwardProxy(req, res) {
     console.log(`[FORWARD ERR] ${method} ${proxyName}/${rest} -> ${error.message} (${elapsed}ms)`);
     appendLog('error', proxyName, `${method.toUpperCase()} ${rest} failed after ${elapsed}ms: ${error.message}`);
     if (error.response) {
-      res.status(error.response.status).json({ success: false, error: error.response.statusText, data: error.response.data });
+      // Sanitize: never forward provider-specific error details to client
+      const sanitizedData = {
+        status: error.response.status,
+        statusText: error.response.statusText,
+      };
+      res.status(error.response.status).json({ success: false, error: error.response.statusText, data: sanitizedData });
     } else {
       res.status(503).json({ success: false, error: `${config.name} is not reachable` });
     }
@@ -833,8 +966,12 @@ function isAllowedEndpoint(proxy, method, path) {
         // Strict validation for :id parameters – only allow UUID or alphanumeric
         const idParam = patternParts[i].substring(1);
         if (idParam === 'id') {
-          // Only accept safe ID formats: hex strings, alphanum, or short alphanumeric
-          if (!/^[a-zA-Z0-9_-]{1,64}$/.test(pathParts[i])) {
+          // Strict validation: UUID (36-char hex-with-dashes), numeric, or short alphanumeric
+          const seg = pathParts[i];
+          const isUUID   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg);
+          const isNumeric = /^\d{1,10}$/.test(seg);
+          const isGeneric = /^[a-zA-Z0-9_-]{1,32}$/.test(seg);
+          if (!isUUID && !isNumeric && !isGeneric) {
             match = false;
             break;
           }
@@ -873,27 +1010,27 @@ app.all('/api/:proxy/*', (req, res, next) => {
 
 /** Normalize raw provider response to canonical {id, name, displayName} */
 function normalizeModels(rawModels, format) {
-  var list = [];
+  const list = [];
   if (format === 'openai') {
-    for (var i = 0; i < rawModels.length; i++) {
-      var m = rawModels[i];
+    for (const i = 0; i < rawModels.length; i++) {
+      const m = rawModels[i];
       list.push({ id: m.id, name: m.id, displayName: m.id });
     }
   } else if (format === 'anthropic') {
-    for (var i = 0; i < rawModels.length; i++) {
-      var m = rawModels[i];
+    for (const i = 0; i < rawModels.length; i++) {
+      const m = rawModels[i];
       list.push({ id: m.identifier, name: m.identifier, displayName: m.name || m.identifier });
     }
   } else if (format === 'gemini') {
-    for (var i = 0; i < rawModels.length; i++) {
-      var m = rawModels[i];
-      var id = m.name.replace('models/', '');
-      var displayName = m.displayName || id;
+    for (const i = 0; i < rawModels.length; i++) {
+      const m = rawModels[i];
+      const id = m.name.replace('models/', '');
+      const displayName = m.displayName || id;
       list.push({ id: id, name: id, displayName: displayName });
     }
   } else if (format === 'ollama') {
-    for (var i = 0; i < rawModels.length; i++) {
-      var m = rawModels[i];
+    for (const i = 0; i < rawModels.length; i++) {
+      const m = rawModels[i];
       list.push({ id: m.name, name: m.name, displayName: m.name });
     }
   }
@@ -1026,11 +1163,16 @@ app.get('/api/env-check', (_req, res) => {
     if (!fs.existsSync(envPath)) continue;
     try {
       const content = fs.readFileSync(envPath, 'utf8');
-      for (const key of ['DEEPSEEK_API_KEY', 'MOONSHOT_API_KEY', 'AGNES_API_KEY']) {
-        const match = content.match(new RegExp(`^${key}=(.*)`, 'm'));
-        const val = match ? match[1].trim() : '';
-        if (!val) {
-          emptyKeys.push({ proxy, key });
+      // Parse .env line-by-line, splitting on first '=' to handle values with spaces
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) continue;
+        const k = trimmed.substring(0, eqIdx).trim();
+        const v = trimmed.substring(eqIdx + 1).trim();
+        if (['DEEPSEEK_API_KEY', 'MOONSHOT_API_KEY', 'AGNES_API_KEY'].includes(k) && !v) {
+          emptyKeys.push({ proxy, key: k });
         }
       }
     } catch (e) {
@@ -1062,10 +1204,10 @@ app.use((req, res, next) => {
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
     console.log('\n========================================');
-  console.log('  Multi-Proxy Manager Shell');
-  console.log(`  Access: http://localhost:${PORT}`);
-  console.log(`  Managed proxies: ${Object.keys(PROXY_CONFIGS).join(', ') || 'none'}`);
-  console.log('========================================\n');
+    console.log('  Multi-Proxy Manager Shell');
+    console.log(`  Access: http://localhost:${PORT}`);
+    console.log(`  Managed proxies: ${Object.keys(PROXY_CONFIGS).join(', ') || 'none'}`);
+    console.log('========================================\n');
 });
 }
 

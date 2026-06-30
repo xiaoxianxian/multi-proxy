@@ -45,9 +45,10 @@ test.describe('E2E Group 1: Authentication Flow', () => {
     // Click submit button
     await page.locator('#setupSubmit').click();
     
-    // Wait for setup to complete (backend stores password)
-    await page.waitForTimeout(2000);
-    
+    // Wait for setup POST to /api/auth/login to complete
+    const setupResponse = page.waitForResponse('/api/auth/login');
+    await setupResponse;
+
     // Should switch to login mode
     await expect(page.locator('#loginMode')).toBeVisible();
     await expect(page.locator('#setupMode')).toBeHidden();
@@ -72,11 +73,11 @@ test.describe('E2E Group 1: Authentication Flow', () => {
     await page.locator('#setupPassword').fill(TEST_PASSWORD);
     await page.locator('#setupConfirm').fill(TEST_PASSWORD);
     await page.locator('#setupSubmit').click();
-    await page.waitForTimeout(1500);
-    
+    await page.waitForResponse('/api/auth/login');
+
     // Switch to login mode
     await expect(page.locator('#loginMode')).toBeVisible();
-    
+
     // Try wrong password
     await page.locator('#loginPassword').fill('WrongPassword123!');
     await page.locator('#loginForm button[type="submit"]').click();
@@ -95,8 +96,8 @@ test.describe('E2E Group 1: Authentication Flow', () => {
     await page.locator('#setupPassword').fill(TEST_PASSWORD);
     await page.locator('#setupConfirm').fill(TEST_PASSWORD);
     await page.locator('#setupSubmit').click();
-    await page.waitForTimeout(1500);
-    
+    await page.waitForResponse('/api/auth/login');
+
     await expect(page.locator('#loginMode')).toBeVisible();
     await page.locator('#loginPassword').fill(TEST_PASSWORD);
     await page.locator('#loginForm button[type="submit"]').click();

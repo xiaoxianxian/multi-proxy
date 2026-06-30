@@ -102,6 +102,7 @@ install_hermes() {
 
   if has_python && [ -f "$dir/requirements.txt" ]; then
     print_info "安装 Python 依赖..."
+    # TODO: Remove --break-system-packages when migrating to Python venv (macOS Sonoma+ workaround)
     pip3 install -r "$dir/requirements.txt" --quiet --break-system-packages 2>/dev/null
     print_ok "Hermes Proxy Python 依赖安装完成"
   fi

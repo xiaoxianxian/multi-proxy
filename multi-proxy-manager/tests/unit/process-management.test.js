@@ -14,28 +14,67 @@ const { spawn } = require('child_process');
 const { createServer } = require('http');
 const net = require('net');
 
+const { execSync } = require('child_process');
+
+// TE5: lsof-based port check matching production code.
+// If lsof is unavailable, fall back to net.Socket.
+let _lsofAvailable = null;
+function _checkLsofAvailable() {
+  if (_lsofAvailable === null) {
+    try {
+      execSync('lsof -v', { stdio: 'ignore' });
+      _lsofAvailable = true;
+    } catch (e) {
+      _lsofAvailable = false;
+    }
+  }
+  return _lsofAvailable;
+}
+function isPortInUseViaLsof(port) {
+  if (_checkLsofAvailable()) {
+    try {
+      execSync(`lsof -i :${port}`, { stdio: 'ignore' });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  // Fallback: net.Socket check
+  try {
+    const net = require('net');
+    const socket = new net.Socket();
+    const started = socket.connect(port, '127.0.0.1', () => { socket.destroy(); });
+    socket.end();
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
 // ==================== Port helpers ====================
 
+// TE5: lsof/ss-based port detection matching production code
+// Falls back to net.Socket if neither lsof nor ss is available
 function waitForPortBound(port, timeout = 5000) {
   return new Promise((resolve) => {
     const start = Date.now();
     const check = () => {
-      const socket = new net.Socket();
-      const onError = () => {
-        socket.destroy();
-        if (Date.now() - start < timeout) {
-          setTimeout(check, 200);
-        } else {
-          resolve(false);
-        }
-      };
-      socket.setTimeout(1000);
-      socket.on('timeout', onError);
-      socket.on('error', onError);
-      socket.connect(port, '127.0.0.1', () => {
-        socket.destroy();
+      if (isPortInUseViaLsof(port)) {
         resolve(true);
-      });
+      } else if (Date.now() - start < timeout) {
+        setTimeout(check, 200);
+      } else {
+        // Final fallback: try net.Socket
+        const net = require('net');
+        const socket = new net.Socket();
+        socket.setTimeout(1000);
+        socket.on('timeout', () => { socket.destroy(); resolve(false); });
+        socket.on('error', () => { socket.destroy(); resolve(false); });
+        socket.connect(port, '127.0.0.1', () => {
+          socket.destroy();
+          resolve(true);
+        });
+      }
     };
     check();
   });

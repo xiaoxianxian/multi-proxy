@@ -6,6 +6,8 @@
  * and checks that oversized passwords are rejected (DoS protection).
  */
 
+const { esc } = require('./helpers/esc');
+
 // ==================== isAllowedEndpoint tests (T6) ====================
 
 const FORWARD_ENDPOINTS = {
@@ -40,7 +42,7 @@ function isAllowedEndpoint(proxy, method, pathStr) {
       if (patternParts[i].startsWith(':')) {
         const idParam = patternParts[i].substring(1);
         if (idParam === 'id') {
-          if (!/^[a-zA-Z0-9_-]{1,64}$/.test(pathParts[i])) {
+          if (!/^[0-9a-fA-F-]{36}$/.test(pathParts[i]) && !/^\d{1,10}$/.test(pathParts[i]) && !/^[a-zA-Z0-9_-]{1,32}$/.test(pathParts[i])) {
             match = false;
             break;
           }
@@ -72,7 +74,7 @@ describe('Path Traversal Prevention (T6)', () => {
   });
 
   it('rejects path segments with special chars that bypass :id params', () => {
-    // The :id param allows only ^[a-zA-Z0-9_-]{1,64}$ — dots and slashes should be rejected
+    // The :id param allows only UUID, numeric, or short alphanumeric — dots and slashes should be rejected
     expect(isAllowedEndpoint('cursor', 'PUT', '/admin-api/providers/../../../etc/passwd')).toBe(false);
     expect(isAllowedEndpoint('cursor', 'DELETE', '/admin-api/models/./../../bad')).toBe(false);
   });
@@ -92,58 +94,22 @@ describe('Path Traversal Prevention (T6)', () => {
 
 // ==================== XSS Prevention tests (T7) ====================
 
-describe('XSS / HTML Injection Prevention (T7)', () => {
-  // Replicates the esc() function from dashboard.html
-  function esc(str) {
-    if (typeof str !== 'string') return '';
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(str));
-    return div.innerHTML;
-  }
+describe('XSS / HTML Encoding Module (tests/unit/helpers/esc.js)', () => {
+  it('returns empty string for non-string input', () => {
+    expect(esc(123)).toBe('');
+    expect(esc(null)).toBe('');
+    expect(esc(undefined)).toBe('');
+    expect(esc({})).toBe('');
+  });
 
-  // Polyfill for DOM APIs in Node.js test environment
-  const mockDocument = {
-    createElement: function(tag) {
-      return {
-        textContent: '',
-        appendChild: function(node) {
-          if (node && node.nodeType === 3) { // TextNode
-            this.textContent += node.data;
-          }
-          return node;
-        },
-        get innerHTML() {
-          // Basic HTML entity encoding
-          return this.textContent
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-        },
-      };
-    },
-    createTextNode: function(text) {
-      return { nodeType: 3, data: String(text) };
-    },
-  };
-
-  // Override for testing
-  const originalCreateElement = global.document?.createElement;
-
-  function escPolyfill(str) {
-    if (typeof str !== 'string') return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
+  it('passes through safe strings unchanged', () => {
+    expect(esc('Hello World')).toBe('Hello World');
+    expect(esc('test@example.com')).toBe('test@example.com');
+  });
 
   it('HTML-encodes script tags in Provider names', () => {
     const malicious = '<script>alert(1)</script>';
-    const encoded = escPolyfill(malicious);
+    const encoded = esc(malicious);
     expect(encoded).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(encoded).not.toContain('<script>');
     expect(encoded).not.toContain('</script>');
@@ -151,47 +117,80 @@ describe('XSS / HTML Injection Prevention (T7)', () => {
 
   it('HTML-encodes onmouseover event handlers', () => {
     const malicious = '<img src=x onerror=alert(1)>';
-    const encoded = escPolyfill(malicious);
+    const encoded = esc(malicious);
     expect(encoded).not.toContain('<img');
     expect(encoded).toContain('&lt;img');
-    expect(encoded).toContain('onerror=alert(1)'); // attribute value is text content
+    expect(encoded).toContain('onerror=alert(1)');
   });
 
   it('HTML-encodes javascript: URIs', () => {
     const malicious = '<a href="javascript:alert(1)">click</a>';
-    const encoded = escPolyfill(malicious);
+    const encoded = esc(malicious);
     expect(encoded).not.toContain('href="javascript:');
-    expect(encoded).toContain('&lt;a href=&quot;javascript:alert(1)&quot;&gt;click&lt;/a&gt;');
+    expect(encoded).toBe('&lt;a href=&quot;javascript:alert(1)&quot;&gt;click&lt;/a&gt;');
   });
 
   it('HTML-encodes SVG onload injection', () => {
     const malicious = '<svg onload=alert(1)/>';
-    const encoded = escPolyfill(malicious);
+    const encoded = esc(malicious);
     expect(encoded).not.toContain('<svg');
     expect(encoded).toContain('&lt;svg');
   });
 
   it('properly handles ampersands in provider names', () => {
     const safe = 'OpenAI & Google';
-    const encoded = escPolyfill(safe);
-    expect(encoded).toBe('OpenAI &amp; Google');
+    expect(esc(safe)).toBe('OpenAI &amp; Google');
   });
 
   it('properly handles quotes in provider names', () => {
     const name = "Test's Provider \"Premium\"";
-    const encoded = escPolyfill(name);
+    const encoded = esc(name);
     expect(encoded).toContain('&#039;');
     expect(encoded).toContain('&quot;');
   });
 
   it('HTML encoding prevents tag execution in template literals', () => {
     const name = '<script>document.cookie</script>';
-    const escaped = escPolyfill(name);
+    const escaped = esc(name);
     const template = `<span class="provider-name">${escaped}</span>`;
     expect(template).not.toContain('<script>');
     expect(template).toContain('&lt;script&gt;');
   });
 });
+
+
+  it('HTML-encodes iframe injection', () => {
+    const malicious = '<iframe src="javascript:alert(1)">';
+    const encoded = esc(malicious);
+    expect(encoded).not.toContain('<iframe');
+    expect(encoded).toContain('&lt;iframe');
+  });
+
+  it('HTML-encodes data: URI injection', () => {
+    const malicious = '<a href="data:text/html,<script>alert(1)</script>">click</a>';
+    const encoded = esc(malicious);
+    expect(encoded).not.toContain('<script>');
+    // data:text/html is not an HTML special char sequence, but script tag inside is encoded
+    expect(encoded).toContain('&lt;script&gt;');
+  });
+
+// ==================== DoS via oversized payloads (T12) ====================
+
+
+  it('HTML-encodes iframe injection', () => {
+    const malicious = '<iframe src="javascript:alert(1)">';
+    const encoded = esc(malicious);
+    expect(encoded).not.toContain('<iframe');
+    expect(encoded).toContain('&lt;iframe');
+  });
+
+  it('HTML-encodes data: URI injection', () => {
+    const malicious = '<a href="data:text/html,<script>alert(1)</script>">click</a>';
+    const encoded = esc(malicious);
+    expect(encoded).not.toContain('<script>');
+    // data:text/html is not an HTML special char sequence, but script tag inside is encoded
+    expect(encoded).toContain('&lt;script&gt;');
+  });
 
 // ==================== DoS via oversized payloads (T12) ====================
 

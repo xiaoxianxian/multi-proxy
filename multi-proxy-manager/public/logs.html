@@ -616,7 +616,8 @@ body {
   'use strict';
 
   // ===== Configuration =====
-  var PROXY_CONFIGS = {
+  // PROXY_CONFIGS loaded from utils.js if available, else defined inline (F5)
+  var PROXY_CONFIGS = window.PROXY_CONFIGS || {
     codex: { name: 'Codex Proxy', icon: '&#129392;', iconClass: 'codex' },
     hermes: { name: 'Hermes Proxy', icon: '&#9889;', iconClass: 'hermes' },
     cursor: { name: 'Cursor Proxy', icon: '&#9729;', iconClass: 'cursor' }

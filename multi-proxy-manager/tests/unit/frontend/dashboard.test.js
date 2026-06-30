@@ -158,6 +158,20 @@ describe('Dashboard Page', () => {
       expect(html).toContain('toggleProxy');
     });
 
+    it('toggleProxy action must only be \'start\' or \'stop\'', () => {
+      // Extract the action assignment from toggleProxy in the HTML
+      // Expected pattern: var action = status && status.running ? 'stop' : 'start';
+      var toggleMatch = html.match(/var action\s*=\s*([^;]+);/);
+      expect(toggleMatch).not.toBeNull();
+      var expr = toggleMatch[1];
+      // Must use ternary with exactly 'start' and 'stop'
+      expect(expr).toMatch(/\?\s*['"]stop['"]/);
+      expect(expr).toMatch(/:\s*['"]start['"]/);
+      // No other string literals should appear in the action assignment
+      var strings = expr.match(/['"](.*?)['"]/g);
+      expect(strings).toEqual(['\'stop\'', '\'start\'']);
+    });
+
     it('should have init function that runs on load', () => {
       expect(html).toContain('function init()');
       expect(html).toContain('init();');

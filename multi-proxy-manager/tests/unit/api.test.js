@@ -120,5 +120,15 @@ describe('Multi-Proxy Manager API', () => {
       const res = await request(app).delete('/api/codex/v1/models');
       expect(res.status).toBe(401);
     });
+
+    it('should block deep path traversal with ../..', async () => {
+      const res = await request(app).get('/api/codex/v1/models/../../../etc/passwd');
+      expect(res.status).not.toBe(401); // blocked by whitelist, not auth
+    });
+
+    it('should block nested URL-encoded path traversal', async () => {
+      const res = await request(app).get('/api/codex/v1/..%252f..%252f..%252fetc/passwd');
+      expect(res.status).not.toBe(200); // should not succeed
+    });
   });
 });

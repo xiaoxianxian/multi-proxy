@@ -39,6 +39,49 @@
   line-height: 1.2;
 }
 
+
+/* ============================================
+   Section Tabs (F6: used by proxy-config.html tabs)
+   ============================================ */
+.section-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 20px;
+}
+
+.section-tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.section-tab:hover {
+  color: var(--color-text);
+  background: var(--color-bg-secondary);
+}
+
+.section-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.section-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ============================================
    Unified Button System (Rule D2)
    ============================================ */
@@ -398,4 +441,55 @@
 
 :root.dark .toast.warning {
   color: #fcd34d;
+}
+
+/* ============================================
+   F17: Logout button centered text
+   ============================================ */
+.btn-logout {
+  text-align: center;
+}
+
+/* ============================================
+   F20: Sidebar close button
+   ============================================ */
+.sidebar-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--color-text-secondary);
+  padding: 4px;
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.sidebar-close:hover {
+  color: var(--color-text);
+}
+
+/* ============================================
+   F18: Unified form input height = 40px
+   ============================================ */
+.form-input {
+  height: 40px;
+}
+
+.form-select {
+  height: 40px;
+}
+
+/* ============================================
+   F19: Mono font code class
+   ============================================ */
+.mono-code {
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* Global mono font for code elements (replaces inline font-family in proxy-config.html) */
+code, .mono-code {
+  font-family: 'SF Mono', Menlo, monospace;
 }

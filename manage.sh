@@ -7,7 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # 日志目录
 LOG_DIR="$SCRIPT_DIR/logs"
-mkdir -p "$LOG_DIR" 2>/dev/null
+mkdir -p "$LOG_DIR"
+if [ $? -ne 0 ]; then
+  print_error "无法创建日志目录: $LOG_DIR"
+  exit 1
+fi
 
 # 各代理目录（扁平结构，平级关系）
 CODEx_PROXY_DIR="$SCRIPT_DIR/codex-proxy"
@@ -37,6 +41,22 @@ is_port_in_use() {
   return $?
 }
 
+# 等待端口绑定（轮询 lsof，最长 WAIT_FOR_PORT_TIMEOUT 毫秒，默认 10 秒）
+WAIT_FOR_PORT_TIMEOUT=${WAIT_FOR_PORT_TIMEOUT:-10000}
+wait_for_port() {
+  local port=$1
+  local waited=0
+  local step=200
+  while [ $waited -lt $WAIT_FOR_PORT_TIMEOUT ]; do
+    if is_port_in_use "$port"; then
+      return 0
+    fi
+    sleep 0.2
+    waited=$((waited + step))
+  done
+  return 1
+}
+
 # 启动 Codex Proxy
 start_codex() {
   if [ ! -f "$CODEx_PROXY_DIR/proxy.js" ]; then
@@ -62,11 +82,10 @@ start_codex() {
 
   cd "$CODEx_PROXY_DIR" || exit 1
   print_status "启动 Codex Proxy..."
-  node proxy.js > "$LOG_DIR/codex-proxy.log" 2>&1 &
+  nohup node proxy.js > "$LOG_DIR/codex-proxy.log" 2>&1 &
   local pid=$!
 
-  sleep 2
-  if is_port_in_use $CODEx_PORT; then
+  if wait_for_port $CODEx_PORT; then
     print_status "Codex Proxy 启动成功 (PID: $pid, 端口: $CODEx_PORT)"
     return 0
   else
@@ -90,11 +109,10 @@ start_hermes() {
 
   cd "$HERMES_PROXY_DIR" || exit 1
   print_status "启动 Hermes Proxy..."
-  python3 proxy.py > "$LOG_DIR/hermes-proxy.log" 2>&1 &
+  nohup python3 proxy.py > "$LOG_DIR/hermes-proxy.log" 2>&1 &
   local pid=$!
 
-  sleep 2
-  if is_port_in_use $HERMES_PORT; then
+  if wait_for_port $HERMES_PORT; then
     print_status "Hermes Proxy 启动成功 (PID: $pid, 端口: $HERMES_PORT)"
     return 0
   else
@@ -133,11 +151,10 @@ start_cursor() {
 
   cd "$CURSOR_PROXY_DIR" || exit 1
   print_status "启动 Cursor Proxy..."
-  node dist/server/start.js > "$LOG_DIR/cursor-proxy.log" 2>&1 &
+  nohup node dist/server/start.js > "$LOG_DIR/cursor-proxy.log" 2>&1 &
   local pid=$!
 
-  sleep 2
-  if is_port_in_use $CURSOR_PORT; then
+  if wait_for_port $CURSOR_PORT; then
     print_status "Cursor Proxy 启动成功 (PID: $pid, 端口: $CURSOR_PORT)"
     return 0
   else
@@ -161,11 +178,10 @@ start_manager() {
 
   cd "$MANAGER_DIR" || exit 1
   print_status "启动 Multi-Proxy Manager Shell..."
-  node server.js > "$LOG_DIR/manager.log" 2>&1 &
+  nohup node server.js > "$LOG_DIR/manager.log" 2>&1 &
   local pid=$!
 
-  sleep 2
-  if is_port_in_use $MANAGER_PORT; then
+  if wait_for_port $MANAGER_PORT; then
     print_status "Manager Shell 启动成功 (PID: $pid, 端口: $MANAGER_PORT)"
     print_status "访问地址: http://localhost:$MANAGER_PORT"
     return 0

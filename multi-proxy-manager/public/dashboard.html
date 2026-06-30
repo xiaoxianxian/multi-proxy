@@ -747,7 +747,7 @@ body {
     <button class="btn btn-sm btn-outline" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
       &#9789; 暗色模式
     </button>
-    <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
+    <button class="btn-logout" onclick="handleLogout()" title="退出登录">登出</button>
   </div>
 </aside>
 
@@ -869,7 +869,8 @@ body {
   'use strict';
 
   // ===== Configuration =====
-  var PROXY_CONFIGS = {
+  // PROXY_CONFIGS loaded from utils.js if available, else defined inline
+  var PROXY_CONFIGS = window.PROXY_CONFIGS || {
     codex: {
       name: 'Codex Proxy',
       icon: '&#129392;',
@@ -1030,13 +1031,17 @@ body {
       }
       var versionBadge = versionValue ? '<span class="proxy-version-badge">' + window.esc(versionValue) + '</span>' : '';
 
-      return '<div class="proxy-card" id="proxy-card-' + name + '">' +
-        '<div class="proxy-icon ' + config.iconClass + '">' +
-          config.icon +
+      var iconEscaped = window.esc(config.icon);
+      var iconClassEscaped = window.esc(config.iconClass || '');
+      var nameEscaped = window.esc(config.name);
+
+      return '<div class="proxy-card" id="proxy-card-' + window.esc(name) + '">' +
+        '<div class="proxy-icon ' + iconClassEscaped + '">' +
+          iconEscaped +
         '</div>' +
         '<div class="proxy-info">' +
           '<div class="proxy-name-row">' +
-            '<span class="proxy-name">' + config.name + '</span>' +
+            '<span class="proxy-name">' + nameEscaped + '</span>' +
             '<span class="proxy-port-badge">:' + (status.port || config.port) + '</span>' +
             versionBadge +
           '</div>' +
@@ -1049,7 +1054,7 @@ body {
         '</div>' +
         '<div class="proxy-actions">' +
           '<button class="btn ' + btnClass + ' btn-sm" id="btn-toggle-' + name + '" onclick="toggleProxy(\'' + name + '\')">' +
-            btnIcon + ' ' + btnText +
+            window.esc(btnIcon) + ' ' + window.esc(btnText) +
           '</button>' +
           '<button class="btn btn-outline btn-sm" onclick="window.location.href=\'proxy-config.html?proxy=' + name + '\'">' +
             '配置' +
@@ -1070,9 +1075,11 @@ body {
       var badgeClass = status.running ? 'running' : 'stopped';
       var badgeText = status.running ? 'ON' : 'OFF';
 
-      return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + window.esc(name) + '" data-tooltip="' + window.esc(config.name) + '" tabindex="0">' +
-        '<span class="nav-icon">' + config.icon + '</span>' +
-        config.name +
+      var cfgIcon = window.esc(config.icon);
+      var cfgName = window.esc(config.name);
+      return '<a href="proxy-config.html?proxy=' + window.esc(name) + '" class="nav-item proxy-nav-item" data-proxy="' + window.esc(name) + '" data-tooltip="' + cfgName + '" tabindex="0">' +
+        '<span class="nav-icon">' + cfgIcon + '</span>' +
+        cfgName +
         '<span class="nav-badge ' + badgeClass + '">' + badgeText + '</span>' +
         '</a>';
     }).join('');
@@ -1323,8 +1330,8 @@ body {
 
       // Load data
       Promise.all([
-        new Promise(function(resolve) { loadStatus(); resolve(); }),
-        new Promise(function(resolve) { loadVersion(); resolve(); })
+        loadStatus().catch(function(){}),
+        loadVersion().catch(function(){})
       ]).then(function() {
         // Check API Key completeness
         fetch('/api/env-check')

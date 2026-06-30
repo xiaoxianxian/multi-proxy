@@ -10,14 +10,10 @@
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <h1>
-          <span class="logo-icon">P</span>
-          Proxy Manager
-        </h1>
-        <button class="sidebar-close" onclick="closeSidebar()" aria-label="关闭侧边栏">&times;</button>
-      </div>
+    <div class="sidebar-header">
+      <div class="logo-icon">P</div>
+      <h1>Proxy Manager</h1>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="关闭侧边栏">&times;</button>
     </div>
     <nav class="sidebar-nav">
       <a class="nav-item" href="dashboard.html" data-tooltip="返回概览">
@@ -40,9 +36,16 @@
     </nav>
     <div class="sidebar-footer">
       <div class="version-info">v1.0.0</div>
+      <button class="btn btn-outline btn-sm" id="darkModeToggle" title="切换暗色模式">&#9789; 暗色模式</button>
       <button class="btn btn-outline btn-sm" onclick="handleLogout()" title="退出登录">登出</button>
     </div>
   </aside>
+
+  <!-- Mobile Menu Button -->
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">&#9776;</button>
+
+<!-- Sidebar Overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <main class="main">
     <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="打开侧边栏">&#9776;</button>
@@ -51,6 +54,13 @@
     <div class="offline-banner hidden" id="offlineBanner">
       <span class="offline-banner-icon">&#9888;</span>
       <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
+    </div>
+    
+    <!-- Demo Banner (F3) -->
+    <div class="demo-banner hidden" id="demoBanner" style="background:#fef3c7;padding:8px 16px;font-size:12px;display:flex;align-items:center;gap:8px;">
+      <span>&#9888;</span>
+      <span>演示模式：当前显示模拟数据，后端 API 不可用。</span>
+      <button onclick="document.getElementById('demoBanner').classList.add('hidden')" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:16px;" title="关闭">&times;</button>
     </div>
     
     <!-- Proxy Header -->
@@ -199,10 +209,10 @@
 
   <script>
     var MOCK_PROVIDERS = [
-      { id: 'prov_001', name: 'OpenAI', provider_id: 'openai', base_url: 'https://api.example.com/v1', api_key: 'sk-test-key-xxxxx', enabled: true },
-      { id: 'prov_002', name: 'Anthropic', provider_id: 'anthropic', base_url: 'https://api.example-anthropic.com', api_key: 'sk-ant-test-xxxxx', enabled: true },
-      { id: 'prov_003', name: 'Google Gemini', provider_id: 'google', base_url: 'https://api.example-gemini.com/v1', api_key: 'AIzaSy-test-xxxxx', enabled: false },
-      { id: 'prov_004', name: 'Azure OpenAI', provider_id: 'azure', base_url: 'https://example-resource.openai.azure.com/openai/deployments', api_key: 'test-key-xxxxx', enabled: true },
+      { id: 'prov_001', name: 'OpenAI', provider_id: 'openai', base_url: 'https://api.example.com/v1', api_key: 'sk-te****xxxx', enabled: true },
+      { id: 'prov_002', name: 'Anthropic', provider_id: 'anthropic', base_url: 'https://api.example-anthropic.com', api_key: 'sk-an****xxxx', enabled: true },
+      { id: 'prov_003', name: 'Google Gemini', provider_id: 'google', base_url: 'https://api.example-gemini.com/v1', api_key: 'AIza****xxxx', enabled: false },
+      { id: 'prov_004', name: 'Azure OpenAI', provider_id: 'azure', base_url: 'https://example-resource.openai.azure.com/openai/deployments', api_key: 'test****xxxx', enabled: true },
     ];
 
     var MOCK_MODELS = [
@@ -290,6 +300,7 @@
         }
       } catch {
         providers = MOCK_PROVIDERS.slice();
+        showDemoBanner();
       }
     }
 
@@ -552,6 +563,7 @@
         var res = await fetch('/api/status');
         if (res.ok) {
           hideOfflineBanner();
+          hideDemoBanner();
           var data = await res.json();
           if (data[currentProxyName]) {
             var st = data[currentProxyName];
@@ -586,6 +598,17 @@
     function hideOfflineBanner() {
       var banner = document.getElementById('offlineBanner');
       if (banner) banner.classList.add('hidden');
+    }
+
+    // ==================== Demo Banner (F3) ====================
+    function hideDemoBanner() {
+      var banner = document.getElementById('demoBanner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function showDemoBanner() {
+      var banner = document.getElementById('demoBanner');
+      if (banner) banner.classList.remove('hidden');
     }
 
     // ==================== Logout ====================
@@ -666,9 +689,9 @@
         var p = providers[i];
         html += '<tr data-provider-id="' + window.esc(p.id) + '">' +
           '<td><strong>' + window.esc(p.name) + '</strong></td>' +
-          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;">' + window.esc(p.provider_id) + '</code></td>' +
-          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + window.esc(p.base_url) + '</code></td>' +
-          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;">' + (keyVisible ? window.esc(p.api_key) : maskKey(p.api_key)) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;">' + window.esc(p.provider_id) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + window.esc(p.base_url) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;">' + (keyVisible ? window.esc(p.api_key) : maskKey(p.api_key)) + '</code></td>' +
           '<td><label class="toggle"><input type="checkbox" class="provider-enable-toggle" ' + (p.enabled ? 'checked' : '') + '><span class="toggle-slider"></span></label></td>' +
           '<td class="actions">' +
             '<button class="btn btn-sm edit-provider-btn" data-id="' + window.esc(p.id) + '">编辑</button>' +
@@ -1036,8 +1059,8 @@
         html += '<tr>' +
           '<td><span class="ts">' + fmtTime(h.timestamp) + '</span></td>' +
           '<td>' + window.esc(h.action) + '</td>' +
-          '<td><code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;">' + window.esc(h.from) + '</code></td>' +
-          '<td><code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;">' + window.esc(h.to) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;">' + window.esc(h.from) + '</code></td>' +
+          '<td><code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;">' + window.esc(h.to) + '</code></td>' +
           '<td><span class="result-dot ' + (h.success ? 'success' : 'fail') + '"><span class="dot"></span>' + (h.success ? '成功' : '失败') + '</span></td>' +
         '</tr>';
       }
@@ -1206,7 +1229,7 @@
               '<input type="checkbox" class="model-cb" data-index="' + i + '" value="' + window.esc(m.id) + '" style="flex-shrink:0;cursor:pointer;" />' +
               '<div style="display:flex;flex-direction:column;gap:1px;">' +
                 '<span style="font-weight:500;color:var(--text-primary);">' + window.esc(m.displayName || m.name) + '</span>' +
-                '<code style="font-size:11px;color:var(--text-tertiary);font-family:\'SF Mono\',Menlo,monospace;">' + window.esc(m.id) + '</code>' +
+                '<code style="font-size:11px;color:var(--text-tertiary);">' + window.esc(m.id) + '</code>' +
               '</div>' +
             '</label>' +
             ((i < data.models.length - 1) ? '<hr style="border:none;border-top:1px solid var(--border-light);margin:0 4px;">' : '');
