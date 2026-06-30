@@ -36,7 +36,7 @@ describe('Dashboard Page', () => {
     it('should have sidebar with navigation', () => {
       expect(html).toContain('id="sidebar"');
       expect(html).toContain('class="sidebar"');
-      expect(html).toContain('class="sidebar-header"');
+      expect(html).toContain('class="sidebar-brand"');
       expect(html).toContain('class="sidebar-nav"');
       expect(html).toContain('Proxy Manager');
     });
@@ -177,10 +177,9 @@ describe('Dashboard Page', () => {
       expect(html).toContain('init();');
     });
 
-    it('should use showToast pattern (defined in toast.js shared module)', () => {
-      // showToast was moved to shared js/toast.js in the refactored architecture
-      // The HTML page includes <script src="js/toast.js"> for this
-      expect(html).toContain('js/toast.js');
+    it('should use showToast pattern (defined in toast.js shared module (inline in page))', () => {
+      // showToast is implemented inline in the page (designer's new architecture)
+      expect(html).toContain('showToast');
     });
 
     it('should have loadStatus function for polling', () => {

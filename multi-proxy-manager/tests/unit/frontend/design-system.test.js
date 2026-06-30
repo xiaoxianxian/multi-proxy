@@ -253,8 +253,9 @@ describe('Design System', () => {
       expect(dashboardHtml).toContain('.sidebar {');
     });
 
-    it('should define sidebar-header in dashboard styles', () => {
-      expect(dashboardHtml).toContain('.sidebar-header');
+    it('should define .sidebar-brand in dashboard styles', () => {
+      // sidebar-brand is defined in shared-styles.css (design system)
+      expect(sharedCss).toContain('.sidebar-brand');
     });
 
     it('should define .sidebar-nav in dashboard styles', () => {

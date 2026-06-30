@@ -87,8 +87,8 @@ body {
   z-index: 100;
 }
 
-/* Unified sidebar-header (Rule 1) */
-.sidebar-header {
+/* Unified sidebar-brand (Rule 1) */
+.sidebar-brand {
   padding: 20px 20px 16px;
   border-bottom: 1px solid var(--color-border);
   display: flex;
@@ -96,7 +96,7 @@ body {
   gap: 12px;
 }
 
-.sidebar-header .logo-icon {
+.sidebar-brand .logo-icon {
   width: 36px;
   height: 36px;
   background: var(--color-primary);
@@ -110,7 +110,7 @@ body {
   flex-shrink: 0;
 }
 
-.sidebar-header h1 {
+.sidebar-brand h1 {
   font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
@@ -497,16 +497,16 @@ body {
 
 <!-- Mobile Menu Button -->
 <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-  &#9776;
-</button>
+    <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
 
 <!-- Sidebar Overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
-  <!-- Rule 1: Unified sidebar-header (NO .sidebar-brand) -->
-  <div class="sidebar-header">
+  <!-- Rule 1: Unified sidebar-brand (NO .sidebar-brand) -->
+  <div class="sidebar-brand">
     <div class="logo-icon">P</div>
     <h1>Proxy Manager</h1>
   </div>
@@ -514,7 +514,7 @@ body {
   <nav class="sidebar-nav" id="sidebarNav">
     <div class="nav-section-label">总览</div>
     <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
-      <span class="nav-icon">&#128202;</span>
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
       概览
     </div>
 
@@ -523,7 +523,7 @@ body {
 
     <div class="nav-section-label">系统</div>
     <div class="nav-item active" data-page="logs" data-tooltip="日志" tabindex="0">
-      <span class="nav-icon">&#128221;</span>
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
       日志
     </div>
   </nav>
@@ -532,8 +532,8 @@ body {
     <div class="version-info" id="sidebarVersion">
       v1.0.0
     </div>
-    <button class="btn btn-sm btn-outline" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
-      &#9789; 暗色模式
+    <button class="btn btn-outline btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
     </button>
     <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
   </div>
@@ -543,7 +543,7 @@ body {
 <main class="main" id="mainContent">
   <!-- Offline Banner -->
   <div class="offline-banner hidden" id="offlineBanner">
-    <span class="offline-banner-icon">&#9888;</span>
+    <span class="offline-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
     <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
   </div>
 
@@ -586,19 +586,19 @@ body {
     <div class="filter-spacer"></div>
 
     <button class="btn btn-sm btn-outline" onclick="loadLogs()" id="refreshBtn">
-      &#8635; 刷新
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 刷新
     </button>
 
     <button class="btn btn-sm btn-outline" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
-      &#9654; 自动刷新
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 自动刷新
     </button>
 
-    <button class="btn btn-sm btn-outline" onclick="copyLogs()" title="复制日志">&#9984; 复制</button>
+    <button class="btn btn-sm btn-outline" onclick="copyLogs()" title="复制日志"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> 复制</button>
 
     <span class="log-count" id="logCount"></span>
 
     <button class="btn btn-sm btn-danger" onclick="clearLogs()">
-      &#9855; 清空
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 清空
     </button>
   </div>
 
@@ -616,18 +616,70 @@ body {
   'use strict';
 
   // ===== Configuration =====
-  // PROXY_CONFIGS loaded from utils.js if available, else defined inline (F5)
-  var PROXY_CONFIGS = window.PROXY_CONFIGS || {
-    codex: { name: 'Codex Proxy', icon: '&#129392;', iconClass: 'codex' },
-    hermes: { name: 'Hermes Proxy', icon: '&#9889;', iconClass: 'hermes' },
-    cursor: { name: 'Cursor Proxy', icon: '&#9729;', iconClass: 'cursor' }
+  var PROXY_CONFIGS = {
+    codex: { name: 'Codex Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>', iconClass: 'codex' },
+    hermes: { name: 'Hermes Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>', iconClass: 'hermes' },
+    cursor: { name: 'Cursor Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>', iconClass: 'cursor' }
   };
 
   // ===== State =====
   var autoRefreshInterval = null;
   var allLogs = [];
   var currentTimeRange = 0;
+  var authToken = sessionStorage.getItem('auth_token');
   var versionCache = {};
+
+  // ===== Toast System (Rule 5: light backgrounds with colored borders) =====
+  function showToast(message, type, duration) {
+    if (duration === undefined) duration = 3000;
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + (type || 'info');
+
+    var icons = { success: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>', error: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>', info: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' };
+    var iconSpan = document.createElement('span');
+    iconSpan.innerHTML = icons[type] || '';
+    var msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    toast.appendChild(iconSpan);
+    toast.appendChild(msgSpan);
+
+    container.appendChild(toast);
+
+    setTimeout(function() {
+      toast.style.animation = 'toast-out 0.3s ease forwards';
+      setTimeout(function() { toast.remove(); }, 300);
+    }, duration);
+  }
+
+  // ===== Escaping Utility =====
+  function esc(str) {
+    if (str === null || str === undefined) return '';
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ===== Auth Header =====
+  function getAuthHeader() {
+    var token = sessionStorage.getItem('auth_token');
+    return token ? { 'x-auth-token': token } : {};
+  }
+
+  // ===== Intercept fetch for auth token =====
+  (function() {
+    var origFetch = window.fetch;
+    window.fetch = function(url, options) {
+      if (options === undefined) options = {};
+      if (typeof url === 'string' && url.indexOf('/api/') === 0 && authToken) {
+        if (!options.headers) options.headers = {};
+        if (typeof options.headers === 'object') {
+          options.headers['x-auth-token'] = authToken;
+        }
+      }
+      return origFetch(url, options);
+    };
+  })();
 
   // ===== Offline Banner =====
   function showOfflineBanner() {
@@ -652,7 +704,9 @@ body {
   // ===== Fetch Logs from API =====
   async function fetchLogs(limit) {
     try {
-      var res = await fetch('/api/logs?limit=' + (limit || 500));
+      var res = await fetch('/api/logs?limit=' + (limit || 500), {
+        headers: getAuthHeader()
+      });
       if (res.ok) {
         hideOfflineBanner();
         var data = await res.json();
@@ -774,15 +828,15 @@ body {
 
   // ===== Render Log Line =====
   function renderLogLine(log) {
-    var ts = window.esc(log.timestamp);
-    var proxyName = window.esc(PROXY_CONFIGS[log.proxy] ? PROXY_CONFIGS[log.proxy].name : log.proxy.toUpperCase());
-    var msg = window.esc(log.message);
+    var ts = esc(log.timestamp);
+    var proxyName = esc(PROXY_CONFIGS[log.proxy] ? PROXY_CONFIGS[log.proxy].name : log.proxy.toUpperCase());
+    var msg = esc(log.message);
     var proxyClass = log.proxy in PROXY_CONFIGS ? log.proxy : 'system';
 
     return '<span class="log-line" title="点击复制日志内容">' +
       '<span class="timestamp">' + ts + '</span> ' +
       '<span class="proxy-tag ' + proxyClass + '">[' + proxyName + ']</span> ' +
-      '<span class="level-badge ' + window.esc(log.level) + '">' + window.esc(log.level) + '</span> ' +
+      '<span class="level-badge ' + esc(log.level) + '">' + esc(log.level) + '</span> ' +
       '<span class="log-message">' + msg + '</span>' +
       '</span>';
   }
@@ -815,7 +869,7 @@ body {
           var text = line.textContent;
           if (navigator.clipboard) {
             navigator.clipboard.writeText(text).then(function() {
-              window.showToast('日志已复制到剪贴板', 'success', 1500);
+              showToast('日志已复制到剪贴板', 'success', 1500);
             });
           }
         };
@@ -884,11 +938,14 @@ body {
   // ===== Clear Logs =====
   window.clearLogs = function() {
     if (!confirm('确定要清除所有日志吗？')) return;
-    fetch('/api/logs/clear', { method: 'POST' }).catch(function() {});
+    fetch('/api/logs/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).catch(function() {});
     allLogs = [];
     document.getElementById('logViewer').innerHTML = '<div class="empty-state">日志已清除</div>';
     document.getElementById('logCount').innerHTML = '共 <strong>0</strong> 条';
-    window.showToast('日志已清除', 'success');
+    showToast('日志已清除', 'success');
   };
 
   // ===== Copy Logs =====
@@ -912,7 +969,7 @@ body {
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(function() {
-        window.showToast('已复制 ' + filtered.length + ' 条日志到剪贴板', 'success');
+        showToast('已复制 ' + filtered.length + ' 条日志到剪贴板', 'success');
       });
     }
   };
@@ -933,7 +990,7 @@ body {
     if (searchTerm) filtered = filtered.filter(function(l) { return l.message.toLowerCase().indexOf(searchTerm) !== -1; });
 
     if (filtered.length === 0) {
-      window.showToast('没有可导出的日志', 'error');
+      showToast('没有可导出的日志', 'error');
       return;
     }
 
@@ -966,7 +1023,7 @@ body {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    window.showToast('已导出 ' + filtered.length + ' 条日志 (' + extension.toUpperCase() + ')', 'success');
+    showToast('已导出 ' + filtered.length + ' 条日志 (' + extension.toUpperCase() + ')', 'success');
   };
 
   // ===== Toggle Auto Refresh =====
@@ -976,12 +1033,12 @@ body {
     if (autoRefreshInterval) {
       clearInterval(autoRefreshInterval);
       autoRefreshInterval = null;
-      btn.innerHTML = '&#9654; 自动刷新';
+      btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 自动刷新';
       btn.classList.remove('active');
     } else {
       loadLogs();
       autoRefreshInterval = setInterval(loadLogs, 5000);
-      btn.innerHTML = '&#9632; 停止刷新';
+      btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止刷新';
       btn.classList.add('active');
     }
   };
@@ -991,7 +1048,7 @@ body {
     var navItem = e.target.closest('.nav-item');
     if (!navItem) return;
     if (navItem.classList.contains('proxy-nav-item')) {
-      window.closeMobileSidebar();
+      closeMobileSidebar();
       return;
     }
     var pageId = navItem.dataset.page;
@@ -1006,19 +1063,95 @@ body {
       }
       var nav = document.querySelector('.nav-item[data-page="' + pageId + '"]');
       if (nav) nav.classList.add('active');
-      window.closeMobileSidebar();
+      closeMobileSidebar();
     }
   });
 
+  // ===== Mobile Sidebar =====
+  var mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  var sidebar = document.getElementById('sidebar');
+  var sidebarOverlay = document.getElementById('sidebarOverlay');
+
+  mobileMenuBtn.addEventListener('click', function() {
+    sidebar.classList.toggle('open');
+    sidebarOverlay.classList.toggle('show');
+  });
+
+  sidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+  function closeMobileSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  }
+
+  // ===== Logout =====
+  window.handleLogout = function() {
+    sessionStorage.removeItem('auth_token');
+    window.location.href = 'login.html';
+  };
+
+  // ===== Dark Mode Toggle =====
+  function initDarkMode() {
+    var toggle = document.getElementById('darkModeToggle');
+    var isDark = localStorage.getItem('darkMode') === 'true';
+    var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+    var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      if (toggle) toggle.innerHTML = moonSvg + ' 亮色模式';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', function() {
+        var html = document.documentElement;
+        var isNowDark = html.classList.contains('dark');
+        if (isNowDark) {
+          html.classList.remove('dark');
+          html.classList.add('light');
+          localStorage.setItem('darkMode', 'false');
+          toggle.innerHTML = sunSvg + ' 暗色模式';
+        } else {
+          html.classList.add('dark');
+          html.classList.remove('light');
+          localStorage.setItem('darkMode', 'true');
+          toggle.innerHTML = moonSvg + ' 亮色模式';
+        }
+      });
+    }
+  }
+
+  // ===== Dynamic Proxy Nav =====
+  function renderDynamicProxyNav(proxyNames) {
+    var container = document.getElementById('proxyNavItems');
+    if (!container) return;
+    var label = document.getElementById('proxySectionLabel');
+    if (label) label.style.display = proxyNames.length > 0 ? '' : 'none';
+
+    if (proxyNames.length === 0) {
+      container.innerHTML = '<div class="nav-item" style="color:var(--color-text-tertiary);font-size:12px;padding:4px 12px;">暂无代理</div>';
+      return;
+    }
+
+    container.innerHTML = proxyNames.map(function(name) {
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' };
+      return '<a href="../proxy-manager-redesign/pages/proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
+        '<span class="nav-icon">' + config.icon + '</span>' +
+        esc(config.name) +
+        '</a>';
+    }).join('');
+  }
+
   // ===== Mock Version Data =====
   function getMockVersion() {
-    return window.getMockVersion();
+    return {
+      version: '1.0.3',
+      proxies: { codex: 'v1.2.0', hermes: 'v0.9.4', cursor: 'v2.1.0' }
+    };
   }
 
   // ===== Initialize =====
   function init() {
-    window.initDarkMode();
-    window.initMobileSidebar();
+    initDarkMode();
     // Load version info
     fetch('/api/version')
       .then(function(res) { return res.json(); })
@@ -1043,11 +1176,11 @@ body {
         return res.json();
       })
       .then(function(names) {
-        if (names && names.length > 0) window.renderDynamicProxyNav(names, PROXY_CONFIGS);
+        if (names && names.length > 0) renderDynamicProxyNav(names);
         else throw new Error();
       })
       .catch(function() {
-        window.renderDynamicProxyNav(Object.keys(PROXY_CONFIGS), PROXY_CONFIGS);
+        renderDynamicProxyNav(Object.keys(PROXY_CONFIGS));
       });
 
     // Load logs
@@ -1057,10 +1190,5 @@ body {
   init();
 })();
 </script>
-<!-- Shared JS libraries -->
-<script src="js/utils.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/toast.js"></script>
-<script src="js/sidebar.js"></script>
 </body>
 </html>

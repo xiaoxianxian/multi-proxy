@@ -221,7 +221,7 @@ describe('Proxy Config Page', () => {
     });
 
     it('should unmask API keys when toggled', () => {
-      expect(html).toContain('keyVisible ? window.esc(p.api_key)');
+      expect(html).toContain('keyVisible ? esc(p.api_key)');
     });
   });
 
