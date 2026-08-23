@@ -1,0 +1,29 @@
+FROM node:20-bookworm AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y python3 g++ make && rm -rf /var/lib/apt/lists/*
+
+COPY cursor-multi-model-proxy/package.json cursor-multi-model-proxy/package-lock.json* ./
+RUN npm install
+
+COPY cursor-multi-model-proxy/ .
+RUN npm run build
+
+FROM node:20-bookworm
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y python3 lsof g++ make && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /app/data
+
+COPY --from=builder /app/dist ./dist
+COPY cursor-multi-model-proxy/package.json .
+RUN rm -rf node_modules && npm install --omit=dev
+
+ENV PORT=18794
+
+EXPOSE 18794
+
+CMD ["node", "dist/index.js", "start"]

@@ -72,7 +72,7 @@ const AUTH_SECRET = getOrGenerateJwtSecret();
 
 // ==================== Auth ====================
 const TOKEN_EXPIRY = '8h';
-const PASSWORD_FILE = path.join(os.homedir(), '.multi-proxy-password');
+const PASSWORD_FILE = path.join(os.homedir(), '.multi-proxy-manager', 'password');
 
 function getPassword() {
   try {
@@ -84,7 +84,16 @@ function getPassword() {
 }
 
 function setPassword(hash) {
-  fs.writeFileSync(PASSWORD_FILE, hash, { mode: 0o600 });
+  try {
+    const dir = path.dirname(PASSWORD_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+    fs.writeFileSync(PASSWORD_FILE, hash, { mode: 0o600 });
+  } catch (e) {
+    console.error('[Auth] Failed to write password file:', e.message);
+    throw e;
+  }
 }
 
 function needsPasswordSetup() {
@@ -109,11 +118,6 @@ function generateToken(password) {
 }
 
 function requireAuth(req, res, next) {
-  const envPassword = process.env.MANAGER_PASSWORD;
-  if (envPassword && envPassword.length > 0) {
-    // Dev mode: skip auth if MANAGER_PASSWORD is set (trust env)
-    return next();
-  }
   const token = req.headers['x-auth-token'] || (req.cookies && req.cookies.auth_token);
   if (!token) {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -311,12 +315,41 @@ if (Object.keys(persisted).length > 0) {
   console.log('[CrashRecovery] Loaded state for:', Object.keys(persisted).join(', '));
 }
 
+// ==================== Docker detection ====================
+const IS_DOCKER = fs.existsSync('/.dockerenv');
+
+// Docker Compose service names (used for inter-container networking via hostname)
+const DOCKER_SERVICE_NAMES = {
+  codex: 'codex-proxy',
+  hermes: 'hermes-proxy',
+  cursor: 'cursor-proxy',
+};
+
+// Container names (used for docker start/stop/inspect commands)
+const DOCKER_CONTAINER_NAMES = {
+  codex: 'proxy-rebuild-codex',
+  hermes: 'proxy-rebuild-hermes',
+  cursor: 'proxy-rebuild-cursor',
+};
+
 // ==================== 辅助函数 ====================
 const LSOF = '/usr/sbin/lsof';
 
 function isProcessRunning(name) {
   const config = PROXY_CONFIGS[name];
   if (!config) return false;
+
+  if (IS_DOCKER) {
+    try {
+      const containerName = DOCKER_CONTAINER_NAMES[name];
+      if (containerName) {
+        const { execSync } = require('child_process');
+        const status = execSync(`docker container inspect -f {{.State.Status}} ${containerName} 2>/dev/null`, { stdio: 'pipe', timeout: 5000 }).toString().trim();
+        if (status === 'running') return true;
+      }
+    } catch {}
+    return false;
+  }
 
   // First check tracked process
   const proc = proxyProcesses[name];
@@ -359,6 +392,28 @@ function waitForPortFree(port, timeout = 5000) {
   });
 }
 
+function waitForDockerStop(containerName, timeout = 8000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = () => {
+      try {
+        const { execSync } = require('child_process');
+        const status = execSync(`docker container inspect -f {{.State.Status}} ${containerName} 2>/dev/null`, { stdio: 'pipe', timeout: 3000 }).toString().trim();
+        if (status !== 'running') {
+          resolve(true);
+        } else if (Date.now() - start < timeout) {
+          setTimeout(check, 300);
+        } else {
+          resolve(false);
+        }
+      } catch {
+        resolve(true);
+      }
+    };
+    check();
+  });
+}
+
 function waitForPortBound(port, timeout = 5000) {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -384,8 +439,9 @@ async function fetchProxyApi(proxyName, endpoint, method = 'GET', body = null) {
   if (!config) return null;
 
   try {
+    const host = IS_DOCKER ? DOCKER_SERVICE_NAMES[proxyName] || proxyName : '127.0.0.1';
     const axiosConfig = {
-      baseURL: `http://127.0.0.1:${config.port}`,
+      baseURL: `http://${host}:${config.port}`,
       url: endpoint,
       method: method.toLowerCase(),
       timeout: 8000,
@@ -405,10 +461,6 @@ const ALLOWED_CWD_PREFIXES = [
   path.join(__dirname, '..'),
 ];
 
-/**
- * Validate that a candidate path is safely within an allowed directory.
- * Prevents path traversal attacks.
- */
 /**
  * Validate that a candidate path is safely within an allowed directory.
  * Prevents path traversal attacks.
@@ -517,10 +569,31 @@ function spawnProxy(name) {
 
 /**
  * Stop a proxy: SIGTERM → wait → SIGKILL. Resets crash recovery state.
+ * In Docker, uses docker compose stop.
  */
 async function stopProxy(name) {
   const config = PROXY_CONFIGS[name];
   if (!config) return false;
+
+  if (IS_DOCKER) {
+    try {
+      const containerName = DOCKER_CONTAINER_NAMES[name];
+      if (containerName) {
+        const { execSync } = require('child_process');
+        execSync(`docker stop ${containerName} 2>/dev/null`, { stdio: 'pipe', timeout: 30000 });
+        // Verify the container actually stopped
+        const stopped = await waitForDockerStop(containerName, 8000);
+        if (stopped) {
+          proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
+          saveCrashRecoveryState();
+        }
+        return stopped;
+      }
+    } catch (e) {
+      appendLog('error', name, `Docker stop failed: ${e.message}`);
+    }
+    return false;
+  }
 
   // Collect the set of PIDs we are authorized to kill for this proxy
   const allowedPids = new Set();
@@ -538,11 +611,10 @@ async function stopProxy(name) {
     const { execSync } = require('child_process');
     for (const pid of allowedPids) {
       try {
-        // Get child PIDs recursively (parent -> children -> grandchildren ...)
         let children = [];
         let pending = [pid];
         while (pending.length > 0) {
-          const childCmd = `ps -o pid= --ppid ${pending.join(' ')}`;
+          const childCmd = `/bin/ps -o pid= --ppid ${pending.join(' ')}`;
           const output = execSync(childCmd, { stdio: 'pipe' }).toString().trim();
           children = children.concat(output.split('\n').map(l => l.trim()).filter(Boolean));
           pending = children.slice(children.length - pending.length);
@@ -566,7 +638,6 @@ async function stopProxy(name) {
   // Wait for port to free
   const freed = await waitForPortFree(config.port, 5000);
   if (!freed) {
-    // Force kill only trusted PIDs
     try {
       const { execSync } = require('child_process');
       const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
@@ -668,13 +739,23 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
     return res.json({ success: true, message: `${config.name} is already running`, running: true });
   }
 
-  // Reset crash recovery state on manual start
   proxyCrashRecovery[name] = { restartCount: 0, lastRestartTime: 0, consecutiveFailures: 0 };
   saveCrashRecoveryState();
 
   appendLog('info', name, `Starting proxy via manager`);
 
   try {
+    if (IS_DOCKER) {
+      const containerName = DOCKER_CONTAINER_NAMES[name];
+      if (!containerName) {
+        return res.status(500).json({ success: false, error: `Unknown service: ${name}` });
+      }
+      const { execSync } = require('child_process');
+      execSync(`docker start ${containerName} 2>/dev/null`, { stdio: 'pipe', timeout: 30000 });
+      appendLog('info', name, `Started successfully`);
+      return res.json({ success: true, message: `${config.name} started`, running: true });
+    }
+
     spawnProxy(name);
 
     const bound = await waitForPortBound(config.port, 5000);
@@ -730,6 +811,16 @@ app.post('/api/restart/:name', requireAuth, async (req, res) => {
   appendLog('info', name, `Restarting proxy via manager`);
 
   try {
+    if (IS_DOCKER) {
+      const containerName = DOCKER_CONTAINER_NAMES[name];
+      if (containerName) {
+        const { execSync } = require('child_process');
+        execSync(`docker restart ${containerName} 2>/dev/null`, { stdio: 'pipe', timeout: 30000 });
+        appendLog('info', name, `Restarted successfully`);
+        return res.json({ success: true, message: `${config.name} restarted`, running: true });
+      }
+    }
+
     // Stop
     await stopProxy(name);
 
@@ -753,7 +844,7 @@ app.post('/api/restart/:name', requireAuth, async (req, res) => {
 });
 
 // ==================== 日志 API ====================
-app.get('/api/logs', (req, res) => {
+app.get('/api/logs', requireAuth, (req, res) => {
   try {
     const { limit = 200 } = req.query;
     if (!fs.existsSync(LOG_FILE)) {
@@ -768,7 +859,7 @@ app.get('/api/logs', (req, res) => {
   }
 });
 
-app.get('/api/logs/raw', (_req, res) => {
+app.get('/api/logs/raw', requireAuth, (_req, res) => {
   try {
     if (!fs.existsSync(LOG_FILE)) {
       return res.send('');
@@ -807,8 +898,9 @@ async function forwardProxy(req, res) {
   const startTime = Date.now();
 
   try {
+    const host = IS_DOCKER ? DOCKER_SERVICE_NAMES[proxyName] || proxyName : '127.0.0.1';
     const axiosConfig = {
-      baseURL: `http://127.0.0.1:${config.port}`,
+      baseURL: `http://${host}:${config.port}`,
       url: rest,
       method,
       timeout: 15000,
@@ -818,6 +910,12 @@ async function forwardProxy(req, res) {
         'Content-Type': 'application/json',
       },
     };
+
+    // Pass auth token to proxy if configured
+    const proxyAuthToken = process.env.PROXY_AUTH_TOKEN;
+    if (proxyAuthToken) {
+      axiosConfig.headers['x-proxy-auth'] = proxyAuthToken;
+    }
     if (['post', 'put', 'patch'].includes(method) && req.body) {
       axiosConfig.data = req.body;
     }
@@ -904,7 +1002,8 @@ app.post('/api/auth/login', lockoutLimiter, authLimiter, async function(req, res
       console.log('[Auth] Password set successfully');
       return res.json({ success: true, token: generateToken(password), setup: true });
     } catch (e) {
-      return res.status(500).json({ success: false, error: 'Internal server error' });
+      console.error('[Auth] Failed to set password:', e.message);
+      return res.status(500).json({ success: false, error: 'Failed to save password, check file permissions' });
     }
   }
 
@@ -933,15 +1032,19 @@ app.get('/api/auth/status', (_req, res) => {
 // Forward proxy whitelist - only allow known endpoints
 const FORWARD_ENDPOINTS = {
   codex: {
-    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection'],
-    POST: ['/v1/chat/completions', '/api/set-routing-mode', '/api/switch-model', '/api/clear-history'],
+    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection'],
+    POST: ['/v1/chat/completions', '/api/set-routing-mode', '/api/switch-model', '/api/clear-history', '/api/providers'],
+    PUT: ['/api/providers/:id'],
+    DELETE: ['/api/providers/:id'],
   },
   hermes: {
-    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection'],
-    POST: ['/v1/chat/completions', '/api/set-routing-mode', '/api/switch-model', '/api/clear-history'],
+    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection'],
+    POST: ['/v1/chat/completions', '/api/set-routing-mode', '/api/switch-model', '/api/clear-history', '/api/providers'],
+    PUT: ['/api/providers/:id'],
+    DELETE: ['/api/providers/:id'],
   },
   cursor: {
-    GET: ['/v1/models', '/health', '/v1/chat/completions', '/admin-api/providers', '/admin-api/models', '/admin-api/routes', '/admin-api/logs', '/admin-api/health', '/admin-api/settings'],
+    GET: ['/v1/models', '/health', '/v1/chat/completions', '/admin-api/providers', '/admin-api/models', '/admin-api/routes', '/admin-api/logs', '/admin-api/health', '/admin-api/settings', '/admin-api/balances'],
     POST: ['/v1/chat/completions', '/admin-api/providers', '/admin-api/models', '/admin-api/routes', '/admin-api/settings'],
     PUT: ['/admin-api/providers/:id', '/admin-api/settings'],
     DELETE: ['/admin-api/providers/:id', '/admin-api/models/:id'],
@@ -951,7 +1054,7 @@ const FORWARD_ENDPOINTS = {
 function isAllowedEndpoint(proxy, method, path) {
   const config = FORWARD_ENDPOINTS[proxy];
   if (!config) return false;
-  const allowed = config[method.toUpperCase()] || config[(method.toUpperCase())];
+  const allowed = config[method.toUpperCase()];
   if (!allowed) return false;
   // Match wildcard params like :id
   for (const pattern of allowed) {
@@ -985,28 +1088,57 @@ function isAllowedEndpoint(proxy, method, path) {
   return false;
 }
 
-app.all('/api/:proxy/*', (req, res, next) => {
-  const method = req.method.toUpperCase();
-  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-    return requireAuth(req, res, next);
+// ==================== 连通性测试 (MUST be before proxy wildcard) ====================
+app.post('/api/test-connection', requireAuth, async (req, res) => {
+  var { baseUrl, apiKey, model: providerId } = req.body;
+  if (!baseUrl || !providerId) {
+    return res.status(400).json({ success: false, error: 'Missing baseUrl or provider type' });
   }
-  next();
-}, (req, res, next) => {
-  const proxy = req.params.proxy;
-  const path = '/' + req.params[0];
-  const method = req.method;
+  baseUrl = (baseUrl || '').replace(/\/$/, '');
+  // For OpenAI-compatible providers, strip /v1 from baseUrl if present
+  const baseApiUrl = baseUrl.replace(/\/v1\/?$/, '');
+  try {
+    var providerLower = providerId.toLowerCase();
+    var testUrl, testMethod, testHeaders;
 
-  if (isAllowedEndpoint(proxy, method, path)) {
-    forwardProxy(req, res);
-  } else {
-    console.log(`[WHITELIST] Blocked ${method} ${proxy}/${path}`);
-    res.status(404).json({ success: false, error: 'Not found' });
+    if (providerLower === 'anthropic') {
+      testUrl = baseApiUrl + '/v1/messages';
+      testMethod = 'post';
+      testHeaders = { 'Content-Type': 'application/json', 'x-api-key': apiKey || '', 'anthropic-version': '2023-06-01' };
+      var postData = { model: 'claude-sonnet-4-20250514', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] };
+    } else if (providerLower === 'google' || providerLower === 'google-gemini') {
+      testUrl = baseApiUrl + '/v1/models?key=' + (apiKey || '');
+      testMethod = 'get';
+      testHeaders = { 'Content-Type': 'application/json' };
+    } else if (providerLower === 'ollama') {
+      testUrl = baseApiUrl + '/api/tags';
+      testMethod = 'get';
+      testHeaders = { 'Content-Type': 'application/json' };
+    } else {
+      // OpenAI, Azure, and OpenAI-compatible
+      testUrl = baseApiUrl + '/v1/models';
+      testMethod = 'get';
+      testHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (apiKey || '') };
+    }
+
+    var axiosConfig = {
+      url: testUrl,
+      method: testMethod,
+      headers: testHeaders,
+      timeout: 10000,
+    };
+    if (testMethod === 'post') {
+      axiosConfig.data = postData || {};
+    }
+
+    var resp = await axios(axiosConfig);
+    res.json({ success: true, message: '连通成功' });
+  } catch (err) {
+    res.status(502).json({ success: false, error: '连接失败: ' + err.message });
   }
 });
 
-
-
-// ==================== 模型列表获取 ====================
+// ==================== 模型列表获取 (MUST be before proxy wildcard) ====================
 
 /** Normalize raw provider response to canonical {id, name, displayName} */
 function normalizeModels(rawModels, format) {
@@ -1041,6 +1173,8 @@ app.post('/api/fetch-models', requireAuth, async (req, res) => {
   var providerId = (req.body.providerId || '').toLowerCase();
   var apiKey = req.body.apiKey || '';
   var baseUrl = (req.body.baseUrl || '').replace(/\/$/, '');
+  // Strip /v1 suffix if present to avoid double /v1 in constructed URLs
+  baseUrl = baseUrl.replace(/\/v1$/, '');
 
   if (!apiKey) {
     return res.status(400).json({ success: false, error: 'API Key 不能为空' });
@@ -1048,7 +1182,7 @@ app.post('/api/fetch-models', requireAuth, async (req, res) => {
 
   var url, headers, format;
 
-  if (providerId === 'openai-compatible' || providerId === 'openai' || providerId === 'azure') {
+  if (providerId === 'openai-compatible' || providerId === 'openai' || providerId === 'azure' || providerId === 'deepseek') {
     url = baseUrl + '/v1/models';
     headers = { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' };
     format = 'openai';
@@ -1090,6 +1224,70 @@ app.post('/api/fetch-models', requireAuth, async (req, res) => {
     res.status(502).json({ success: false, error: '无法连接到供应商 API，请检查地址和密钥' });
   }
 });
+
+// Proxy-specific API paths
+const PROXY_API_PATHS = {
+  codex: '/api',
+  hermes: '/api',
+  cursor: '/admin-api',
+};
+
+// ==================== 余额查询 (MUST be before proxy wildcard) ====================
+app.get('/api/balances', requireAuth, async (req, res) => {
+  const proxyName = req.query.proxy || 'codex';
+  const config = PROXY_CONFIGS[proxyName];
+  if (!config) {
+    return res.status(404).json({ success: false, error: 'Unknown proxy' });
+  }
+  const path = PROXY_API_PATHS[proxyName] + '/balances';
+  const data = await fetchProxyApi(proxyName, path, 'GET');
+  if (data) {
+    // Normalize: convert { balances: { name: value } } to array format the frontend expects
+    if (data.balances && typeof data.balances === 'object') {
+      const arr = Object.entries(data.balances).map(([name, amount]) => {
+        const numAmount = typeof amount === 'number' ? amount : parseFloat(amount);
+        return {
+          name,
+          amount: isNaN(numAmount) ? (typeof amount === 'string' ? amount : 0) : numAmount,
+          currency: 'USD',
+        };
+      });
+      return res.json(arr);
+    }
+    res.json(data);
+  } else {
+    res.json([]);
+  }
+});
+
+// ==================== Provider enable API (MUST be before proxy wildcard) ====================
+app.put('/api/providers/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const proxyName = req.body._proxy;
+  const data = await fetchProxyApi(proxyName, '/api/providers/' + id, 'PUT', req.body);
+  if (data) {
+    res.json(data);
+  } else {
+    res.status(502).json({ success: false, error: 'Provider service unreachable' });
+  }
+});
+
+// Forward proxy wildcard — catches all /api/{proxy_name}/{rest} paths
+// Registered AFTER all /api/fetch-models, /api/balances, /api/test-connection
+app.all('/api/:proxy/*', requireAuth, (req, res, next) => {
+  const proxy = req.params.proxy;
+  const path = '/' + req.params[0];
+  const method = req.method;
+
+  if (isAllowedEndpoint(proxy, method, path)) {
+    forwardProxy(req, res);
+  } else {
+    console.log(`[WHITELIST] Blocked ${method} ${proxy}/${path}`);
+    res.status(404).json({ success: false, error: 'Not found' });
+  }
+});
+
+
 
 // ==================== 开机自启管理 ====================
 const LAUNCHD_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.multi-proxy-manager.plist');

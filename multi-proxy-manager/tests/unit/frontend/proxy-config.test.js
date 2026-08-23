@@ -384,10 +384,10 @@ describe('Proxy Config Page', () => {
       expect(html).toContain('id="routingModeSelect"');
     });
 
-    it('should have failover, round-robin, weighted options', () => {
+    it('should have failover and round-robin options (weighted removed)', () => {
       expect(html).toContain('failover');
       expect(html).toContain('round-robin');
-      expect(html).toContain('weighted');
+      expect(html).not.toContain('>weighted<');
     });
 
     it('should have changeRoutingMode function', () => {

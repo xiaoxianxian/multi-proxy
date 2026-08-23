@@ -14,9 +14,19 @@ console.log = (...args) => {
 
 const PORT = parseInt(process.env.PORT) || 18790;
 const HOME = process.env.HOME || path.join(require('os').homedir());
+const AUTH_TOKEN = process.env.PROXY_AUTH_TOKEN || '';
+
+// ===== Auth Middleware =====
+function requireAuth(req, res, next) {
+  if (!AUTH_TOKEN) return next(); // Auth disabled if no token set
+  const headerToken = req.headers['x-proxy-auth'];
+  if (headerToken === AUTH_TOKEN) return next();
+  return res.status(401).json({ success: false, error: 'Unauthorized' });
+}
 
 // ===== Config file detection =====
-const ROUTING_MODE_FILE = path.join(HOME, '.codex-proxy', 'routing-mode.json');
+const DATA_DIR = path.join(HOME, '.multi-proxy-manager');
+const ROUTING_MODE_FILE = path.join(DATA_DIR, 'routing-mode.json');
 
 let CONFIG_TOML = findConfigToml();
 let lastConfigModel = '';
@@ -127,8 +137,7 @@ function loadRoutingMode() {
 
 function updateRoutingMode(mode) {
   try {
-    const dir = path.dirname(ROUTING_MODE_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     const data = JSON.stringify({ mode }, null, 2);
     const tmpFile = ROUTING_MODE_FILE + '.tmp';
     fs.writeFileSync(tmpFile, data, 'utf-8');
@@ -176,10 +185,38 @@ function findProvider(modelName) {
   return null;
 }
 
+// ===== In-memory provider store =====
+const PROVIDERS_FILE = path.join(DATA_DIR, 'providers.json');
+
+function loadProviders() {
+  try {
+    if (fs.existsSync(PROVIDERS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(PROVIDERS_FILE, 'utf8'));
+      return Array.isArray(data) ? data : [];
+    }
+  } catch {}
+  return [];
+}
+
+function saveProviders(providers) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(PROVIDERS_FILE, JSON.stringify(providers, null, 2), 'utf8');
+  } catch (e) {
+    console.error(`[PROVIDERS] Failed to save: ${e.message}`);
+  }
+}
+
+let providers = loadProviders();
+
+function generateId() {
+  return 'prov_' + Date.now().toString(36).padStart(9, '0') + '_' + Math.random().toString(36).substring(2, 8);
+}
+
 // ===== API Routes =====
 
 // Models list
-app.get('/v1/models', (req, res) => {
+app.get('/v1/models', requireAuth, (req, res) => {
   const models = UPSTREAM_MODELS.flatMap(p =>
     p.availableModels.map(name => ({
       id: name, object: 'model', created: Math.floor(Date.now() / 1000), owned_by: p.name
@@ -189,7 +226,7 @@ app.get('/v1/models', (req, res) => {
 });
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', requireAuth, (req, res) => {
   res.json({
     status: 'healthy',
     uptime: process.uptime(),
@@ -198,19 +235,19 @@ app.get('/health', (req, res) => {
 });
 
 // Admin API routes
-app.get('/api/config', (req, res) => {
+app.get('/api/config', requireAuth, (req, res) => {
   const configTomlPath = findConfigToml();
   const config = parseConfigToml(configTomlPath);
   config.path = configTomlPath;
   res.json(config);
 });
 
-app.get('/api/routing-mode', (req, res) => {
+app.get('/api/routing-mode', requireAuth, (req, res) => {
   loadRoutingMode();
   res.json({ mode: routingMode });
 });
 
-app.post('/api/set-routing-mode', (req, res) => {
+app.post('/api/set-routing-mode', requireAuth, (req, res) => {
   const { mode } = req.body;
   if (!['codex', 'config', 'both'].includes(mode)) {
     return res.status(400).json({ success: false, error: 'Invalid mode', code: 'INVALID_MODE' });
@@ -228,7 +265,7 @@ app.post('/api/set-routing-mode', (req, res) => {
   }
 });
 
-app.get('/api/providers/status', (req, res) => {
+app.get('/api/providers/status', requireAuth, (req, res) => {
   const providers = UPSTREAM_MODELS.map(p => ({
     name: p.name,
     baseUrl: p.baseUrl,
@@ -238,42 +275,15 @@ app.get('/api/providers/status', (req, res) => {
   res.json({ providers });
 });
 
-app.get('/api/balances', async (req, res) => {
-  const balances = {};
-  for (const provider of UPSTREAM_MODELS) {
-    if (!provider.apiKey) { balances[provider.name] = '未配置'; continue; }
-    try {
-      let url;
-      if (provider.name === 'DeepSeek') url = `${provider.baseUrl}/user/info`;
-      else if (provider.name === 'Kimi') url = `${provider.baseUrl}/user/info`;
-      else if (provider.name === 'Agnes') url = `${provider.baseUrl}/user/balance`;
-      else { balances[provider.name] = '不支持'; continue; }
-
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${provider.apiKey}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        balances[provider.name] = data.balance || data.amount || '未知';
-      } else {
-        balances[provider.name] = '查询失败';
-      }
-    } catch (e) {
-      balances[provider.name] = '错误';
-    }
-  }
-  res.json({ balances });
-});
-
 // Switch history (in-memory)
 const switchHistory = [];
 const MAX_HISTORY = 50;
 
-app.get('/api/history', (req, res) => {
+app.get('/api/history', requireAuth, (req, res) => {
   res.json({ history: switchHistory.slice(0, 20).reverse() });
 });
 
-app.post('/api/switch-model', (req, res) => {
+app.post('/api/switch-model', requireAuth, (req, res) => {
   const { model } = req.body;
   if (!model) {
     return res.status(400).json({ success: false, error: '缺少 model 参数', code: 'MISSING_MODEL' });
@@ -310,7 +320,7 @@ app.post('/api/switch-model', (req, res) => {
   }
 });
 
-app.post('/api/test-connection', async (req, res) => {
+app.post('/api/test-connection', requireAuth, async (req, res) => {
   const { model } = req.body;
   if (!model) {
     return res.status(400).json({ success: false, error: '缺少 model 参数', code: 'MISSING_MODEL' });
@@ -333,7 +343,127 @@ app.post('/api/test-connection', async (req, res) => {
   }
 });
 
-app.post('/api/clear-history', (req, res) => {
+// ===== Provider CRUD =====
+
+// GET /api/providers — list all providers
+app.get('/api/providers', requireAuth, (req, res) => {
+  const safe = providers.map(p => ({
+    ...p,
+    api_key: p.api_key ? p.api_key.substring(0, 4) + '****' : ''
+  }));
+  res.json({ providers: safe });
+});
+
+// POST /api/providers — create a new provider
+app.post('/api/providers', requireAuth, (req, res) => {
+  const { name, provider_id, api_key, base_url, enabled } = req.body;
+  if (!name || !provider_id || !api_key || !base_url) {
+    return res.status(400).json({ success: false, error: 'Missing required fields: name, provider_id, api_key, base_url' });
+  }
+  if (providers.find(p => p.provider_id === provider_id)) {
+    return res.status(409).json({ success: false, error: 'Provider ID already exists' });
+  }
+  const provider = {
+    id: generateId(),
+    name,
+    provider_id,
+    api_key,
+    base_url,
+    enabled: enabled !== false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  providers.push(provider);
+  saveProviders(providers);
+  res.json({ success: true, provider });
+});
+
+// PUT /api/providers/:id — update a provider
+app.put('/api/providers/:id', requireAuth, (req, res) => {
+  const idx = providers.findIndex(p => p.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Provider not found' });
+  }
+  const allowedFields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled'];
+  const updates = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+  updates.updated_at = new Date().toISOString();
+  providers[idx] = { ...providers[idx], ...updates };
+  saveProviders(providers);
+  res.json({ success: true, provider: providers[idx] });
+});
+
+// DELETE /api/providers/:id — delete a provider
+app.delete('/api/providers/:id', requireAuth, (req, res) => {
+  const idx = providers.findIndex(p => p.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Provider not found' });
+  }
+  providers.splice(idx, 1);
+  saveProviders(providers);
+  res.json({ success: true });
+});
+
+// ===== Balance Query =====
+
+// Known balance API endpoints per provider type
+const BALANCE_ENDPOINTS = {
+  deepseek: ['https://api.deepseek.com/user/info', 'GET'],
+  moonshot: ['https://api.moonshot.cn/user/info', 'GET'],
+  agnes: ['https://apihub.agnes-ai.com/user/balance', 'GET'],
+  openai: ['https://api.openai.com/dashboard/billing/credit_grants', 'GET'],
+  anthropic: null,
+  ollama: null,
+};
+
+function detectProviderType(providerId) {
+  const lower = providerId.toLowerCase();
+  if (lower.includes('deepseek')) return 'deepseek';
+  if (lower.includes('moonshot') || lower.includes('kimi')) return 'moonshot';
+  if (lower.includes('agnes') || lower.includes('agnes-ai')) return 'agnes';
+  if (lower.includes('openai')) return 'openai';
+  if (lower.includes('anthropic')) return 'anthropic';
+  if (lower.includes('ollama')) return 'ollama';
+  return 'generic';
+}
+
+// GET /api/balances — query balances for all providers
+app.get('/api/balances', requireAuth, async (req, res) => {
+  const balances = {};
+  for (const provider of providers) {
+    if (!provider.enabled || !provider.api_key) {
+      balances[provider.name] = '未启用';
+      continue;
+    }
+    const type = detectProviderType(provider.provider_id);
+    const endpoint = BALANCE_ENDPOINTS[type];
+    if (!endpoint) {
+      balances[provider.name] = '不支持';
+      continue;
+    }
+    try {
+      const [url, method] = endpoint;
+      const response = await fetch(url, {
+        method,
+        headers: { 'Authorization': `Bearer ${provider.api_key}` },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        balances[provider.name] = data.balance || data.amount || data.totalAmount || data.total_available || '未知';
+      } else {
+        balances[provider.name] = `查询失败 (HTTP ${response.status})`;
+      }
+    } catch (e) {
+      balances[provider.name] = `错误: ${e.message}`;
+    }
+  }
+  res.json({ balances });
+});
+
+app.post('/api/clear-history', requireAuth, (req, res) => {
   switchHistory.length = 0;
   res.json({ success: true });
 });
@@ -344,7 +474,7 @@ function addHistory(action, from, to, mode, success) {
 }
 
 // Chat Completions passthrough
-app.post('/v1/chat/completions', async (req, res) => {
+app.post('/v1/chat/completions', requireAuth, async (req, res) => {
   try {
     const { model } = req.body;
     const provider = findProvider(model);

@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
-  <link rel="stylesheet" href="../colors_and_type.css">
-  <link rel="stylesheet" href="../shared-styles.css">
+  <link rel="stylesheet" href="./colors_and_type.css">
+  <link rel="stylesheet" href="./shared-styles.css">
 </head>
 <style>
 /* ============================================
@@ -177,6 +177,7 @@ body {
 .main {
   flex: 1;
   overflow-y: auto;
+  max-height: 100vh;
   padding: var(--main-padding);
   min-width: 0;
 }
@@ -417,7 +418,7 @@ body {
 .version-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 10px 14px;
   background: var(--color-bg-secondary);
   border-radius: var(--radius-sm);
@@ -699,6 +700,7 @@ body {
 </aside>
 
 <!-- Main Content -->
+<div class="loading-bar" id="loadingBar"></div>
 <main class="main" id="mainContent">
   <!-- Offline Banner -->
   <div class="offline-banner hidden" id="offlineBanner">
@@ -931,6 +933,16 @@ body {
     return d.innerHTML;
   }
 
+  // ===== Loading Bar (P1-4) =====
+  function showLoading() {
+    var bar = document.getElementById('loadingBar');
+    if (bar) bar.classList.add('active');
+  }
+  function hideLoading() {
+    var bar = document.getElementById('loadingBar');
+    if (bar) bar.classList.remove('active');
+  }
+
   // ===== Mock Data =====
   function getMockStatus() {
     return {
@@ -1155,7 +1167,7 @@ body {
     var status = proxyStatus[name];
     var action = status && status.running ? 'stop' : 'start';
 
-    fetch('/api/' + action + '/' + name, { method: 'POST' })
+    fetch('/api/' + action + '/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' } })
       .then(function(res) { return res.json(); })
       .then(function(data) {
         if (data.success) {
@@ -1164,23 +1176,21 @@ body {
           proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
           updateDashboardDisplay(versionCache);
         } else {
-          proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
-          showToast('模拟模式: ' + name + ' 已' + (action === 'start' ? '启动' : '停止'), 'info', 2000);
-          updateDashboardDisplay(versionCache);
+          showToast((action === 'start' ? '启动' : '停止') + '失败: ' + (data.error || '未知错误'), 'error');
+          btn.innerHTML = originalContent;
+          btn.disabled = false;
         }
       })
-      .catch(function() {
-        proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: !(proxyStatus[name] ? proxyStatus[name].running : false) });
-        showToast('演示模式: ' + name + ' 状态已切换', 'info', 2000);
-        updateDashboardDisplay(versionCache);
-      })
-      .finally(function() {
+      .catch(function(err) {
+        showToast((action === 'start' ? '启动' : '停止') + '失败: ' + err.message, 'error');
+        btn.innerHTML = originalContent;
         btn.disabled = false;
       });
   };
 
   // ===== Data Loading =====
   function loadStatus() {
+    showLoading();
     fetch('/api/status')
       .then(function(res) {
         if (!res.ok) throw new Error('API not available');
@@ -1198,10 +1208,12 @@ body {
           updateDashboardDisplay(versionCache);
           showOfflineBanner();
         }
-      });
+      })
+      .finally(hideLoading);
   }
 
   function loadVersion() {
+    showLoading();
     fetch('/api/version')
       .then(function(res) {
         if (!res.ok) throw new Error('API not available');
@@ -1216,7 +1228,8 @@ body {
       .catch(function() {
         updateVersionDisplay(getMockVersion());
         showOfflineBanner();
-      });
+      })
+      .finally(hideLoading);
   }
 
   // ===== Offline Banner =====
@@ -1362,6 +1375,16 @@ body {
     window.__statusInterval = setInterval(loadStatus, val * 1000);
     toggle.checked = true;
   }
+
+  // ===== Cross-tab status sync via BroadcastChannel =====
+  try {
+    window.__statusChannel = new BroadcastChannel('proxy-status');
+    window.__statusChannel.onmessage = function(e) {
+      if (e.data && e.data.type === 'proxy-status-changed') {
+        loadStatus();
+      }
+    };
+  } catch {}
 
   // ===== Dynamic Proxy Nav =====
   function renderDynamicProxyNav(proxyNames) {

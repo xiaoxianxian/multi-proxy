@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+RUN apk add --no-cache lsof docker-cli
+
+WORKDIR /app
+
+COPY multi-proxy-manager/package.json multi-proxy-manager/package-lock.json* ./
+RUN npm install --production
+
+COPY multi-proxy-manager/ .
+
+ENV PORT=18792
+
+EXPOSE 18792
+
+CMD ["node", "server.js"]

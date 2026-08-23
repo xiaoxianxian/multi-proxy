@@ -73,7 +73,7 @@ bash install.sh --autostop    # 禁用开机自启
 
 ### 代理配置页 (Proxy Config)
 
-- **供应商管理** — 增删改查供应商配置（目前仅 Cursor 代理支持完整 CRUD，Codex/Hermes 为只读展示）
+- **供应商管理** — 增删改查供应商配置（Codex、Hermes、Cursor 三个代理均支持完整 CRUD）
 - **模型切换** — 为每个代理选择当前使用的模型
 - **余额查询** — 查询 DeepSeek、Moonshot、Agnes AI 等供应商的账户余额
 - **切换历史** — 记录模型切换操作的历史日志
@@ -130,6 +130,81 @@ bash install.sh --autostop    # 禁用开机自启
 - **CORS 策略** — 限制跨域访问来源
 - **错误信息脱敏** — 生产环境不暴露堆栈和内部细节
 - **密钥加密** — Cursor 代理使用 AES-256-GCM 加密存储 API Key
+
+## 模型代理切换工具（agent-proxy-switch）
+
+当 proxy-rebuild 正在修 bug、暂时用不了时，你可能想让某个 agent 退回其它方式；
+反之 proxy-rebuild 修好后想切回来。为避免「两套代理同时拥有同一个 agent 的
+base_url 而打架」，项目提供统一切换器 `tools/agent-proxy-switch`。
+
+### 设计铁律
+1. **单一所有者**：每个 agent 同一时刻的 `base_url` 只能指向一个代理。这由
+   配置文件结构天然保证（base_url 只能有一个值），无需额外加锁。
+2. **绝不污染全局环境**：切换器只改各 agent 自己的配置文件，绝不使用
+   `launchctl setenv NO_PROXY/no_proxy`。历史上往 launchd 注入含裸 `*` 的
+   NO_PROXY 曾导致所有走系统代理的 GUI 应用直连被墙 IP 而超时（详见
+   下方「已知问题 #1」）。**任何代码都禁止写裸 `*`**。
+3. **不误伤其它 agent / 不管理进程**：切 codex 只动 codex 配置，切 hermes 只动
+   hermes 配置；启停代理由 install.sh / manage.sh 负责。
+4. **不死链**：切到某代理前先确认其端口在监听，否则拒绝写入。
+
+### 各 agent 的可选所有者
+| agent  | proxy-rebuild 端口 | 另一候选 | 配置位置 | 切换方式 |
+|--------|-------------------|----------|----------|----------|
+| codex  | 18790             | cc-switch (15721) | `~/.codex/config.toml` 的 `[model_providers.custom]` | 全自动 |
+| hermes | 18793             | direct（直连 agnes 真实地址） | `~/.hermes/config.yaml` 的 `model.base_url` + `providers.custom.base_url` | 全自动 |
+| cursor | 18794             | direct（清空 Cursor 自带 base） | Cursor GUI（Settings → Models） | 半自动（打印步骤） |
+
+> 说明：CC Switch 实际只代理 Claude（codex 是你手动 pin 到 15721 的），
+> 不支持 hermes/cursor，所以 hermes/cursor 的另一候选是「直连真实服务商」。
+
+### 用法
+```bash
+bash tools/agent-proxy-switch                  # 状态总览（全部 agent）
+bash tools/agent-proxy-switch <agent>          # 单个 agent 状态
+bash tools/agent-proxy-switch <agent> <owner>  # 切换所有者
+
+# 例：把 codex 从 cc-switch 切到 proxy-rebuild（需 proxy-rebuild 已启动）
+bash tools/agent-proxy-switch codex proxy-rebuild
+# 例：proxy-rebuild 修 bug 时，把 hermes 退回直连
+bash tools/agent-proxy-switch hermes direct
+```
+（该脚本已软链到 `/usr/local/bin/agent-proxy-switch`，可直接敲命令名调用。）
+
+### 重要纪律
+卸载或停止「当前正在代理某个 agent 的代理工具」之前，务必先用本工具把该 agent
+切到另一个所有者，否则 agent 会指向死端口而断连。
+
+## 已知问题与待修复
+
+### #1 〔历史·已规避〕裸 `*` 污染全局 NO_PROXY（曾导致全系统代理失效）
+- **现象**：往 launchd 注入 `NO_PROXY=127.0.0.1,localhost,*`，使所有走系统代理
+  环境变量的 GUI 应用（WorkBuddy、CC Switch 的 outbound 等）把「所有域名」判定为
+  不走代理，直连被墙 IP → `ETIMEDOUT`。
+- **精确位置**：旧版 `codex-multi-model-proxy-deploy`（proxy-rebuild 前身）的
+  `install.sh` 第 195–196 行与 `README.md` 第 133–134 行含
+  `launchctl setenv no_proxy "127.0.0.1,localhost,*"`。
+- **当前状态**：`proxy-rebuild` 源码已无此写法（全仓库扫描确认），autostart plist
+  仅设 `PATH`，未塞 `NO_PROXY`。
+- **修复写法**：`*` 改为 `::1`，即 `127.0.0.1,localhost,::1`；更好的做法是只在
+  「该代理自身 plist 的 `<EnvironmentVariables>`」里设 `NO_PROXY`，绝不用
+  `launchctl setenv` 污染全局。
+- **原理**：HTTP 客户端对 `NO_PROXY` 按逗号拆项做 `hostname.endsWith(项)`；`*`
+  去前导通配符后为空串 → `endsWith('')` 恒真 → 全部绕过代理。
+
+### #2 〔当前〕`install.sh --uninstall` 卸载不完整（LaunchAgent 残留）
+- **现象**：`uninstall_launchd`（install.sh:212–219）只删除
+  `com.multi-proxy-manager.plist`，不清理早期部署遗留的 `com.codex.*` /
+  `com.xiaoxian.*` LaunchAgents。重装新版本时可能与旧 plist 冲突。
+- **修复**：卸载时扫描并移除已知 plist 名称集合（`com.multi-proxy-manager`、
+  `com.codex.*`、`com.xiaoxian.*`）；或统一成单一 LaunchAgent 命名，避免多套并存。
+
+### #3 〔设计〕缺少「单一所有者」保护 / 安全切换手段
+- **现象**：项目没有机制防止 proxy-rebuild 与 cc-switch 同时把同一 agent 的
+  `base_url` 指向自己；也没有安全的翻转手段。
+- **修复**：`tools/agent-proxy-switch` 已提供安全切换（见上节）。install.sh /
+  manage.sh 在安装或启停代理时，应**避免改动 cc-switch 已拥有的 agent 配置**
+  （如 codex 的 `config.toml`）。
 
 ## 常见问题
 

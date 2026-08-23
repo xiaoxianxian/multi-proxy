@@ -10,8 +10,14 @@
  * These tests verify the full chain without requiring real upstream APIs.
  */
 
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const app = require('../server');
+
+// Valid auth token for endpoints protected by requireAuth (P0 fix).
+const AUTH_TOKEN = jwt.sign({ authenticated: true, ts: Date.now() }, process.env.JWT_SECRET, { expiresIn: '8h' });
+const authed = (req) => req.set('x-auth-token', AUTH_TOKEN);
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -104,12 +110,12 @@ describe('E2E — Manager API Flow', () => {
 
   describe('Whitelist blocks unauthorized access', () => {
     it('blocks admin endpoints on codex', async () => {
-      const res = await request(app).get('/api/codex/admin/secret');
+      const res = await authed(request(app).get('/api/codex/admin/secret'));
       expect(res.status).toBe(404);
     });
 
     it('blocks admin endpoints on hermes', async () => {
-      const res = await request(app).get('/api/hermes/admin/secret');
+      const res = await authed(request(app).get('/api/hermes/admin/secret'));
       expect(res.status).toBe(404);
     });
 
@@ -129,7 +135,7 @@ describe('E2E — Log System', () => {
   });
 
   it('GET /api/logs returns valid JSON', async () => {
-    const res = await request(app).get('/api/logs');
+    const res = await authed(request(app).get('/api/logs'));
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('logs');
     expect(res.body).toHaveProperty('count');
@@ -137,13 +143,13 @@ describe('E2E — Log System', () => {
   });
 
   it('GET /api/logs?limit=5 returns limited results', async () => {
-    const res = await request(app).get('/api/logs?limit=5');
+    const res = await authed(request(app).get('/api/logs?limit=5'));
     expect(res.status).toBe(200);
     expect(res.body.recent).toBeLessThanOrEqual(5);
   });
 
   it('GET /api/logs/raw returns plain text', async () => {
-    const res = await request(app).get('/api/logs/raw');
+    const res = await authed(request(app).get('/api/logs/raw'));
     expect(res.status).toBe(200);
     expect(typeof res.text).toBe('string');
   });

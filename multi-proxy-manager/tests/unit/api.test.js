@@ -1,5 +1,11 @@
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const app = require('../server');
+
+// Valid auth token for endpoints protected by requireAuth (P0 fix).
+const AUTH_TOKEN = jwt.sign({ authenticated: true, ts: Date.now() }, process.env.JWT_SECRET, { expiresIn: '8h' });
+const authed = (req) => req.set('x-auth-token', AUTH_TOKEN);
 
 describe('Multi-Proxy Manager API', () => {
 
@@ -27,14 +33,14 @@ describe('Multi-Proxy Manager API', () => {
 
   describe('GET /api/logs', () => {
     it('should return logs object', async () => {
-      const res = await request(app).get('/api/logs');
+      const res = await authed(request(app).get('/api/logs'));
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('logs');
       expect(res.body).toHaveProperty('count');
     });
 
     it('should respect limit query param', async () => {
-      const res = await request(app).get('/api/logs?limit=10');
+      const res = await authed(request(app).get('/api/logs?limit=10'));
       expect(res.status).toBe(200);
       // When log file doesn't exist, recent may not be present
       // Just verify it doesn't error
@@ -44,7 +50,7 @@ describe('Multi-Proxy Manager API', () => {
 
   describe('GET /api/logs/raw', () => {
     it('should return empty or plain text', async () => {
-      const res = await request(app).get('/api/logs/raw');
+      const res = await authed(request(app).get('/api/logs/raw'));
       expect(res.status).toBe(200);
       // When log file doesn't exist, express sends '' with default text/html
       // When it exists, it sends text/plain — either is acceptable
@@ -103,13 +109,13 @@ describe('Multi-Proxy Manager API', () => {
 
   describe('Forward proxy whitelist', () => {
     it('should allow whitelisted GET endpoint', async () => {
-      const res = await request(app).get('/api/codex/v1/models');
+      const res = await authed(request(app).get('/api/codex/v1/models'));
       // Will fail to reach upstream (503) but should not be blocked by whitelist (404)
       expect(res.status).not.toBe(404);
     });
 
     it('should block non-whitelisted endpoint with 404', async () => {
-      const res = await request(app).get('/api/codex/admin/secret');
+      const res = await authed(request(app).get('/api/codex/admin/secret'));
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('Not found');
     });
@@ -122,7 +128,7 @@ describe('Multi-Proxy Manager API', () => {
     });
 
     it('should block deep path traversal with ../..', async () => {
-      const res = await request(app).get('/api/codex/v1/models/../../../etc/passwd');
+      const res = await authed(request(app).get('/api/codex/v1/models/../../../etc/passwd'));
       expect(res.status).not.toBe(401); // blocked by whitelist, not auth
     });
 

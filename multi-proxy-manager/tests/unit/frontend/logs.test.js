@@ -4,10 +4,16 @@
  * and backend log API endpoints.
  */
 
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 const fs = require('fs');
 const path = require('path');
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const app = require('../../../server');
+
+// Valid auth token for endpoints protected by requireAuth (P0 fix).
+const AUTH_TOKEN = jwt.sign({ authenticated: true, ts: Date.now() }, process.env.JWT_SECRET, { expiresIn: '8h' });
+const authed = (req) => req.set('x-auth-token', AUTH_TOKEN);
 
 const PUBLIC_DIR = path.join(__dirname, '../../../public');
 
@@ -76,7 +82,8 @@ describe('Logs Page', () => {
 
     it('should have search input', () => {
       expect(html).toContain('id="logSearch"');
-      expect(html).toContain('oninput="applyFilters()"');
+      // P1-3: debounced search — oninput goes through onSearchInput (250ms debounce)
+      expect(html).toContain('oninput="onSearchInput()"');
     });
 
     it('should have time range buttons', () => {
@@ -216,18 +223,18 @@ describe('Logs Page', () => {
     });
 
     it('should return logs via GET /api/logs', async () => {
-      const res = await request(app).get('/api/logs?limit=10');
+      const res = await authed(request(app).get('/api/logs?limit=10'));
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('count');
     });
 
     it('should support limit query parameter', async () => {
-      const res = await request(app).get('/api/logs?limit=5');
+      const res = await authed(request(app).get('/api/logs?limit=5'));
       expect(res.status).toBe(200);
     });
 
     it('should return raw logs via GET /api/logs/raw', async () => {
-      const res = await request(app).get('/api/logs/raw');
+      const res = await authed(request(app).get('/api/logs/raw'));
       expect(res.status).toBe(200);
       expect(typeof res.text).toBe('string');
     });

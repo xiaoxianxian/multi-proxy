@@ -33,8 +33,23 @@ app.config['JSON_AS_ASCII'] = False
 # Configuration
 PORT = int(os.environ.get('PORT', 18793))
 HOME = os.environ.get('HOME', str(Path.home()))
+AUTH_TOKEN = os.environ.get('PROXY_AUTH_TOKEN', '')
 CONFIG_YAML_PATH = os.path.join(HOME, '.hermes', 'config.yaml')
-ROUTING_MODE_FILE = os.path.join(HOME, '.hermes-proxy', 'routing-mode.json')
+DATA_DIR = os.path.join(HOME, '.multi-proxy-manager')
+ROUTING_MODE_FILE = os.path.join(DATA_DIR, 'routing-mode.json')
+PROVIDERS_FILE = os.path.join(DATA_DIR, 'providers.json')
+
+# ===== Auth Middleware =====
+def require_auth(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not AUTH_TOKEN:
+            return f(*args, **kwargs)  # Auth disabled if no token set
+        header_token = request.headers.get('x-proxy-auth')
+        if header_token == AUTH_TOKEN:
+            return f(*args, **kwargs)
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    return decorated_function
 
 # In-memory switch history
 switch_history = []
@@ -42,6 +57,31 @@ MAX_HISTORY = 50
 
 # Routing mode
 routing_mode = 'codex'  # 'codex' | 'config' | 'both'
+
+# ===== Provider store =====
+def load_providers():
+    try:
+        if os.path.exists(PROVIDERS_FILE):
+            with open(PROVIDERS_FILE, 'r') as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else []
+    except Exception:
+        pass
+    return []
+
+def save_providers(providers):
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(PROVIDERS_FILE, 'w') as f:
+            json.dump(providers, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save providers: {e}")
+
+providers = load_providers()
+
+def generate_id():
+    import random
+    return 'prov_' + time.strftime('%Y%m%d%H%M%S') + '_' + format(random.randint(0, 0xfffffff), '07x')
 
 
 def load_routing_mode():
@@ -62,7 +102,7 @@ def update_routing_mode(mode):
     """Update routing mode to file using atomic rename to prevent race conditions."""
     global routing_mode
     try:
-        os.makedirs(os.path.dirname(ROUTING_MODE_FILE), exist_ok=True)
+        os.makedirs(DATA_DIR, exist_ok=True)
         tmp_file = ROUTING_MODE_FILE + '.tmp'
         with open(tmp_file, 'w') as f:
             json.dump({'mode': mode}, f, indent=2)
@@ -237,6 +277,7 @@ def add_history(action, from_model, to_model, mode, success):
 # API Routes
 
 @app.route('/health', methods=['GET'])
+@require_auth
 def health_check():
     """Health check endpoint."""
     config_path = find_config_yaml()
@@ -252,6 +293,7 @@ def health_check():
 
 
 @app.route('/v1/models', methods=['GET'])
+@require_auth
 def list_models():
     """List available models."""
     config_path = find_config_yaml()
@@ -280,6 +322,7 @@ def list_models():
 
 
 @app.route('/api/config', methods=['GET'])
+@require_auth
 def get_config():
     """Get current configuration."""
     config_path = find_config_yaml()
@@ -294,6 +337,7 @@ def get_config():
 
 
 @app.route('/api/routing-mode', methods=['GET'])
+@require_auth
 def get_routing_mode():
     """Get current routing mode."""
     load_routing_mode()
@@ -301,6 +345,7 @@ def get_routing_mode():
 
 
 @app.route('/api/set-routing-mode', methods=['POST'])
+@require_auth
 def set_routing_mode():
     """Set routing mode."""
     data = request.get_json()
@@ -316,6 +361,7 @@ def set_routing_mode():
 
 
 @app.route('/api/providers/status', methods=['GET'])
+@require_auth
 def get_providers_status():
     """Get provider status."""
     config_path = find_config_yaml()
@@ -348,52 +394,8 @@ KNOWN_BALANCE_DOMAINS = {
 }
 
 
-@app.route('/api/balances', methods=['GET'])
-def get_balances():
-    """Get account balances (simplified - actual implementation depends on provider APIs)."""
-    balances = {}
-    config_path = find_config_yaml()
-    config_data = parse_config_yaml(config_path) if os.path.exists(config_path) else {}
-
-    providers = config_data.get('providers', {})
-    for name, config in providers.items():
-        if not isinstance(config, dict):
-            balances[name] = '不可查询'
-            continue
-        api_url = config.get('api', '')
-        if not api_url:
-            balances[name] = '不可查询'
-            continue
-        # Extract hostname and check against known providers
-        from urllib.parse import urlparse
-        try:
-            parsed = urlparse(api_url)
-            host = parsed.hostname or ''
-        except Exception:
-            host = ''
-        if host in KNOWN_BALANCE_DOMAINS:
-            endpoint = KNOWN_BALANCE_DOMAINS[host]
-            if endpoint is None:
-                balances[name] = '无公开余额API'
-            else:
-                method, path = endpoint
-                try:
-                    url = f"{api_url.rstrip('/')}{path}"
-                    resp = requests.get(url, timeout=5)
-                    if resp.ok:
-                        data = resp.json()
-                        balances[name] = data.get('balance', data.get('amount', data.get('totalAmount', '未知')))
-                    else:
-                        balances[name] = f'查询失败 (HTTP {resp.status_code})'
-                except Exception as e:
-                    balances[name] = f'查询失败: {str(e)}'
-        else:
-            balances[name] = '不可查询'
-
-    return jsonify({'balances': balances})
-
-
 @app.route('/api/history', methods=['GET'])
+@require_auth
 def get_history():
     """Get switch history."""
     return jsonify({
@@ -402,6 +404,7 @@ def get_history():
 
 
 @app.route('/api/switch-model', methods=['POST'])
+@require_auth
 def switch_model():
     """Switch to a different model."""
     data = request.get_json()
@@ -442,6 +445,7 @@ def switch_model():
 
 
 @app.route('/api/test-connection', methods=['POST'])
+@require_auth
 def test_connection():
     """Test connection to a model's provider."""
     data = request.get_json()
@@ -473,11 +477,147 @@ def test_connection():
 
 
 @app.route('/api/clear-history', methods=['POST'])
+@require_auth
 def clear_history():
     """Clear switch history."""
     global switch_history
     switch_history = []
     return jsonify({'success': True})
+
+
+# ===== Provider CRUD =====
+
+# GET /api/providers
+@app.route('/api/providers', methods=['GET'])
+@require_auth
+def get_providers():
+    safe = []
+    for p in providers:
+        sp = dict(p)
+        if sp.get('api_key') and len(sp['api_key']) > 4:
+            sp['api_key'] = sp['api_key'][:4] + '****'
+        safe.append(sp)
+    return jsonify({'providers': safe})
+
+
+# POST /api/providers
+@app.route('/api/providers', methods=['POST'])
+@require_auth
+def create_provider():
+    data = request.get_json() or {}
+    name = data.get('name', '')
+    provider_id = data.get('provider_id', '')
+    api_key = data.get('api_key', '')
+    base_url = data.get('base_url', '')
+    enabled = data.get('enabled', True)
+
+    if not all([name, provider_id, api_key, base_url]):
+        return jsonify({'success': False, 'error': 'Missing required fields: name, provider_id, api_key, base_url'}), 400
+
+    if any(p['provider_id'] == provider_id for p in providers):
+        return jsonify({'success': False, 'error': 'Provider ID already exists'}), 409
+
+    provider = {
+        'id': generate_id(),
+        'name': name,
+        'provider_id': provider_id,
+        'api_key': api_key,
+        'base_url': base_url,
+        'enabled': enabled,
+        'created_at': datetime.utcnow().isoformat(),
+        'updated_at': datetime.utcnow().isoformat(),
+    }
+    providers.append(provider)
+    save_providers(providers)
+    return jsonify({'success': True, 'provider': provider})
+
+
+# PUT /api/providers/<id>
+@app.route('/api/providers/<provider_id>', methods=['PUT'])
+@require_auth
+def update_provider(provider_id):
+    idx = next((i for i, p in enumerate(providers) if p['id'] == provider_id), -1)
+    if idx == -1:
+        return jsonify({'success': False, 'error': 'Provider not found'}), 404
+
+    data = request.get_json() or {}
+    allowed_fields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled']
+    for field in allowed_fields:
+        if field in data:
+            providers[idx][field] = data[field]
+
+    providers[idx]['updated_at'] = datetime.utcnow().isoformat()
+    save_providers(providers)
+    return jsonify({'success': True, 'provider': providers[idx]})
+
+
+# DELETE /api/providers/<id>
+@app.route('/api/providers/<provider_id>', methods=['DELETE'])
+@require_auth
+def delete_provider(provider_id):
+    idx = next((i for i, p in enumerate(providers) if p['id'] == provider_id), -1)
+    if idx == -1:
+        return jsonify({'success': False, 'error': 'Provider not found'}), 404
+
+    providers.pop(idx)
+    save_providers(providers)
+    return jsonify({'success': True})
+
+
+# Balance detection helpers
+BALANCE_ENDPOINTS = {
+    'deepseek': ('https://api.deepseek.com/user/info', 'GET'),
+    'moonshot': ('https://api.moonshot.cn/user/info', 'GET'),
+    'agnes': ('https://apihub.agnes-ai.com/user/balance', 'GET'),
+    'openai': ('https://api.openai.com/dashboard/billing/credit_grants', 'GET'),
+    'anthropic': None,
+    'ollama': None,
+}
+
+
+def detect_provider_type(provider_id):
+    lower = provider_id.lower()
+    for key in BALANCE_ENDPOINTS:
+        if key in lower:
+            return key
+    return 'generic'
+
+
+# Enhanced /api/balances
+@app.route('/api/balances', methods=['GET'])
+@require_auth
+def get_balances():
+    balances = {}
+    for provider in providers:
+        if not provider.get('enabled') or not provider.get('api_key'):
+            balances[provider.get('name', 'Unknown')] = '未启用'
+            continue
+
+        ptype = detect_provider_type(provider.get('provider_id', ''))
+        endpoint = BALANCE_ENDPOINTS.get(ptype)
+
+        if endpoint is None:
+            balances[provider.get('name', 'Unknown')] = '不支持'
+            continue
+
+        method, url = endpoint
+        try:
+            headers = {'Authorization': f'Bearer {provider["api_key"]}'}
+            resp = requests.request(method, url, headers=headers, timeout=10)
+            if resp.ok:
+                data = resp.json()
+                for key in ['balance', 'amount', 'totalAmount', 'total_available']:
+                    if key in data:
+                        balances[provider.get('name', 'Unknown')] = data[key]
+                        break
+                else:
+                    balances[provider.get('name', 'Unknown')] = '未知'
+            else:
+                balances[provider.get('name', 'Unknown')] = f'查询失败 (HTTP {resp.status_code})'
+        except Exception as e:
+            balances[provider.get('name', 'Unknown')] = f'错误: {str(e)}'
+
+    return jsonify({'balances': balances})
 
 
 # Main entry point

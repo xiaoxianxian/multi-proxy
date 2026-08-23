@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
-  <link rel="stylesheet" href="../colors_and_type.css">
-  <link rel="stylesheet" href="../shared-styles.css">
+  <link rel="stylesheet" href="./colors_and_type.css">
+  <link rel="stylesheet" href="./shared-styles.css">
 </head>
 <style>
 /* ============================================
@@ -540,6 +540,7 @@ body {
 </aside>
 
 <!-- Main Content -->
+<div class="loading-bar" id="loadingBar"></div>
 <main class="main" id="mainContent">
   <!-- Offline Banner -->
   <div class="offline-banner hidden" id="offlineBanner">
@@ -574,7 +575,7 @@ body {
     </div>
 
     <div class="filter-group">
-      <input type="text" id="logSearch" class="form-input" placeholder="搜索日志..." style="width:180px;" oninput="applyFilters()">
+      <input type="text" id="logSearch" class="form-input" placeholder="搜索日志..." style="width:180px;" oninput="onSearchInput()">
     </div>
 
     <span class="time-range-label" style="font-size:12px;color:var(--color-text-tertiary);font-weight:500;margin-left:4px;">最近:</span>
@@ -628,6 +629,7 @@ body {
   var currentTimeRange = 0;
   var authToken = sessionStorage.getItem('auth_token');
   var versionCache = {};
+  var searchDebounceTimer = null;
 
   // ===== Toast System (Rule 5: light backgrounds with colored borders) =====
   function showToast(message, type, duration) {
@@ -658,6 +660,16 @@ body {
     var d = document.createElement('div');
     d.textContent = str;
     return d.innerHTML;
+  }
+
+  // ===== Loading Bar (P1-4) =====
+  function showLoading() {
+    var bar = document.getElementById('loadingBar');
+    if (bar) bar.classList.add('active');
+  }
+  function hideLoading() {
+    var bar = document.getElementById('loadingBar');
+    if (bar) bar.classList.remove('active');
   }
 
   // ===== Auth Header =====
@@ -699,6 +711,12 @@ body {
       btn.classList.toggle('active', parseInt(btn.dataset.hours) === hours);
     });
     applyFilters();
+  };
+
+  // ===== Debounced Search Input =====
+  window.onSearchInput = function() {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(applyFilters, 250);
   };
 
   // ===== Fetch Logs from API =====
@@ -861,19 +879,20 @@ body {
     viewer.innerHTML = logsToRender.map(renderLogLine).join('');
     countEl.innerHTML = '共 <strong>' + totalCount + '</strong> 条，显示 <strong>' + logsToRender.length + '</strong> 条';
 
-    // Click-to-copy log lines
-    var lines = viewer.querySelectorAll('.log-line');
-    for (var i = 0; i < lines.length; i++) {
-      lines[i].addEventListener('click', (function(line) {
-        return function() {
+    // Click-to-copy log lines — use event delegation (single listener on viewer)
+    if (!viewer.hasAttribute('data-delegate-bound')) {
+      viewer.addEventListener('click', function(e) {
+        var line = e.target.closest('.log-line');
+        if (line) {
           var text = line.textContent;
           if (navigator.clipboard) {
             navigator.clipboard.writeText(text).then(function() {
               showToast('日志已复制到剪贴板', 'success', 1500);
             });
           }
-        };
-      })(lines[i]));
+        }
+      });
+      viewer.setAttribute('data-delegate-bound', '1');
     }
 
     // Auto-scroll on initial load or auto-refresh
@@ -915,6 +934,7 @@ body {
 
   // ===== Load Logs =====
   window.loadLogs = function() {
+    showLoading();
     var viewer = document.getElementById('logViewer');
     viewer.innerHTML = '<div class="loading"><span class="loading-spinner"></span> 加载中...</div>';
 
@@ -932,7 +952,7 @@ body {
       allLogs = generateMockLogs();
       showOfflineBanner();
       applyFilters();
-    });
+    }).finally(hideLoading);
   };
 
   // ===== Clear Logs =====
@@ -1134,7 +1154,7 @@ body {
 
     container.innerHTML = proxyNames.map(function(name) {
       var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' };
-      return '<a href="../proxy-manager-redesign/pages/proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
+      return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
         '<span class="nav-icon">' + config.icon + '</span>' +
         esc(config.name) +
         '</a>';

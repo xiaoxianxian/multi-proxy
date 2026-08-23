@@ -5,9 +5,498 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cursor Proxy - 配置</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
-    <link rel="stylesheet" href="../colors_and_type.css">
-    <link rel="stylesheet" href="../shared-styles.css">
+    <link rel="stylesheet" href="./colors_and_type.css">
+    <link rel="stylesheet" href="./shared-styles.css">
 </head>
+<style>
+/* ============================================
+   Proxy Config Page Specific Styles
+   ============================================ */
+
+/* Hamburger Button */
+.hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+/* Sidebar Close Button */
+.sidebar-close {
+  display: none;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+/* Proxy Header */
+.proxy-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.proxy-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.proxy-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.proxy-title-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.proxy-title-group h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.proxy-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  flex-wrap: wrap;
+}
+
+.port-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.proxy-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Tabs Container */
+.tabs-container {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.section-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  overflow-x: auto;
+}
+
+.section-tab {
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.section-tab:hover {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.section-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  background: var(--color-bg);
+  font-weight: 600;
+}
+
+.section-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.section-tab:disabled:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.tab-content {
+  display: none;
+  padding: 24px;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Cards */
+.card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-bottom: 16px;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  font-size: 13px;
+  color: var(--color-text);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.info-value.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Balance Grid */
+.balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.balance-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+
+.balance-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.balance-amount {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.balance-currency {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  margin-left: 4px;
+}
+
+/* History Table */
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.history-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table-wrapper th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.table-wrapper td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.table-wrapper tr:last-child td {
+  border-bottom: none;
+}
+
+/* Key Toggle Button */
+.key-toggle-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.key-toggle-btn:hover {
+  background: var(--color-bg);
+  border-color: var(--color-text-tertiary);
+}
+
+/* Provider Enable Toggle */
+.provider-enable-toggle {
+  /* Visually hidden but still part of label flow */
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.result-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.result-dot .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.result-dot.success {
+  color: var(--color-success);
+}
+
+.result-dot.success .dot {
+  background: var(--color-success);
+}
+
+.result-dot.fail {
+  color: var(--color-error);
+}
+
+.result-dot.fail .dot {
+  background: var(--color-error);
+}
+
+/* Select Wrapper */
+.select-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.select-wrapper .form-select {
+  padding-right: 32px;
+}
+
+/* Current Model Info */
+.current-model-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+.current-model-info .model-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.current-model-info .model-desc {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+/* Model Switcher */
+.model-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-switcher .btn {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hamburger-btn {
+    display: flex;
+  }
+
+  .sidebar-close {
+    display: block;
+  }
+
+  .proxy-header {
+    flex-direction: column;
+  }
+
+  .proxy-header-actions {
+    width: 100%;
+  }
+
+  .proxy-header-actions .btn {
+    flex: 1;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .section-tab {
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+
+  /* Icon-only action buttons */
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-icon:hover {
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+    border-color: var(--color-text-tertiary);
+  }
+
+  .btn-icon.btn-danger:hover {
+    background: var(--color-error-light);
+    color: var(--color-error);
+    border-color: var(--color-error);
+  }
+
+  /* Actions cell - center buttons vertically */
+  .actions {
+    white-space: nowrap;
+  }
+
+  .actions .btn {
+    margin-right: 8px;
+  }
+
+  .actions .btn:last-child {
+    margin-right: 0;
+  }
+
+  .tab-content {
+    padding: 16px;
+  }
+}
+</style>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
@@ -40,6 +529,7 @@
     </div>
   </aside>
 
+  <div class="loading-bar" id="loadingBar"></div>
   <main class="main">
     <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="打开侧边栏">
       <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -99,13 +589,12 @@
               <span class="info-label">当前模型</span>
               <span class="info-value">claude-sonnet-4-20250514</span>
             </div>
-            <div class="info-item">
+            <div class="info-item" id="routingModeItem" style="display:none;">
               <span class="info-label">路由模式</span>
               <div class="select-wrapper">
                 <select id="routingModeSelect" onchange="changeRoutingMode(this.value)" class="form-select">
-                  <option value="failover" selected>Failover</option>
-                  <option value="round-robin">Round Robin</option>
-                  <option value="weighted">Weighted</option>
+                  <option value="failover" selected title="故障转移，主 Provider 失败自动切换到备用">Failover</option>
+                  <option value="round-robin" title="轮询分发请求">Round Robin</option>
                 </select>
               </div>
             </div>
@@ -128,7 +617,7 @@
                   <th>名称</th>
                   <th>Provider ID</th>
                   <th>Base URL</th>
-                  <th>API Key <button class="key-toggle-btn" onclick="toggleKeyVisibility()" title="显示/隐藏密钥"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button></th>
+                  <th>API Key <button class="key-toggle-btn" id="keyToggleBtn" title="显示/隐藏密钥"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button></th>
                   <th>启用</th>
                   <th>操作</th>
                 </tr>
@@ -214,12 +703,18 @@
       { id: 'gemini-2.5-pro-preview-05-06', name: 'Gemini 2.5 Pro' },
     ];
 
-    var MOCK_BALANCES = [
-      { name: 'OpenAI', amount: 12.50, currency: 'USD' },
-      { name: 'Anthropic', amount: 8.75, currency: 'USD' },
-      { name: 'Google AI', amount: 200.00, currency: 'USD' },
-      { name: 'Azure', amount: 45.20, currency: 'USD' },
-    ];
+    var MOCK_BALANCES = [];
+
+    function getBalancesFromProviders() {
+      MOCK_BALANCES.length = 0;
+      for (var i = 0; i < providers.length; i++) {
+        MOCK_BALANCES.push({
+          name: providers[i].name,
+          amount: parseFloat((Math.random() * 100).toFixed(2)),
+          currency: 'USD',
+        });
+      }
+    }
 
     var MOCK_HISTORY = [
       { timestamp: '2026-06-27T10:30:00Z', action: '手动切换', from: 'gpt-4o', to: 'claude-sonnet-4-20250514', success: true },
@@ -248,39 +743,53 @@
     }
 
     async function fetchAdminApi(path, options = {}) {
-      const url = '/admin-api' + path;
+      const prefix = PROXY_API_PREFIX[currentProxyName] || '/api';
+      const fwdUrl = '/api/' + currentProxyName + prefix + path;
       const headers = { 'Content-Type': 'application/json' };
       const token = sessionStorage.getItem('auth_token');
       if (token) headers['x-auth-token'] = token;
 
       try {
-        const res = await fetch(url, {
+        const res = await fetch(fwdUrl, {
           headers,
           ...options,
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return await res.json();
       } catch (e) {
-        const fwdUrl = '/api/' + currentProxyName + path;
-        const res2 = await fetch(fwdUrl, {
-          headers,
-          ...options,
-        });
-        if (!res2.ok) throw new Error('HTTP ' + res2.status);
-        return await res2.json();
+        return null;
       }
     }
 
     async function loadProviders() {
+      showLoading();
       try {
+        // Preserve full API keys from current state before loading from backend
+        var fullKeys = {};
+        for (var i = 0; i < providers.length; i++) {
+          if (providers[i].api_key && !providers[i].api_key.endsWith('****')) {
+            fullKeys[providers[i].id] = providers[i].api_key;
+          }
+        }
         const data = await fetchAdminApi('/providers');
         if (data && Array.isArray(data.providers)) {
           providers = data.providers;
         } else if (data && Array.isArray(data)) {
           providers = data;
+        } else {
+          throw new Error('Invalid response');
+        }
+        // Restore full API keys from local state (backend masks them)
+        for (var i = 0; i < providers.length; i++) {
+          if (fullKeys[providers[i].id]) {
+            providers[i].api_key = fullKeys[providers[i].id];
+          }
         }
       } catch {
         providers = MOCK_PROVIDERS.slice();
+        getBalancesFromProviders();
+      } finally {
+        hideLoading();
       }
     }
 
@@ -291,9 +800,16 @@
           body: JSON.stringify({ name, provider_id: pid, base_url: url, api_key: key, enabled }),
         });
         await loadProviders();
+        renderProviders();
+        await loadBalancesData();
+        renderBalances();
+        await loadModelsData();
+        renderModels();
       } catch {
         providers.push({ id: 'prov_' + Date.now(), name, provider_id: pid, base_url: url, api_key: key, enabled });
+        getBalancesFromProviders();
         renderProviders();
+        renderBalances();
       }
     }
 
@@ -306,6 +822,11 @@
           body: JSON.stringify(body),
         });
         await loadProviders();
+        renderProviders();
+        await loadBalancesData();
+        renderBalances();
+        await loadModelsData();
+        renderModels();
       } catch {
         for (var i = 0; i < providers.length; i++) {
           if (providers[i].id === id) {
@@ -324,25 +845,66 @@
       try {
         await fetchAdminApi('/providers/' + encodeURIComponent(id), { method: 'DELETE' });
         await loadProviders();
+        renderProviders();
+        await loadBalancesData();
+        renderBalances();
+        await loadModelsData();
+        renderModels();
       } catch {
         for (var i = 0; i < providers.length; i++) {
           if (providers[i].id === id) { providers.splice(i, 1); break; }
         }
+        getBalancesFromProviders();
         renderProviders();
+        renderBalances();
+        renderModels();
       }
     }
 
     async function toggleProviderEnabledApi(id, enabled) {
+      var idx = -1;
       for (var i = 0; i < providers.length; i++) {
-        if (providers[i].id === id) { providers[i].enabled = enabled; break; }
+        if (providers[i].id === id) { idx = i; break; }
       }
+      if (idx === -1) return;
+      var prevEnabled = providers[idx].enabled;
+      providers[idx].enabled = enabled;
       renderProviders();
       try {
         await fetchAdminApi('/providers/' + encodeURIComponent(id), {
           method: 'PUT',
           body: JSON.stringify({ enabled }),
         });
-      } catch {}
+      } catch (e) {
+        providers[idx].enabled = prevEnabled;
+        renderProviders();
+      }
+    }
+
+    async function testProviderConnection(id, url, key, pid) {
+      var btn = document.querySelector('.test-provider-btn[data-id="' + esc(id) + '"]');
+      if (!btn) return;
+      var origText = btn.textContent;
+      btn.textContent = '测试中...';
+      btn.disabled = true;
+      try {
+        var res = await fetch('/api/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ model: pid, baseUrl: url, apiKey: key }),
+        });
+        var data = await res.json();
+        if (data.success) {
+          showToast('连通性测试成功: ' + id, 'success');
+        } else {
+          showToast('连通性测试失败: ' + (data.error || '未知错误'), 'error');
+        }
+      } catch (e) {
+        showToast('连通性测试失败: ' + e.message, 'error');
+      } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+      }
     }
 
     async function loadModels() {
@@ -370,9 +932,19 @@
 
     async function loadBalances() {
       try {
-        const data = await fetchAdminApi('/providers/balance');
-        if (data && Array.isArray(data.balances)) {
-          return data.balances;
+        const data = await fetchAdminApi('/balances');
+        if (data && Array.isArray(data)) {
+          return data;
+        }
+      } catch {}
+      // Fallback: manager has GET /api/balances?proxy={name} that returns normalized array
+      try {
+        const res = await fetch('/api/balances?proxy=' + currentProxyName, {
+          headers: getAuthHeaders(),
+        });
+        if (res.ok) {
+          const arr = await res.json();
+          if (Array.isArray(arr) && arr.length > 0) return arr;
         }
       } catch {}
       return null;
@@ -401,16 +973,33 @@
       cursor: { bg: '#dbeafe', color: '#2563eb', letter: 'C' },
     };
 
+    // Each proxy backend uses a different URL prefix for its admin API
+    var PROXY_API_PREFIX = {
+      codex: '/api',
+      hermes: '/api',
+      cursor: '/admin-api',
+    };
+
     var displayName;
 
     // ==================== Core Init ====================
     function init() {
+      // Cross-tab status sync via BroadcastChannel
+      try {
+        window.__statusChannel = new BroadcastChannel('proxy-status');
+        window.__statusChannel.onmessage = function(e) {
+          if (e.data && e.data.type === 'proxy-status-changed') {
+            fetchStatus();
+          }
+        };
+      } catch {}
       currentProxyName = getProxyFromUrl();
       displayName = proxyDisplayNameMap[currentProxyName] || currentProxyName;
       document.title = displayName + ' - 配置';
       updateProxyHeader(displayName);
       highlightActiveNav();
       setupDynamicTabs();
+      setupRoutingModeVisibility();
 
       var tabName = getTabFromHash();
       var tabEl = document.querySelector('.section-tab[data-tab="' + tabName + '"]');
@@ -428,23 +1017,31 @@
 
     // ==================== P4: Dynamic Tabs ====================
     function setupDynamicTabs() {
-      var isCursor = (currentProxyName === 'cursor');
+      // All proxies now support providers and balances tabs
       var providersBtn = document.getElementById('tab-providers-btn');
       var balancesBtn = document.getElementById('tab-balances-btn');
 
-      if (!isCursor) {
-        if (providersBtn) {
-          providersBtn.disabled = true;
-          providersBtn.style.color = 'var(--color-text-tertiary)';
-          providersBtn.style.cursor = 'not-allowed';
-          providersBtn.style.background = 'var(--color-bg-secondary)';
-        }
-        if (balancesBtn) {
-          balancesBtn.disabled = true;
-          balancesBtn.style.color = 'var(--color-text-tertiary)';
-          balancesBtn.style.cursor = 'not-allowed';
-          balancesBtn.style.background = 'var(--color-bg-secondary)';
-        }
+      if (providersBtn) {
+        providersBtn.disabled = false;
+        providersBtn.removeAttribute('style');
+      }
+      if (balancesBtn) {
+        balancesBtn.disabled = false;
+        balancesBtn.removeAttribute('title');
+        balancesBtn.removeAttribute('style');
+      }
+    }
+
+    function setupRoutingModeVisibility() {
+      // Routing mode is only available for Cursor proxy
+      var routingItem = document.getElementById('routingModeItem');
+      var routingSelect = document.getElementById('routingModeSelect');
+      if (currentProxyName === 'cursor') {
+        if (routingItem) routingItem.style.display = '';
+        if (routingSelect) routingSelect.disabled = false;
+      } else {
+        if (routingItem) routingItem.style.display = 'none';
+        if (routingSelect) routingSelect.disabled = true;
       }
     }
 
@@ -473,6 +1070,16 @@
         var ports = { codex: 18790, hermes: 18793, cursor: 18794 };
         portBadge.textContent = 'Port ' + (ports[currentProxyName] || 0);
       }
+      // Update config file path based on proxy type
+      var configPathEl = document.querySelector('.info-item:first-child .info-value.mono');
+      if (configPathEl) {
+        var paths = {
+          codex: '~/.codex/multi-model-config.json',
+          hermes: '~/.hermes/config.json',
+          cursor: '~/.cursor/multi-model-config.json',
+        };
+        configPathEl.textContent = paths[currentProxyName] || '~/.multi-proxy/config.json';
+      }
     }
 
     function adjustColor(hex, amount) {
@@ -484,33 +1091,54 @@
     }
 
     async function loadModelsData() {
-      var models = await loadModels();
-      if (models) {
-        MOCK_MODELS.length = 0;
-        for (var i = 0; i < models.length; i++) {
-          MOCK_MODELS.push({ id: models[i].id || models[i].model_id || models[i], name: models[i].name || models[i].display_name || models[i] });
+      showLoading();
+      try {
+        var models = await loadModels();
+        if (models) {
+          MOCK_MODELS.length = 0;
+          for (var i = 0; i < models.length; i++) {
+            MOCK_MODELS.push({ id: models[i].id || models[i].model_id || models[i], name: models[i].name || models[i].display_name || models[i] });
+          }
+          if (MOCK_MODELS.length === 0) {
+            MOCK_MODELS.push({ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' });
+          }
         }
-        if (MOCK_MODELS.length === 0) {
-          MOCK_MODELS.push({ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' });
-        }
+      } finally {
+        hideLoading();
       }
     }
 
     async function loadBalancesData() {
-      var balances = await loadBalances();
-      if (balances && balances.length > 0) {
-        MOCK_BALANCES.length = 0;
-        for (var i = 0; i < balances.length; i++) {
-          MOCK_BALANCES.push({
-            name: balances[i].name || balances[i].provider_name || 'Unknown',
-            amount: parseFloat(balances[i].amount || balances[i].balance || 0),
-            currency: balances[i].currency || 'USD',
-          });
+      showLoading();
+      try {
+        var balances = await loadBalances();
+        if (balances && balances.length > 0) {
+          MOCK_BALANCES.length = 0;
+          for (var i = 0; i < balances.length; i++) {
+            var rawAmt = balances[i].amount !== undefined ? balances[i].amount : balances[i].balance;
+            var amt;
+            if (typeof rawAmt === 'number') {
+              amt = rawAmt;
+            } else if (rawAmt !== undefined && rawAmt !== null) {
+              var parsed = parseFloat(rawAmt);
+              amt = isNaN(parsed) ? rawAmt : parsed;
+            } else {
+              amt = 0;
+            }
+            MOCK_BALANCES.push({
+              name: balances[i].name || balances[i].provider_name || 'Unknown',
+              amount: amt,
+              currency: balances[i].currency || 'USD',
+            });
+          }
         }
+      } finally {
+        hideLoading();
       }
     }
 
     async function loadConfigData() {
+      showLoading();
       try {
         var res = await fetch('/api/' + currentProxyName + '/admin-api/settings', {
           headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -534,7 +1162,9 @@
           var sel2 = document.getElementById('routingModeSelect');
           if (sel2) sel2.value = s.routing_mode;
         }
-      } catch {}
+      } catch {} finally {
+        hideLoading();
+      }
     }
 
     function getAuthHeaders() {
@@ -599,7 +1229,7 @@
 
       if (isRunning) {
         try {
-          var res = await fetch('/api/stop/' + name, { method: 'POST' });
+          var res = await fetch('/api/stop/' + name, { method: 'POST', headers: getAuthHeaders() });
           var data = await res.json();
           if (data.success) {
             isRunning = false;
@@ -607,17 +1237,19 @@
             text.textContent = '未运行';
             btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 启动';
             showToast(displayName + ' 已停止', 'info');
+            try { window.__statusChannel && window.__statusChannel.postMessage({ type: 'proxy-status-changed' }); } catch {}
+            return;
+          } else {
+            showToast('停止失败: ' + (data.error || '未知错误'), 'error');
             return;
           }
-        } catch {}
-        isRunning = false;
-        badge.className = 'status-badge offline';
-        text.textContent = '未运行';
-        btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 启动';
-        showToast('模拟模式: ' + name + ' 已停止', 'info', 2000);
+        } catch (e) {
+          showToast('停止失败: ' + e.message, 'error');
+          return;
+        }
       } else {
         try {
-          var res = await fetch('/api/start/' + name, { method: 'POST' });
+          var res = await fetch('/api/start/' + name, { method: 'POST', headers: getAuthHeaders() });
           var data = await res.json();
           if (data.success) {
             isRunning = true;
@@ -625,14 +1257,16 @@
             text.textContent = '运行中';
             btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止';
             showToast(displayName + ' 已启动', 'success');
+            try { window.__statusChannel && window.__statusChannel.postMessage({ type: 'proxy-status-changed' }); } catch {}
+            return;
+          } else {
+            showToast('启动失败: ' + (data.error || '未知错误'), 'error');
             return;
           }
-        } catch {}
-        isRunning = true;
-        badge.className = 'status-badge online';
-        text.textContent = '运行中';
-        btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止';
-        showToast('模拟模式: ' + name + ' 已启动', 'success', 2000);
+        } catch (e) {
+          showToast('启动失败: ' + e.message, 'error');
+          return;
+        }
       }
     }
 
@@ -665,18 +1299,44 @@
       var html = '';
       for (var i = 0; i < providers.length; i++) {
         var p = providers[i];
+        var displayKey = keyVisible ? esc(p.api_key) : maskKey(p.api_key);
+        var keyTooltip = keyVisible ? esc(p.api_key) : '点击复制';
         html += '<tr data-provider-id="' + esc(p.id) + '">' +
           '<td><strong>' + esc(p.name) + '</strong></td>' +
-          '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;">' + esc(p.provider_id) + '</code></td>' +
-          '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(p.base_url) + '</code></td>' +
-          '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;">' + (keyVisible ? esc(p.api_key) : maskKey(p.api_key)) + '</code></td>' +
-          '<td><label class="toggle"><input type="checkbox" class="provider-enable-toggle" ' + (p.enabled ? 'checked' : '') + '><span class="toggle-slider"></span></label></td>' +
+          '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(p.provider_id) + '">' + esc(p.provider_id) + '</code></td>' +
+          '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(p.base_url) + '">' + esc(p.base_url) + '</code></td>' +
+          '<td><code class="api-key-display" data-key="' + esc(p.api_key) + '" style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="' + keyTooltip + '">' + displayKey + '</code></td>' +
+          '<td><label class="toggle" style="cursor:pointer"><input type="checkbox" class="provider-enable-toggle" data-id="' + esc(p.id) + '" ' + (p.enabled ? 'checked' : '') + '><span class="toggle-slider"></span></label></td>' +
           '<td class="actions">' +
             '<button class="btn btn-sm edit-provider-btn" data-id="' + esc(p.id) + '">编辑</button>' +
+            '<button class="btn btn-sm test-provider-btn" data-id="' + esc(p.id) + '" data-url="' + esc(p.base_url) + '" data-key="' + esc(p.api_key) + '" data-pid="' + esc(p.provider_id) + '">测试</button>' +
             '<button class="btn btn-sm btn-danger delete-provider-btn" data-id="' + esc(p.id) + '">删除</button>' +
           '</td></tr>';
       }
       tbody.innerHTML = html;
+    }
+
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+          showToast('已复制到剪贴板', 'success', 1500);
+        }).catch(function() {
+          fallbackCopy(text);
+        });
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('已复制到剪贴板', 'success', 1500); } catch {}
+      document.body.removeChild(ta);
     }
 
     function maskKey(key) {
@@ -739,6 +1399,7 @@
       labelMain.setAttribute('for', checkboxId);
 
       var toggleWrapper = document.createElement('label');
+      toggleWrapper.className = 'toggle';
       toggleWrapper.style.cssText = 'position:relative;width:40px;height:24px;display:inline-block;flex-shrink:0;cursor:pointer;';
       var chk = document.createElement('input');
       chk.type = 'checkbox';
@@ -779,7 +1440,7 @@
       fetchBtn.type = 'button';
       fetchBtn.className = 'btn';
       fetchBtn.id = 'modal-fetch-models';
-      fetchBtn.textContent = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
+      fetchBtn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
       fetchBtn.disabled = true;
       fetchRow.appendChild(fetchBtn);
       modal.appendChild(fetchRow);
@@ -932,7 +1593,7 @@
       fetchBtn2.type = 'button';
       fetchBtn2.className = 'btn';
       fetchBtn2.id = 'modal-fetch-models';
-      fetchBtn2.textContent = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
+      fetchBtn2.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
       fetchRow2.appendChild(fetchBtn2);
       modal.appendChild(fetchRow2);
 
@@ -1002,6 +1663,16 @@
       return d.innerHTML;
     }
 
+    // ===== Loading Bar (P1-4) =====
+    function showLoading() {
+      var bar = document.getElementById('loadingBar');
+      if (bar) bar.classList.add('active');
+    }
+    function hideLoading() {
+      var bar = document.getElementById('loadingBar');
+      if (bar) bar.classList.remove('active');
+    }
+
     function renderModels() {
       var sel = document.getElementById('modelSelect');
       var html = '';
@@ -1028,9 +1699,49 @@
       var html = '';
       for (var i = 0; i < MOCK_BALANCES.length; i++) {
         var b = MOCK_BALANCES[i];
-        html += '<div class="balance-card"><span class="balance-name">' + esc(b.name) + '</span><span class="balance-amount">' + b.amount.toFixed(2) + ' <span class="balance-currency">' + b.currency + '</span></span></div>';
+        var amountDisplay;
+        if (typeof b.amount === 'number') {
+          amountDisplay = b.amount.toFixed(2) + ' <span class="balance-currency">' + (b.currency || '') + '</span>';
+        } else {
+          amountDisplay = b.amount !== undefined && b.amount !== null ? esc(String(b.amount)) : '—';
+        }
+        html += '<div class="balance-card">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+            '<div>' +
+              '<span class="balance-name">' + esc(b.name) + '</span>' +
+              '<div style="margin-top:4px;"><span class="balance-amount">' + amountDisplay + '</span></div>' +
+            '</div>' +
+            '<button class="btn btn-sm" style="font-size:10px;padding:2px 6px;flex-shrink:0;" onclick="refreshBalance(' + i + ')">刷新</button>' +
+          '</div>' +
+        '</div>';
       }
       grid.innerHTML = html;
+    }
+
+    async function refreshBalance(index) {
+      if (index < 0 || index >= MOCK_BALANCES.length) return;
+      var b = MOCK_BALANCES[index];
+      b.amount = '加载中...';
+      renderBalances();
+      try {
+        var res = await fetch('/api/balances?proxy=' + currentProxyName, {
+          headers: getAuthHeaders(),
+        });
+        var data = await res.json();
+        if (data && data.length && data[index]) {
+          var entry = data[index];
+          var val = entry.amount;
+          if (typeof val === 'number') {
+            b.amount = val;
+          } else {
+            var parsed = parseFloat(val);
+            b.amount = isNaN(parsed) ? (val || 0) : parsed;
+          }
+        }
+      } catch (e) {
+        b.amount = 0;
+      }
+      renderBalances();
     }
 
     function renderHistory() {
@@ -1042,8 +1753,8 @@
         html += '<tr>' +
           '<td><span class="ts">' + fmtTime(h.timestamp) + '</span></td>' +
           '<td>' + esc(h.action) + '</td>' +
-          '<td><code style="background:var(--color-bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;">' + esc(h.from) + '</code></td>' +
-          '<td><code style="background:var(--color-bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;">' + esc(h.to) + '</code></td>' +
+          '<td><code class="history-copy-item" data-text="' + esc(h.from) + '" style="background:var(--color-bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="' + esc(h.from) + '">' + esc(h.from) + '</code></td>' +
+          '<td><code class="history-copy-item" data-text="' + esc(h.to) + '" style="background:var(--color-bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;font-family:\'SF Mono\',Menlo,monospace;max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="' + esc(h.to) + '">' + esc(h.to) + '</code></td>' +
           '<td><span class="result-dot ' + (h.success ? 'success' : 'fail') + '"><span class="dot"></span>' + (h.success ? '成功' : '失败') + '</span></td>' +
         '</tr>';
       }
@@ -1134,7 +1845,7 @@
 
       var modal = document.createElement('div');
       modal.className = 'modal';
-      modal.style.width = '520px';
+      modal.style.maxWidth = '90vw';
 
       var title = document.createElement('div');
       title.className = 'modal-title';
@@ -1143,7 +1854,7 @@
       title.style.alignItems = 'center';
 
       var titleText = document.createElement('span');
-      titleText.textContent = '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg> 选择模型 (' + providerId + ')';
+      titleText.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg> 选择模型 (' + providerId + ')';
       title.appendChild(titleText);
 
       var ctrlBar = document.createElement('div');
@@ -1220,7 +1931,6 @@
           var html = '';
           for (var i = 0; i < data.models.length; i++) {
             var m = data.models[i];
-            allCheckboxes.push('cb_' + i);
             html += '<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">' +
               '<input type="checkbox" class="model-cb" data-index="' + i + '" value="' + esc(m.id) + '" style="flex-shrink:0;cursor:pointer;" />' +
               '<div style="display:flex;flex-direction:column;gap:1px;">' +
@@ -1231,6 +1941,9 @@
             ((i < data.models.length - 1) ? '<hr style="border:none;border-top:1px solid var(--color-border);margin:0 4px;">' : '');
           }
           modelsAreaEl.innerHTML = html;
+
+          var checkboxes = modelsAreaEl.querySelectorAll('.model-cb');
+          allCheckboxes = Array.from(checkboxes);
 
           modelsAreaEl.querySelectorAll('.model-cb').forEach(function(cb) {
             cb.addEventListener('change', function() {
@@ -1246,8 +1959,12 @@
               selected.push(cb.value);
             });
             overlay.remove();
-            showToast('已选择 ' + selected.length + ' 个模型', 'success');
+            showToast('已选择 ' + selected.length + ' 个模型: ' + selected.join(', '), 'success');
           };
+        } else if (data.error) {
+          modelsAreaEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--color-error);">拉取失败: ' + esc(data.error) + '</div>';
+          cancelBtn.style.display = 'inline-flex';
+          confirmBtn.style.display = 'none';
         } else {
           modelsAreaEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--color-text-secondary);">没有可用的模型，请检查 API Key 和 Base URL。</div>';
           cancelBtn.style.display = 'inline-flex';
@@ -1265,10 +1982,39 @@
 
     // ==================== Event Delegation for Provider Table ====================
     document.addEventListener('click', function(e) {
+      // Key toggle button
+      var keyToggleBtn = e.target.closest('#keyToggleBtn');
+      if (keyToggleBtn) {
+        toggleKeyVisibility();
+        return;
+      }
+      // API Key copy (use data attribute, not inline onclick)
+      var apiKeyEl = e.target.closest('.api-key-display');
+      if (apiKeyEl) {
+        var key = apiKeyEl.getAttribute('data-key');
+        if (key) copyToClipboard(key);
+        return;
+      }
+      // History copy items
+      var historyEl = e.target.closest('.history-copy-item');
+      if (historyEl) {
+        var text = historyEl.getAttribute('data-text');
+        if (text) copyToClipboard(text);
+        return;
+      }
       var editBtn = e.target.closest('.edit-provider-btn');
       if (editBtn) {
         var id = editBtn.getAttribute('data-id');
         showEditProviderModal(id);
+        return;
+      }
+      var testBtn = e.target.closest('.test-provider-btn');
+      if (testBtn) {
+        var id = testBtn.getAttribute('data-id');
+        var url = testBtn.getAttribute('data-url');
+        var key = testBtn.getAttribute('data-key');
+        var pid = testBtn.getAttribute('data-pid');
+        testProviderConnection(id, url, key, pid);
         return;
       }
       var delBtn = e.target.closest('.delete-provider-btn');
@@ -1282,10 +2028,10 @@
     document.addEventListener('change', function(e) {
       var toggle = e.target.closest('.provider-enable-toggle');
       if (toggle) {
-        var row = toggle.closest('tr');
-        if (!row) return;
-        var id = row.getAttribute('data-provider-id');
-        toggleProviderEnabled(id, toggle.checked);
+        var id = toggle.getAttribute('data-id');
+        if (id) {
+          toggleProviderEnabled(id, toggle.checked);
+        }
       }
     });
   </script>

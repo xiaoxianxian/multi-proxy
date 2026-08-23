@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+#
+# agent-proxy-switch — 各 AI agent 的「模型代理所有权」安全切换器
+# =====================================================================
+# 作用：
+#   在 proxy-rebuild 与「另一候选」之间，安全切换某个 agent 的模型代理
+#   base_url。支持 codex / hermes / cursor 三个 agent。
+#
+# 为什么需要它（一次真实事故总结）：
+#   本机曾同时有 cc-switch 与 proxy-rebuild 两套代理工具。若两者同时
+#   把同一个 agent 的 base_url 指向自己，就会“打架”。本工具用一条铁律
+#   规避：同一时刻，一个 agent 的 base_url 只能有一个值 → 结构上不可能
+#   被两个工具同时拥有（不需要额外加锁）。
+#
+# 设计原则（务必遵守，写代码改本项目时同理）：
+#   1. 单一所有者：每 agent 的 base_url 同一时刻只能指向一个代理。
+#   2. 绝不污染全局环境：本工具只改各 agent 自己的配置文件里的 base_url，
+#      绝不使用 `launchctl setenv NO_PROXY/no_proxy ...`。历史上某次往
+#      launchd 注入了含裸 `*` 的 NO_PROXY，导致所有走系统代理环境变量
+#      的 GUI 应用（WorkBuddy、CC Switch 的 outbound 等）把“所有域名”都
+#      判定为不走代理，直连被墙 IP → ETIMEDOUT，把全系统带崩。
+#      （原理：HTTP 客户端对 NO_PROXY 按逗号拆项做 hostname.endsWith(项)；
+#       `*` 去前导通配符后变空串 → endsWith('') 恒真 → 全部绕过代理。）
+#       ★ 任何代码都禁止写裸 `*`；如确需绕过 localhost，只在该代理自身
+#         plist 的 <EnvironmentVariables> 里设 NO_PROXY=127.0.0.1,localhost,::1。
+#   3. 不误伤其它 agent：切 codex 只动 codex 的 config；切 hermes 只动
+#      hermes 的 config；互不干扰。也不管理任何代理进程的生命周期
+#      （启停由 install.sh / manage.sh / 用户自己负责）。
+#   4. 不死链：切到某个代理前，先确认它真的在监听对应端口；否则拒绝写入，
+#      避免把 base_url 指向一个已死/未启动的端口导致 agent 断连。
+#
+# 用法：
+#   agent-proxy-switch                  # 查看全部 agent 的当前所有者 + 端口状态
+#   agent-proxy-switch <agent>          # 查看单个 agent 的状态
+#   agent-proxy-switch <agent> <owner>  # 把 agent 的代理切到 owner
+#
+#   <agent> ∈ codex | hermes | cursor
+#   <owner> 取决于 agent：
+#     codex  : cc-switch | proxy-rebuild
+#     hermes : proxy-rebuild | direct        （direct = 直连真实服务商 agnes）
+#     cursor : proxy-rebuild | direct        （cursor 的 base_url 在 GUI 里，半自动）
+#
+set -eo pipefail
+
+# ---- 端口（务必与 install.sh 保持一致）----
+CODEX_PORT=18790
+HERMES_PORT=18793
+CURSOR_PORT=18794
+CC_SWITCH_PORT=15721
+
+# ---- 各 owner 的目标 URL ----
+CC_SWITCH_URL="http://127.0.0.1:15721/v1"
+PR_CODEX_URL="http://127.0.0.1:18790/v1"
+PR_HERMES_URL="http://127.0.0.1:18793/v1"
+PR_CURSOR_URL="http://127.0.0.1:18794/v1"
+DIRECT_HERMES_URL="https://apihub.agnes-ai.com/v1"
+
+# ---- 配置文件 ----
+CODEX_CFG="$HOME/.codex/config.toml"
+HERMES_CFG="$HOME/.hermes/config.yaml"
+
+port_listening() {
+  /usr/sbin/lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+# ---- 读取当前 base_url ----
+current_codex_url() {
+  grep -A20 '\[model_providers\.custom\]' "$CODEX_CFG" 2>/dev/null \
+    | grep -E '^[[:space:]]*base_url' | head -1 \
+    | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/'
+}
+current_hermes_url() {
+  # model.base_url 是 2 空格缩进；providers.custom.base_url 是 4 空格。
+  # 这里取 model.base_url（与 proxy-rebuild 切换时两处一起改）。
+  grep -E '^  base_url:' "$HERMES_CFG" 2>/dev/null | head -1 \
+    | sed -E 's/.*base_url:[[:space:]]*"?([^"]+)"?.*/\1/'
+}
+
+# ---- 写入 base_url ----
+set_codex() {
+  local new_url="${1:-}"
+  [ -z "$new_url" ] && { echo "  内部错误：未提供目标 URL" >&2; return 1; }
+  local cur; cur="$(current_codex_url)"
+  [ "$cur" = "$new_url" ] && { echo "  当前 base_url 已是 $new_url，无需改动。"; return 0; }
+  cp "$CODEX_CFG" "$CODEX_CFG.bak.$(date +%Y%m%d-%H%M%S)"
+  NEW_URL="$new_url" python3 - "$CODEX_CFG" <<'PY'
+import sys, re, os
+path = sys.argv[1]; new_url = os.environ['NEW_URL']
+lines = open(path).read().split('\n')
+in_sec = False; replaced = False
+for i, line in enumerate(lines):
+    if re.match(r'^\s*\[model_providers\.custom\]\s*$', line):
+        in_sec = True; continue
+    if in_sec and re.match(r'^\s*\[', line):
+        in_sec = False
+    if in_sec and re.match(r'^\s*base_url\s*=', line):
+        lines[i] = f'base_url = "{new_url}"'; replaced = True
+open(path, 'w').write('\n'.join(lines))
+if not replaced:
+    raise SystemExit("未在 [model_providers.custom] 找到 base_url，未修改：" + path)
+PY
+  echo "  已写入 base_url = $new_url"
+}
+
+set_hermes() {
+  local new_url="${1:-}"
+  [ -z "$new_url" ] && { echo "  内部错误：未提供目标 URL" >&2; return 1; }
+  local cur; cur="$(current_hermes_url)"
+  [ "$cur" = "$new_url" ] && { echo "  当前 model.base_url 已是 $new_url，无需改动。"; return 0; }
+  cp "$HERMES_CFG" "$HERMES_CFG.bak.$(date +%Y%m%d-%H%M%S)"
+  NEW_URL="$new_url" python3 - "$HERMES_CFG" <<'PY'
+import sys, re, os
+path = sys.argv[1]; new_url = os.environ['NEW_URL']
+lines = open(path).read().split('\n')
+section = None      # 当前顶层 section 名
+in_custom = False   # 是否在 providers.custom 内
+rep_model = False
+rep_custom = False
+for i, line in enumerate(lines):
+    m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*):', line)
+    if m and line[:1] not in ' \t':
+        section = m.group(1); in_custom = False; continue
+    if section == 'model' and re.match(r'^  base_url:', line):
+        lines[i] = f'  base_url: {new_url}'; rep_model = True
+    if section == 'providers' and re.match(r'^  custom:', line):
+        in_custom = True; continue
+    if in_custom and re.match(r'^    base_url:', line):
+        lines[i] = f'    base_url: {new_url}'; rep_custom = True
+    if in_custom and re.match(r'^  [A-Za-z_]', line):
+        in_custom = False
+open(path, 'w').write('\n'.join(lines))
+if not (rep_model and rep_custom):
+    raise SystemExit(f"未同时找到 model.base_url 与 providers.custom.base_url，未修改：{path}")
+PY
+  echo "  已写入 model.base_url 与 providers.custom.base_url = $new_url"
+}
+
+# ---- 识别当前所有者 ----
+detect_owner() {
+  local agent="$1" url="$2"
+  case "$agent" in
+    codex)
+      [ "$url" = "$CC_SWITCH_URL" ] && { echo cc-switch; return; }
+      [ "$url" = "$PR_CODEX_URL" ] && { echo proxy-rebuild; return; } ;;
+    hermes)
+      [ "$url" = "$PR_HERMES_URL" ] && { echo proxy-rebuild; return; }
+      [ "$url" = "$DIRECT_HERMES_URL" ] && { echo direct; return; } ;;
+  esac
+  echo "unknown ($url)"
+}
+
+status_one() {
+  local agent="$1"
+  case "$agent" in
+    codex)
+      local url; url="$(current_codex_url)"
+      echo "Codex:"
+      echo "  当前所有者            = $(detect_owner codex "$url")"
+      echo "  base_url              = ${url:-（未读取到）}"
+      echo "  cc-switch(15721) 监听 = $(port_listening $CC_SWITCH_PORT && echo 是 || echo 否)"
+      echo "  proxy-rebuild(18790) 监听 = $(port_listening $CODEX_PORT && echo 是 || echo 否)" ;;
+    hermes)
+      local url; url="$(current_hermes_url)"
+      echo "Hermes:"
+      echo "  当前所有者            = $(detect_owner hermes "$url")"
+      echo "  model.base_url        = ${url:-（未读取到）}"
+      echo "  proxy-rebuild(18793) 监听 = $(port_listening $HERMES_PORT && echo 是 || echo 否)" ;;
+    cursor)
+      echo "Cursor:"
+      echo "  当前所有者            = 请在 Cursor GUI (Settings → Models) 查看 OpenAI Base URL"
+      echo "  proxy-rebuild(18794) 监听 = $(port_listening $CURSOR_PORT && echo 是 || echo 否)" ;;
+  esac
+}
+
+switch_one() {
+  local agent="$1" owner="$2"
+  case "$agent" in
+    codex)
+      case "$owner" in
+        cc-switch)
+          set_codex "$CC_SWITCH_URL"
+          echo "  请重启 Codex 使配置生效。" ;;
+        proxy-rebuild)
+          if ! port_listening $CODEX_PORT; then
+            echo "  [错误] proxy-rebuild 的 codex 代理(18790)未监听。可能未安装/未启动。"
+            echo "     为避免死链已中止。请先启动 proxy-rebuild，再：agent-proxy-switch codex proxy-rebuild"
+            return 1
+          fi
+          set_codex "$PR_CODEX_URL"
+          echo "  请重启 Codex 使配置生效。" ;;
+        *) echo "  codex 的 owner 只能是 cc-switch 或 proxy-rebuild" >&2; return 1 ;;
+      esac ;;
+    hermes)
+      case "$owner" in
+        proxy-rebuild)
+          if ! port_listening $HERMES_PORT; then
+            echo "  [错误] proxy-rebuild 的 hermes 代理(18793)未监听。可能未安装/未启动。"
+            echo "     为避免死链已中止。请先启动 proxy-rebuild，再：agent-proxy-switch hermes proxy-rebuild"
+            return 1
+          fi
+          set_hermes "$PR_HERMES_URL"
+          echo "  请重启 Hermes 使配置生效。" ;;
+        direct)
+          set_hermes "$DIRECT_HERMES_URL"
+          echo "  目标：直连真实服务商。请重启 Hermes 使配置生效。" ;;
+        *) echo "  hermes 的 owner 只能是 proxy-rebuild 或 direct" >&2; return 1 ;;
+      esac ;;
+    cursor)
+      case "$owner" in
+        proxy-rebuild)
+          if ! port_listening $CURSOR_PORT; then
+            echo "  [错误] proxy-rebuild 的 cursor 代理(18794)未监听。可能未安装/未启动。"
+            echo "     为避免死链已中止。请先启动 proxy-rebuild，再：agent-proxy-switch cursor proxy-rebuild"
+            return 1
+          fi
+          echo "  [半自动] 请手动在 Cursor GUI 完成切换："
+          echo "    1) 打开 Cursor → Settings → Models"
+          echo "    2) 把 OpenAI Base URL 设为: $PR_CURSOR_URL"
+          echo "    3) 确保 proxy-rebuild 已启动（见上，端口 18794 监听中）" ;;
+        direct)
+          echo "  [半自动] 请手动在 Cursor GUI 完成切换："
+          echo "    1) 打开 Cursor → Settings → Models"
+          echo "    2) 清空 OpenAI Base URL（恢复 Cursor 默认）" ;;
+        *) echo "  cursor 的 owner 只能是 proxy-rebuild 或 direct" >&2; return 1 ;;
+      esac ;;
+  esac
+}
+
+usage() {
+  cat <<'EOF'
+用法:
+  agent-proxy-switch                        # 状态总览（全部 agent）
+  agent-proxy-switch <agent>                # 单个 agent 状态
+  agent-proxy-switch <agent> <owner>        # 切换代理所有者
+
+  <agent> ∈ codex | hermes | cursor
+  <owner>:
+    codex  : cc-switch | proxy-rebuild
+    hermes : proxy-rebuild | direct
+    cursor : proxy-rebuild | direct
+EOF
+}
+
+# ---- 入口 ----
+agent="${1:-}"; owner="${2:-}"
+if [ -z "$agent" ]; then
+  echo "===== 模型代理所有权总览 ====="
+  for a in codex hermes cursor; do status_one "$a"; echo; done
+  exit 0
+fi
+case "$agent" in
+  codex|hermes|cursor) ;;
+  *) echo "未知 agent: $agent" >&2; usage >&2; exit 1 ;;
+esac
+if [ -z "$owner" ]; then
+  status_one "$agent"
+  exit 0
+fi
+switch_one "$agent" "$owner"
