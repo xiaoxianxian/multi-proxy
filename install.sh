@@ -56,9 +56,21 @@ check_deps() {
   has_node || missing+=("Node.js")
   has_python || missing+=("Python3")
 
+  # Docker Compose 检查（Docker 模式需要）
+  if [ -f "$ROOT_DIR/docker-compose.yml" ]; then
+    if ! command -v docker >/dev/null 2>&1; then
+      missing+=("Docker")
+    elif ! docker compose version >/dev/null 2>&1 && ! docker-compose version >/dev/null 2>&1; then
+      missing+=("Docker Compose")
+    fi
+  fi
+
   if [ ${#missing[@]} -gt 0 ]; then
     print_err "缺少依赖: ${missing[*]}"
     print_info "请先安装: brew install node python"
+    if [ -f "$ROOT_DIR/docker-compose.yml" ]; then
+      print_info "Docker 模式需要 Docker + Docker Compose: brew install --cask docker"
+    fi
     return 1
   fi
   return 0
@@ -102,8 +114,7 @@ install_hermes() {
 
   if has_python && [ -f "$dir/requirements.txt" ]; then
     print_info "安装 Python 依赖..."
-    # TODO: Remove --break-system-packages when migrating to Python venv (macOS Sonoma+ workaround)
-    pip3 install -r "$dir/requirements.txt" --quiet --break-system-packages 2>/dev/null
+    pip3 install -r "$dir/requirements.txt" --quiet 2>&1
     print_ok "Hermes Proxy Python 依赖安装完成"
   fi
 }
@@ -124,6 +135,24 @@ install_cursor() {
       print_info "安装 Node.js 依赖..."
       (cd "$dir" && npm install)
       print_ok "Cursor Proxy 依赖安装完成"
+    fi
+
+    # Rebuild native modules (better-sqlite3) for correct platform/arch
+    print_info "重建原生模块以确保正确的平台和架构..."
+    (cd "$dir" && npm rebuild better-sqlite3 2>&1)
+    if [ $? -ne 0 ]; then
+      print_warn "原生模块重建失败，尝试重新安装..."
+      (cd "$dir" && rm -rf node_modules && npm install 2>&1)
+      # Rebuild after full reinstall
+      (cd "$dir" && npm rebuild better-sqlite3 2>&1)
+      if [ $? -ne 0 ]; then
+        print_err "Cursor Proxy 原生模块修复失败"
+        print_warn "请检查: cd cursor-multi-model-proxy && npm rebuild better-sqlite3"
+        return 1
+      fi
+      print_ok "原生模块重新安装完成"
+    else
+      print_ok "原生模块重建完成"
     fi
 
     print_info "编译 TypeScript..."
@@ -231,6 +260,12 @@ start_cursor() {
   if [ ! -f "$ROOT_DIR/cursor-multi-model-proxy/dist/server/start.js" ]; then
     print_err "Cursor Proxy 未编译，请先运行: cd cursor-multi-model-proxy && npm run build"
     return 1
+  fi
+  # Rebuild native modules (better-sqlite3) to ensure correct platform/arch
+  CURSOR_NDIR="$ROOT_DIR/cursor-multi-model-proxy/node_modules/better-sqlite3"
+  if [ -d "$CURSOR_NDIR" ]; then
+    print_info "重建原生模块..."
+    (cd "$ROOT_DIR/cursor-multi-model-proxy" && npm rebuild better-sqlite3 2>&1) || true
   fi
   (cd "$ROOT_DIR/cursor-multi-model-proxy" && node dist/server/start.js > "$SCRIPT_DIR/logs/cursor-proxy.log" 2>&1 &)
   sleep 1

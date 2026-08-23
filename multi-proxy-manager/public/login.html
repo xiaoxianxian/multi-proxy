@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Proxy Manager - Login</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="stylesheet" href="./colors_and_type.css">
+  <link rel="stylesheet" href="./shared-styles.css">
 </head>
 <style>
 /* ============================================
@@ -195,57 +200,57 @@ body::after {
 
 .input-wrapper {
   position: relative;
+  width: 100%;
   display: flex;
   align-items: center;
-}
-
-.input-field {
-  width: 100%;
-  height: 40px;
-  padding: 0 44px 0 14px;
-  font-family: var(--font-family);
-  font-size: 0.875rem;
-  color: var(--color-text);
   background: var(--color-bg);
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-sm);
-  outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input-wrapper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
+.input-wrapper.has-error {
+  border-color: var(--color-error);
+}
+
+.input-wrapper.has-error:focus-within {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.input-wrapper .input-icon {
+  position: static;
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+  transition: color var(--transition-fast);
+  flex-shrink: 0;
+  margin-left: 12px;
+  margin-right: 8px;
+}
+
+.input-field {
+  flex: 1;
+  height: 40px;
+  padding: 0 0;
+  font-family: var(--font-family);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  outline: none;
 }
 
 .input-field::placeholder {
   color: var(--color-text-tertiary);
 }
 
-.input-field:hover {
-  border-color: #cbd5e1;
-}
-
-.input-field:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-bg);
-}
-
-.input-field.error {
-  border-color: var(--color-error);
-}
-
-.input-field.error:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-
-.input-icon {
-  position: absolute;
-  left: 14px;
-  width: 18px;
-  height: 18px;
-  color: var(--color-text-tertiary);
-  pointer-events: none;
-  transition: color var(--transition-fast);
-}
-
-.input-field:focus ~ .input-icon,
-.input-field:not(:placeholder-shown) ~ .input-icon {
+.input-wrapper:focus-within .input-icon {
   color: var(--color-primary);
 }
 
@@ -253,10 +258,10 @@ body::after {
    Password Toggle Button
    ============================================ */
 .password-toggle {
-  position: absolute;
-  right: 4px;
-  width: 34px;
-  height: 34px;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-right: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -644,10 +649,10 @@ body::after {
         <div class="form-group">
           <label class="form-label" for="setupPassword">密码</label>
           <div class="input-wrapper">
-            <input type="password" id="setupPassword" class="input-field" placeholder="输入密码" autocomplete="new-password" required />
             <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
+            <input type="password" id="setupPassword" class="input-field" placeholder="输入密码" autocomplete="new-password" required />
             <button type="button" class="password-toggle" aria-label="显示密码" tabindex="0">
               <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -670,10 +675,10 @@ body::after {
         <div class="form-group">
           <label class="form-label" for="setupConfirm">确认密码</label>
           <div class="input-wrapper">
-            <input type="password" id="setupConfirm" class="input-field" placeholder="再次输入密码" autocomplete="new-password" required />
             <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
+            <input type="password" id="setupConfirm" class="input-field" placeholder="再次输入密码" autocomplete="new-password" required />
             <button type="button" class="password-toggle" aria-label="显示密码" tabindex="0">
               <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -713,10 +718,10 @@ body::after {
         <div class="form-group">
           <label class="form-label" for="loginPassword">密码</label>
           <div class="input-wrapper">
-            <input type="password" id="loginPassword" class="input-field" placeholder="输入密码" autocomplete="current-password" required />
             <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
+            <input type="password" id="loginPassword" class="input-field" placeholder="输入密码" autocomplete="current-password" required />
             <button type="button" class="password-toggle" aria-label="显示密码" tabindex="0">
               <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -979,8 +984,8 @@ body::after {
 
       if (password !== confirm) {
         showError(els.setupError, '两次输入的密码不一致。');
-        els.setupConfirm.classList.add('error');
-        setTimeout(function() { els.setupConfirm.classList.remove('error'); }, 2000);
+        els.setupConfirm.closest('.input-wrapper').classList.add('has-error');
+        setTimeout(function() { els.setupConfirm.closest('.input-wrapper').classList.remove('has-error'); }, 2000);
         return;
       }
 
@@ -1069,7 +1074,7 @@ body::after {
   for (var j = 0; j < inputs.length; j++) {
     (function(input) {
       input.addEventListener('focus', function() {
-        this.classList.remove('error');
+        this.closest('.input-wrapper').classList.remove('has-error');
         var form = this.closest('form');
         if (form) {
           var errorBox = form.querySelector('.message-box.error-msg');

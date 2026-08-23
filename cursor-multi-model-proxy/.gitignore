@@ -29,3 +29,8 @@ Thumbs.db
 # Prisma
 prisma/migrations/
 .encryption-key
+
+# SQLite database files
+data/*.db
+data/*.db-wal
+data/*.db-shm

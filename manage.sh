@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Multi-Proxy Manager - 一键管理脚本（新版扁平目录结构）
 # 用法: ./manage.sh [start|stop|restart|status|logs]
@@ -84,6 +85,7 @@ start_codex() {
   print_status "启动 Codex Proxy..."
   nohup node proxy.js > "$LOG_DIR/codex-proxy.log" 2>&1 &
   local pid=$!
+  sleep 1
 
   if wait_for_port $CODEx_PORT; then
     print_status "Codex Proxy 启动成功 (PID: $pid, 端口: $CODEx_PORT)"
@@ -111,6 +113,7 @@ start_hermes() {
   print_status "启动 Hermes Proxy..."
   nohup python3 proxy.py > "$LOG_DIR/hermes-proxy.log" 2>&1 &
   local pid=$!
+  sleep 1
 
   if wait_for_port $HERMES_PORT; then
     print_status "Hermes Proxy 启动成功 (PID: $pid, 端口: $HERMES_PORT)"
@@ -144,6 +147,26 @@ start_cursor() {
     return 1
   fi
 
+  # Rebuild native modules (better-sqlite3) to ensure correct platform/arch
+  if [ -f "$CURSOR_PROXY_DIR/node_modules/better-sqlite3/package.json" ]; then
+    print_status "重建 Cursor Proxy 原生模块..."
+    (cd "$CURSOR_PROXY_DIR" && npm rebuild better-sqlite3 2>&1)
+    if [ $? -ne 0 ]; then
+      print_warning "原生模块重建失败，尝试重新安装..."
+      (cd "$CURSOR_PROXY_DIR" && rm -rf node_modules && npm install 2>&1)
+      # Rebuild after full reinstall
+      (cd "$CURSOR_PROXY_DIR" && npm rebuild better-sqlite3 2>&1)
+      if [ $? -ne 0 ]; then
+        print_error "Cursor Proxy 原生模块修复失败"
+        print_warning "请检查: cd cursor-multi-model-proxy && npm rebuild better-sqlite3"
+        return 1
+      fi
+      print_status "原生模块重新安装完成"
+    else
+      print_status "原生模块重建完成"
+    fi
+  fi
+
   if is_port_in_use $CURSOR_PORT; then
     print_warning "Cursor Proxy 已在运行 (端口 $CURSOR_PORT)"
     return 0
@@ -153,6 +176,7 @@ start_cursor() {
   print_status "启动 Cursor Proxy..."
   nohup node dist/server/start.js > "$LOG_DIR/cursor-proxy.log" 2>&1 &
   local pid=$!
+  sleep 1
 
   if wait_for_port $CURSOR_PORT; then
     print_status "Cursor Proxy 启动成功 (PID: $pid, 端口: $CURSOR_PORT)"

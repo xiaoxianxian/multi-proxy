@@ -7,10 +7,52 @@ import { SecretsManager } from '../../utils/crypto.js';
 
 const secrets = new SecretsManager();
 
+/** Get the current routing mode from settings (default: 'failover') */
+function getRoutingMode(): string {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'routing_mode'").get() as any;
+  return row ? String(row.value) : 'failover';
+}
+
+/** Round-robin index (persisted in settings so it survives restarts) */
+function getNextProviderIndex(providerCount: number): number {
+  if (providerCount <= 0) return 0;
+  const mode = getRoutingMode();
+  if (mode !== 'round-robin') return 0;
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'rr_index'").get() as any;
+  const current = row ? parseInt(String(row.value)) : 0;
+  // Advance and persist for NEXT call
+  const next = (current + 1) % Math.max(providerCount, 1);
+  db.prepare("INSERT OR REPLACE INTO settings (key, value, value_type) VALUES (?, ?, ?)")
+    .run('rr_index', String(next), 'string');
+  return current % providerCount;
+}
+
 /**
  * 根据模型名从数据库中查找匹配的 Provider 配置
+ * 支持 routing_mode: priority(默认) 或 round-robin
  */
 export function findProviderConfig(modelName: string): ProviderConfig | null {
+  const mode = getRoutingMode();
+
+  // round-robin: cycle through all enabled providers
+  if (mode === 'round-robin') {
+    const providerRows = db.prepare(
+      'SELECT * FROM providers WHERE enabled = 1 ORDER BY created_at DESC'
+    ).all() as any[];
+    if (providerRows.length === 0) return null;
+    const idx = getNextProviderIndex(providerRows.length);
+    const p = providerRows[idx];
+    return {
+      id: p.id,
+      name: p.name,
+      providerId: p.provider_id as any,
+      apiKey: secrets.decrypt(p.api_key),
+      baseUrl: p.base_url,
+      enabled: p.enabled === 1,
+    };
+  }
+
+  // priority/failover/weighted: use model-specific provider
   // 1. 先查找启用的模型
   const modelRow = db.prepare(`
     SELECT m.provider_id, m.enabled
@@ -88,9 +130,11 @@ export async function forwardToProvider(
   });
 
   if (!upstreamResponse.ok) {
-    const errText = await upstreamResponse.text();
-    console.error(`[ChatHandler] Upstream error: ${errText}`);
-    res.status(upstreamResponse.status).json({ success: false, error: errText, code: 'UPSTREAM_ERROR' });
+   const errText = await upstreamResponse.text();
+   // 脱敏：截断并转义上游错误信息，避免泄露内部细节
+   const safeErr = errText.slice(0, 200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+   console.error(`[ChatHandler] Upstream error (truncated): ${safeErr}`);
+   res.status(upstreamResponse.status).json({ success: false, error: 'Upstream provider error', code: 'UPSTREAM_ERROR' });
     return;
   }
 

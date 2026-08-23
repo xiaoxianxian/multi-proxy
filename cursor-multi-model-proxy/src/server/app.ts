@@ -9,7 +9,6 @@ import { registerDefaultProviders, ProviderRegistry } from '../providers/index.j
 
 // Register default providers at module load time
 registerDefaultProviders(ProviderRegistry.getInstance());
-console.log(`[Proxy Server] Registered providers: ${ProviderRegistry.getInstance().getAll().map(p => p.name).join(', ')}`);
 
 const app = express();
 

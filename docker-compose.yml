@@ -1,0 +1,81 @@
+services:
+  codex-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.codex
+    container_name: proxy-rebuild-codex
+    ports:
+      - "18790:18790"
+    env_file:
+      - codex-proxy/.env
+    volumes:
+      - codex-data:/root/.codex
+      - codex-proxy-data:/app
+    restart: unless-stopped
+    networks:
+      - proxy-network
+
+  hermes-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.hermes
+    container_name: proxy-rebuild-hermes
+    ports:
+      - "18793:18793"
+    env_file:
+      - hermes-proxy/.env
+    volumes:
+      - hermes-data:/root/.hermes
+      - hermes-proxy-data:/app
+    restart: unless-stopped
+    networks:
+      - proxy-network
+
+  cursor-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.cursor
+    container_name: proxy-rebuild-cursor
+    ports:
+      - "18794:18794"
+    env_file:
+      - cursor-multi-model-proxy/.env
+    volumes:
+      - cursor-data:/app/data
+    restart: unless-stopped
+    networks:
+      - proxy-network
+
+  manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    container_name: proxy-rebuild-manager
+    ports:
+      - "18792:18792"
+    env_file:
+      - multi-proxy-manager/.env
+    volumes:
+      - manager-state:/root/.multi-proxy-manager
+      - manager-jwt:/root/.multi-proxy-jwt-secret
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - codex-proxy
+      - hermes-proxy
+      - cursor-proxy
+    restart: unless-stopped
+    networks:
+      - proxy-network
+
+volumes:
+  codex-data:
+  hermes-data:
+  cursor-data:
+  manager-state:
+  manager-jwt:
+  codex-proxy-data:
+  hermes-proxy-data:
+
+networks:
+  proxy-network:
+    driver: bridge

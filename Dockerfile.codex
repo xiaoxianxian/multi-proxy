@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache python3 lsof
+
+COPY codex-proxy/package.json codex-proxy/package-lock.json* ./
+RUN npm install --production
+
+COPY codex-proxy/ .
+
+ENV PORT=18790
+
+EXPOSE 18790
+
+CMD ["node", "proxy.js"]

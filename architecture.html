@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proxy Rebuild - Architecture Diagram</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --bg-deep: #0a0e1a;
+    --bg-card: #111827;
+    --bg-card-hover: #1a2332;
+    --border-subtle: rgba(99, 179, 237, 0.15);
+    --border-accent: rgba(99, 179, 237, 0.4);
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --cyan: #22d3ee;
+    --blue: #3b82f6;
+    --purple: #a78bfa;
+    --green: #34d399;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --red: #ef4444;
+    --yellow: #fbbf24;
+    --teal: #2dd4bf;
+    --cyan-glow: rgba(34, 211, 238, 0.15);
+    --blue-glow: rgba(59, 130, 246, 0.15);
+    --purple-glow: rgba(167, 139, 250, 0.15);
+    --green-glow: rgba(52, 211, 153, 0.15);
+    --orange-glow: rgba(251, 146, 60, 0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'Noto Sans SC', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid pattern */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Radial glow */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: 30%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 40px 30px 60px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 50px;
+    position: relative;
+  }
+
+  .header h1 {
+    font-size: 2.4rem;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--cyan) 0%, var(--blue) 40%, var(--purple) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .header .subtitle {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .header .tech-stack {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .tech-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(17, 24, 39, 0.8);
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+  }
+
+  .tech-badge.cyan { border-color: rgba(34, 211, 238, 0.3); color: var(--cyan); }
+  .tech-badge.blue { border-color: rgba(59, 130, 246, 0.3); color: var(--blue); }
+  .tech-badge.purple { border-color: rgba(167, 139, 250, 0.3); color: var(--purple); }
+  .tech-badge.green { border-color: rgba(52, 211, 153, 0.3); color: var(--green); }
+  .tech-badge.orange { border-color: rgba(251, 146, 60, 0.3); color: var(--orange); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-dot.cyan { background: var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); }
+  .legend-dot.blue { background: var(--blue); box-shadow: 0 0 8px var(--blue-glow); }
+  .legend-dot.purple { background: var(--purple); box-shadow: 0 0 8px var(--purple-glow); }
+  .legend-dot.green { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
+  .legend-dot.orange { background: var(--orange); box-shadow: 0 0 8px var(--orange-glow); }
+
+  /* Architecture layers */
+  .layer {
+    margin-bottom: 32px;
+    position: relative;
+  }
+
+  .layer-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+    padding-left: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .layer-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border-subtle), transparent);
+  }
+
+  /* Cards grid */
+  .cards-row {
+    display: grid;
+    gap: 16px;
+  }
+
+  .cards-row.cols-1 { grid-template-columns: 1fr; max-width: 500px; margin: 0 auto; }
+  .cards-row.cols-2 { grid-template-columns: repeat(2, 1fr); max-width: 900px; margin: 0 auto; }
+  .cards-row.cols-3 { grid-template-columns: repeat(3, 1fr); max-width: 1200px; margin: 0 auto; }
+  .cards-row.cols-4 { grid-template-columns: repeat(4, 1fr); max-width: 1500px; margin: 0 auto; }
+
+  /* Service card */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    transition: all 0.3s ease;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-accent);
+  }
+
+  .card.cyan::before { background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+  .card.cyan:hover { box-shadow: 0 8px 30px var(--cyan-glow); }
+  .card.blue::before { background: linear-gradient(90deg, transparent, var(--blue), transparent); }
+  .card.blue:hover { box-shadow: 0 8px 30px var(--blue-glow); }
+  .card.purple::before { background: linear-gradient(90deg, transparent, var(--purple), transparent); }
+  .card.purple:hover { box-shadow: 0 8px 30px var(--purple-glow); }
+  .card.green::before { background: linear-gradient(90deg, transparent, var(--green), transparent); }
+  .card.green:hover { box-shadow: 0 8px 30px var(--green-glow); }
+  .card.orange::before { background: linear-gradient(90deg, transparent, var(--orange), transparent); }
+  .card.orange:hover { box-shadow: 0 8px 30px var(--orange-glow); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+
+  .card.cyan .card-icon { background: rgba(34, 211, 238, 0.1); }
+  .card.blue .card-icon { background: rgba(59, 130, 246, 0.1); }
+  .card.purple .card-icon { background: rgba(167, 139, 250, 0.1); }
+  .card.green .card-icon { background: rgba(52, 211, 153, 0.1); }
+  .card.orange .card-icon { background: rgba(251, 146, 60, 0.1); }
+
+  .card-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .card-port {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .card-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .detail-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .detail-label {
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .detail-value {
+    word-break: break-all;
+  }
+
+  .detail-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+  }
+
+  .detail-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  /* Connection arrows */
+  .connection-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 8px 0;
+    position: relative;
+  }
+
+  .connection-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 0;
+  }
+
+  .arrow-line {
+    width: 2px;
+    height: 24px;
+    background: linear-gradient(180deg, var(--border-accent), var(--cyan));
+    position: relative;
+  }
+
+  .arrow-line::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--cyan);
+  }
+
+  .arrow-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    text-align: center;
+    background: var(--bg-deep);
+    padding: 2px 8px;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Flow diagram */
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+
+  .flow-node {
+    text-align: center;
+    padding: 8px 16px;
+  }
+
+  .flow-node-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+  }
+
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  /* Data store card */
+  .datastore-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 700px;
+    margin: 0 auto;
+    transition: all 0.3s ease;
+  }
+
+  .datastore-card:hover {
+    border-color: var(--border-accent);
+    background: var(--bg-card-hover);
+  }
+
+  .datastore-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    background: rgba(167, 139, 250, 0.1);
+    flex-shrink: 0;
+  }
+
+  .datastore-info {
+    flex: 1;
+  }
+
+  .datastore-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .datastore-desc {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  /* Section divider */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 36px 0;
+  }
+
+  .section-divider::before,
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-subtle), transparent);
+  }
+
+  .section-divider span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* Communication matrix */
+  .comm-table {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+  }
+
+  .comm-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+    font-weight: 600;
+  }
+
+  .comm-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    vertical-align: top;
+  }
+
+  .comm-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .comm-method {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(34, 211, 238, 0.08);
+    color: var(--cyan);
+    border: 1px solid rgba(34, 211, 238, 0.15);
+  }
+
+  .comm-endpoint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+  }
+
+  /* Security badges */
+  .security-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .security-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    transition: all 0.3s ease;
+  }
+
+  .security-item:hover {
+    border-color: var(--border-accent);
+  }
+
+  .security-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .security-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .security-desc {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  /* External services */
+  .external-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .external-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+
+  .external-item:hover {
+    border-color: var(--border-accent);
+    transform: translateY(-1px);
+  }
+
+  .external-icon {
+    font-size: 1.3rem;
+    margin-bottom: 6px;
+  }
+
+  .external-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .external-type {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+  }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .cards-row.cols-3 { grid-template-columns: repeat(2, 1fr); }
+    .cards-row.cols-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 768px) {
+    .cards-row.cols-2,
+    .cards-row.cols-3,
+    .cards-row.cols-4 { grid-template-columns: 1fr; }
+    .header h1 { font-size: 1.8rem; }
+    .container { padding: 24px 16px 40px; }
+  }
+
+  /* Animation */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .layer {
+    animation: fadeInUp 0.6s ease-out both;
+  }
+
+  .layer:nth-child(1) { animation-delay: 0.1s; }
+  .layer:nth-child(2) { animation-delay: 0.2s; }
+  .layer:nth-child(3) { animation-delay: 0.3s; }
+  .layer:nth-child(4) { animation-delay: 0.4s; }
+  .layer:nth-child(5) { animation-delay: 0.5s; }
+  .layer:nth-child(6) { animation-delay: 0.6s; }
+  .layer:nth-child(7) { animation-delay: 0.7s; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>Proxy Rebuild 系统架构</h1>
+    <div class="subtitle">多代理 AI 服务管理系统</div>
+    <div class="tech-stack">
+      <span class="tech-badge cyan">Node.js</span>
+      <span class="tech-badge blue">Python</span>
+      <span class="tech-badge purple">TypeScript</span>
+      <span class="tech-badge green">SQLite</span>
+      <span class="tech-badge orange">Docker</span>
+      <span class="tech-badge">Express</span>
+      <span class="tech-badge">Flask</span>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot cyan"></div>Manager 管理后台</div>
+    <div class="legend-item"><div class="legend-dot blue"></div>Codex 代理</div>
+    <div class="legend-item"><div class="legend-dot purple"></div>Hermes 代理</div>
+    <div class="legend-item"><div class="legend-dot green"></div>Cursor 代理</div>
+    <div class="legend-item"><div class="legend-dot orange"></div>外部服务</div>
+  </div>
+
+  <!-- Layer 1: Client Tier -->
+  <div class="layer">
+    <div class="layer-label">客户端层</div>
+    <div class="cards-row cols-3">
+      <div class="card cyan">
+        <div class="card-header">
+          <div class="card-icon">🖥️</div>
+          <div class="card-title">Web 管理面板</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">页面</span>
+            <div class="detail-tags">
+              <span class="detail-tag">Dashboard 概览</span>
+              <span class="detail-tag">Login 登录</span>
+              <span class="detail-tag">Logs 日志</span>
+              <span class="detail-tag">Proxy Config 代理配置</span>
+            </div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">认证</span>
+            <span class="detail-value">JWT (HS256, 8h TTL) + bcrypt 密码</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">通信</span>
+            <span class="detail-value">BroadcastChannel + fetch(x-auth-token)</span>
+          </div>
+        </div>
+      </div>
+      <div class="card blue">
+        <div class="card-header">
+          <div class="card-icon">⌨️</div>
+          <div class="card-title">Codex CLI</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">目标</span>
+            <span class="detail-value">http://localhost:18790</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">认证</span>
+            <span class="detail-value">x-proxy-auth header</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">协议</span>
+            <span class="detail-value">REST + SSE 流式</span>
+          </div>
+        </div>
+      </div>
+      <div class="card purple">
+        <div class="card-header">
+          <div class="card-icon">🤖</div>
+          <div class="card-title">Cursor IDE</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">目标</span>
+            <span class="detail-value">http://localhost:18794</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">协议</span>
+            <span class="detail-value">OpenAI Compatible API</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">特性</span>
+            <span class="detail-value">Failover / Round Robin 路由</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="section-divider"><span>通信流程</span></div>
+
+  <!-- Flow Diagram -->
+  <div class="flow-diagram">
+    <div class="flow-node">
+      <div style="font-size:1.5rem;margin-bottom:4px;">👤</div>
+      <div class="flow-node-label">开发者</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div style="font-size:1.2rem;margin-bottom:4px;">🌐</div>
+      <div class="flow-node-label">Web 界面<br><span style="color:var(--cyan);font-size:0.55rem;">:18792</span></div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div style="font-size:1.2rem;margin-bottom:4px;">⚙️</div>
+      <div class="flow-node-label">Manager 管理器<br><span style="color:var(--text-muted);font-size:0.55rem;">API 转发</span></div>
+    </div>
+    <div class="flow-arrow">↕</div>
+    <div class="flow-node">
+      <div style="font-size:1.2rem;margin-bottom:4px;">📡</div>
+      <div class="flow-node-label">代理层<br><span style="color:var(--text-muted);font-size:0.55rem;">:18790 / :18793 / :18794</span></div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div style="font-size:1.2rem;margin-bottom:4px;">☁️</div>
+      <div class="flow-node-label">AI 服务提供商</div>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="section-divider"><span>服务层</span></div>
+
+  <!-- Layer 2: Manager Service -->
+  <div class="layer">
+    <div class="layer-label">Manager 服务 — 中央控制平面</div>
+    <div class="cards-row cols-1">
+      <div class="card cyan" style="max-width:1200px;">
+        <div class="card-header">
+          <div class="card-icon">🎛️</div>
+          <div class="card-title">multi-proxy-manager</div>
+          <div class="card-port">端口 18792</div>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
+          <div class="card-details">
+            <div class="detail-row">
+              <span class="detail-label">技术栈</span>
+              <span class="detail-value">Node.js + Express + JWT + bcryptjs</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">核心文件</span>
+              <span class="detail-value">server.js (1404 行)</span>
+            </div>
+          </div>
+          <div class="card-details">
+            <div class="detail-row">
+              <span class="detail-label">进程管理</span>
+              <span class="detail-value">spawn() + lsof 检测 + 崩溃恢复 (指数退避 ×5)</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">API 转发</span>
+              <span class="detail-value">forwardProxy() → axios → 代理服务</span>
+            </div>
+          </div>
+          <div class="card-details">
+            <div class="detail-row">
+              <span class="detail-label">安全防护</span>
+              <span class="detail-value">速率限制、CSP、CORS、XSS 过滤、路径白名单</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">部署方式</span>
+              <span class="detail-value">本地 (manage.sh) / Docker (compose) / LaunchAgent (开机自启)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layer 3: Proxy Services -->
+  <div class="layer">
+    <div class="layer-label">代理服务 — 模型路由层</div>
+    <div class="cards-row cols-3">
+      <!-- Codex Proxy -->
+      <div class="card blue">
+        <div class="card-header">
+          <div class="card-icon">🔵</div>
+          <div class="card-title">codex-proxy</div>
+          <div class="card-port">:18790</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">技术栈</span>
+            <span class="detail-value">Node.js + Express + dotenv</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">入口文件</span>
+            <span class="detail-value">proxy.js (532 行)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">API 端点</span>
+            <div class="detail-tags">
+              <span class="detail-tag">/v1/chat/completions</span>
+              <span class="detail-tag">/v1/models</span>
+              <span class="detail-tag">/api/providers</span>
+              <span class="detail-tag">/api/balances</span>
+            </div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">配置文件</span>
+            <span class="detail-value">.codex/config.toml + providers.json</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">路由模式</span>
+            <span class="detail-value">codex | config | both (已持久化)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">流式响应</span>
+            <span class="detail-value">SSE 透传至上游</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hermes Proxy -->
+      <div class="card purple">
+        <div class="card-header">
+          <div class="card-icon">🟣</div>
+          <div class="card-title">hermes-proxy</div>
+          <div class="card-port">:18793</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">技术栈</span>
+            <span class="detail-value">Python + Flask + PyYAML + Requests</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">入口文件</span>
+            <span class="detail-value">proxy.py (630 行)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">API 端点</span>
+            <div class="detail-tags">
+              <span class="detail-tag">/v1/chat/completions</span>
+              <span class="detail-tag">/health</span>
+              <span class="detail-tag">/api/providers</span>
+              <span class="detail-tag">/api/balances</span>
+            </div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">配置文件</span>
+            <span class="detail-value">.hermes/config.yaml + providers.json</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">共享状态</span>
+            <span class="detail-value">~/.multi-proxy-manager/ (与 Codex 共享)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">流式响应</span>
+            <span class="detail-value">Flask StreamingResponse</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cursor Proxy -->
+      <div class="card green">
+        <div class="card-header">
+          <div class="card-icon">🟢</div>
+          <div class="card-title">cursor-multi-model-proxy</div>
+          <div class="card-port">:18794</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">技术栈</span>
+            <span class="detail-value">TypeScript + Express + better-sqlite3 + Helmet</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">目录结构</span>
+            <span class="detail-value">src/index.ts → server/ + providers/ + routing/ + translate/</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">API 端点</span>
+            <div class="detail-tags">
+              <span class="detail-tag">/v1/chat/completions</span>
+              <span class="detail-tag">/admin-api/*</span>
+            </div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">支持的 Provider</span>
+            <div class="detail-tags">
+              <span class="detail-tag">OpenAI</span>
+              <span class="detail-tag">Anthropic</span>
+              <span class="detail-tag">Gemini</span>
+              <span class="detail-tag">Ollama</span>
+            </div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">路由策略</span>
+            <span class="detail-value">Failover / Round Robin (已持久化索引)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">容错机制</span>
+            <span class="detail-value">健康监控 (30s) + 熔断器 (3次失败/30s)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">加密存储</span>
+            <span class="detail-value">AES-256-GCM (PBKDF2 派生密钥) 保护 API Keys</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="section-divider"><span>数据持久化</span></div>
+
+  <!-- Layer 4: Storage -->
+  <div class="layer">
+    <div class="layer-label">数据存储层</div>
+    <div class="cards-row cols-2">
+      <div class="datastore-card">
+        <div class="datastore-icon">🗄️</div>
+        <div class="datastore-info">
+          <div class="datastore-name">SQLite — cursor-multi-model-proxy/data/proxy.db</div>
+          <div class="datastore-desc">
+            WAL 模式 · 数据表: providers (加密密钥) / models / routes / logs (30天过期) / settings (键值对)
+          </div>
+        </div>
+      </div>
+      <div class="datastore-card">
+        <div class="datastore-icon" style="background:rgba(34,211,238,0.1);">📁</div>
+        <div class="datastore-info">
+          <div class="datastore-name">JSON 文件 — ~/.multi-proxy-manager/</div>
+          <div class="datastore-desc">
+            providers.json (Codex+Hermes 共享) · routing-mode.json · password (bcrypt) · crash-recovery.json
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="section-divider"><span>服务间通信</span></div>
+
+  <!-- Layer 5: Communication Matrix -->
+  <div class="layer">
+    <div class="layer-label">通信矩阵</div>
+    <table class="comm-table">
+      <thead>
+        <tr>
+          <th>来源</th>
+          <th>目标</th>
+          <th>方式</th>
+          <th>协议 / 端点</th>
+          <th>备注</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--cyan);font-weight:600;">Manager</td>
+          <td>Codex / Hermes</td>
+          <td><span class="comm-method">HTTP 转发</span></td>
+          <td><span class="comm-endpoint">axios → :18790 / :18793</span></td>
+          <td>自动注入 x-proxy-auth 认证头</td>
+        </tr>
+        <tr>
+          <td style="color:var(--cyan);font-weight:600;">Manager</td>
+          <td>Cursor</td>
+          <td><span class="comm-method">HTTP 转发</span></td>
+          <td><span class="comm-endpoint">axios → :18794</span></td>
+          <td>/v1/chat, /admin-api/* 已白名单</td>
+        </tr>
+        <tr>
+          <td style="color:var(--blue);font-weight:600;">Codex</td>
+          <td>Hermes</td>
+          <td><span class="comm-method">文件共享</span></td>
+          <td><span class="comm-endpoint">~/.multi-proxy-manager/providers.json</span></td>
+          <td>共享配置，文件轮询</td>
+        </tr>
+        <tr>
+          <td style="color:var(--purple);font-weight:600;">浏览器</td>
+          <td>Manager UI</td>
+          <td><span class="comm-method">BroadcastChannel</span></td>
+          <td><span class="comm-endpoint">BroadcastChannel('proxy-status')</span></td>
+          <td>启动/停止时跨标签页同步</td>
+        </tr>
+        <tr>
+          <td style="color:var(--green);font-weight:600;">Cursor</td>
+          <td>上游 API</td>
+          <td><span class="comm-method">HTTP 流式</span></td>
+          <td><span class="comm-endpoint">undici.fetch → ReadableStream</span></td>
+          <td>SSE 直通，熔断器保护</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Divider -->
+  <div class="section-divider"><span>安全机制</span></div>
+
+  <!-- Layer 6: Security -->
+  <div class="layer">
+    <div class="layer-label">安全机制</div>
+    <div class="security-grid">
+      <div class="security-item">
+        <div class="security-icon">🔐</div>
+        <div>
+          <div class="security-title">Manager 认证</div>
+          <div class="security-desc">JWT HS256 (8h) + bcrypt 密码 / 明文 MANAGER_PASSWORD</div>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="security-icon">🛡️</div>
+        <div>
+          <div class="security-title">速率限制</div>
+          <div class="security-desc">登录: 60秒内最多5次 · 锁定: 15分钟内5次失败 → 封禁</div>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="security-icon">🔒</div>
+        <div>
+          <div class="security-title">CSP 安全头</div>
+          <div class="security-desc">script/connect-src 'self' · frame-options DENY · nosniff</div>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="security-icon">🗝️</div>
+        <div>
+          <div class="security-title">密钥加密</div>
+          <div class="security-desc">AES-256-GCM + PBKDF2 (10万次迭代, SHA-256) 加密 Cursor 中的 API keys</div>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="security-icon">✅</div>
+        <div>
+          <div class="security-title">路径白名单</div>
+          <div class="security-desc">spawn() realpathSync 验证 · 命令白名单 (node, python3)</div>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="security-icon">🔄</div>
+        <div>
+          <div class="security-title">代理认证 Token</div>
+          <div class="security-desc">PROXY_AUTH_TOKEN · x-proxy-auth 认证头由 Manager 自动转发</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="section-divider"><span>外部依赖</span></div>
+
+  <!-- Layer 7: External Services -->
+  <div class="layer">
+    <div class="layer-label">上游 AI 服务提供商</div>
+    <div class="external-grid">
+      <div class="external-item">
+        <div class="external-icon">🔷</div>
+        <div class="external-name">DeepSeek</div>
+        <div class="external-type">api.deepseek.com</div>
+      </div>
+      <div class="external-item">
+        <div class="external-icon">🌙</div>
+        <div class="external-name">Moonshot / Kimi</div>
+        <div class="external-type">api.moonshot.cn</div>
+      </div>
+      <div class="external-item">
+        <div class="external-icon">✨</div>
+        <div class="external-name">Agnes AI</div>
+        <div class="external-type">apihub.agnes-ai.com</div>
+      </div>
+      <div class="external-item">
+        <div class="external-icon">🟠</div>
+        <div class="external-name">Anthropic</div>
+        <div class="external-type">api.anthropic.com</div>
+      </div>
+      <div class="external-item">
+        <div class="external-icon">🔵</div>
+        <div class="external-name">OpenAI</div>
+        <div class="external-type">api.openai.com</div>
+      </div>
+      <div class="external-item">
+        <div class="external-icon">🟡</div>
+        <div class="external-name">Google Gemini</div>
+        <div class="external-type">generativelanguage.googleapis.com</div>
+      </div>
+      <div class="external-item">
+        <div class="external-icon">🟣</div>
+        <div class="external-name">Ollama</div>
+        <div class="external-type">localhost:11434 (本地部署)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="section-divider"><span>部署拓扑</span></div>
+
+  <!-- Layer 8: Deployment -->
+  <div class="layer">
+    <div class="layer-label">部署模式</div>
+    <div class="cards-row cols-2">
+      <div class="card orange">
+        <div class="card-header">
+          <div class="card-icon">💻</div>
+          <div class="card-title">本地开发</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">编排管理</span>
+            <span class="detail-value">manage.sh start → nohup + 端口轮询 (200ms, 最长10s)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">开机自启</span>
+            <span class="detail-value">macOS LaunchAgent → manage.sh start (自动检测 nvm/pyenv)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">进程检测</span>
+            <span class="detail-value">/usr/sbin/lsof -ti :PORT (必须使用完整路径)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">崩溃恢复</span>
+            <span class="detail-value">指数退避: 1s → 2s → 4s → 8s → 16s (最多重试5次)</span>
+          </div>
+        </div>
+      </div>
+      <div class="card cyan">
+        <div class="card-header">
+          <div class="card-icon">🐳</div>
+          <div class="card-title">Docker 部署</div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">Compose 编排</span>
+            <span class="detail-value">docker-compose.yml → 4个服务运行在 proxy-network 网络</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">构建方式</span>
+            <span class="detail-value">多阶段构建 (Cursor: builder → runtime, 移除开发依赖)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">容器间通信</span>
+            <span class="detail-value">服务名解析 (codex-proxy:18790, 等)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Manager 控制</span>
+            <span class="detail-value">Docker socket 挂载 → docker stop/start/restart 管理容器</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center; margin-top:50px; padding-top:30px; border-top:1px solid var(--border-subtle);">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted); letter-spacing:1px;">
+      PROXY REBUILD · 多代理 AI 服务管理系统 · 4个服务 · 7个上游提供商
+    </div>
+    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:6px;">
+      端口: 18790 (Codex) · 18792 (Manager) · 18793 (Hermes) · 18794 (Cursor)
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
