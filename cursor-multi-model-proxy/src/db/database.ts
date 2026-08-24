@@ -74,6 +74,20 @@ db.exec(`
 
 // ==================== Migrations ====================
 
+// D2: Ensure settings has value_type column (added for round-robin persistence).
+// Older databases created before value_type existed only have (key, value).
+(function ensureSettingsValueType() {
+  const cols = db.prepare('PRAGMA table_info(settings)').all() as Array<{ name: string }>;
+  if (!Array.isArray(cols) || cols.length === 0) return; // table not created yet
+  if (cols.some(c => c.name === 'value_type')) return; // already migrated
+  try {
+    db.prepare("ALTER TABLE settings ADD COLUMN value_type TEXT DEFAULT 'string'").run();
+    console.log('[DB] Added value_type column to settings table.');
+  } catch (e) {
+    console.warn('[DB] Could not add settings.value_type:', (e as Error).message);
+  }
+})();
+
 // D1: Ensure providers has UNIQUE(provider_id).
 // SQLite cannot add a UNIQUE constraint via ALTER TABLE, so we check whether the
 // index already exists and recreate the table only when needed.

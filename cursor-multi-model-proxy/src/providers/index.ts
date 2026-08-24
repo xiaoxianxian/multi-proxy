@@ -7,6 +7,9 @@ import { GenericProvider } from './generic.js';
 
 export function registerDefaultProviders(registry: ProviderRegistry): void {
   registry.register(new OpenAICompatibleProvider());
+  // DeepSeek uses the OpenAI-compatible wire protocol; register a dedicated
+  // adapter instance so provider_id='deepseek' resolves (base.ts ProviderId).
+  registry.register(new OpenAICompatibleProvider('deepseek'));
   registry.register(new AnthropicProvider());
   registry.register(new GoogleGeminiProvider());
   registry.register(new OllamaProvider());

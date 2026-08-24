@@ -1,7 +1,11 @@
 import { ProviderAdapter, ProviderConfig, ModelInfo, UpstreamRequest } from './base.js';
 
 export class OpenAICompatibleProvider implements ProviderAdapter {
-  readonly id: 'openai' | 'deepseek' | 'generic' = 'openai';
+  readonly id: 'openai' | 'deepseek' | 'generic';
+
+  constructor(id: 'openai' | 'deepseek' | 'generic' = 'openai') {
+    this.id = id;
+  }
   readonly name = 'OpenAI Compatible';
   readonly defaultBaseUrl = 'https://api.openai.com/v1';
   readonly wireApi: 'openai' = 'openai';
