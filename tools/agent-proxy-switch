@@ -70,10 +70,20 @@ current_codex_url() {
     | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/'
 }
 current_hermes_url() {
-  # model.base_url 是 2 空格缩进；providers.custom.base_url 是 4 空格。
-  # 这里取 model.base_url（与 proxy-rebuild 切换时两处一起改）。
-  grep -E '^  base_url:' "$HERMES_CFG" 2>/dev/null | head -1 \
-    | sed -E 's/.*base_url:[[:space:]]*"?([^"]+)"?.*/\1/'
+  # 取顶层 model: 块内的 2 空格缩进 base_url。
+  # 不能直接 grep '^  base_url:' —— 新版 config.yaml 里 delegation、
+  # auxiliary 等其它顶层块也有 2 空格缩进的 base_url（且常为空值），
+  # 排在 model 块前面会被误读，导致所有者误判 unknown。
+  # 注意 ^model: 不会匹配 model_catalog:（冒号位置不同）。
+  awk '
+    /^[A-Za-z_][A-Za-z0-9_]*:/ { in_model = ($0 ~ /^model:[[:space:]]*$/) }
+    in_model && /^  base_url:/ {
+      sub(/^  base_url:[[:space:]]*/, "")
+      gsub(/^"|"$/, "")
+      print
+      exit
+    }
+  ' "$HERMES_CFG" 2>/dev/null
 }
 
 # ---- 写入 base_url ----
