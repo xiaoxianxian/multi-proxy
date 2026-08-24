@@ -628,6 +628,17 @@ async function stopProxy(name) {
   try {
     const { execSync } = require('child_process');
     const pids = execSync(`${LSOF} -ti :${config.port}`, { stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
+    // Fallback for externally-started proxies (e.g. via manage.sh nohup):
+    // proxyProcesses is empty then, so authorize port PIDs only when the
+    // process's working directory matches this proxy's configured cwd.
+    if (allowedPids.size === 0 && config.cwd) {
+      for (const pid of pids) {
+        try {
+          const cwdOut = execSync(`${LSOF} -a -p ${pid} -d cwd`, { stdio: 'pipe' }).toString();
+          if (cwdOut.includes(config.cwd)) allowedPids.add(parseInt(pid));
+        } catch {}
+      }
+    }
     for (const pid of pids) {
       const pidNum = parseInt(pid);
       if (!allowedPids.has(pidNum)) continue;
