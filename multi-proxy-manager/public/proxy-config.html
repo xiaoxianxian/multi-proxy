@@ -921,6 +921,15 @@
 
     async function switchModel(modelId) {
       try {
+        // hermes has a dedicated switch-model endpoint that rewrites its config.yaml
+        if (currentProxyName === 'hermes') {
+          await fetchAdminApi('/switch-model', {
+            method: 'POST',
+            body: JSON.stringify({ model: modelId }),
+          });
+          return;
+        }
+        // codex & cursor persist the current model in their settings store
         await fetchAdminApi('/settings', {
           method: 'PUT',
           body: JSON.stringify({ key: 'current_model', value: modelId }),
