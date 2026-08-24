@@ -176,6 +176,21 @@ const UPSTREAM_MODELS = [
 
 function findProvider(modelName) {
   if (!modelName) return null;
+  // 1. User-defined providers (created via Web UI, stored in providers.json)
+  //    take priority. Their models are matched exactly; base_url + api_key
+  //    come from the provider entry itself.
+  const userProviders = loadProviders().filter(p => p.enabled !== false);
+  for (const p of userProviders) {
+    if (Array.isArray(p.models) && p.models.includes(modelName)) {
+      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models };
+    }
+  }
+  const userMatch = userProviders.find(p => p.provider_id && modelName.toLowerCase().includes(String(p.provider_id).toLowerCase()));
+  if (userMatch) {
+    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [] };
+  }
+
+  // 2. Legacy built-in env-key providers (DeepSeek / Kimi / Agnes)
   let provider = UPSTREAM_MODELS.find(p => p.availableModels.includes(modelName));
   if (provider) return provider;
   const lower = modelName.toLowerCase();
@@ -217,12 +232,18 @@ function generateId() {
 
 // Models list
 app.get('/v1/models', requireAuth, (req, res) => {
-  const models = UPSTREAM_MODELS.flatMap(p =>
+  const builtin = UPSTREAM_MODELS.flatMap(p =>
     p.availableModels.map(name => ({
       id: name, object: 'model', created: Math.floor(Date.now() / 1000), owned_by: p.name
     }))
   );
-  res.json({ object: 'list', data: models });
+  // Merge in models of user-defined providers (Web UI CRUD)
+  const userModelIds = new Set(builtin.map(m => m.id));
+  const userModels = loadProviders().filter(p => p.enabled !== false && Array.isArray(p.models))
+    .flatMap(p => p.models
+      .filter(name => !userModelIds.has(name))
+      .map(name => ({ id: name, object: 'model', created: Math.floor(Date.now() / 1000), owned_by: p.name })));
+  res.json({ object: 'list', data: builtin.concat(userModels) });
 });
 
 // Health check
@@ -241,6 +262,45 @@ app.get('/api/config', requireAuth, (req, res) => {
   config.path = configTomlPath;
   res.json(config);
 });
+
+// ===== Settings (key-value store for Web UI; e.g. current_model) =====
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+      return data && typeof data === 'object' ? data : {};
+    }
+  } catch {}
+  return {};
+}
+
+function saveSettings(settings) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (e) {
+    console.error(`[SETTINGS] Failed to save: ${e.message}`);
+  }
+}
+
+app.get('/api/settings', requireAuth, (req, res) => {
+  res.json({ settings: loadSettings() });
+});
+
+app.put('/api/settings', requireAuth, (req, res) => {
+  const { key, value } = req.body || {};
+  if (!key) {
+    return res.status(400).json({ success: false, error: 'Missing key', code: 'MISSING_KEY' });
+  }
+  const settings = loadSettings();
+  settings[key] = value;
+  saveSettings(settings);
+  console.log(`[SETTINGS] ${key} = ${JSON.stringify(value)}`);
+  res.json({ success: true });
+});
+
 
 app.get('/api/routing-mode', requireAuth, (req, res) => {
   loadRoutingMode();
@@ -356,7 +416,7 @@ app.get('/api/providers', requireAuth, (req, res) => {
 
 // POST /api/providers — create a new provider
 app.post('/api/providers', requireAuth, (req, res) => {
-  const { name, provider_id, api_key, base_url, enabled } = req.body;
+  const { name, provider_id, api_key, base_url, enabled, models } = req.body;
   if (!name || !provider_id || !api_key || !base_url) {
     return res.status(400).json({ success: false, error: 'Missing required fields: name, provider_id, api_key, base_url' });
   }
@@ -369,6 +429,7 @@ app.post('/api/providers', requireAuth, (req, res) => {
     provider_id,
     api_key,
     base_url,
+    models: Array.isArray(models) ? models.filter(m => typeof m === 'string') : [],
     enabled: enabled !== false,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -384,7 +445,7 @@ app.put('/api/providers/:id', requireAuth, (req, res) => {
   if (idx === -1) {
     return res.status(404).json({ success: false, error: 'Provider not found' });
   }
-  const allowedFields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled'];
+  const allowedFields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled', 'models'];
   const updates = {};
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];

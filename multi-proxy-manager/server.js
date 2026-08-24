@@ -1043,9 +1043,9 @@ app.get('/api/auth/status', (_req, res) => {
 // Forward proxy whitelist - only allow known endpoints
 const FORWARD_ENDPOINTS = {
   codex: {
-    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection'],
+    GET: ['/v1/models', '/health', '/api/config', '/api/routing-mode', '/api/providers', '/api/providers/status', '/api/balances', '/api/history', '/api/test-connection', '/api/settings'],
     POST: ['/v1/chat/completions', '/api/set-routing-mode', '/api/switch-model', '/api/clear-history', '/api/providers'],
-    PUT: ['/api/providers/:id'],
+    PUT: ['/api/providers/:id', '/api/settings'],
     DELETE: ['/api/providers/:id'],
   },
   hermes: {
