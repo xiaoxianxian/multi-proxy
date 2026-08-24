@@ -1100,6 +1100,27 @@ function isAllowedEndpoint(proxy, method, path) {
 }
 
 // ==================== 连通性测试 (MUST be before proxy wildcard) ====================
+
+/**
+ * 把上游请求错误分类成用户可读文案。
+ * 区分：认证失败(401/403) / 端点不存在(404) / 网络不通 / 其它，
+ * 避免把「密钥错误」误报成「无法连接」（交接文档遗留体验问题）。
+ */
+function classifyUpstreamError(err) {
+  const status = err && err.response && err.response.status;
+  if (status === 401 || status === 403) {
+    return { status: 401, error: `认证失败（HTTP ${status}）：API Key 无效或无权限，请检查密钥` };
+  }
+  if (status === 404) {
+    return { status: 404, error: '端点不存在（HTTP 404）：请检查 Base URL 是否正确' };
+  }
+  if (status) {
+    return { status: 502, error: `供应商返回错误（HTTP ${status}）` };
+  }
+  // 无 response —— 网络层失败（DNS/超时/拒绝连接等）
+  return { status: 502, error: '无法连接到供应商 API，请检查网络和地址（' + ((err && err.code) || err.message || '未知错误') + '）' };
+}
+
 app.post('/api/test-connection', requireAuth, async (req, res) => {
   var { baseUrl, apiKey, model: providerId } = req.body;
   if (!baseUrl || !providerId) {
@@ -1145,7 +1166,9 @@ app.post('/api/test-connection', requireAuth, async (req, res) => {
     var resp = await axios(axiosConfig);
     res.json({ success: true, message: '连通成功' });
   } catch (err) {
-    res.status(502).json({ success: false, error: '连接失败: ' + err.message });
+    const c = classifyUpstreamError(err);
+    appendLog('warn', 'test-connection', 'Connection test failed: ' + err.message);
+    res.status(c.status).json({ success: false, error: c.error });
   }
 });
 
@@ -1155,24 +1178,24 @@ app.post('/api/test-connection', requireAuth, async (req, res) => {
 function normalizeModels(rawModels, format) {
   const list = [];
   if (format === 'openai') {
-    for (const i = 0; i < rawModels.length; i++) {
+    for (let i = 0; i < rawModels.length; i++) {
       const m = rawModels[i];
       list.push({ id: m.id, name: m.id, displayName: m.id });
     }
   } else if (format === 'anthropic') {
-    for (const i = 0; i < rawModels.length; i++) {
+    for (let i = 0; i < rawModels.length; i++) {
       const m = rawModels[i];
       list.push({ id: m.identifier, name: m.identifier, displayName: m.name || m.identifier });
     }
   } else if (format === 'gemini') {
-    for (const i = 0; i < rawModels.length; i++) {
+    for (let i = 0; i < rawModels.length; i++) {
       const m = rawModels[i];
       const id = m.name.replace('models/', '');
       const displayName = m.displayName || id;
       list.push({ id: id, name: id, displayName: displayName });
     }
   } else if (format === 'ollama') {
-    for (const i = 0; i < rawModels.length; i++) {
+    for (let i = 0; i < rawModels.length; i++) {
       const m = rawModels[i];
       list.push({ id: m.name, name: m.name, displayName: m.name });
     }
@@ -1231,8 +1254,9 @@ app.post('/api/fetch-models', requireAuth, async (req, res) => {
     var models = normalizeModels(rawModels, format);
     res.json({ success: true, models: models });
   } catch (err) {
+    const c = classifyUpstreamError(err);
     appendLog('warn', 'fetch-models', 'Failed to fetch models: ' + err.message);
-    res.status(502).json({ success: false, error: '无法连接到供应商 API，请检查地址和密钥' });
+    res.status(c.status).json({ success: false, error: c.error });
   }
 });
 
