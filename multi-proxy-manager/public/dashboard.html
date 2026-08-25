@@ -1337,6 +1337,8 @@ body {
   }
 
   // ===== Intercept fetch for auth token =====
+  // B6: 注入 token + 全局 401 拦截 —— token 过期/无效时跳转登录页，
+  // 避免页面退化为"假数据模式"。auth 端点自身的 401（密码错误）不拦截。
   var _origFetch = window.fetch;
   window.fetch = function(url, options) {
     if (options === undefined) options = {};
@@ -1346,7 +1348,17 @@ body {
         options.headers['x-auth-token'] = authToken;
       }
     }
-    return _origFetch(url, options);
+    var p = _origFetch(url, options);
+    if (typeof url === 'string' && url.indexOf('/api/') === 0
+        && url.indexOf('/api/auth/') !== 0) {
+      p.then(function(res) {
+        if (res.status === 401) {
+          sessionStorage.removeItem('auth_token');
+          window.location.href = 'login.html';
+        }
+      }).catch(function() {});
+    }
+    return p;
   };
 
   // ===== Auto-refresh Control =====

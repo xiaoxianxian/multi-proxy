@@ -727,7 +727,6 @@
     var providers = MOCK_PROVIDERS.slice();
     var isRunning = true;
     var currentModel = 'claude-sonnet-4-20250514';
-    var keyVisible = false;
     var currentProxyName = 'cursor';
 
     // ==================== API Layer ====================
@@ -1193,6 +1192,25 @@
       return h;
     }
 
+    // B6: 全局 401 拦截 —— token 过期/无效时跳转登录页，避免页面显示错误状态。
+    // auth 端点自身的 401（密码错误）不拦截。本页 fetch 均为相对 /api/ 路径。
+    (function() {
+      var origFetch = window.fetch;
+      window.fetch = function(url, options) {
+        var p = origFetch(url, options);
+        if (typeof url === 'string' && url.indexOf('/api/') === 0
+            && url.indexOf('/api/auth/') !== 0) {
+          p.then(function(res) {
+            if (res.status === 401) {
+              sessionStorage.removeItem('auth_token');
+              window.location.href = 'login.html';
+            }
+          }).catch(function() {});
+        }
+        return p;
+      };
+    })();
+
     async function fetchStatus() {
       try {
         var res = await fetch('/api/status');
@@ -1293,9 +1311,16 @@
       window.location.href = 'dashboard.html';
     }
 
+    // B8: key 明文永不进 DOM，"显示/隐藏密钥"按钮改为提示（复制功能保留）
     function toggleKeyVisibility() {
-      keyVisible = !keyVisible;
-      renderProviders();
+      showToast('出于安全考虑，API Key 仅显示掩码；点击掩码可复制完整 Key', 'info', 3000);
+    }
+
+    function getProviderById(id) {
+      for (var i = 0; i < providers.length; i++) {
+        if (providers[i].id === id) return providers[i];
+      }
+      return null;
     }
 
     function switchTab(tabEl, tabName) {
@@ -1318,17 +1343,18 @@
       var html = '';
       for (var i = 0; i < providers.length; i++) {
         var p = providers[i];
-        var displayKey = keyVisible ? esc(p.api_key) : maskKey(p.api_key);
-        var keyTooltip = keyVisible ? esc(p.api_key) : '点击复制';
+        // B8: API Key 明文不进 DOM —— 显示掩码，复制/测试按钮只带 data-id，
+        // 点击时从内存 providers 数组按 id 取 key。
+        var displayKey = maskKey(p.api_key);
         html += '<tr data-provider-id="' + esc(p.id) + '">' +
           '<td><strong>' + esc(p.name) + '</strong></td>' +
           '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(p.provider_id) + '">' + esc(p.provider_id) + '</code></td>' +
           '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(p.base_url) + '">' + esc(p.base_url) + '</code></td>' +
-          '<td><code class="api-key-display" data-key="' + esc(p.api_key) + '" style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="' + keyTooltip + '">' + displayKey + '</code></td>' +
+          '<td><code class="api-key-display" data-id="' + esc(p.id) + '" style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="点击复制">' + displayKey + '</code></td>' +
           '<td><label class="toggle" style="cursor:pointer"><input type="checkbox" class="provider-enable-toggle" data-id="' + esc(p.id) + '" ' + (p.enabled ? 'checked' : '') + '><span class="toggle-slider"></span></label></td>' +
           '<td class="actions">' +
             '<button class="btn btn-sm edit-provider-btn" data-id="' + esc(p.id) + '">编辑</button>' +
-            '<button class="btn btn-sm test-provider-btn" data-id="' + esc(p.id) + '" data-url="' + esc(p.base_url) + '" data-key="' + esc(p.api_key) + '" data-pid="' + esc(p.provider_id) + '">测试</button>' +
+            '<button class="btn btn-sm test-provider-btn" data-id="' + esc(p.id) + '">测试</button>' +
             '<button class="btn btn-sm btn-danger delete-provider-btn" data-id="' + esc(p.id) + '">删除</button>' +
           '</td></tr>';
       }
@@ -2057,11 +2083,12 @@
         toggleKeyVisibility();
         return;
       }
-      // API Key copy (use data attribute, not inline onclick)
+      // API Key copy (B8: key 不在 DOM，从内存 providers 按 data-id 取)
       var apiKeyEl = e.target.closest('.api-key-display');
       if (apiKeyEl) {
-        var key = apiKeyEl.getAttribute('data-key');
-        if (key) copyToClipboard(key);
+        var keyId = apiKeyEl.getAttribute('data-id');
+        var p = getProviderById(keyId);
+        if (p && p.api_key) copyToClipboard(p.api_key);
         return;
       }
       // History copy items
@@ -2079,11 +2106,9 @@
       }
       var testBtn = e.target.closest('.test-provider-btn');
       if (testBtn) {
-        var id = testBtn.getAttribute('data-id');
-        var url = testBtn.getAttribute('data-url');
-        var key = testBtn.getAttribute('data-key');
-        var pid = testBtn.getAttribute('data-pid');
-        testProviderConnection(id, url, key, pid);
+        var tid = testBtn.getAttribute('data-id');
+        var tp = getProviderById(tid);
+        if (tp) testProviderConnection(tp.id, tp.base_url, tp.api_key, tp.provider_id);
         return;
       }
       var delBtn = e.target.closest('.delete-provider-btn');
