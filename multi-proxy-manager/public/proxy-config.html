@@ -1468,9 +1468,13 @@
     function showAddProviderModal() {
       var modal = document.createElement('div');
       modal.className = 'modal';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'modal-add-title');
 
       var title = document.createElement('div');
       title.className = 'modal-title';
+      title.id = 'modal-add-title';
       title.textContent = '添加供应商';
       modal.appendChild(title);
 
@@ -1533,6 +1537,7 @@
         showToast('已添加供应商 ' + name, 'success');
       };
       overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+      overlay.addEventListener('keydown', function(e) { if (e.key === 'Escape') overlay.remove(); });
 
       var fetchEl = fetchBtn;
       var pidEl2 = document.getElementById('modal-provider-id');
@@ -1564,9 +1569,13 @@
 
       var modal = document.createElement('div');
       modal.className = 'modal';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'modal-edit-title');
 
       var title = document.createElement('div');
       title.className = 'modal-title';
+      title.id = 'modal-edit-title';
       title.textContent = '编辑供应商';
       modal.appendChild(title);
 
@@ -1682,6 +1691,7 @@
         showToast('已更新 ' + name, 'success');
       };
       overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+      overlay.addEventListener('keydown', function(e) { if (e.key === 'Escape') overlay.remove(); });
 
       var fetchEl = fetchBtn2;
       var urlEl3 = document.getElementById('modal-base-url');
@@ -1935,12 +1945,16 @@
       var modal = document.createElement('div');
       modal.className = 'modal';
       modal.style.maxWidth = '90vw';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'modal-fetch-title');
 
       var title = document.createElement('div');
       title.className = 'modal-title';
       title.style.display = 'flex';
       title.style.justifyContent = 'space-between';
       title.style.alignItems = 'center';
+      title.id = 'modal-fetch-title';
 
       var titleText = document.createElement('span');
       titleText.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg> 选择模型 (' + providerId + ')';
@@ -1997,6 +2011,7 @@
 
       cancelBtn.onclick = function() { overlay.remove(); };
       overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+      overlay.addEventListener('keydown', function(e) { if (e.key === 'Escape') overlay.remove(); });
 
       var allCheckboxes = [];
       var modelsAreaEl = document.getElementById('models-area');

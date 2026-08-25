@@ -68,6 +68,12 @@
   border-color: var(--color-border);
 }
 
+.btn:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
 .btn:active {
   transform: scale(0.97);
 }
