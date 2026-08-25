@@ -91,8 +91,24 @@ def save_providers(providers):
 providers = load_providers()
 
 def generate_id():
+    # 与 codex-proxy generateId() 同构：prov_ + base36 毫秒时间戳(9位补零)
+    # + '_' + 6位 base36 随机串。
     import random
-    return 'prov_' + time.strftime('%Y%m%d%H%M%S') + '_' + format(random.randint(0, 0xfffffff), '07x')
+    ts36 = _to_base36(int(time.time() * 1000)).rjust(9, '0')
+    rand36 = ''.join(random.choice('0123456789abcdefghijklmnopqrstuvwxyz')
+                     for _ in range(6))
+    return 'prov_' + ts36 + '_' + rand36
+
+
+def _to_base36(n):
+    digits = '0123456789abcdefghijklmnopqrstuvwxyz'
+    if n == 0:
+        return '0'
+    out = []
+    while n:
+        n, r = divmod(n, 36)
+        out.append(digits[r])
+    return ''.join(reversed(out))
 
 
 def load_routing_mode():
@@ -368,7 +384,8 @@ def set_routing_mode():
     if update_routing_mode(mode):
         return jsonify({'success': True, 'mode': mode})
     else:
-        return jsonify({'success': False, 'error': 'Failed to update routing mode'}), 500
+        # 与 codex-proxy 对齐：写文件失败统一返回 WRITE_FAILED
+        return jsonify({'success': False, 'error': 'Failed to update routing mode', 'code': 'WRITE_FAILED'}), 500
 
 
 @app.route('/api/providers/status', methods=['GET'])
@@ -436,7 +453,8 @@ def switch_model():
     # Update config
     result = update_config_yaml(config_path, new_model)
     if not result['success']:
-        return jsonify({'success': False, 'error': result['error'], 'code': 'CONFIG_UPDATE_FAILED'}), 500
+        # 与 codex-proxy 对齐：switch-model 配置更新失败统一返回 SWITCH_FAILED
+        return jsonify({'success': False, 'error': result['error'], 'code': 'SWITCH_FAILED'}), 500
 
     # Auto-switch to config routing mode
     update_routing_mode('config')
@@ -505,8 +523,12 @@ def get_providers():
     safe = []
     for p in providers:
         sp = dict(p)
-        if sp.get('api_key') and len(sp['api_key']) > 4:
+        if sp.get('api_key'):
+            # 与 codex-proxy 掩码规则一致：无条件只保留前 4 字符，
+            # 短 key 也掩码（否则 len<=4 的 key 会整串泄漏给前端）。
             sp['api_key'] = sp['api_key'][:4] + '****'
+        else:
+            sp['api_key'] = ''
         safe.append(sp)
     return jsonify({'providers': safe})
 
