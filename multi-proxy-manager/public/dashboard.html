@@ -927,10 +927,14 @@ body {
   }
 
   // ===== Escaping Utility =====
+  // 转义 < > & ' "（引号用于属性上下文安全，见 proxy-config.html 同名函数注释）
   function esc(str) {
+    if (str === null || str === undefined) return '';
     var d = document.createElement('div');
     d.textContent = str;
-    return d.innerHTML;
+    return d.innerHTML
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ===== Loading Bar (P1-4) =====

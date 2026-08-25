@@ -1666,10 +1666,16 @@
       updateFetchBtn2();
     }
 
+    // 转义 < > & ' " —— 引号必须转义：本页大量把 esc() 输出放进
+    // 双引号属性（data-* / title），不转义 " 会被含引号的供应商
+    // 名称/URL/API Key 逃逸属性注入事件处理器（存储型 XSS）。
     function esc(str) {
+      if (str === null || str === undefined) return '';
       var d = document.createElement('div');
       d.textContent = str;
-      return d.innerHTML;
+      return d.innerHTML
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     // ===== Loading Bar (P1-4) =====
