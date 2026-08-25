@@ -752,7 +752,7 @@ body::after {
         <div class="modal-title" id="forgotModalTitle">忘记密码？</div>
         <ol>
           <li>关闭 Manager 服务</li>
-          <li>删除密码文件：<code>rm ~/.multi-proxy-password</code></li>
+          <li>删除密码文件：<code>rm ~/.multi-proxy-manager/password</code></li>
           <li>重启 Manager 服务：<code>bash manage.sh restart manager</code></li>
           <li>重新访问 <a href="http://localhost:18792" style="color:var(--color-primary);">http://localhost:18792</a> 设置新密码</li>
         </ol>
@@ -771,6 +771,12 @@ body::after {
 <script>
 (function() {
   'use strict';
+
+  // Dark mode: 沿用 localStorage 偏好（与 dashboard/logs/proxy-config 保持一致）
+  if (localStorage.getItem('darkMode') === 'true') {
+    document.documentElement.classList.add('dark');
+    document.documentElement.classList.remove('light');
+  }
 
   // ============================================
   // State
@@ -1137,7 +1143,7 @@ body::after {
   });
 
   function copyResetCommand() {
-    var cmd = 'rm ~/.multi-proxy-password\nbash manage.sh restart manager';
+    var cmd = 'rm ~/.multi-proxy-manager/password\nbash manage.sh restart manager';
     if (navigator.clipboard) {
       navigator.clipboard.writeText(cmd).then(function() {
         var btn = els.copyCmdBtn;

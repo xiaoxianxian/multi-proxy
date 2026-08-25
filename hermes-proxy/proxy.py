@@ -76,8 +76,10 @@ def save_providers(providers):
         # JSON，下次 load 解析失败静默返回空列表导致数据全丢。tmp+replace
         # 与 save_routing_mode 同模式，os.replace 是原子操作。
         tmp_file = PROVIDERS_FILE + '.tmp'
+        # P1: 文件含明文 API Key，收紧权限到 0600
         with open(tmp_file, 'w') as f:
             json.dump(providers, f, indent=2)
+        os.chmod(tmp_file, 0o600)
         os.replace(tmp_file, PROVIDERS_FILE)
     except Exception as e:
         try:

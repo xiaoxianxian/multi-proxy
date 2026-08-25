@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cursor Proxy - 配置</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
     <link rel="stylesheet" href="./colors_and_type.css">
     <link rel="stylesheet" href="./shared-styles.css">
@@ -716,20 +719,10 @@
       }
     }
 
-    var MOCK_HISTORY = [
-      { timestamp: '2026-06-27T10:30:00Z', action: '手动切换', from: 'gpt-4o', to: 'claude-sonnet-4-20250514', success: true },
-      { timestamp: '2026-06-27T09:15:00Z', action: '自动切换', from: 'claude-3-5-sonnet-latest', to: 'gpt-4o', success: true },
-      { timestamp: '2026-06-27T08:45:00Z', action: '手动切换', from: 'o3-mini', to: 'claude-3-5-sonnet-latest', success: false },
-      { timestamp: '2026-06-26T22:10:00Z', action: 'Failover', from: 'claude-opus-4-20250514', to: 'claude-sonnet-4-20250514', success: true },
-      { timestamp: '2026-06-26T18:30:00Z', action: '手动切换', from: 'gpt-4o-mini', to: 'o3-mini', success: true },
-      { timestamp: '2026-06-26T14:20:00Z', action: '自动切换', from: 'gemini-2.0-flash', to: 'gpt-4o-mini', success: true },
-      { timestamp: '2026-06-26T11:00:00Z', action: '手动切换', from: 'claude-sonnet-4-20250514', to: 'gemini-2.0-flash', success: true },
-      { timestamp: '2026-06-25T20:45:00Z', action: 'Failover', from: 'gpt-4o', to: 'claude-sonnet-4-20250514', success: false },
-      { timestamp: '2026-06-25T16:30:00Z', action: '手动切换', from: 'o3-mini', to: 'gpt-4o', success: true },
-      { timestamp: '2026-06-25T09:00:00Z', action: '自动切换', from: 'claude-3-5-sonnet-latest', to: 'o3-mini', success: true },
-      { timestamp: '2026-06-24T23:15:00Z', action: '手动切换', from: 'gemini-2.5-pro-preview-05-06', to: 'claude-3-5-sonnet-latest', success: true },
-      { timestamp: '2026-06-24T19:40:00Z', action: 'Failover', from: 'gpt-4o', to: 'gemini-2.5-pro-preview-05-06', success: true },
-    ];
+    // 切换历史：来自后端 /api/history（codex/hermes 内存记录）。
+    // cursor 无此端点，显示空态提示。
+    var switchHistory = [];
+    var historySupported = currentProxyName === 'codex' || currentProxyName === 'hermes';
 
     var providers = MOCK_PROVIDERS.slice();
     var isRunning = true;
@@ -919,24 +912,29 @@
       return null;
     }
 
+    // 返回后端 JSON（含 success 字段）；网络/HTTP 失败时抛异常，由调用方提示
     async function switchModel(modelId) {
-      try {
-        // hermes has a dedicated switch-model endpoint that rewrites its config.yaml
-        if (currentProxyName === 'hermes') {
-          await fetchAdminApi('/switch-model', {
-            method: 'POST',
-            body: JSON.stringify({ model: modelId }),
-          });
-          return;
-        }
-        // codex & cursor persist the current model in their settings store
-        await fetchAdminApi('/settings', {
-          method: 'PUT',
-          body: JSON.stringify({ key: 'current_model', value: modelId }),
+      // codex & hermes 有专用 switch-model 端点：改写配置文件 + 记录切换历史 +
+      // 路由模式切到 config。cursor 无此端点，用 settings KV 持久化当前模型。
+      if (currentProxyName === 'codex' || currentProxyName === 'hermes') {
+        const prefix = PROXY_API_PREFIX[currentProxyName] || '/api';
+        const fwdUrl = '/api/' + currentProxyName + prefix + '/switch-model';
+        const res = await fetch(fwdUrl, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ model: modelId }),
         });
-      } catch {
-        // Fallback to in-memory only
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        return data;
       }
+      await fetchAdminApi('/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ key: 'current_model', value: modelId }),
+      });
+      return { success: true };
     }
 
     async function loadBalances() {
@@ -1005,6 +1003,7 @@
       currentProxyName = getProxyFromUrl();
       displayName = proxyDisplayNameMap[currentProxyName] || currentProxyName;
       document.title = displayName + ' - 配置';
+      applySavedDarkMode();
       updateProxyHeader(displayName);
       highlightActiveNav();
       setupDynamicTabs();
@@ -1019,7 +1018,7 @@
       renderProviders();
       renderModels();
       renderBalances();
-      renderHistory();
+      loadHistory();
       loadConfigData();
       fetchStatus();
     }
@@ -1149,21 +1148,32 @@
     async function loadConfigData() {
       showLoading();
       try {
-        var res = await fetch('/api/' + currentProxyName + '/admin-api/settings', {
+        // codex/hermes: GET /api/config 返回真实配置中的当前模型（{model: ...}）；
+        // cursor: /admin-api/settings 的 current_model KV。
+        var url, modelKey;
+        if (currentProxyName === 'codex' || currentProxyName === 'hermes') {
+          var prefix = PROXY_API_PREFIX[currentProxyName] || '/api';
+          url = '/api/' + currentProxyName + prefix + '/config';
+          modelKey = 'model';
+        } else {
+          url = '/api/cursor/admin-api/settings';
+          modelKey = 'current_model';
+        }
+        var res = await fetch(url, {
           headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         });
         if (!res.ok) return;
         var data = await res.json();
-        if (!data.settings) return;
-        var s = data.settings;
-        if (s.current_model) {
-          currentModel = s.current_model;
+        var s = (modelKey === 'model') ? data : data.settings;
+        if (!s) return;
+        if (s[modelKey]) {
+          currentModel = s[modelKey];
           var disp = document.getElementById('currentModelDisplay');
-          if (disp) disp.textContent = s.current_model;
+          if (disp) disp.textContent = s[modelKey];
           var sel = document.getElementById('modelSelect');
           if (sel) {
             for (var i = 0; i < sel.options.length; i++) {
-              if (sel.options[i].value === s.current_model) { sel.selectedIndex = i; break; }
+              if (sel.options[i].value === s[modelKey]) { sel.selectedIndex = i; break; }
             }
           }
         }
@@ -1698,15 +1708,24 @@
       sel.innerHTML = html;
     }
 
-    function switchCurrentModel() {
+    async function switchCurrentModel() {
       var sel = document.getElementById('modelSelect');
       var nm = sel.value;
       if (nm === currentModel) { showToast('已经是当前模型', 'info'); return; }
+      var oldModel = currentModel;
       currentModel = nm;
       document.getElementById('currentModelDisplay').textContent = nm;
-      switchModel(nm).catch(function() {
-        showToast('模拟模式: 模型已切换为 ' + nm, 'info', 2000);
-      });
+      try {
+        await switchModel(nm);
+        showToast('模型已切换为 ' + nm, 'success', 3000);
+        loadHistory();
+      } catch (e) {
+        // 后端失败则回滚 UI，避免显示假状态
+        currentModel = oldModel;
+        document.getElementById('currentModelDisplay').textContent = oldModel;
+        sel.value = oldModel;
+        showToast('切换失败: ' + (e.message || '未知错误'), 'error', 4000);
+      }
     }
 
     function renderBalances() {
@@ -1759,10 +1778,31 @@
       renderBalances();
     }
 
+    async function loadHistory() {
+      if (!historySupported) {
+        switchHistory = [];
+        renderHistory();
+        return;
+      }
+      try {
+        const data = await fetchAdminApi('/history');
+        if (data && Array.isArray(data.history)) {
+          switchHistory = data.history;
+        }
+      } catch {}
+      renderHistory();
+    }
+
     function renderHistory() {
       var tbody = document.getElementById('historyBody');
       var html = '';
-      var list = MOCK_HISTORY.slice(0, 20).reverse();
+      var list = (switchHistory || []).slice(0, 20);
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-text-tertiary,#94a3b8);">'
+          + (historySupported ? '暂无切换记录，切换模型后将显示在这里' : '当前代理不支持切换历史')
+          + '</td></tr>';
+        return;
+      }
       for (var i = 0; i < list.length; i++) {
         var h = list[i];
         html += '<tr>' +
@@ -1787,9 +1827,16 @@
       return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 
-    function clearHistory() {
+    async function clearHistory() {
       if (!confirm('确定要清除所有切换历史吗？')) return;
-      MOCK_HISTORY.length = 0;
+      if (historySupported) {
+        const data = await fetchAdminApi('/clear-history', { method: 'POST' });
+        if (!data || !data.success) {
+          showToast('清除失败', 'error');
+          return;
+        }
+      }
+      switchHistory = [];
       renderHistory();
       showToast('历史记录已清除', 'success');
     }
@@ -1991,6 +2038,13 @@
         cancelBtn.style.display = 'inline-flex';
         confirmBtn.style.display = 'none';
       });
+    }
+
+    function applySavedDarkMode() {
+      if (localStorage.getItem('darkMode') === 'true') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
     }
 
     init();

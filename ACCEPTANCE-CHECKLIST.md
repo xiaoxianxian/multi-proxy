@@ -79,4 +79,4 @@ cd cursor-multi-model-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest
 
 - 代理显示"未运行"：`/usr/sbin/lsof -i :18790` 测试 lsof 是否可用
 - 代理启动失败：`bash manage.sh logs codex` 查看日志
-- 忘记密码：`rm ~/.multi-proxy-password && bash manage.sh restart manager`
+- 忘记密码：`rm ~/.multi-proxy-manager/password && bash manage.sh restart manager`

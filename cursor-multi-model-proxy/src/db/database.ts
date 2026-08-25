@@ -125,7 +125,17 @@ db.exec(`
   }
 })();
 
-// D3: Clean up logs older than 30 days at startup.
+// D3: Hot-path indexes.
+// - logs.timestamp: adminRoutes 按 ORDER BY timestamp DESC 查询、下方 30 天清理按范围删除，均全表扫描
+// - models.name: chatHandler 每次聊天请求 WHERE m.name = ? AND m.enabled = 1，热路径全表扫描
+try {
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_models_name ON models(name)').run();
+} catch (e) {
+  console.warn('[DB] Could not create indexes:', (e as Error).message);
+}
+
+// D4: Clean up logs older than 30 days at startup.
 try {
   const result = db.prepare(
     "DELETE FROM logs WHERE timestamp < datetime('now', '-30 days')"
