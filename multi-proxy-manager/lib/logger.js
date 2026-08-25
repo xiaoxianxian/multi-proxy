@@ -22,17 +22,33 @@ function formatLogEntry(level, proxy, message, meta = {}) {
   };
 }
 
+// 裁剪策略：每追加 TRIM_INTERVAL 条才做一次全文件重写（保留最后 HARD_LIMIT 行），
+// 文件稳定在 HARD_LIMIT ~ HARD_LIMIT+TRIM_INTERVAL 行之间。
+// 避免旧实现"每写一条就整读整写"的 O(n²) 写放大。
+const HARD_LIMIT = 5000;
+const TRIM_INTERVAL = 500;
+let linesSinceTrim = 0;
+
+function trimLogFile() {
+  const content = fs.readFileSync(LOG_FILE, 'utf8');
+  const lines = content.split('\n').slice(-HARD_LIMIT);
+  fs.writeFileSync(LOG_FILE, lines.join('\n'));
+}
+
 function appendLog(level, proxyName, message, meta = {}) {
   try {
     if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
     const entry = formatLogEntry(level, proxyName, message, meta);
     fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
-    // Keep last 5000 lines
-    const content = fs.readFileSync(LOG_FILE, 'utf8');
-    const lines = content.split('\n').slice(-5000);
-    fs.writeFileSync(LOG_FILE, lines.join('\n'));
+    linesSinceTrim++;
+    // Keep last ~5000 lines; full rewrite only once per TRIM_INTERVAL appends
+    if (linesSinceTrim >= TRIM_INTERVAL) {
+      trimLogFile();
+      linesSinceTrim = 0;
+    }
   } catch (e) {
     // Silently ignore log errors
+    linesSinceTrim = 0;
   }
 }
 
