@@ -738,28 +738,48 @@ body {
   }
 
   // ===== Parse Raw Log Lines =====
+  // 后端 appendLog 写 JSON Lines：{"ts","level"(大写),"proxy","msg","meta"}
+  // （见 server.js formatLogEntry）。旧文本格式 [ts] [LEVEL] [proxy] msg
+  // 仅作兼容回退。
   function parseRawLogs(raw) {
     if (!raw) return [];
     var lines = raw.split('\n').filter(function(l) { return l.trim(); });
     var logs = [];
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
-      var m = line.match(/^\[([^\]]+)\]\s+\[(\w+)\]\s+\[([^\]]+)\]\s+(.*)$/);
-      if (m) {
-        logs.push({
-          timestamp: m[1],
-          level: m[2],
-          proxy: m[3].toLowerCase(),
-          message: m[4]
-        });
-      } else {
-        logs.push({
-          timestamp: new Date().toISOString(),
-          level: 'INFO',
-          proxy: 'system',
-          message: line
-        });
+      var entry = null;
+      if (line.charAt(0) === '{') {
+        try {
+          var j = JSON.parse(line);
+          if (j && (j.ts || j.msg)) {
+            entry = {
+              timestamp: j.ts || new Date().toISOString(),
+              level: String(j.level || 'INFO').toUpperCase(),
+              proxy: String(j.proxy || 'system').toLowerCase(),
+              message: j.msg !== undefined ? String(j.msg) : ''
+            };
+          }
+        } catch (e) { /* fall through to legacy text parsing */ }
       }
+      if (!entry) {
+        var m = line.match(/^\[([^\]]+)\]\s+\[(\w+)\]\s+\[([^\]]+)\]\s+(.*)$/);
+        if (m) {
+          entry = {
+            timestamp: m[1],
+            level: m[2],
+            proxy: m[3].toLowerCase(),
+            message: m[4]
+          };
+        } else {
+          entry = {
+            timestamp: new Date().toISOString(),
+            level: 'INFO',
+            proxy: 'system',
+            message: line
+          };
+        }
+      }
+      logs.push(entry);
     }
     return logs;
   }
