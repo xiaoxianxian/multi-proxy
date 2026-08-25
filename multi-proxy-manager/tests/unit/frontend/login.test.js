@@ -183,7 +183,7 @@ describe('Login Page', () => {
     beforeAll(() => { html = readHtml('login.html'); });
 
     it('should have reset command steps', () => {
-      expect(html).toContain('multi-proxy-password');
+      expect(html).toContain('multi-proxy-manager/password');
       expect(html).toContain('manage.sh restart manager');
     });
 

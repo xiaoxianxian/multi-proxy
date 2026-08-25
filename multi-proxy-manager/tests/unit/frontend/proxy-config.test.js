@@ -305,8 +305,9 @@ describe('Proxy Config Page', () => {
       expect(html).toContain('clearHistory');
     });
 
-    it('should define MOCK_HISTORY array', () => {
-      expect(html).toContain('MOCK_HISTORY');
+    it('should define switchHistory array and historySupported flag (was MOCK_HISTORY)', () => {
+      expect(html).toContain('switchHistory');
+      expect(html).toContain('historySupported');
     });
 
     it('should render history entries with timestamp, action, old/new model, result', () => {
@@ -324,8 +325,9 @@ describe('Proxy Config Page', () => {
       expect(html).toContain('fail');
     });
 
-    it('should clear history with confirmation', () => {
-      expect(html).toContain('MOCK_HISTORY.length = 0');
+    it('should clear history with confirmation (now uses fetchAdminApi, not MOCK_HISTORY.length = 0)', () => {
+      expect(html).toContain('clearHistory');
+      expect(html).not.toContain('MOCK_HISTORY.length = 0');
     });
   });
 

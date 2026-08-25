@@ -220,7 +220,8 @@ function saveProviders(providers) {
     // JSON，下次 load 解析失败静默返回空数组导致数据全丢。tmp+rename 与
     // updateRoutingMode 同模式，rename 在同一文件系统上是原子的。
     const tmpFile = PROVIDERS_FILE + '.tmp';
-    fs.writeFileSync(tmpFile, JSON.stringify(providers, null, 2), 'utf8');
+    // P1: 文件含明文 API Key，收紧权限到 0600
+    fs.writeFileSync(tmpFile, JSON.stringify(providers, null, 2), { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmpFile, PROVIDERS_FILE);
   } catch (e) {
     try { fs.unlinkSync(PROVIDERS_FILE + '.tmp'); } catch {}

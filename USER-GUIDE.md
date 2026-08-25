@@ -236,7 +236,7 @@ bash manage.sh restart all
 
 ```bash
 # 删除密码文件后重启，会进入设置引导
-rm ~/.multi-proxy-password
+rm ~/.multi-proxy-manager/password
 bash manage.sh restart manager
 ```
 
@@ -378,7 +378,7 @@ cat /tmp/cursor-build.log
 ### 忘记管理员密码
 
 ```bash
-rm ~/.multi-proxy-password
+rm ~/.multi-proxy-manager/password
 bash manage.sh restart manager
 ```
 

@@ -240,7 +240,7 @@ npm run build 2>&1 | tee logs/cursor-build.log
 
 删除密码文件后重启管理器会进入密码设置模式：
 ```bash
-rm ~/.multi-proxy-password
+rm ~/.multi-proxy-manager/password
 bash manage.sh restart manager
 ```
 

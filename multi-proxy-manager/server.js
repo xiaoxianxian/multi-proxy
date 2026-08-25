@@ -708,8 +708,8 @@ async function restartProxy(name, delay = 0) {
       recovery.consecutiveFailures++;
       recovery.lastRestartTime = Date.now();
       saveCrashRecoveryState();
-      delete proxyProcesses[name];
       if (proxyProcesses[name]) proxyProcesses[name].kill('SIGKILL');
+      delete proxyProcesses[name];
     }
   } catch (err) {
     appendLog('error', name, `Auto-restart failed: ${err.message}`);
@@ -781,8 +781,8 @@ app.post('/api/start/:name', requireAuth, async (req, res) => {
       res.json({ success: true, message: `${config.name} started`, running: true });
     } else {
       appendLog('error', name, `Failed to start (port not bound)`);
-      delete proxyProcesses[name];
       if (proxyProcesses[name]) proxyProcesses[name].kill('SIGKILL');
+      delete proxyProcesses[name];
       res.status(500).json({ success: false, error: `${config.name} failed to start` });
     }
   } catch (error) {
@@ -850,8 +850,8 @@ app.post('/api/restart/:name', requireAuth, async (req, res) => {
       res.json({ success: true, message: `${config.name} restarted`, running: true });
     } else {
       appendLog('error', name, `Restart failed`);
-      delete proxyProcesses[name];
       if (proxyProcesses[name]) proxyProcesses[name].kill('SIGKILL');
+      delete proxyProcesses[name];
       res.status(500).json({ success: false, error: `${config.name} failed to restart` });
     }
   } catch (error) {
@@ -1128,7 +1128,11 @@ function classifyUpstreamError(err) {
 }
 
 app.post('/api/test-connection', requireAuth, async (req, res) => {
-  var { baseUrl, apiKey, model: providerId } = req.body;
+  // 参数名统一（交接遗留项）：providerId = 供应商类型，与 /api/fetch-models 一致；
+  // 兼容旧参数名 model。
+  var providerId = req.body.providerId || req.body.model || '';
+  var apiKey = req.body.apiKey;
+  var baseUrl = req.body.baseUrl;
   if (!baseUrl || !providerId) {
     return res.status(400).json({ success: false, error: 'Missing baseUrl or provider type' });
   }
@@ -1420,6 +1424,18 @@ app.get('/api/env-check', (_req, res) => {
   }
 
   res.json({ emptyKeys, totalCount: emptyKeys.length });
+});
+
+// Error-handling middleware: JSON body 解析失败（非法 JSON）等错误统一返回
+// 简洁文案，不把 Node 堆栈/内部路径暴露给客户端。
+app.use((err, _req, res, _next) => {
+  const isBodyParse = err.type === 'entity.parse.failed' || err instanceof SyntaxError;
+  if (!res.headersSent) {
+    res.status(isBodyParse ? 400 : 500).json({
+      success: false,
+      error: isBodyParse ? 'Invalid request body: malformed JSON' : 'Internal server error',
+    });
+  }
 });
 
 // SPA fallback: serve correct HTML page based on route
