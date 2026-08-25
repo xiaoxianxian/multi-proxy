@@ -4,13 +4,22 @@ RUN apk add --no-cache lsof docker-cli
 
 WORKDIR /app
 
-COPY multi-proxy-manager/package.json multi-proxy-manager/package-lock.json* ./
-RUN npm install --production
+# Manager 自身
+COPY multi-proxy-manager/package.json multi-proxy-manager/package-lock.json* ./manager/
+RUN cd manager && npm install --production
 
-COPY multi-proxy-manager/ .
+COPY multi-proxy-manager/ ./manager/
+
+# P0-1 补充：buildProxyConfigs 用 path.join(__dirname,'..') 找各代理目录，
+# 容器内必须是 /deploy/{codex-proxy,hermes-proxy,cursor-multi-model-proxy}
+# 与宿主机仓库布局一致，否则 "Managed proxies: none"。
+COPY codex-proxy/ ./codex-proxy/
+COPY hermes-proxy/ ./hermes-proxy/
+COPY cursor-multi-model-proxy/package.json ./cursor-multi-model-proxy/
+COPY cursor-multi-model-proxy/dist ./cursor-multi-model-proxy/dist
 
 ENV PORT=18792
 
 EXPOSE 18792
 
-CMD ["node", "server.js"]
+CMD ["node", "manager/server.js"]

@@ -637,4 +637,6 @@ if __name__ == '__main__':
     # Load initial routing mode
     load_routing_mode()
 
-    app.run(host='127.0.0.1', port=PORT, debug=False)
+    # P0-2: Docker 里必须绑 0.0.0.0 端口映射才通；本机默认 127.0.0.1
+    bind_host = os.environ.get('BIND_HOST', '127.0.0.1')
+    app.run(host=bind_host, port=PORT, debug=False)

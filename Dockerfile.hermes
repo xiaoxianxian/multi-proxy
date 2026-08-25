@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY hermes-proxy/ .
 
 ENV PORT=18793
+# P0-2: 容器内绑 0.0.0.0，宿主机端口映射才可达（本机直跑默认仍为 127.0.0.1）
+ENV BIND_HOST=0.0.0.0
 
 EXPOSE 18793
 

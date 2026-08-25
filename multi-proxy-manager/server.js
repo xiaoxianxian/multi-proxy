@@ -91,6 +91,12 @@ function setPassword(hash) {
     }
     fs.writeFileSync(PASSWORD_FILE, hash, { mode: 0o600 });
   } catch (e) {
+    // P0-1: EISDIR = 密码路径被目录占用（典型：Docker 把卷挂到了文件路径，
+    // Docker 自动建了目录）。给出针对性提示，别让用户去查"文件权限"。
+    if (e.code === 'EISDIR') {
+      console.error('[Auth] Password path is occupied by a DIRECTORY (typical cause: a Docker volume mounted at the file path). Fix the volume mount and recreate the container.');
+      throw new Error('Password storage path is occupied by a directory. Check your Docker volume mounts.');
+    }
     console.error('[Auth] Failed to write password file:', e.message);
     throw e;
   }
