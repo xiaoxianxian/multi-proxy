@@ -1,12 +1,18 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 const KEY_FILE = '.encryption-key';
+
+// P0-6: 密钥文件锚定到模块位置（<项目根>/.encryption-key），与 data/proxy.db
+// 同级。此前用 process.cwd() —— 从其它目录启动（或 Docker WORKDIR 不同）时
+// 会找不到/另生成一份密钥，导致已有 API Key 无法解密。
+const PROJECT_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 let cachedKey: Buffer | null = null;
 
@@ -26,7 +32,7 @@ export function getEncryptionKey(): Buffer {
   }
 
   // Priority 2: key file
-  const keyPath = path.join(process.cwd(), KEY_FILE);
+  const keyPath = path.join(PROJECT_ROOT, KEY_FILE);
   try {
     if (fs.existsSync(keyPath)) {
       const keyStr = fs.readFileSync(keyPath, 'utf8').trim();
