@@ -216,8 +216,14 @@ function loadProviders() {
 function saveProviders(providers) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(PROVIDERS_FILE, JSON.stringify(providers, null, 2), 'utf8');
+    // P0-8: 原子写 —— 直接 writeFileSync 在进程崩溃/磁盘满时会留下半截
+    // JSON，下次 load 解析失败静默返回空数组导致数据全丢。tmp+rename 与
+    // updateRoutingMode 同模式，rename 在同一文件系统上是原子的。
+    const tmpFile = PROVIDERS_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, JSON.stringify(providers, null, 2), 'utf8');
+    fs.renameSync(tmpFile, PROVIDERS_FILE);
   } catch (e) {
+    try { fs.unlinkSync(PROVIDERS_FILE + '.tmp'); } catch {}
     console.error(`[PROVIDERS] Failed to save: ${e.message}`);
   }
 }

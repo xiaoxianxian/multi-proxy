@@ -72,9 +72,18 @@ def load_providers():
 def save_providers(providers):
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        with open(PROVIDERS_FILE, 'w') as f:
+        # P0-8: 原子写 —— 直接 open('w') 在进程崩溃/磁盘满时会留下半截
+        # JSON，下次 load 解析失败静默返回空列表导致数据全丢。tmp+replace
+        # 与 save_routing_mode 同模式，os.replace 是原子操作。
+        tmp_file = PROVIDERS_FILE + '.tmp'
+        with open(tmp_file, 'w') as f:
             json.dump(providers, f, indent=2)
+        os.replace(tmp_file, PROVIDERS_FILE)
     except Exception as e:
+        try:
+            os.unlink(PROVIDERS_FILE + '.tmp')
+        except OSError:
+            pass
         logger.error(f"Failed to save providers: {e}")
 
 providers = load_providers()
