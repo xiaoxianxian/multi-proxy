@@ -232,6 +232,11 @@
   color: var(--color-error);
 }
 
+.status-badge.fault {
+  background: var(--color-warning-light);
+  color: var(--color-warning-deep, var(--color-warning));
+}
+
 /* ============================================
    Unified Nav Tooltip (Rule D11: global, NOT in media query)
    ============================================ */
