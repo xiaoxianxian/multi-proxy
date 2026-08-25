@@ -141,6 +141,12 @@ describe('Dashboard Page', () => {
       expect(html).toContain("'/api/'");
       expect(html).toContain('action');
     });
+
+    it('should surface backend fault state in status badge (P2)', () => {
+      // 后端 /api/status 返回 fault: true 时，卡片显示"故障熔断"而非笼统的"未运行"
+      expect(html).toContain('status.fault');
+      expect(html).toContain('故障熔断');
+    });
   });
 
   describe('JavaScript Functions', () => {
