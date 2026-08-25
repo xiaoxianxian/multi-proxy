@@ -374,7 +374,7 @@ setup_autostart() {
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <false/>
     <key>StandardOutPath</key>
     <string>$HOME/.multi-proxy-manager/logs/stdout.log</string>
     <key>StandardErrorPath</key>
@@ -387,6 +387,18 @@ setup_autostart() {
 </dict>
 </plist>
 PLIST_EOF
+
+  # P0-7: 日志轮转 —— 防止 launchd 的 stdout/stderr 日志无限增长
+  rotate_launchd_log() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    if [ "$(stat -f%z "$f" 2>/dev/null || echo 0)" -gt 10485760 ]; then
+      mv "$f" "$f.old"
+      print_info "已轮转 $f (>10MB)"
+    fi
+  }
+  rotate_launchd_log "$HOME/.multi-proxy-manager/logs/stdout.log"
+  rotate_launchd_log "$HOME/.multi-proxy-manager/logs/stderr.log"
 
   launchctl load "$plist" 2>/dev/null || true
   print_ok "开机自启已配置"
