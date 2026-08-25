@@ -363,13 +363,13 @@ body {
 }
 
 .log-viewer .proxy-tag.codex {
-  background: #ede9fe;
-  color: #7c3aed;
+  background: var(--color-prov-codex-bg);
+  color: var(--color-prov-codex-fg);
 }
 
 .log-viewer .proxy-tag.hermes {
-  background: #fef3c7;
-  color: #d97706;
+  background: var(--color-prov-hermes-bg);
+  color: var(--color-prov-hermes-fg);
 }
 
 .log-viewer .proxy-tag.cursor {
@@ -395,17 +395,17 @@ body {
 
 .log-viewer .level-badge.INFO {
   background: var(--color-info-light);
-  color: #1e40af;
+  color: var(--color-info-deep, #1e40af);
 }
 
 .log-viewer .level-badge.WARN {
   background: var(--color-warning-light);
-  color: #92400e;
+  color: var(--color-warning-deep, #92400e);
 }
 
 .log-viewer .level-badge.ERROR {
   background: var(--color-error-light);
-  color: #991b1b;
+  color: var(--color-error-deep, #991b1b);
 }
 
 .log-viewer .log-message {

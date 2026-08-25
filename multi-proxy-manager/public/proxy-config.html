@@ -974,9 +974,10 @@
     };
 
     var proxyColorMap = {
-      codex: { bg: '#ede9fe', color: '#7c3aed', letter: 'C' },
-      hermes: { bg: '#fef3c7', color: '#d97706', letter: 'H' },
-      cursor: { bg: '#dbeafe', color: '#2563eb', letter: 'C' },
+      // B: 使用令牌层定义的代理色，避免硬编码（颜色令牌化）
+      codex: { bg: 'var(--color-prov-codex-bg)', color: 'var(--color-prov-codex-fg)', letter: 'C' },
+      hermes: { bg: 'var(--color-prov-hermes-bg)', color: 'var(--color-prov-hermes-fg)', letter: 'H' },
+      cursor: { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'C' },
     };
 
     // Each proxy backend uses a different URL prefix for its admin API
