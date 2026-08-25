@@ -212,16 +212,19 @@ describe('Proxy Config Page', () => {
       expect(html).toContain('function toggleKeyVisibility');
     });
 
-    it('should have keyVisible state variable', () => {
-      expect(html).toContain('var keyVisible');
+    it('should NOT keep keyVisible state (B8: key 明文永不进 DOM)', () => {
+      expect(html).not.toContain('var keyVisible');
     });
 
     it('should mask API keys by default', () => {
       expect(html).toContain('maskKey');
     });
 
-    it('should unmask API keys when toggled', () => {
-      expect(html).toContain('keyVisible ? esc(p.api_key)');
+    it('should NOT put plaintext api_key into DOM data attributes (B8)', () => {
+      expect(html).not.toContain('data-key=');
+      expect(html).not.toContain('keyVisible ? esc(p.api_key)');
+      // 点击时从内存 providers 数组按 id 取 key
+      expect(html).toContain('getProviderById');
     });
   });
 

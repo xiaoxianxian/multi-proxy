@@ -685,6 +685,7 @@ body {
   }
 
   // ===== Intercept fetch for auth token =====
+  // B6: 注入 token + 全局 401 拦截（auth 端点自身的 401 不拦截）
   (function() {
     var origFetch = window.fetch;
     window.fetch = function(url, options) {
@@ -695,7 +696,17 @@ body {
           options.headers['x-auth-token'] = authToken;
         }
       }
-      return origFetch(url, options);
+      var p = origFetch(url, options);
+      if (typeof url === 'string' && url.indexOf('/api/') === 0
+          && url.indexOf('/api/auth/') !== 0) {
+        p.then(function(res) {
+          if (res.status === 401) {
+            sessionStorage.removeItem('auth_token');
+            window.location.href = 'login.html';
+          }
+        }).catch(function() {});
+      }
+      return p;
     };
   })();
 
