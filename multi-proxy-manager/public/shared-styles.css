@@ -161,6 +161,7 @@
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   max-width: 360px;
+  white-space: pre-line;
   pointer-events: auto;
   animation: toast-in 0.3s ease;
   border-left: 3px solid;

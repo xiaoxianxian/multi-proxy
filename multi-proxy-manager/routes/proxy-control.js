@@ -5,8 +5,17 @@ const fs = require('fs');
 const { requireAuth } = require('../lib/auth');
 const { appendLog, LOG_FILE } = require('../lib/logger');
 const pm = require('../lib/process-manager');
+const { detectOccupancy, detectAll } = require('../lib/agent-owner');
 
 const router = express.Router();
+
+// 全局代理冲突检测：打开应用时调用，报告哪些 agent 被其它工具占用。
+// 返回 { conflicts: { codex: {...}, hermes: {...}, cursor: {...} }, any: bool }
+router.get('/conflicts', requireAuth, (_req, res) => {
+  const all = detectAll();
+  const any = Object.values(all).some(c => c.occupied);
+  res.json({ conflicts: all, any });
+});
 
 // 获取所有代理状态
 router.get('/status', async (_req, res) => {
@@ -41,6 +50,21 @@ router.post('/start/:name', requireAuth, async (req, res) => {
 
   if (!config) {
     return res.status(404).json({ success: false, error: `Unknown proxy: ${name}` });
+  }
+
+  // 冲突检测：若该 agent 的 base_url 已被其它代理工具（如 cc-switch）占用，
+  // 拒绝开启，并要求先关掉那个工具，避免两个代理器“打架”把流量指向死链。
+  const occ = detectOccupancy(name);
+  if (occ.occupied) {
+    appendLog('warn', name, `Start blocked: agent base_url occupied by other tool (${occ.by}, ${occ.baseUrl})`);
+    return res.status(409).json({
+      success: false,
+      conflict: true,
+      error: `无法开启 ${config.name}：${name} 的代理已被其它工具占用（base_url 指向 ${occ.by}）。` +
+             `请先关闭该工具对 ${name} 的代理，再开启本服务的开关。`,
+      occupiedBy: occ.by,
+      baseUrl: occ.baseUrl,
+    });
   }
 
   if (pm.isProcessRunning(name)) {
