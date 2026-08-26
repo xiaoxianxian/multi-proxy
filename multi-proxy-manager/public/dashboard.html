@@ -1180,6 +1180,12 @@ body {
           showToast(label + ' 已' + (action === 'start' ? '启动' : '停止'), 'success');
           proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
           updateDashboardDisplay(versionCache);
+        } else if (action === 'start' && data.conflict) {
+          // 冲突：该 agent 的代理被其它工具（如 cc-switch）占用，拒绝开启。
+          // 不切换 running 状态、不动按钮，只报错提示。
+          showToast((data.error || '该代理被其它工具占用，无法开启'), 'error', 6000);
+          btn.innerHTML = originalContent;
+          btn.disabled = false;
         } else {
           showToast((action === 'start' ? '启动' : '停止') + '失败: ' + (data.error || '未知错误'), 'error');
           btn.innerHTML = originalContent;
@@ -1215,6 +1221,25 @@ body {
         }
       })
       .finally(hideLoading);
+  }
+
+  function checkProxyConflicts() {
+    fetch('/api/conflicts', { headers: { 'x-auth-token': authToken || '' } })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var conflicts = data.conflicts || {};
+        var occupied = Object.keys(conflicts).filter(function(k) { return conflicts[k] && conflicts[k].occupied; });
+        if (occupied.length === 0) return;
+        var names = occupied.map(function(k) {
+          var c = conflicts[k];
+          var label = PROXY_CONFIGS[k] ? PROXY_CONFIGS[k].name : k;
+          return label + '（base_url → ' + (c.baseUrl || c.by) + '）';
+        });
+        var msg = '检测到以下代理被其它工具占用，本服务无法接管：\n' + names.join('\n') +
+                  '\n请先关闭占用工具（如 cc-switch）对这些代理的代理，再开启本服务开关。';
+        showToast(msg, 'error', 8000);
+      })
+      .catch(function() { /* 冲突检测失败不应阻断主界面 */ });
   }
 
   function loadVersion() {
@@ -1483,7 +1508,7 @@ body {
       Promise.all([
         new Promise(function(resolve) { loadStatus(); resolve(); }),
         new Promise(function(resolve) { loadVersion(); resolve(); })
-      ]).then(function() {
+      }).then(function() {
         // Check API Key completeness
         fetch('/api/env-check')
           .then(function(res) { return res.json(); })
@@ -1493,6 +1518,9 @@ body {
             }
           })
           .catch(function() { /* skip */ });
+
+        // 打开应用时全局检测：是否有 agent 的代理被其它工具（cc-switch 等）占用。
+        checkProxyConflicts();
       });
 
       // Start auto-refresh
