@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+web/node_modules/
+
+# Build output
+dist/
+web/dist/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Electron
+*.dmg
+*.exe
+*.deb
+*.AppImage
+
+# Prisma
+prisma/migrations/
+.encryption-key
+
+# SQLite database files
+data/*.db
+data/*.db-wal
+data/*.db-shm

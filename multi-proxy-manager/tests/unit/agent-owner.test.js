@@ -47,7 +47,7 @@ describe('agent-owner detection', () => {
     expect(r.by).toBe('port:15721');
   });
 
-  it('detects no conflict when codex points to proxy-rebuild port 18790', () => {
+  it('detects no conflict when codex points to multi-proxy port 18790', () => {
     writeConfigs('http://127.0.0.1:18790/v1', undefined);
     expect(detectOccupancy('codex').occupied).toBe(false);
   });

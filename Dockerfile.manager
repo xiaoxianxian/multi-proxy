@@ -11,12 +11,12 @@ RUN cd manager && npm install --production
 COPY multi-proxy-manager/ ./manager/
 
 # P0-1 补充：buildProxyConfigs 用 path.join(__dirname,'..') 找各代理目录，
-# 容器内必须是 /deploy/{codex-proxy,hermes-proxy,cursor-multi-model-proxy}
+# 容器内必须是 /deploy/{codex-proxy,hermes-proxy,cursor-proxy}
 # 与宿主机仓库布局一致，否则 "Managed proxies: none"。
 COPY codex-proxy/ ./codex-proxy/
 COPY hermes-proxy/ ./hermes-proxy/
-COPY cursor-multi-model-proxy/package.json ./cursor-multi-model-proxy/
-COPY cursor-multi-model-proxy/dist ./cursor-multi-model-proxy/dist
+COPY cursor-proxy/package.json ./cursor-proxy/
+COPY cursor-proxy/dist ./cursor-proxy/dist
 
 ENV PORT=18792
 

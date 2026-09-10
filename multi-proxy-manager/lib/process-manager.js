@@ -36,7 +36,7 @@ function buildProxyConfigs() {
     };
   }
 
-  const cursorDir = path.join(baseDir, 'cursor-multi-model-proxy');
+  const cursorDir = path.join(baseDir, 'cursor-proxy');
   const cursorDist = path.join(cursorDir, 'dist', 'server', 'start.js');
   if (fs.existsSync(cursorDist)) {
     configs.cursor = {
@@ -117,9 +117,9 @@ const DOCKER_SERVICE_NAMES = {
 
 // Container names (used for docker start/stop/inspect commands)
 const DOCKER_CONTAINER_NAMES = {
-  codex: 'proxy-rebuild-codex',
-  hermes: 'proxy-rebuild-hermes',
-  cursor: 'proxy-rebuild-cursor',
+  codex: 'multi-proxy-codex',
+  hermes: 'multi-proxy-hermes',
+  cursor: 'multi-proxy-cursor',
 };
 
 // ==================== 辅助函数 ====================

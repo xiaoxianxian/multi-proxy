@@ -17,7 +17,7 @@ fi
 # 各代理目录（扁平结构，平级关系）
 CODEx_PROXY_DIR="$SCRIPT_DIR/codex-proxy"
 HERMES_PROXY_DIR="$SCRIPT_DIR/hermes-proxy"
-CURSOR_PROXY_DIR="$SCRIPT_DIR/cursor-multi-model-proxy"
+CURSOR_PROXY_DIR="$SCRIPT_DIR/cursor-proxy"
 MANAGER_DIR="$SCRIPT_DIR/multi-proxy-manager"
 
 # 端口
@@ -143,7 +143,7 @@ start_cursor() {
 
   if [ ! -f "$CURSOR_PROXY_DIR/dist/server/start.js" ]; then
     print_warning "Cursor Proxy 未编译: $CURSOR_PROXY_DIR/dist/server/start.js 不存在"
-    print_warning "请先运行: cd cursor-multi-model-proxy && npm run build"
+    print_warning "请先运行: cd cursor-proxy && npm run build"
     return 1
   fi
 
@@ -158,7 +158,7 @@ start_cursor() {
       (cd "$CURSOR_PROXY_DIR" && npm rebuild better-sqlite3 2>&1)
       if [ $? -ne 0 ]; then
         print_error "Cursor Proxy 原生模块修复失败"
-        print_warning "请检查: cd cursor-multi-model-proxy && npm rebuild better-sqlite3"
+        print_warning "请检查: cd cursor-proxy && npm rebuild better-sqlite3"
         return 1
       fi
       print_status "原生模块重新安装完成"

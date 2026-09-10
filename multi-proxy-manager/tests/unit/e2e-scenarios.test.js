@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-// Resolve project root robustly: go up from tests/unit/ → multi-proxy-manager/ → proxy-rebuild/
+// Resolve project root robustly: go up from tests/unit/ → multi-proxy-manager/ → multi-proxy/
 const PROJECT_ROOT = path.resolve(__dirname, '../..', '..');
 
 describe('E2E — Manager API Flow', () => {
@@ -183,9 +183,9 @@ describe('E2E — Proxy Config File Detection', () => {
     expect(fs.existsSync(path.join(PROJECT_ROOT, 'hermes-proxy', 'proxy.py'))).toBe(true);
   });
 
-  it('cursor-multi-model-proxy directory exists with dist/server/start.js or src', () => {
-    const hasDist = fs.existsSync(path.join(PROJECT_ROOT, 'cursor-multi-model-proxy', 'dist', 'server', 'start.js'));
-    const hasSrc = fs.existsSync(path.join(PROJECT_ROOT, 'cursor-multi-model-proxy', 'src'));
+  it('cursor-proxy directory exists with dist/server/start.js or src', () => {
+    const hasDist = fs.existsSync(path.join(PROJECT_ROOT, 'cursor-proxy', 'dist', 'server', 'start.js'));
+    const hasSrc = fs.existsSync(path.join(PROJECT_ROOT, 'cursor-proxy', 'src'));
     expect(hasDist || hasSrc).toBe(true);
   });
 });

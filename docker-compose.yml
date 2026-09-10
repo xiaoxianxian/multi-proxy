@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.codex
-    container_name: proxy-rebuild-codex
+    container_name: multi-proxy-codex
     ports:
       - "18790:18790"
     env_file:
@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.hermes
-    container_name: proxy-rebuild-hermes
+    container_name: multi-proxy-hermes
     ports:
       - "18793:18793"
     env_file:
@@ -35,11 +35,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.cursor
-    container_name: proxy-rebuild-cursor
+    container_name: multi-proxy-cursor
     ports:
       - "18794:18794"
     env_file:
-      - cursor-multi-model-proxy/.env
+      - cursor-proxy/.env
     volumes:
       - cursor-data:/app/data
     restart: unless-stopped
@@ -50,7 +50,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.manager
-    container_name: proxy-rebuild-manager
+    container_name: multi-proxy-manager
     ports:
       - "18792:18792"
     env_file:

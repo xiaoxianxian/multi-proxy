@@ -9,7 +9,7 @@
 | `multi-proxy-manager/` | Node.js + Express | 18792 | Web 管理界面（前端 + 后端） |
 | `codex-proxy/` | Node.js + Express | 18790 | Codex CLI 代理 |
 | `hermes-proxy/` | Python + Flask | 18793 | Hermes Agent 代理 |
-| `cursor-multi-model-proxy/` | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理 |
+| `cursor-proxy/` | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理 |
 
 ## 快速开始
 
@@ -20,7 +20,7 @@ bash install.sh --all
 # 编辑各代理的 .env 文件配置 API Key
 nano codex-proxy/.env
 nano hermes-proxy/.env
-nano cursor-multi-model-proxy/.env
+nano cursor-proxy/.env
 
 # 启动所有服务
 bash manage.sh start
@@ -226,13 +226,13 @@ bash manage.sh logs manager
 
 # 手动启动查看错误
 cd codex-proxy && node proxy.js
-cd cursor-multi-model-proxy && node dist/server/start.js
+cd cursor-proxy && node dist/server/start.js
 ```
 
 ### Cursor 代理 TypeScript 编译失败？
 
 ```bash
-cd cursor-multi-model-proxy
+cd cursor-proxy
 npm run build 2>&1 | tee logs/cursor-build.log
 ```
 
@@ -289,7 +289,7 @@ proxy-rebuild/
 ├── hermes-proxy/          # Hermes Agent 代理
 │   ├── proxy.py
 │   └── requirements.txt
-└── cursor-multi-model-proxy/  # Cursor IDE 代理
+└── cursor-proxy/  # Cursor IDE 代理
     ├── src/               # TypeScript 源码
     │   ├── providers/     # 供应商适配器
     │   ├── routing/       # 路由引擎
