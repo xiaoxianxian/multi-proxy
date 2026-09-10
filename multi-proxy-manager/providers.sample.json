@@ -1,0 +1,99 @@
+[
+  {
+    "id": "prov_qwen",
+    "name": "Alibaba Qwen (DashScope)",
+    "provider_id": "qwen",
+    "api_key": "sk-YOUR-QWEN-KEY",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "enabled": true,
+    "created_at": "2026-09-10T00:00:00.000000",
+    "updated_at": "2026-09-10T00:00:00.000000",
+    "models": [
+      {
+        "id": "qwen3.8-flash",
+        "name": "Qwen3.8-Flash",
+        "type": "cloud",
+        "pricing": { "input": 0.8, "output": 2.7, "cacheHit": 0.1 },
+        "rateLimit": null
+      }
+    ]
+  },
+  {
+    "id": "prov_deepseek",
+    "name": "DeepSeek",
+    "provider_id": "deepseek",
+    "api_key": "sk-YOUR-DEEPSEEK-KEY",
+    "base_url": "https://api.deepseek.com/v1",
+    "enabled": true,
+    "created_at": "2026-09-10T00:00:00.000000",
+    "updated_at": "2026-09-10T00:00:00.000000",
+    "models": [
+      {
+        "id": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "type": "cloud",
+        "note": "闲时价；高峰翻倍 ¥2/¥8",
+        "pricing": { "input": 1, "output": 4, "cacheHit": 0.02 },
+        "rateLimit": null
+      }
+    ]
+  },
+  {
+    "id": "prov_agnes",
+    "name": "Agnes",
+    "provider_id": "agnes",
+    "api_key": "sk-YOUR-AGNES-KEY",
+    "base_url": "https://apihub.agnes-ai.cn/v1",
+    "enabled": true,
+    "created_at": "2026-09-10T00:00:00.000000",
+    "updated_at": "2026-09-10T00:00:00.000000",
+    "models": [
+      {
+        "id": "agnes-2.5-flash",
+        "name": "Agnes 2.5 Flash",
+        "type": "cloud",
+        "pricing": { "input": 0, "output": 0, "cacheHit": 0 },
+        "rateLimit": { "per5h": 1500, "perWeek": 15000 }
+      }
+    ]
+  },
+  {
+    "id": "prov_zhipu",
+    "name": "Zhipu GLM (Z.AI)",
+    "provider_id": "zhipu",
+    "api_key": "sk-YOUR-ZHIPU-KEY",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "enabled": true,
+    "created_at": "2026-09-10T00:00:00.000000",
+    "updated_at": "2026-09-10T00:00:00.000000",
+    "models": [
+      {
+        "id": "glm-5.3-flash",
+        "name": "GLM-5.3-Flash",
+        "type": "cloud",
+        "pricing": { "input": 0.8, "output": 2.8, "cacheHit": 0.23 },
+        "rateLimit": null
+      }
+    ]
+  },
+  {
+    "id": "prov_local",
+    "name": "Local Ollama (qwen3.8)",
+    "provider_id": "local",
+    "api_key": "ollama",
+    "base_url": "http://localhost:11434/v1",
+    "enabled": true,
+    "created_at": "2026-09-10T00:00:00.000000",
+    "updated_at": "2026-09-10T00:00:00.000000",
+    "models": [
+      {
+        "id": "qwen3.8-local",
+        "name": "Qwen3.8 Local (27B Q5_K_M)",
+        "type": "local",
+        "baseUrl": "http://localhost:11434/v1",
+        "pricing": { "input": 0, "output": 0, "cacheHit": 0 },
+        "rateLimit": null
+      }
+    ]
+  }
+]

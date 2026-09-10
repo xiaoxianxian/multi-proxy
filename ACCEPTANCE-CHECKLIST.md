@@ -28,7 +28,7 @@ nano codex-proxy/.env
 nano hermes-proxy/.env
 
 # Cursor
-nano cursor-multi-model-proxy/.env
+nano cursor-proxy/.env
 ```
 
 ## 启动所有服务
@@ -56,7 +56,7 @@ cd codex-proxy && NODE_ENV=test npx jest --verbose --forceExit
 cd hermes-proxy && PYTHONPATH=. python3 -m pytest tests/ -v
 
 # Cursor
-cd cursor-multi-model-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
+cd cursor-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
 ```
 
 预期结果：**549/549 全部通过**

@@ -121,7 +121,7 @@ install_hermes() {
 
 install_cursor() {
   print_step "安装 Cursor Multi-Model Proxy..."
-  local dir="$ROOT_DIR/cursor-multi-model-proxy"
+  local dir="$ROOT_DIR/cursor-proxy"
 
   if [ ! -f "$dir/src/index.ts" ]; then
     print_err "Cursor Proxy 文件不存在: $dir/src/index.ts"
@@ -147,7 +147,7 @@ install_cursor() {
       (cd "$dir" && npm rebuild better-sqlite3 2>&1)
       if [ $? -ne 0 ]; then
         print_err "Cursor Proxy 原生模块修复失败"
-        print_warn "请检查: cd cursor-multi-model-proxy && npm rebuild better-sqlite3"
+        print_warn "请检查: cd cursor-proxy && npm rebuild better-sqlite3"
         return 1
       fi
       print_ok "原生模块重新安装完成"
@@ -210,7 +210,7 @@ uninstall_hermes() {
 
 uninstall_cursor() {
   print_step "卸载 Cursor Proxy..."
-  local dir="$ROOT_DIR/cursor-multi-model-proxy"
+  local dir="$ROOT_DIR/cursor-proxy"
   [ -f "$dir/.env" ] && rm -f "$dir/.env" && print_ok ".env 已移除"
   print_info "Cursor Proxy 文件保留（如需完全删除请手动 rm -rf $dir）"
 }
@@ -257,17 +257,17 @@ start_cursor() {
     print_warn "Cursor Proxy 已在运行"
     return 0
   fi
-  if [ ! -f "$ROOT_DIR/cursor-multi-model-proxy/dist/server/start.js" ]; then
-    print_err "Cursor Proxy 未编译，请先运行: cd cursor-multi-model-proxy && npm run build"
+  if [ ! -f "$ROOT_DIR/cursor-proxy/dist/server/start.js" ]; then
+    print_err "Cursor Proxy 未编译，请先运行: cd cursor-proxy && npm run build"
     return 1
   fi
   # Rebuild native modules (better-sqlite3) to ensure correct platform/arch
-  CURSOR_NDIR="$ROOT_DIR/cursor-multi-model-proxy/node_modules/better-sqlite3"
+  CURSOR_NDIR="$ROOT_DIR/cursor-proxy/node_modules/better-sqlite3"
   if [ -d "$CURSOR_NDIR" ]; then
     print_info "重建原生模块..."
-    (cd "$ROOT_DIR/cursor-multi-model-proxy" && npm rebuild better-sqlite3 2>&1) || true
+    (cd "$ROOT_DIR/cursor-proxy" && npm rebuild better-sqlite3 2>&1) || true
   fi
-  (cd "$ROOT_DIR/cursor-multi-model-proxy" && node dist/server/start.js > "$SCRIPT_DIR/logs/cursor-proxy.log" 2>&1 &)
+  (cd "$ROOT_DIR/cursor-proxy" && node dist/server/start.js > "$SCRIPT_DIR/logs/cursor-proxy.log" 2>&1 &)
   sleep 1
   is_port_in_use $CURSOR_PORT && print_ok "Cursor Proxy 已启动" || print_err "Cursor Proxy 启动失败"
 }

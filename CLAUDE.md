@@ -11,7 +11,7 @@
 | `multi-proxy-manager/` | Node.js + Express | 18792 | Web 管理界面（前端+后端） |
 | `codex-proxy/` | Node.js + Express | 18790 | Codex CLI 代理 |
 | `hermes-proxy/` | Python + Flask | 18793 | Hermes Agent 代理 |
-| `cursor-multi-model-proxy/` | Node.js + TypeScript + SQLite | 18794 | Cursor IDE 代理 |
+| `cursor-proxy/` | Node.js + TypeScript + SQLite | 18794 | Cursor IDE 代理 |
 
 ## 快速开始
 
@@ -94,8 +94,9 @@ bash manage.sh stop
 - **供应商启用开关**：checkbox 用 `pointer-events: none` + `opacity: 0` 隐藏，label 包裹整个 toggle 区域，点击 slider 通过 label 关联触发 checkbox。
 - **跨页面状态同步**：dashboard.html 和 proxy-config.html 使用 `BroadcastChannel('proxy-status')` 通信。stop/start 成功后广播 `proxy-status-changed` 事件，其他页面收到后立即 `loadStatus()`。
 - **路由模式**：Cursor 支持 Failover（故障转移）和 Round Robin（轮询分发）。Weighted 模式未实现，已从 UI 移除。
+- **任务类型智能派发（规划中，未实现）**：`cursor-proxy/src/routing/routeEngine.ts` 的 `RouteConfig.rules`（`condition` 表达式）和 `strategy: 'cost-optimization'` 已声明但**未被 evaluate**——这是为"按任务类型自动派发"预留的空接口。完整实现逻辑（含 `classifyTask` / `evaluateRules` / cost-optimization 分支 / 默认 RouteConfig）见 `ITERATION-ROADMAP.md` 方向四。注意 `getNextRoute(modelName, config)` 当前 `modelName` 参数未使用，且无消息/任务上下文入口，落地时需扩展签名。
 - **统一数据目录**：codex-proxy 和 hermes-proxy 共享 `~/.multi-proxy-manager/` 目录存储 providers.json 和 routing-mode.json
-- **agent-proxy-switch**：`tools/agent-proxy-switch` 用于在 proxy-rebuild 与 cc-switch 间切换各 agent 的 base_url，详见下方说明
+- **agent-proxy-switch**：`tools/agent-proxy-switch` 用于在 multi-proxy 与 cc-switch 间切换各 agent 的 base_url，详见下方说明
 
 ## P0 安全修复记录 (2026-07-03)
 
@@ -134,7 +135,7 @@ bash manage.sh restart
 ## 模型代理切换与 NO_PROXY 铁律
 
 ### 各 agent 代理端口（务必一致）
-- codex-proxy: 18790 / hermes-proxy: 18793 / cursor-multi-model-proxy: 18794 / multi-proxy-manager: 18792
+- codex-proxy: 18790 / hermes-proxy: 18793 / cursor-proxy: 18794 / multi-proxy-manager: 18792
 - cc-switch（独立 App，非本项目）: 15721
 
 ### 安全切换工具
@@ -161,7 +162,7 @@ bash manage.sh restart
 ### better-sqlite3 native module 版本不匹配
 - 现象：Cursor database.test.ts 22 个测试全 fail
 - 根因：prebuild 仅支持 Node 18 (NODE_MODULE_VERSION 127)，当前系统 Node 24 (137)
-- 修复：`cd cursor-multi-model-proxy && npm rebuild better-sqlite3` 或 `npm install`
+- 修复：`cd cursor-proxy && npm rebuild better-sqlite3` 或 `npm install`
 - 若 npm cache 无写权限：`npm config set cache /tmp/npm-cache && npm rebuild better-sqlite3`
 
 ### Manager supertest EPERM

@@ -38,7 +38,7 @@ cd proxy-rebuild
 | `multi-proxy-manager/` | Web 管理后台（前端+后端） | 18792 |
 | `codex-proxy/` | Codex CLI 代理 | 18790 |
 | `hermes-proxy/` | Hermes Agent 代理 | 18793 |
-| `cursor-multi-model-proxy/` | Cursor IDE 代理 | 18794 |
+| `cursor-proxy/` | Cursor IDE 代理 | 18794 |
 
 ---
 
@@ -54,7 +54,7 @@ bash install.sh --all
 1. 检测 Node.js 和 Python3 是否就绪
 2. 为 codex-proxy 安装 npm 依赖
 3. 为 hermes-proxy 安装 pip 依赖
-4. 为 cursor-multi-model-proxy 安装 npm 依赖并编译 TypeScript
+4. 为 cursor-proxy 安装 npm 依赖并编译 TypeScript
 5. 为 multi-proxy-manager 安装 npm 依赖
 6. 为缺少 `.env` 的模块自动创建 `.env` 副本
 
@@ -76,7 +76,7 @@ cd codex-proxy && npm install --production && cd ..
 cd hermes-proxy && pip3 install -r requirements.txt --break-system-packages && cd ..
 
 # Cursor
-cd cursor-multi-model-proxy && npm install && npm run build && cd ..
+cd cursor-proxy && npm install && npm run build && cd ..
 
 # Manager
 cd multi-proxy-manager && npm install && cd ..
@@ -111,10 +111,10 @@ nano hermes-proxy/.env
 
 变量与 Codex 类似：`PORT`、`DEEPSEEK_API_KEY`、`MOONSHOT_API_KEY`、`AGNES_API_KEY`。
 
-### 3. Cursor Proxy (`cursor-multi-model-proxy/.env`)
+### 3. Cursor Proxy (`cursor-proxy/.env`)
 
 ```bash
-nano cursor-multi-model-proxy/.env
+nano cursor-proxy/.env
 ```
 
 | 变量 | 说明 |
@@ -171,7 +171,7 @@ cd codex-proxy && node proxy.js
 cd hermes-proxy && python3 proxy.py
 
 # Cursor
-cd cursor-multi-model-proxy && node dist/server/start.js
+cd cursor-proxy && node dist/server/start.js
 
 # Manager（必须先启动所有代理后再启动 Manager）
 cd multi-proxy-manager && node server.js
@@ -364,7 +364,7 @@ rm -rf ~/projects/proxy-rebuild
 ### Cursor 代理 TypeScript 编译失败
 
 ```bash
-cd cursor-multi-model-proxy
+cd cursor-proxy
 npm run build 2>&1 | tee /tmp/cursor-build.log
 cat /tmp/cursor-build.log
 ```
@@ -411,7 +411,7 @@ cd codex-proxy && NODE_ENV=test npx jest --verbose --forceExit
 cd hermes-proxy && PYTHONPATH=. python3 -m pytest tests/ -v
 
 # Cursor
-cd cursor-multi-model-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
+cd cursor-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
 ```
 
 ### 2. 验收清单
@@ -469,7 +469,7 @@ proxy-rebuild/
 │   ├── .env.example
 │   └── tests/
 │
-└── cursor-multi-model-proxy/  # Cursor 代理
+└── cursor-proxy/  # Cursor 代理
     ├── src/               # TypeScript 源码
     ├── dist/              # 编译产物
     ├── .env.example

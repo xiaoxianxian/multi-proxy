@@ -4,10 +4,10 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y python3 g++ make && rm -rf /var/lib/apt/lists/*
 
-COPY cursor-multi-model-proxy/package.json cursor-multi-model-proxy/package-lock.json* ./
+COPY cursor-proxy/package.json cursor-proxy/package-lock.json* ./
 RUN npm install
 
-COPY cursor-multi-model-proxy/ .
+COPY cursor-proxy/ .
 RUN npm run build
 
 FROM node:20-bookworm
@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y python3 lsof g++ make && rm -rf /var/li
 RUN mkdir -p /app/data
 
 COPY --from=builder /app/dist ./dist
-COPY cursor-multi-model-proxy/package.json .
+COPY cursor-proxy/package.json .
 RUN rm -rf node_modules && npm install --omit=dev
 
 ENV PORT=18794

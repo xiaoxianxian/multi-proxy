@@ -11,7 +11,7 @@
 | **multi-proxy-manager** | Node.js + Express | 18792 | Web 管理后台（前端 4 页 + 后端 API + 进程管理） |
 | **codex-proxy** | Node.js + Express | 18790 | Codex CLI 代理，转发上游模型请求 |
 | **hermes-proxy** | Python + Flask | 18793 | Hermes Agent 代理，YAML 配置驱动 |
-| **cursor-multi-model-proxy** | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理，Provider 注册表 + SQLite 持久化 |
+| **cursor-proxy** | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理，Provider 注册表 + SQLite 持久化 |
 
 ---
 
@@ -314,7 +314,7 @@ proxy-rebuild/
 │   ├── proxy.py
 │   ├── requirements.txt
 │   └── tests/
-└── cursor-multi-model-proxy/
+└── cursor-proxy/
     ├── src/
     │   ├── providers/       # 供应商适配器
     │   ├── routing/         # 路由引擎

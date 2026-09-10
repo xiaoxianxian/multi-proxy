@@ -16,14 +16,14 @@ const MANAGER_PORT = 18792;
 const MANAGER_URL = `http://127.0.0.1:${MANAGER_PORT}`;
 // 仓库根解析顺序:
 //   1. 环境变量 PROXY_MANAGER_REPO（显式覆盖）
-//   2. 打包版: ~/proxy-rebuild（壳是启动器，业务代码常驻仓库目录，
+//   2. 打包版: ~/multi-proxy（壳是启动器，业务代码常驻仓库目录，
 //      不塞进 .app —— 避免 better-sqlite3 ABI 与双份 node_modules 问题）
 //   3. 开发模式: desktop/..
 function resolveRepoRoot() {
   if (process.env.PROXY_MANAGER_REPO) return process.env.PROXY_MANAGER_REPO;
   const home = app.getPath('home');
   const candidates = app.isPackaged
-    ? [path.join(home, 'proxy-rebuild')]
+    ? [path.join(home, 'multi-proxy')]
     : [path.join(__dirname, '..')];
   for (const c of candidates) {
     if (fs.existsSync(path.join(c, 'multi-proxy-manager', 'server.js'))) return c;

@@ -1,5 +1,5 @@
 {
-  "name": "cursor-multi-model-proxy",
+  "name": "cursor-proxy",
   "version": "1.0.0",
   "type": "module",
   "scripts": {

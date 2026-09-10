@@ -130,7 +130,7 @@ cd codex-proxy && NODE_ENV=test npx jest --verbose --forceExit
 cd hermes-proxy && PYTHONPATH=. python3 -m pytest tests/ -v
 
 # Cursor 单元测试（需先修复 better-sqlite3）
-cd cursor-multi-model-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
+cd cursor-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
 ```
 
 ### 2. 验收清单
@@ -149,7 +149,7 @@ cd cursor-multi-model-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest
 - 确保 Python 3.8+
 - 确保安装了所有依赖：`bash install.sh --all`
 - 确保安装了 Python 依赖：`pip3 install flask pyyaml requests pytest`
-- **Cursor**: 确保 better-sqlite3 已正确编译：`cd cursor-multi-model-proxy && npm rebuild better-sqlite3`
+- **Cursor**: 确保 better-sqlite3 已正确编译：`cd cursor-proxy && npm rebuild better-sqlite3`
 - **Manager**: 确保有端口绑定权限（非沙箱环境）
 
 ## P1 优化任务 (2026-07-04)
@@ -170,7 +170,7 @@ cd cursor-multi-model-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest
 ### better-sqlite3 native module 版本不匹配
 - 现象：Cursor database.test.ts 22 个测试全 fail
 - 根因：prebuild 仅支持 Node 18 (NODE_MODULE_VERSION 127)，当前系统 Node 24 (137)
-- 修复：`cd cursor-multi-model-proxy && npm rebuild better-sqlite3` 或 `npm install`
+- 修复：`cd cursor-proxy && npm rebuild better-sqlite3` 或 `npm install`
 - 若 npm cache 无写权限：`npm config set cache /tmp/npm-cache && npm rebuild better-sqlite3`
 
 ### Manager supertest EPERM
