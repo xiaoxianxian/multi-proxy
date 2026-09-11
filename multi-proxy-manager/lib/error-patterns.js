@@ -46,6 +46,7 @@ const SEED_PATTERNS = [
 // ---------- 运行时状态（可注入，便于测试） ----------
 let patterns = [];
 let activeHistoryFile = ERROR_HISTORY_FILE;
+let activePatternFile = ERROR_PATTERNS_FILE;
 let linesSinceTrim = 0;
 
 function loadPatterns() {
@@ -54,8 +55,8 @@ function loadPatterns() {
   patterns = SEED_PATTERNS.map((p) => ({ ...p }));
   // 尝试合并磁盘上的（用户/历史扩展的）
   try {
-    if (fs.existsSync(ERROR_PATTERNS_FILE)) {
-      const data = JSON.parse(fs.readFileSync(ERROR_PATTERNS_FILE, 'utf8'));
+   if (fs.existsSync(activePatternFile)) {
+     const data = JSON.parse(fs.readFileSync(activePatternFile, 'utf8'));
       if (Array.isArray(data)) {
         const byId = new Map(patterns.map((p) => [p.id, p]));
         for (const dp of data) {
@@ -111,9 +112,10 @@ function recordError(opts = {}) {
     if (m) {
       entry.pattern_id = m.id;
       entry.resolution_hint = m.resolution;
-      entry.frequency = (bumpPatternFreq(m.id) || 0) + 1;
-    }
-  }
+       // frequency 持久化仅在 persist 时（避免测试 persist:false 仍写盘）
+      if (persist !== false) entry.frequency = (bumpPatternFreq(m.id) || 0) + 1;
+     }
+   }
   if (persist !== false) appendHistory(entry);
   return entry;
 }
@@ -122,10 +124,10 @@ function recordError(opts = {}) {
 function bumpPatternFreq(id) {
   try {
     let data = [];
-    if (fs.existsSync(ERROR_PATTERNS_FILE)) {
-      data = JSON.parse(fs.readFileSync(ERROR_PATTERNS_FILE, 'utf8'));
+    if (fs.existsSync(activePatternFile)) {
+      data = JSON.parse(fs.readFileSync(activePatternFile, 'utf8'));
       if (!Array.isArray(data)) data = [];
-    }
+     }
     let found = data.find((p) => p.id === id);
     if (found) { found.occurrences = (found.occurrences || 0) + 1; }
     else {
@@ -133,7 +135,7 @@ function bumpPatternFreq(id) {
       data.push({ id, occurrences: 1, resolution: seed ? seed.resolution : null, first_seen: new Date().toISOString().slice(0, 10) });
     }
     ensurePatternsDir();
-    fs.writeFileSync(ERROR_PATTERNS_FILE, JSON.stringify(data, null, 2));
+    fs.writeFileSync(activePatternFile, JSON.stringify(data, null, 2));
     return data.find((p) => p.id === id).occurrences;
   } catch {
     return null;
@@ -141,7 +143,7 @@ function bumpPatternFreq(id) {
 }
 
 function ensurePatternsDir() {
-  const dir = path.dirname(ERROR_PATTERNS_FILE);
+  const dir = path.dirname(activePatternFile);
   if (!fs.existsSync(dir)) {
     try { fs.mkdirSync(dir, { recursive: true }); } catch { /* best-effort */ }
     }
@@ -213,6 +215,7 @@ function searchHistory(keyword, limit = 50) {
 function setPatterns(list) { patterns = list; }
 function resetErrorPatterns() { patterns = []; }
 function setHistoryFile(f) { activeHistoryFile = f; linesSinceTrim = 0; }
+function setPatternFile(f) { activePatternFile = f; }
 
 module.exports = {
   matchError,
@@ -224,6 +227,7 @@ module.exports = {
   setPatterns,
   resetErrorPatterns,
   setHistoryFile,
+  setPatternFile,
   SEED_PATTERNS,
   ERROR_PATTERNS_FILE,
   ERROR_HISTORY_FILE,

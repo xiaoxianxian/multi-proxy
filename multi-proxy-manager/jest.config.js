@@ -2,6 +2,7 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['<rootDir>/tests/unit/**/*.test.js'],
   roots: ['<rootDir>'],
+  setupFiles: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     "^../server$": "<rootDir>/server",
   },
