@@ -42,7 +42,19 @@ Agent Profile 的 CRUD + 能力标签注册/查询，编排引擎"按能力路�
 - **零依赖**：内核仅用 node 内置（schema/校验归 validate，内核可移植）。
 - 能力查询 `byCapability(tag)` / `registerCapabilities(id, tags)`——Adapter 启动时声明能力的落点。
 - 真跑：`node l2/agent-registry.demo.js`（CRUD + 能力 + 跨实例持久化 + 负例，18 checks 全 PASS）。
-- **边界**：内核已落地；接 manager HTTP API（:18792，重启+jest+真跑）是下一个独立增量，未在本增量内做。
+- **增量 2b（已落地）**：接 manager HTTP API（`multi-proxy-manager/routes/registry.js` + jest 12/12 + :18792 真跑探测 200/401）。
+  route 必须挂在代理 wildcard（`apiRoutes` 的 `/:proxy/*`）**之前**，否则 `/api/registry/agents` 被 `:proxy=registry`
+  误捕获并被白名单 404。registry 默认内存存储（非侵入、绝不写 home）；设 `L2_REGISTRY_DIR` 才落文件。
+
+## plugin-runtime.js — 插件运行时内核（P0 增量 3）
+
+插件动态加载 + 生命周期管理（类 DeepSeek Harness 2026-08 的"一切皆插件"）：
+- 状态机：`register → enabled → started → stopped`；`unload` 是热插拔的逆操作。
+- 热插拔：`loadFromDir(dir)` 扫描 `dir/<name>/index.js`，require 前清缓存（重载拿最新代码）。
+- 能力汇总：`listCapabilities()` 聚合所有已启插件能力，供编排引擎按能力路由。
+- **非侵入④**：插件 dir 由调用方注入（test 写 os.tmpdir，绝不默认写 home/agent 文件）；零依赖（仅 node 内置）。
+- 真跑：`node l2/plugin-runtime.demo.js`（状态机 + 热插拔 + 能力聚合 + 负例，14 checks 全 PASS）。
+- 修过 1 个 bug：`validatePlugin` 成功返 `[]` 而 `if(errs)` 对空数组为 truthy（与 registry 内核 `返 null` 不一致）→ 统一为 `errs.length ? errs : null`。
 
 ## 铁律（落地前必读）
 
