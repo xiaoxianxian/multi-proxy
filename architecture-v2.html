@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proxy-Rebuild L2 架构 · Agent 编排中枢</title>
+<style>
+   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+
+   * { margin: 0; padding: 0; box-sizing: border-box; }
+
+   :root {
+     --bg: #020617;
+     --card: rgba(15, 23, 42, 0.6);
+     --foreground: #e2e8f0;
+     --muted: #94a3b8;
+     --faint: #64748b;
+     --grid: #1e293b;
+     --cyan: #22d3ee;     --cyan-g: rgba(34,211,238,0.12);
+     --emerald: #34d399;  --e-g: rgba(52,211,153,0.12);
+     --violet: #a78bfa;   --v-g: rgba(167,139,250,0.12);
+     --amber: #fbbf24;    --a-g: rgba(251,191,36,0.10);
+     --rose: #fb7185;     --r-g: rgba(251,113,133,0.10);
+     --orange: #fb923c;   --o-g: rgba(251,146,60,0.10);
+     --slate: #94a3b8;    --s-g: rgba(148,163,184,0.08);
+   }
+
+   body {
+     background: var(--bg);
+     color: var(--foreground);
+     font-family: 'Noto Sans SC', system-ui, sans-serif;
+     min-height: 100vh;
+     padding: 40px 24px 60px;
+   }
+   body::before {
+     content: '';
+     position: fixed; inset: 0;
+     background-image:
+       linear-gradient(rgba(148,163,184,0.035) 1px, transparent 1px),
+       linear-gradient(90deg, rgba(148,163,184,0.035) 1px, transparent 1px);
+     background-size: 40px 40px;
+     pointer-events: none; z-index: 0;
+   }
+
+   .wrap { max-width: 1280px; margin: 0 auto; position: relative; z-index: 1; }
+
+   h1 {
+     font-size: 1.85rem; font-weight: 900; letter-spacing: -0.5px;
+     background: linear-gradient(135deg, var(--cyan), #60a5fa, var(--violet));
+     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+     background-clip: text; text-align: center;
+   }
+   .sub { text-align: center; color: var(--faint); font-weight: 300;
+     letter-spacing: 2px; text-transform: uppercase; font-size: 0.78rem; margin: 8px 0 4px; }
+   .date { text-align: center; color: var(--faint); font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; margin-bottom: 28px; }
+   .date b { color: var(--amber); font-weight: 600; }
+
+   .diagram-card {
+     background: var(--card);
+     border: 1px solid rgba(99,179,237,0.12);
+     border-radius: 14px;
+     padding: 10px;
+     overflow-x: auto;
+   }
+   .diagram-card svg { display: block; width: 100%; height: auto; }
+
+   .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+   .card { background: rgba(15,23,42,0.5); border: 1px solid rgba(99,179,237,0.10);
+     border-radius: 12px; padding: 16px 18px; }
+   .card h3 { font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+   .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+   .card ul { list-style: none; }
+   .card li { font-size: 0.82rem; color: var(--muted); padding: 3px 0; line-height: 1.5; }
+   .card li::before { content: '· '; color: var(--faint); }
+   .k { color: var(--foreground); font-weight: 500; }
+
+   .legend { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 14px 22px;
+     justify-content: center; font-size: 0.78rem; color: var(--muted); }
+   .legend span { display: inline-flex; align-items: center; gap: 6px; }
+   .sw { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid; }
+
+   .footer { text-align: center; color: var(--faint); font-size: 0.7rem;
+     margin-top: 36px; font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Proxy-Rebuild L2 · Agent 编排中枢</h1>
+  <div class="sub">Architecture Blueprint · Gateway + Mid-Platform</div>
+  <div class="date">DRAFT · 2026-09-11 · <b>L1 已收口，L2 蓝图阶段（未实施）</b></div>
+
+  <div class="diagram-card">
+    <svg viewBox="0 0 1180 880" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#475569"/>
+        </marker>
+        <marker id="arrowR" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#fb7185"/>
+        </marker>
+      </defs>
+
+      <!-- ============ LAYER 1: 管理界面层 ============ -->
+      <g>
+        <rect x="30" y="34" width="1120" height="118" rx="12" fill="none"
+          stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="8,4" opacity="0.7"/>
+        <text x="46" y="56" fill="#22d3ee" font-size="12" font-weight="700">管理界面层</text>
+        <text x="140" y="56" fill="#94a3b8" font-size="10">（L2 新增 · 类 Marvis 看板）</text>
+
+        <g>
+          <rect x="60" y="72" width="250" height="58" rx="6" fill="#0f172a"/>
+          <rect x="60" y="72" width="250" height="58" rx="6" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="76" y="98" fill="#e2e8f0" font-size="13" font-weight="600">Agent 看板</text>
+          <text x="76" y="116" fill="#94a3b8" font-size="9">模拟"员工工位" · 实时状态/产出</text>
+        </g>
+        <g>
+          <rect x="340" y="72" width="250" height="58" rx="6" fill="#0f172a"/>
+          <rect x="340" y="72" width="250" height="58" rx="6" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="356" y="98" fill="#e2e8f0" font-size="13" font-weight="600">编排面板</text>
+          <text x="356" y="116" fill="#94a3b8" font-size="9">任务依赖图 · 执行进度</text>
+        </g>
+        <g>
+          <rect x="620" y="72" width="250" height="58" rx="6" fill="#0f172a"/>
+          <rect x="620" y="72" width="250" height="58" rx="6" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="636" y="98" fill="#e2e8f0" font-size="13" font-weight="600">插件市场</text>
+          <text x="636" y="116" fill="#94a3b8" font-size="9">卡片 · 启停 · 版本切换</text>
+        </g>
+        <g>
+          <rect x="900" y="72" width="220" height="58" rx="6" fill="#0f172a"/>
+          <rect x="900" y="72" width="220" height="58" rx="6" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="916" y="98" fill="#e2e8f0" font-size="13" font-weight="600">记忆/技能管理</text>
+          <text x="916" y="116" fill="#94a3b8" font-size="9">公共 + 个性 统一视图</text>
+        </g>
+      </g>
+
+      <!-- ============ LAYER 2: 中台层 ============ -->
+      <g>
+        <rect x="30" y="192" width="1120" height="118" rx="12" fill="none"
+          stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="8,4" opacity="0.7"/>
+        <text x="46" y="214" fill="#a78bfa" font-size="12" font-weight="700">中台层</text>
+        <text x="102" y="214" fill="#94a3b8" font-size="10">（L2 核心）</text>
+
+        <g>
+          <rect x="55" y="230" width="195" height="62" rx="6" fill="#0f172a"/>
+          <rect x="55" y="230" width="195" height="62" rx="6" fill="rgba(76,29,149,0.45)" stroke="#a78bfa" stroke-width="1.5"/>
+          <text x="71" y="256" fill="#e2e8f0" font-size="12" font-weight="600">Agent Registry</text>
+          <text x="71" y="274" fill="#94a3b8" font-size="9">Profile / 能力标签 /</text>
+          <text x="71" y="287" fill="#94a3b8" font-size="9">版本 / 使用统计</text>
+        </g>
+        <g>
+          <rect x="270" y="230" width="195" height="62" rx="6" fill="#0f172a"/>
+          <rect x="270" y="230" width="195" height="62" rx="6" fill="rgba(76,29,149,0.45)" stroke="#a78bfa" stroke-width="1.5"/>
+          <text x="286" y="256" fill="#e2e8f0" font-size="12" font-weight="600">编排引擎</text>
+          <text x="286" y="274" fill="#94a3b8" font-size="9">拆解→路由→</text>
+          <text x="286" y="287" fill="#94a3b8" font-size="9">执行→聚合</text>
+        </g>
+        <g>
+          <rect x="485" y="230" width="195" height="62" rx="6" fill="#0f172a"/>
+          <rect x="485" y="230" width="195" height="62" rx="6" fill="rgba(76,29,149,0.45)" stroke="#a78bfa" stroke-width="1.5"/>
+          <text x="501" y="256" fill="#e2e8f0" font-size="12" font-weight="600">插件运行时</text>
+          <text x="501" y="274" fill="#94a3b8" font-size="9">热插拔 · 项目内</text>
+          <text x="501" y="287" fill="#94a3b8" font-size="9">类 DeepSeek Harness</text>
+        </g>
+        <g>
+          <rect x="700" y="230" width="195" height="62" rx="6" fill="#0f172a"/>
+          <rect x="700" y="230" width="195" height="62" rx="6" fill="rgba(76,29,149,0.45)" stroke="#a78bfa" stroke-width="1.5"/>
+          <text x="716" y="256" fill="#e2e8f0" font-size="12" font-weight="600">记忆服务</text>
+          <text x="716" y="274" fill="#94a3b8" font-size="9">公共 + 个性</text>
+          <text x="716" y="287" fill="#94a3b8" font-size="9">环境变量注入</text>
+        </g>
+        <g>
+          <rect x="915" y="230" width="195" height="62" rx="6" fill="#0f172a"/>
+          <rect x="915" y="230" width="195" height="62" rx="6" fill="rgba(76,29,149,0.45)" stroke="#a78bfa" stroke-width="1.5"/>
+          <text x="931" y="256" fill="#e2e8f0" font-size="12" font-weight="600">健康监控</text>
+          <text x="931" y="274" fill="#94a3b8" font-size="9">M2 已有 +</text>
+          <text x="931" y="287" fill="#94a3b8" font-size="9">告警/成本分析</text>
+        </g>
+      </g>
+
+      <!-- arrows layer1 -> layer2 -->
+      <g stroke="#475569" stroke-width="1.2" fill="none">
+        <line x1="185" y1="152" x2="185" y2="192" marker-end="url(#arrow)"/>
+        <line x1="465" y1="152" x2="380" y2="192" marker-end="url(#arrow)"/>
+        <line x1="745" y1="152" x2="582" y2="192" marker-end="url(#arrow)"/>
+        <line x1="1010" y1="152" x2="797" y2="192" marker-end="url(#arrow)"/>
+      </g>
+
+      <!-- ============ LAYER 3: 网关层 ============ -->
+      <g>
+        <rect x="30" y="350" width="1120" height="110" rx="12" fill="none"
+          stroke="#34d399" stroke-width="1.5" stroke-dasharray="8,4" opacity="0.7"/>
+        <text x="46" y="372" fill="#34d399" font-size="12" font-weight="700">网关层</text>
+        <text x="102" y="372" fill="#94a3b8" font-size="10">（L1 已有 · 增强）</text>
+
+        <g>
+          <rect x="60" y="388" width="245" height="56" rx="6" fill="#0f172a"/>
+          <rect x="60" y="388" width="245" height="56" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+          <text x="76" y="412" fill="#e2e8f0" font-size="13" font-weight="600">API Gateway</text>
+          <text x="76" y="430" fill="#94a3b8" font-size="9">认证 / 限流 / 转发</text>
+        </g>
+        <g>
+          <rect x="330" y="388" width="245" height="56" rx="6" fill="#0f172a"/>
+          <rect x="330" y="388" width="245" height="56" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+          <text x="346" y="412" fill="#e2e8f0" font-size="13" font-weight="600">协议适配器</text>
+          <text x="346" y="430" fill="#94a3b8" font-size="9">Responses ↔ ChatComp</text>
+        </g>
+        <g>
+          <rect x="600" y="388" width="245" height="56" rx="6" fill="#0f172a"/>
+          <rect x="600" y="388" width="245" height="56" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+          <text x="616" y="412" fill="#e2e8f0" font-size="13" font-weight="600">负载均衡</text>
+          <text x="616" y="430" fill="#94a3b8" font-size="9">Failover / RR / 成本</text>
+        </g>
+        <g>
+          <rect x="870" y="388" width="245" height="56" rx="6" fill="#0f172a"/>
+          <rect x="870" y="388" width="245" height="56" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+          <text x="886" y="412" fill="#e2e8f0" font-size="13" font-weight="600">L1 路由（供应商）</text>
+          <text x="886" y="430" fill="#94a3b8" font-size="9">M6 引擎+shadow ✓</text>
+        </g>
+      </g>
+
+      <g stroke="#475569" stroke-width="1.2" fill="none">
+        <line x1="350" y1="310" x2="183" y2="350" marker-end="url(#arrow)"/>
+        <line x1="350" y1="310" x2="453" y2="350" marker-end="url(#arrow)"/>
+      </g>
+
+      <!-- ============ LAYER 4: 代理层 ============ -->
+      <g>
+        <rect x="30" y="500" width="1120" height="108" rx="12" fill="none"
+          stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="8,4" opacity="0.7"/>
+        <text x="46" y="522" fill="#60a5fa" font-size="12" font-weight="700">代理层</text>
+        <text x="102" y="522" fill="#94a3b8" font-size="10">（L1 已有 · 非侵入）</text>
+
+        <g>
+          <rect x="120" y="540" width="220" height="52" rx="6" fill="#0f172a"/>
+          <rect x="120" y="540" width="220" height="52" rx="6" fill="rgba(30,58,120,0.35)" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="136" y="563" fill="#e2e8f0" font-size="13" font-weight="600">Codex Proxy</text>
+          <text x="136" y="580" fill="#94a3b8" font-size="9">Node · port 18790</text>
+        </g>
+        <g>
+          <rect x="480" y="540" width="220" height="52" rx="6" fill="#0f172a"/>
+          <rect x="480" y="540" width="220" height="52" rx="6" fill="rgba(30,58,120,0.35)" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="496" y="563" fill="#e2e8f0" font-size="13" font-weight="600">Hermes Proxy</text>
+          <text x="496" y="580" fill="#94a3b8" font-size="9">Flask · port 18793</text>
+        </g>
+        <g>
+          <rect x="840" y="540" width="220" height="52" rx="6" fill="#0f172a"/>
+          <rect x="840" y="540" width="220" height="52" rx="6" fill="rgba(30,58,120,0.35)" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="856" y="563" fill="#e2e8f0" font-size="13" font-weight="600">Cursor Proxy</text>
+          <text x="856" y="580" fill="#94a3b8" font-size="9">TS+SQLite · 18794</text>
+        </g>
+      </g>
+
+      <g stroke="#475569" stroke-width="1.2" fill="none">
+        <line x1="230" y1="444" x2="230" y2="500" marker-end="url(#arrow)"/>
+        <line x1="453" y1="444" x2="590" y2="500" marker-end="url(#arrow)"/>
+        <line x1="676" y1="444" x2="950" y2="500" marker-end="url(#arrow)"/>
+      </g>
+
+      <!-- ============ LAYER 5: 外部 API ============ -->
+      <g>
+        <rect x="30" y="648" width="1120" height="92" rx="12" fill="none"
+          stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,4" opacity="0.6"/>
+        <text x="46" y="668" fill="#94a3b8" font-size="11" font-weight="700">外部 API（已接入）</text>
+        <g font-size="11" fill="#cbd5e1">
+          <rect x="80"   y="686" width="150" height="34" rx="5" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+          <text x="155" y="707" text-anchor="middle">OpenAI</text>
+          <rect x="250"  y="686" width="150" height="34" rx="5" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+          <text x="325" y="707" text-anchor="middle">Anthropic</text>
+          <rect x="420"  y="686" width="150" height="34" rx="5" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+          <text x="495" y="707" text-anchor="middle">DeepSeek</text>
+          <rect x="590"  y="686" width="150" height="34" rx="5" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+          <text x="665" y="707" text-anchor="middle">Agnes</text>
+          <rect x="760"  y="686" width="180" height="34" rx="5" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+          <text x="850" y="707" text-anchor="middle" fill="#94a3b8">更多供应商 …</text>
+        </g>
+      </g>
+
+      <g stroke="#475569" stroke-width="1.2" fill="none">
+        <line x1="480" y1="592" x2="155" y2="648" marker-end="url(#arrow)"/>
+        <line x1="590" y1="592" x2="495" y2="648" marker-end="url(#arrow)"/>
+        <line x1="700" y1="592" x2="850" y2="648" marker-end="url(#arrow)"/>
+      </g>
+
+      <!-- 记忆注入 / 非侵入 反向通道（rose dashed） -->
+      <g>
+        <path d="M 797 292 C 797 360, 1140 360, 1140 566" fill="none" stroke="#fb7185"
+          stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowR)"/>
+        <rect x="965" y="450" width="228" height="46" rx="6" fill="rgba(136,19,55,0.5)" stroke="#fb7185" stroke-width="1.2"/>
+        <text x="980" y="470" fill="#fda4af" font-size="10" font-weight="600">非侵入注入</text>
+        <text x="980" y="485" fill="#fca5a5" font-size="9">环境变量注入，绝不写</text>
+        <text x="980" y="497" fill="#fca5a5" font-size="9">~/.codex / ~/.hermes / ~/.cursor</text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- summary cards -->
+  <div class="cards">
+    <div class="card">
+      <h3><span class="dot" style="background:#a78bfa"></span>中台层 · L2 核心</h3>
+      <ul>
+        <li><span class="k">Agent Registry</span> · profile/能力/版本</li>
+        <li><span class="k">编排引擎</span> · 拆解/路由/执行/聚合</li>
+        <li><span class="k">插件运行时</span> · 热插拔(类 Harness)</li>
+        <li><span class="k">记忆服务</span> · 公共+个性 注入</li>
+        <li><span class="k">健康监控</span> · 告警/成本分析</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="dot" style="background:#34d399"></span>网关层 · L1 已有</h3>
+      <ul>
+        <li><span class="k">API Gateway</span> · 认证/限流/转发</li>
+        <li><span class="k">协议适配</span> · Responses↔ChatComp</li>
+        <li><span class="k">负载均衡</span> · 故障转/轮询/成本</li>
+        <li><span class="k">L1 路由</span> · M6 引擎+shadow ✓</li>
+        <li><span class="k">646 测试</span> 全绿护航</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="dot" style="background:#fb7185"></span>四原则 · 落地边界</h3>
+      <ul>
+        <li>① 网关+中台 分层</li>
+        <li>② 一切皆插件 · <span class="k">项目内热插拔</span></li>
+        <li>③ 记忆复用 · 公共+个性</li>
+        <li>④ <span class="k">非侵入</span> · 只读+环境变量注入，绝不写 agent 文件</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="sw" style="border-color:#22d3ee;background:rgba(8,51,68,0.5)"></span>管理界面层</span>
+    <span><span class="sw" style="border-color:#a78bfa;background:rgba(76,29,149,0.5)"></span>中台层</span>
+    <span><span class="sw" style="border-color:#34d399;background:rgba(6,78,59,0.5)"></span>网关层</span>
+    <span><span class="sw" style="border-color:#3b82f6;background:rgba(30,58,120,0.4)"></span>代理层</span>
+    <span><span class="sw" style="border-color:#94a3b8;background:rgba(30,41,59,0.5)"></span>外部 API</span>
+    <span><span class="sw" style="border-color:#fb7185;background:rgba(136,19,55,0.5)"></span>非侵入注入通道</span>
+  </div>
+
+  <div class="footer">
+    proxy-rebuild · L2 blueprint · draft 2026-09-11 · 详见 L2-BLUEPRINT.md · 状态：待老板拍板
+  </div>
+</div>
+</body>
+</html>
