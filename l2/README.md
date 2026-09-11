@@ -56,6 +56,15 @@ Agent Profile 的 CRUD + 能力标签注册/查询，编排引擎"按能力路�
 - 真跑：`node l2/plugin-runtime.demo.js`（状态机 + 热插拔 + 能力聚合 + 负例，14 checks 全 PASS）。
 - 修过 1 个 bug：`validatePlugin` 成功返 `[]` 而 `if(errs)` 对空数组为 truthy（与 registry 内核 `返 null` 不一致）→ 统一为 `errs.length ? errs : null`。
 
+## adapters/h3web-adapter.js — h3web 端到端样例（P0 增量 4 · 收口）
+
+决策 3 的 adapter 契约在真实 HTTP round-trip 下验证（**非侵入**）：
+- **协议四类接口**：能力声明 `capabilitiesDeclaration()` / 健康 `health()` / 任务接收 `submit(task)` / 结果回传 `result(taskId)`，外加便捷 `run(task)` 轮询到终态。
+- **非侵入④ 实测**：adapter 对 h3web **只读转发**（不写 h3web 任何文件）；端口**动态探测**（`probePort` 取候选中在 LISTEN 的，否则用注入端口，绝不写死）；零依赖（仅 node 内置 http）。
+- **下游替身**：用 `mock-h3web.js`（node 最小 HTTP，模拟 h3web 的 `/api/gen`+`/api/status` job 状态机 pending→running→done），零副作用——不起真 h3web、不触 Minimax 云端。**真实"起 8731 h3web + 真文生视频"属 P1**（h3web 未运行、云端费用、时长长）。
+- 真跑：`node l2/adapters/h3web-adapter.demo.js`（6 checks 全 PASS）；jest `tests/unit/h3web-adapter.test.js`（5/5 PASS，锁 HTTP round-trip 进 CI）。
+- **环境漂移记录（重要）**：实测 8732 上跑的是 `wechat-style-extractor-py` 的 `server.py`（非 h3web）——印证 adapter「必须动态探测、绝不写死端口」的铁律现实价值；故 P0 用 mock 替身验证契约，真实 h3web 接入待 P1 服务起来再做。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；
