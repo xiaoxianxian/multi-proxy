@@ -41,3 +41,43 @@
   `UPDATE sessions SET model_config=json_remove(model_config,'$_delegate_from') WHERE cwd='<新路径>' AND json_config 带 _delegate_from;`
   二者都满足才会在项目树出现。WAL 模式用 `PRAGMA wal_checkpoint(PASSIVE)` 落盘，不打断运行中的 Hermes；改完重启 Hermes 生效（侧边栏有 300s singleflight 缓存）。
 - 本次：proxy-rebuild→multi-proxy 改名后，9 个 Aug-24 开发会话（delegate 子代理，父 `20260824_000331_d08287`）被隐藏；按上法解绑+清标记后已在 multi-proxy 项目下显示。
+
+---
+
+## 八、外部参考：OpenAI Agents API / Harness（2026-09-11 子非AI《Agent 的战争，打到了运行时》）
+
+> 来源：公众号「子非AI」2026-09-11 文章。核心：OpenAI 把 Codex 背后负责会话/编排/上下文压缩/工具执行/任务恢复的 Harness 做成托管 API（Agents API）。**这恰恰是本项目的本质——multi-proxy 就是在造一套本地版 Harness。**
+
+### 8.1 文章核心判断（直接指导迭代）
+- **模型 API 卖的是智力，Agents API 交付的是「能持续干完活的过程」**。Agent 竞争已从聊天框进入运行时。
+- **Harness 是生产级 Agent 最难复制、最值钱的部分**，且会「锁定」——难迁移的是 Session 状态、上下文压缩方式、工具调用历史、Artifact 格式、失败恢复逻辑，而非某个模型。
+- **薄平台警告**：只在模型 API 外包一层简单循环的「薄平台」会被上游 commoditize；价值向两端移动——下：多模型路由/端云协同/私有化 Harness/权限安全审计；上：企业知识/行业工具/验收体系。
+- **自托管 Sandbox ≠ 私有部署 Agent**：OpenAI 自托管模式仍由它运行 Harness，只把执行器留企业内网；本项目全本地（Harness 也自管）比它更彻底，是真实优势。
+
+### 8.2 四对象 ↔ 本地 AI 栈 对照表（架构素材，设计直接引用）
+| OpenAI 概念 | 文章角色 | 本项目/本地栈对应物 |
+|------|------|------|
+| **Agent** | 谁来干（模型+指令+工具+MCP） | `qwen3.8:27b-mlx` Modelfile（ctx 131072 + MTP）+ multi-proxy 模型路由（M6 内容感知派发） |
+| **Environment** | 在哪里干（文件/命令行/代码执行） | 本机沙箱：Ollama 本地推理、h3.c 本地推理、各 proxy 进程 |
+| **Session** | 跨轮次保存任务状态 | **待建**：任务级 Session/checkpoint 存储（provider-health.json / error-history.jsonl 是资源健康维度雏形，缺「任务进度」维度） |
+| **Events & Items** | 记录每步产出/工具调用/结果 | TaskCreate/TaskList 任务清单 + 工具调用日志 + context-guard 上下文监测 |
+
+### 8.3 对 multi-proxy 迭代规划的具体帮助
+1. **定位校准**：别把自己做成「薄代理壳」，要做厚成「本地 Harness」——把 M6 路由 + 健康/错误库 + 任务级 Session 串成「能观察、能干预、能续跑」的运行时（对齐四对象）。
+2. **补缺失对象——Session（任务级）**：建议在 `~/.multi-proxy-manager/` 增加 `sessions.json`（任务 id → 当前 proxy/目标 provider/已执行步骤/checkpoint），使 proxy 重启后可续跑。
+3. **三条工程纪律（写进后续设计）**：
+   - **Session 持久 ≠ 工作目录永久存在**：checkpoint 必须落盘 `sessions.json`，不依赖内存/临时目录。
+   - **可以恢复 ≠ 命令自动续跑**：重连只读回已存状态，被杀进程不自动重启；副作用动作（切 provider、写文件）做幂等标记 + 检查点 + 补偿。
+   - **自托管 ≠ 私有部署**：全本地已满足 Harness 自管，可作对外写作/产品化卖点。
+
+### 8.4 与现有路线关系
+- 不冲突且强化 M2（健康/隔离）、M4（错误库）、M6（路由）。新增「Session 对象」是运行时补全，可列 **M7：任务级 Session 与续跑**（见 ITERATION-ROADMAP.md 方向五）。
+- `autonomous-continuity` skill（本地 Agent 连续性）已落地「续跑提示词 + checkpoint」思路，可反向给 multi-proxy 提供 Session 设计参考。
+
+### 8.5 对 L2 蓝图的修正与补充（2026-09-12 Hermes 补充）
+- **全本地 Harness 是差异化卖点**：OpenAI 自托管模式仍由他们运行 Harness，只把执行器留企业内网。proxy-rebuild 全本地（Harness+执行器都自管）比它更彻底，私有化程度更高。
+- **三个可落地动作**：
+  1. **P0-M7**：在 `~/.multi-proxy-manager/` 增加 `sessions.json`（任务id→当前proxy/目标provider/已执行步骤/checkpoint），使 proxy 重启后可续跑。应补进 ITERATION-ROADMAP.md。
+  2. **P1-任务幂等**：代理切换/provider故障时，已有操作能做补偿或标记，不重复执行。是 M2（健康隔离）的自然延伸。
+  3. **P2-事件流/Webhook**：让用户订阅 agent 进度，支持中途干预。全新能力，可作差异化。
+- **警示**：文章原话"如果 Harness 只是公共管道，托管更经济"。proxy-rebuild 目前多模型路由（M6）+健康图/熔断是核心竞争力，但任务级Session/恢复是短板。方向对，但要加快 M7 落地，否则回到"薄平台"陷阱。

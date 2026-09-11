@@ -341,3 +341,30 @@ multi-proxy-manager (18792)
 ---
 
 *最后更新：2026-09-11（M1-M6 全部完成/落地，646/646 测试全绿；高后果动作 gated defer）*
+
+---
+
+## 六、外部启发：OpenAI Agents API / Harness（2026-09-11 子非AI）
+
+> 详见 `MEMORY.md` §八（含四对象↔本地栈对照表）。以下为可落地的迭代条目。
+
+### 方向五（建议列入 M7）：任务级 Session 与续跑（优先级：高）
+**现状：**
+- 已有资源健康维度：provider-health.json（M2）、error-history.jsonl（M4）。
+- 缺「任务进度」维度：一次多步请求（如「读文件→改代码→跑测试」）中途 proxy 崩，无状态可续。
+
+**目标：** 让 multi-proxy 具备文章所说 Session 能力——跨轮次保存任务、可观察、可干预、可续跑。
+
+**具体能力：**
+1. `sessions.json`（存 `~/.multi-proxy-manager/`）：`{ sessionId, proxy, targetProvider, steps:[{tool, status, checkpoint}], createdAt }`。
+2. proxy 入口对多步任务写 checkpoint；崩溃恢复读回 → 跳过已完成步骤（幂等）。
+3. dashboard 新增「运行中任务」区块，可手动 abort / resume。
+
+**三条工程纪律（设计必须遵守）：**
+- Session 持久 ≠ 工作目录永久：状态落盘 `sessions.json`，不依赖内存/临时目录。
+- 恢复 ≠ 命令自动续跑：重连只读回状态，副作用动作需幂等 + 检查点 + 补偿。
+- 自托管 ≠ 私有部署：全本地已满足 Harness 自管，作为差异化卖点。
+
+**与现有代码关系：** 复用 M2 的 `provider-health.js` 落盘模式、M4 的 jsonl 策略；新增 `lib/session-store.js` + `routes/sessions-api.js`；不破坏 646 测试基线。
+
+**依赖：** M1-M6 已完成，M7 独立，可并行启动。
