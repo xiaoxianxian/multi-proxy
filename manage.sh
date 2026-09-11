@@ -333,35 +333,84 @@ show_logs() {
   esac
 }
 
+# 单服务路由（带目标参数）：$2 ∈ {codex,hermes,cursor,manager,all}，缺省 all。
+# 镜像已有日志路由风格（logs 读 $2）。裸 start/stop/restart（无 $2）= all，行为不变。
+run_target() {
+  local verb=$1       # start | stop | restart
+  local target=${2:-all}
+  case "$target" in
+    codex)
+      case $verb in
+        start) start_codex ;;
+        stop) stop_codex ;;
+        restart) restart_codex ;;
+       esac ;;
+    hermes)
+      case $verb in
+        start) start_hermes ;;
+        stop) stop_hermes ;;
+        restart) restart_hermes ;;
+       esac ;;
+    cursor)
+      case $verb in
+        start) start_cursor ;;
+        stop) stop_cursor ;;
+        restart) restart_cursor ;;
+       esac ;;
+    manager)
+      case $verb in
+        start) start_manager ;;
+        stop) stop_manager ;;
+        restart) restart_manager ;;
+       esac ;;
+    all|"")
+      case $verb in
+        start)
+          start_codex || true
+          start_hermes || true
+          start_cursor || true
+          start_manager
+          ;;
+        stop)
+          stop_codex
+          stop_hermes
+          stop_cursor
+          stop_manager
+          ;;
+        restart)
+          restart_codex || true
+          restart_hermes || true
+          restart_cursor || true
+          restart_manager
+          ;;
+       esac ;;
+    *)
+      print_error "未知目标: $target"
+      echo "用法: $0 {start|stop|restart} [codex|hermes|cursor|manager|all]"
+      return 1 ;;
+  esac
+}
+
 # 主函数
 case "${1:-status}" in
   start)
     print_status "启动所有服务..."
-    start_codex || true
-    start_hermes || true
-    start_cursor || true
-    start_manager
+    run_target start
     echo ""
     show_status
-    ;;
+     ;;
   stop)
-    print_status "停止所有服务..."
-    stop_codex
-    stop_hermes
-    stop_cursor
-    stop_manager
+    print_status "停止服务${2:+ ($2)}..."
+    run_target stop "$2"
     echo ""
     show_status
-    ;;
+     ;;
   restart)
-    print_status "重启所有服务..."
-    restart_codex || true
-    restart_hermes || true
-    restart_cursor || true
-    restart_manager
+    print_status "重启服务${2:+ ($2)}..."
+    run_target restart "$2"
     echo ""
     show_status
-    ;;
+     ;;
   status)
     show_status
     ;;
