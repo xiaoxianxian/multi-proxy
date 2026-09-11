@@ -7,6 +7,7 @@ const { execFile } = require('child_process');
 
 const { requireAuth } = require('../lib/auth');
 const pm = require('../lib/process-manager');
+const { readRecentHealth } = require('../lib/health');
 
 const router = express.Router();
 
@@ -46,6 +47,12 @@ router.post('/autostart', requireAuth, async (req, res) => {
 // 健康检查
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// M1: 健康历史回溯（最近 N 条 /api/status 持久化的归一化健康记录，倒序）
+router.get('/health-history', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 1000);
+  res.json({ history: readRecentHealth(limit) });
 });
 
 // 版本信息

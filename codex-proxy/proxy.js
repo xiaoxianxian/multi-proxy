@@ -253,12 +253,55 @@ app.get('/v1/models', requireAuth, (req, res) => {
   res.json({ object: 'list', data: builtin.concat(userModels) });
 });
 
-// Health check
+// Health check — M1 DAG 健康依赖图：分级状态 (ok/degraded/down) + 各检查项 + 原因。
+// 保留 status:'healthy'（本进程存活即健康），checks/reasons 供 manager 聚合与 dashboard 展示原因。
+// 向后兼容：新增字段为增量，旧调用方只读 status/uptime/models 不受影响。
+function buildCodexHealthChecks() {
+  const checks = { process: true, config: true, providers: true };
+  const reasons = [];
+
+  // config: 配置文件是否可读（findConfigToml 永远返回候选路径，需实测可存在）
+  try {
+    const cfgPath = findConfigToml();
+    if (cfgPath && fs.existsSync(cfgPath)) {
+      const parsed = parseConfigToml(cfgPath);
+      if (!parsed || parsed.error) {
+        checks.config = false;
+        reasons.push('配置文件解析失败: ' + (parsed ? parsed.error : '未知'));
+      }
+    } else {
+      // 未检测到任何配置文件，标记为降级但非致命（使用默认）
+      checks.config = false;
+      reasons.push('未检测到配置文件');
+    }
+  } catch (e) {
+    checks.config = false;
+    reasons.push('配置文件读取异常: ' + e.message);
+  }
+
+  // providers: providers.json 存在时校验合法性；不存在视为正常（默认态）
+  try {
+    if (fs.existsSync(PROVIDERS_FILE)) {
+      JSON.parse(fs.readFileSync(PROVIDERS_FILE, 'utf8'));
+    }
+  } catch (e) {
+    checks.providers = false;
+    reasons.push('providers.json 损坏，已回退空列表');
+  }
+
+  return { checks, reasons };
+}
+
 app.get('/health', requireAuth, (req, res) => {
+  const { checks, reasons } = buildCodexHealthChecks();
+  const allOk = checks.process && checks.config && checks.providers;
   res.json({
-    status: 'healthy',
+    status: allOk ? 'healthy' : 'degraded',
     uptime: process.uptime(),
-    models: UPSTREAM_MODELS.flatMap(p => p.availableModels)
+    models: UPSTREAM_MODELS.flatMap(p => p.availableModels),
+    checks,
+    reasons,
+    timestamp: new Date().toISOString()
   });
 });
 

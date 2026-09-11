@@ -6,6 +6,7 @@ const { requireAuth } = require('../lib/auth');
 const { appendLog, LOG_FILE } = require('../lib/logger');
 const pm = require('../lib/process-manager');
 const { detectOccupancy, detectAll } = require('../lib/agent-owner');
+const { normalizeProxyHealth, persistHealthHistory } = require('../lib/health');
 
 const router = express.Router();
 
@@ -18,27 +19,61 @@ router.get('/conflicts', requireAuth, (_req, res) => {
 });
 
 // 获取所有代理状态
+// M1: 拉取每个 proxy 的 /health（已升级为分级 + checks + reasons），归一化为
+// { status:'ok'|'degraded'|'down', checks, reasons, overall, latencyMs }，
+// 合并 manager 侧故障信号（fault / 未运行），并持久化到 health-history.jsonl。
 router.get('/status', async (_req, res) => {
   const PROXY_CONFIGS = pm.getProxyConfigs();
   const status = {};
 
   for (const [name, config] of Object.entries(PROXY_CONFIGS)) {
     const running = pm.isProcessRunning(name);
-
-    let health = null;
-    try {
-      health = await pm.fetchProxyApi(name, '/health');
-    } catch { /* ignore */ }
-
     const recovery = pm.getCrashRecovery(name);
+    const fault = recovery.consecutiveFailures >= 5;
+
+    let raw = null;
+    let latencyMs = undefined;
+    if (running && !fault) {
+      const t0 = Date.now();
+      try {
+        raw = await pm.fetchProxyApi(name, '/health');
+       } catch { /* ignore — 拉取失败按 down 处理 */ }
+      latencyMs = Date.now() - t0;
+      } else {
+       // 进程未运行或已熔断：不拉取，避免无谓等待
+      raw = null;
+      }
+
+    const normalized = normalizeProxyHealth(name, raw, { faultSignal: fault });
+
     status[name] = {
       running,
-      health,
       port: config.port,
       name: config.name,
-      fault: recovery.consecutiveFailures >= 5,
-    };
-  }
+      fault,
+      // 保留顶层 fault（既有契约），health 升级为归一化结构
+      health: {
+        status: normalized.status,
+        overall: normalized.overall,
+        checks: normalized.checks,
+        reasons: normalized.reasons,
+        latencyMs,
+       },
+      rawHealth: raw,
+     };
+
+    // 持久化（best-effort，写入失败不影响响应）
+    persistHealthHistory({
+      ts: new Date().toISOString(),
+      proxy: name,
+      status: normalized.status,
+      overall: normalized.overall,
+      checks: normalized.checks,
+      reasons: normalized.reasons,
+      fault,
+      latencyMs,
+     });
+   }
 
   res.json(status);
 });
