@@ -7,9 +7,9 @@
 // 不代表 adapter 只能连 node——adapter 可指向任何实现 /api/gen + /api/status 的后端。
 //
 // job 状态机（模拟 h3web 真实 async 语义）：
-//    POST /api/gen {prompt}     → { job_id, state:'pending' }
-//    GET  /api/status/:id       第 1 次 → { state:'running' }
-//                         第 ≥2 次 → { state:'done', result:{ video_url } }
+//    POST /api/gen {prompt}     → { job_id, status:'pending' }
+//    GET  /api/status/:id       第 1 次 → { status:'running' }
+//                         第 ≥2 次 → { status:'done', output:{ video_url } }
 // 全程零副作用：不写任何文件、不起 h3web、不触 Minimax 云端。
 
 const http = require('http');
@@ -28,7 +28,7 @@ module.exports = function startMockH3web(port) {
                 const job_id = 'job_' + Math.random().toString(36).slice(2, 8);
                 jobs[job_id] = { attempts: 0, prompt: 'unknown' };
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ job_id, state: 'pending' }));
+                res.end(JSON.stringify({ job_id, status: 'pending' }));
             });
             return;
         }
@@ -42,8 +42,8 @@ module.exports = function startMockH3web(port) {
             }
             j.attempts += 1;
             const out = j.attempts < 2
-                ? { state: 'running' }
-                : { state: 'done', result: { video_url: '/outputs/' + id + '.mp4' } };
+                ? { status: 'running' }
+                : { status: 'done', output: '/outputs/' + id + '.mp4' };
             res.writeHead(200, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify(out));
         }
