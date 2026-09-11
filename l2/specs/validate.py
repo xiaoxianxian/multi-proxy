@@ -49,7 +49,8 @@ def schema_like(doc, keys):
 def main():
     fails = 0
     pairs = [("agent-memory", ["specVersion", "entries"]),
-             ("skill", ["specVersion", "entries"])]
+              ("skill", ["specVersion", "entries"]),
+              ("agent-profile", ["specVersion", "entries"])]
     for name, keys in pairs:
         json_doc = json.loads((HERE / f"{name}.json").read_text())
         yaml_doc = load_yaml(HERE / f"{name}.yaml")

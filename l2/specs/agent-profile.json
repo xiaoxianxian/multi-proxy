@@ -1,0 +1,32 @@
+{
+   "specVersion": "1.0.0",
+   "entries": [
+     {
+       "id": "codex-worker",
+       "name": "Codex worker",
+       "type": "codex",
+       "description": "通用编码 worker",
+       "toolsAllowed": ["read", "write", "exec"],
+       "maxRounds": 10,
+       "contextLength": 131072,
+       "costBudget": 100000,
+       "capabilityTags": ["code", "writing"],
+       "version": "1.0.0",
+       "createdAt": "2026-09-11T00:00:00Z",
+       "updatedAt": "2026-09-11T00:00:00Z",
+       "specVersion": "1.0.0"
+     },
+     {
+       "id": "cursor-vision",
+       "name": "Cursor vision",
+       "type": "cursor",
+       "description": "前端 + 视觉",
+       "contextLength": 200000,
+       "capabilityTags": ["code", "vision"],
+       "version": "1.0.0",
+       "createdAt": "2026-09-11T00:00:00Z",
+       "updatedAt": "2026-09-11T00:00:00Z",
+       "specVersion": "1.0.0"
+     }
+   ]
+}

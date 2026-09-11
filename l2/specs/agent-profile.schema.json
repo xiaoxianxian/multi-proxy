@@ -1,0 +1,38 @@
+{
+   "$schema": "http://json-schema.org/draft-07/schema#",
+   "$id": "https://multi-proxy-manager.local/spec/agent-profile/1.0.0",
+   "title": "Agent Profile registry (canonical interchange)",
+   "type": "object",
+   "required": ["specVersion", "entries"],
+   "additionalProperties": false,
+   "properties": {
+     "specVersion": { "const": "1.0.0" },
+     "entries": {
+       "type": "array",
+       "items": { "$ref": "#/definitions/agentProfile" }
+     }
+   },
+   "definitions": {
+     "agentProfile": {
+       "type": "object",
+       "required": ["id", "name", "type", "capabilityTags", "specVersion"],
+       "additionalProperties": true,
+       "properties": {
+         "id": { "type": "string", "description": "稳定唯一 ID，跨方案保留" },
+         "name": { "type": "string", "description": "人类可读名" },
+         "type": { "enum": ["codex", "hermes", "cursor", "custom"], "description": "agent 种类（custom 用于 h3web/AIGC 等开放接入）" },
+         "description": { "type": "string" },
+         "systemPrompt": { "type": "string", "description": "注入用的系统提示（非侵入，不写 agent 自身配置）" },
+         "toolsAllowed": { "type": "array", "items": { "type": "string" } },
+         "maxRounds": { "type": "integer", "minimum": 0 },
+         "contextLength": { "type": "integer", "minimum": 0 },
+         "costBudget": { "type": "number", "minimum": 0, "description": "token 预算" },
+         "capabilityTags": { "type": "array", "items": { "type": "string" }, "description": "能力标签 code/writing/vision/image/video/audio..." },
+         "version": { "type": "string", "description": "profile 自身版本" },
+         "createdAt": { "type": "string", "format": "date-time" },
+         "updatedAt": { "type": "string", "format": "date-time" },
+         "specVersion": { "const": "1.0.0" }
+       }
+     }
+   }
+}
