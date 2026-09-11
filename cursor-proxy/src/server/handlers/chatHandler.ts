@@ -4,6 +4,7 @@ import { ProviderRegistry } from '../../providers/registry.js';
 import { ProviderAdapter, ProviderConfig } from '../../providers/base.js';
 import { db } from '../../db/database.js';
 import { SecretsManager } from '../../utils/crypto.js';
+import { routeShadow } from '../../routing/routing-shadow.js';
 
 const secrets = new SecretsManager();
 
@@ -198,6 +199,13 @@ export async function handleChatCompletion(req: Request, res: Response): Promise
   }
 
   console.log(`[ChatHandler] model=${model}, provider=${providerConfig.name}, stream=${stream}`);
+
+   // M6 影子路由建议（dry-run，不改变真实路由；仅 PROXY_ROUTING_SHADOW=1 时落日志）
+  try {
+    routeShadow(model, messages);
+   } catch {
+    // 影子模式绝不影响主链路——异常即静默忽略
+   }
 
   try {
     await forwardToProvider(req.body, providerConfig, res, stream);

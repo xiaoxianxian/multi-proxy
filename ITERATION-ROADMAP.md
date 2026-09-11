@@ -197,13 +197,13 @@ multi-proxy-manager (18792)
 {
   "id": "default-four-tier",
   "defaultModel": "qwen3.8-flash",
-  "fallbackChain": ["qwen3.8-flash", "deepseek-v4.1-flash", "agnes-2.5-flash", "qwen3.8-local"],
+  "fallbackChain": ["qwen3.8-flash", "deepseek-v4.1-flash", "agnes-2.5-flash", "qwen3.8:27b-mlx"],
   "rules": [
     { "id": "r-cheap",   "condition": "taskType == 'cheap'",   "targetProvider": "agnes-2.5-flash" },
     { "id": "r-coding",  "condition": "taskType == 'coding'",  "targetProvider": "deepseek-v4.1-flash" },
     { "id": "r-writing", "condition": "taskType == 'writing'", "targetProvider": "qwen3.8-flash" },
     { "id": "r-vision",  "condition": "taskType == 'vision'",  "targetProvider": "qwen3.8-flash" },
-    { "id": "r-private", "condition": "privacy == true",       "targetProvider": "qwen3.8-local" },
+    { "id": "r-private", "condition": "privacy == true",       "targetProvider": "qwen3.8:27b-mlx" },
     { "id": "r-hard",    "condition": "quality == 'high'",     "targetProvider": "deepseek-v4.1-flash" }
   ],
   "maxRetries": 3,
@@ -215,7 +215,7 @@ multi-proxy-manager (18792)
 - **Tier 1 强且便宜默认档**：`qwen3.8-flash` 单价 ¥0.8/¥2.7、1M 上下文、多模态、权重开源。日常写作/多模态/通用默认走它——与 GLM-5.3-Flash 同分（SuperCLUE-Terminal 48.48）但更便宜更快、token 更少。
 - **Tier 2 重编码溢出档**：`deepseek-v4.1-flash` 闲时 ¥1/¥4，**缓存命中仅 ¥0.02**（全市场最低之一）。coding agent 反复带同一份系统提示+代码库上下文跑，命中后成本比 GLM（¥0.23）低一个数量级。今日发布、能力超越 V4-Pro 且降价，是重活的性价比之王。
 - **Tier 3 免费兜底档**：`agnes-2.5-flash` 单价 ¥0，但免费档有配额（约 1500 次/5h、15000 次/周）。琐碎低价值任务（r-cheap）白嫖它；配额打满时方向二健康检查标 `unhealthy`，自动溢出到付费档。
-- **Tier 4 离线/隐私兜底**：Agnes 与云端都不可达（断网/订阅过期/限流）时，`fallbackChain` 末位 `qwen3.8-local`（Ollama `localhost:11434`）兜底，离线/隐私场景零依赖。
+- **Tier 4 离线/隐私兜底**：Agnes 与云端都不可达（断网/订阅过期/限流）时，`fallbackChain` 末位 `qwen3.8:27b-mlx`（Ollama `localhost:11434`）兜底，离线/隐私场景零依赖。
 - **显式规则**：`privacy == true` 直接走本地；`quality == 'high'`（硬骨头，如大仓库重构/复杂算法）直接走 DeepSeek V4.1 Flash 啃缓存红利，跳过白嫖档。
 
 **providers.json 需补充的字段（供 4c cost-optimization 查单价 + 方向二记配额）：**
@@ -224,7 +224,7 @@ multi-proxy-manager (18792)
 { "id": "deepseek-v4.1-flash","type": "cloud", "pricing": { "input": 1,   "output": 4,   "cacheHit": 0.02 },  "rateLimit": null, "note": "闲时价；高峰翻倍 ¥2/¥8" },
 { "id": "agnes-2.5-flash",    "type": "cloud", "pricing": { "input": 0,   "output": 0,   "cacheHit": 0 },     "rateLimit": { "per5h": 1500, "perWeek": 15000 } },
 { "id": "glm-5.3-flash",      "type": "cloud", "pricing": { "input": 0.8, "output": 2.8, "cacheHit": 0.23 },  "rateLimit": null },
-{ "id": "qwen3.8-local",      "type": "local", "baseUrl": "http://localhost:11434/v1", "pricing": { "input": 0, "output": 0, "cacheHit": 0 }, "rateLimit": null }
+{ "id": "qwen3.8:27b-mlx",      "type": "local", "baseUrl": "http://localhost:11434/v1", "pricing": { "input": 0, "output": 0, "cacheHit": 0 }, "rateLimit": null }
 ```
 
 **实现要点：**
