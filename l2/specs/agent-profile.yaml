@@ -1,0 +1,33 @@
+# 人类可读视图 —— 由 agent-profile.json 双向无损转换而来；机器/存储以 json 为准。
+specVersion: "1.0.0"
+entries:
+   - id: codex-worker
+     name: "Codex worker"
+     type: codex
+     description: "通用编码 worker"
+     capabilityTags:
+       - code
+       - writing
+     toolsAllowed:
+       - read
+       - write
+       - exec
+     maxRounds: 10
+     contextLength: 131072
+     costBudget: 100000
+     version: "1.0.0"
+     createdAt: "2026-09-11T00:00:00Z"
+     updatedAt: "2026-09-11T00:00:00Z"
+     specVersion: "1.0.0"
+   - id: cursor-vision
+     name: "Cursor vision"
+     type: cursor
+     description: "前端 + 视觉"
+     capabilityTags:
+       - code
+       - vision
+     contextLength: 200000
+     version: "1.0.0"
+     createdAt: "2026-09-11T00:00:00Z"
+     updatedAt: "2026-09-11T00:00:00Z"
+     specVersion: "1.0.0"

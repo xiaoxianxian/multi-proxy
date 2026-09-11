@@ -17,10 +17,11 @@ const check = (name, ok, detail) => {
   if (!ok) failures++;
 };
 
-// 三件套：json(canonical) / yaml(view) / schema，文件名各不相同，整列出避免拼接歧义。
+// 四件套：json(canonical) / yaml(view) / schema，文件名各不相同，整列出避免拼接歧义。
 const specs = [
-   { label: 'memory', json: 'agent-memory.json', yaml: 'agent-memory.yaml', schema: 'agent-memory.schema.json' },
-   { label: 'skill',  json: 'skill.json',        yaml: 'skill.yaml',        schema: 'skill.schema.json' },
+    { label: 'memory',  json: 'agent-memory.json',  yaml: 'agent-memory.yaml',  schema: 'agent-memory.schema.json' },
+    { label: 'skill',   json: 'skill.json',         yaml: 'skill.yaml',         schema: 'skill.schema.json' },
+    { label: 'profile', json: 'agent-profile.json', yaml: 'agent-profile.yaml', schema: 'agent-profile.schema.json' },
 ];
 
 for (const { label, json: jf, yaml: yf, schema: sf } of specs) {
@@ -28,10 +29,15 @@ for (const { label, json: jf, yaml: yf, schema: sf } of specs) {
   const yamlDoc = yaml.parse(fs.readFileSync(path.join(dir, yf), 'utf8'));
   const schemaDoc = JSON.parse(fs.readFileSync(path.join(dir, sf), 'utf8'));
 
-   // 1. 两 view 解析结果一致（JSON 是 canonical，YAML 必须与之完全等价）
-  const roundtripEq = JSON.stringify(jsonDoc) === JSON.stringify(yamlDoc);
-  check(`${label}: JSON == YAML (parsed)`, roundtripEq,
-    roundtripEq ? '' : `\njson=${JSON.stringify(jsonDoc)}\nyaml=${JSON.stringify(yamlDoc)}`);
+   // 1. 两 view 解析结果一致（JSON 是 canonical，YAML 必须与之内容等价，与键序无关——人类手写 YAML 字段顺序可能与 JSON 不同）
+   const canon = (v) =>
+   Array.isArray(v) ? v.map(canon)
+    : (v && typeof v === 'object'
+        ? Object.keys(v).sort().reduce((a, k) => { a[k] = canon(v[k]); return a; }, {})
+        : v);
+   const roundtripEq = JSON.stringify(canon(jsonDoc)) === JSON.stringify(canon(yamlDoc));
+   check(`${label}: JSON == YAML (parsed)`, roundtripEq,
+   roundtripEq ? '' : `\njson=${JSON.stringify(jsonDoc)}\nyaml=${JSON.stringify(yamlDoc)}`);
 
    // 2. YAML 字符串 -> 对象 -> 写回 YAML，应与原文件语义一致（无损往返）
   const backToYaml = yaml.stringify(yamlDoc);
