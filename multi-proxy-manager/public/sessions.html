@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Manager - 任务</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="stylesheet" href="./colors_and_type.css">
+  <link rel="stylesheet" href="./shared-styles.css">
+</head>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-family); background: var(--color-bg-secondary); color: var(--color-text); display: flex; min-height: 100vh; overflow: hidden; }
+.mobile-menu-btn { display: none; position: fixed; top: 16px; left: 16px; z-index: 200; width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-bg); border: 1px solid var(--color-border); box-shadow: var(--shadow-md); cursor: pointer; align-items: center; justify-content: center; font-size: 18px; color: var(--color-text); }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); z-index: 90; }
+.sidebar { width: var(--sidebar-width); background: var(--color-bg); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; position: sticky; top: 0; overflow-y: auto; z-index: 100; }
+.sidebar-brand { padding: 20px 20px 16px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 12px; }
+.sidebar-brand .logo-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
+.sidebar-brand h1 { font-size: 16px; font-weight: 600; }
+.sidebar-nav { flex: 1; padding: 12px; overflow-y: auto; }
+.nav-section-label { font-size: 11px; font-weight: 600; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; color: var(--color-text-secondary); transition: all 0.15s ease; font-size: 14px; }
+.nav-item:hover { background: var(--color-bg-secondary); color: var(--color-text); }
+.nav-item.active { background: var(--color-primary-alpha); color: var(--color-primary); font-weight: 500; }
+.nav-icon { width: 20px; height: 20px; flex-shrink: 0; }
+.icon-svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--color-border); }
+.version-info { font-size: 12px; color: var(--color-text-tertiary); text-align: center; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.15s ease; text-decoration: none; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-outline { background: transparent; border-color: var(--color-border); color: var(--color-text); }
+.btn-outline:hover { background: var(--color-bg-secondary); }
+.btn-primary { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-danger { background: var(--color-danger); color: white; border-color: var(--color-danger); }
+.btn-danger:hover { opacity: 0.9; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.loading-bar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 9999; pointer-events: none; display: none; }
+.loading-bar.active { display: block; }
+.loading-bar::after { content: ''; position: absolute; top: 0; left: -40%; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, var(--color-primary), transparent); animation: loading-slide 1s ease-in-out infinite; }
+@keyframes loading-slide { from { left: -40%; } to { left: 100%; } }
+.page { flex: 1; overflow-y: auto; padding: 24px; }
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+.page-subtitle { font-size: 13px; color: var(--color-text-tertiary); }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-bar select, .filter-bar input { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font-size: 13px; }
+.filter-bar input { flex: 1; min-width: 150px; }
+.session-card { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 12px; }
+.session-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.session-card-title { font-weight: 600; font-size: 14px; }
+.session-card-meta { font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; }
+.session-card-body { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 12px; }
+.session-card-footer { display: flex; gap: 8px; justify-content: flex-end; }
+.steps-list { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); }
+.step-item { display: flex; gap: 8px; padding: 6px 0; font-size: 12px; }
+.step-item .step-time { color: var(--color-text-tertiary); min-width: 70px; }
+.step-item .step-content { color: var(--color-text-secondary); }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; }
+.badge-success { background: var(--color-success-alpha); color: var(--color-success); }
+.badge-warning { background: var(--color-warning-alpha); color: var(--color-warning); }
+.badge-danger { background: var(--color-danger-alpha); color: var(--color-danger); }
+.badge-info { background: var(--color-info-alpha); color: var(--color-info); }
+.empty-state { text-align: center; padding: 40px; color: var(--color-text-tertiary); }
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; box-shadow: var(--shadow-lg); animation: slideIn 0.2s ease; max-width: 320px; }
+.toast-success { background: var(--color-success); color: white; }
+.toast-error { background: var(--color-danger); color: white; }
+.toast-info { background: var(--color-info); color: white; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@media (max-width: 768px) { .mobile-menu-btn { display: flex; } .sidebar { position: fixed; left: -100%; transition: left 0.3s ease; } .sidebar.open { left: 0; } .sidebar-overlay.show { display: block; } }
+</style>
+<body>
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+  <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo-icon">P</div>
+    <h1>Proxy Manager</h1>
+  </div>
+  <nav class="sidebar-nav" id="sidebarNav">
+    <div class="nav-section-label">总览</div>
+    <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+      概览
+    </div>
+    <div class="nav-section-label">系统</div>
+    <div class="nav-item active" data-page="sessions" data-tooltip="任务" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      任务
+    </div>
+    <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+      日志
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="version-info" id="sidebarVersion">v1.0.0</div>
+    <button class="btn btn-outline btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
+    </button>
+    <button class="btn btn-outline btn-sm" onclick="handleLogout()" title="退出登录" style="width:100%;margin-top:8px;">登出</button>
+  </div>
+</aside>
+
+<div class="loading-bar" id="loadingBar"></div>
+<main class="main" id="mainContent">
+  <div class="page active" id="page-sessions">
+    <div class="page-header">
+      <h1 class="page-title">任务列表</h1>
+      <p class="page-subtitle">L2 编排引擎 Session 管理 — 续跑、中止、删除</p>
+    </div>
+
+    <div class="filter-bar">
+      <select id="proxyFilter">
+        <option value="">所有代理</option>
+        <option value="codex">Codex</option>
+        <option value="hermes">Hermes</option>
+        <option value="cursor">Cursor</option>
+      </select>
+      <select id="statusFilter">
+        <option value="">所有状态</option>
+        <option value="running">运行中</option>
+        <option value="done">已完成</option>
+        <option value="failed">失败</option>
+        <option value="aborted">已中止</option>
+      </select>
+      <input type="text" id="searchInput" placeholder="搜索任务...">
+    </div>
+
+    <div id="sessionsList">
+      <div class="empty-state"><div class="loading-spinner" style="margin:0 auto 12px;"></div>加载中...</div>
+    </div>
+  </div>
+</main>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  var authToken = sessionStorage.getItem('auth_token');
+  var allSessions = [];
+
+  // ===== Helpers =====
+  function esc(str) {
+    var div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+  }
+
+  function showToast(msg, type, duration) {
+    duration = duration || 3000;
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast toast-' + (type || 'info');
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(function() { toast.style.opacity = '0'; setTimeout(function() { toast.remove(); }, 200); }, duration);
+  }
+
+  function showLoading() {
+    var bar = document.getElementById('loadingBar');
+    if (bar) bar.classList.add('active');
+  }
+
+  function hideLoading() {
+    var bar = document.getElementById('loadingBar');
+    if (bar) bar.classList.remove('active');
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '-';
+    var d = new Date(iso);
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return '';
+    var ms = Date.now() - new Date(iso).getTime();
+    var m = Math.floor(ms / 60000);
+    if (m < 1) return '刚刚';
+    if (m < 60) return m + '分钟前';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + '小时前';
+    return Math.floor(h / 24) + '天前';
+  }
+
+  // ===== Load Sessions =====
+  function loadSessions() {
+    showLoading();
+    fetch('/api/sessions', { headers: { 'x-auth-token': authToken || '' } })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        allSessions = data.sessions || [];
+        renderSessions(allSessions);
+        hideLoading();
+      })
+      .catch(function() {
+        document.getElementById('sessionsList').innerHTML = '<div class="empty-state">加载失败</div>';
+        hideLoading();
+      });
+  }
+
+  function renderSessions(sessions) {
+    var container = document.getElementById('sessionsList');
+    if (!container) return;
+
+    if (sessions.length === 0) {
+      container.innerHTML = '<div class="empty-state">暂无任务</div>';
+      return;
+    }
+
+    container.innerHTML = sessions.map(function(s) {
+      var statusBadge = s.status === 'running' ? 'badge-success' :
+                        s.status === 'done' ? 'badge-info' :
+                        s.status === 'failed' ? 'badge-danger' : 'badge-warning';
+      var statusText = s.status === 'running' ? '运行中' :
+                       s.status === 'done' ? '已完成' :
+                       s.status === 'failed' ? '失败' :
+                       s.status === 'aborted' ? '已中止' : s.status || '-';
+      var stepsHtml = (s.steps && s.steps.length > 0)
+        ? '<div class="steps-list"><div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:6px;">最近步骤</div>' +
+          s.steps.slice(-3).reverse().map(function(st) {
+            return '<div class="step-item"><span class="step-time">' + (st.timestamp ? formatTime(st.timestamp) : '-') + '</span><span class="step-content">' + esc(st.action) + '</span></div>';
+          }).join('') +
+          '</div>'
+        : '';
+
+      var actions = '';
+      if (s.status === 'running') {
+        actions = '<button class="btn btn-danger btn-sm" onclick="abortSession(\'' + esc(s.sessionId) + '\')">中止</button>' +
+                  '<button class="btn btn-primary btn-sm" onclick="resumeSession(\'' + esc(s.sessionId) + '\')">继续</button>';
+      } else if (s.status === 'failed' || s.status === 'aborted') {
+        actions = '<button class="btn btn-primary btn-sm" onclick="resumeSession(\'' + esc(s.sessionId) + '\')">续跑</button>' +
+                  '<button class="btn btn-outline btn-sm" onclick="deleteSession(\'' + esc(s.sessionId) + '\')">删除</button>';
+      } else if (s.status === 'done') {
+        actions = '<button class="btn btn-outline btn-sm" onclick="deleteSession(\'' + esc(s.sessionId) + '\')">删除</button>';
+      }
+
+      return '<div class="session-card" data-id="' + esc(s.sessionId) + '">' +
+        '<div class="session-card-header">' +
+          '<div>' +
+            '<div class="session-card-title">' + esc((s.task || {}).title || '无标题') + '</div>' +
+            '<div class="session-card-meta">' + esc(s.proxy) + ' · 创建于 ' + formatTime(s.createdAt) + ' · ' + timeAgo(s.updatedAt) + '</div>' +
+          '</div>' +
+          '<span class="badge ' + statusBadge + '">' + statusText + '</span>' +
+        '</div>' +
+        '<div class="session-card-body">' + esc(JSON.stringify(s.task || {}).substring(0, 100)) + '</div>' +
+        stepsHtml +
+        '<div class="session-card-footer">' + actions + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ===== Actions =====
+  window.abortSession = function(id) {
+    if (!confirm('确认中止此任务？')) return;
+    fetch('/api/sessions/' + id + '/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' },
+      body: JSON.stringify({ by: 'user' })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        showToast('任务已中止', 'success');
+        loadSessions();
+      } else {
+        showToast('中止失败: ' + (data.error || ''), 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('中止失败: ' + err.message, 'error');
+    });
+  };
+
+  window.resumeSession = function(id) {
+    if (!confirm('确认续跑此任务？将从最后一步继续执行。')) return;
+    fetch('/api/sessions/' + id + '/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        showToast('任务已续跑', 'success');
+        loadSessions();
+      } else {
+        showToast('续跑失败: ' + (data.error || ''), 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('续跑失败: ' + err.message, 'error');
+    });
+  };
+
+  window.deleteSession = function(id) {
+    if (!confirm('确认删除此任务？此操作不可恢复。')) return;
+    fetch('/api/sessions/' + id, {
+      method: 'DELETE',
+      headers: { 'x-auth-token': authToken || '' }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        showToast('任务已删除', 'success');
+        loadSessions();
+      } else {
+        showToast('删除失败: ' + (data.error || ''), 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('删除失败: ' + err.message, 'error');
+    });
+  };
+
+  // ===== Filter =====
+  function applyFilters() {
+    var proxy = document.getElementById('proxyFilter').value;
+    var status = document.getElementById('statusFilter').value;
+    var search = document.getElementById('searchInput').value.toLowerCase();
+
+    var filtered = allSessions;
+    if (proxy) filtered = filtered.filter(function(s) { return s.proxy === proxy; });
+    if (status) filtered = filtered.filter(function(s) { return s.status === status; });
+    if (search) filtered = filtered.filter(function(s) {
+      var text = JSON.stringify(s).toLowerCase();
+      return text.indexOf(search) !== -1;
+    });
+
+    renderSessions(filtered);
+  }
+
+  document.getElementById('proxyFilter').addEventListener('change', applyFilters);
+  document.getElementById('statusFilter').addEventListener('change', applyFilters);
+  document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+  // ===== Sidebar =====
+  var mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  var sidebar = document.getElementById('sidebar');
+  var sidebarOverlay = document.getElementById('sidebarOverlay');
+
+  mobileMenuBtn.addEventListener('click', function() {
+    sidebar.classList.toggle('open');
+    sidebarOverlay.classList.toggle('show');
+  });
+
+  sidebarOverlay.addEventListener('click', function() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  });
+
+  document.querySelectorAll('.nav-item').forEach(function(item) {
+    item.addEventListener('click', function() {
+      var page = this.dataset.page;
+      if (page === 'dashboard') window.location.href = '/';
+      else if (page === 'logs') window.location.href = '/logs';
+    });
+  });
+
+  // ===== Logout =====
+  window.handleLogout = function() {
+    sessionStorage.removeItem('auth_token');
+    window.location.href = 'login.html';
+  };
+
+  // ===== Dark Mode =====
+  function initDarkMode() {
+    var toggle = document.getElementById('darkModeToggle');
+    var isDark = localStorage.getItem('darkMode') === 'true';
+    var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+    var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      if (toggle) toggle.innerHTML = moonSvg + ' 亮色模式';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', function() {
+        var html = document.documentElement;
+        var isNowDark = html.classList.contains('dark');
+        if (isNowDark) {
+          html.classList.remove('dark');
+          html.classList.add('light');
+          localStorage.setItem('darkMode', 'false');
+          toggle.innerHTML = sunSvg + ' 暗色模式';
+        } else {
+          html.classList.add('dark');
+          html.classList.remove('light');
+          localStorage.setItem('darkMode', 'true');
+          toggle.innerHTML = moonSvg + ' 亮色模式';
+        }
+      });
+    }
+  }
+
+  // ===== Init =====
+  function init() {
+    initDarkMode();
+    loadSessions();
+    // Auto-refresh every 30s
+    setInterval(loadSessions, 30000);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -682,6 +682,10 @@ body {
     <div id="proxyNavItems"></div>
 
     <div class="nav-section-label">系统</div>
+    <div class="nav-item" data-page="sessions" data-tooltip="任务" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      任务
+    </div>
     <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
       日志
@@ -1455,7 +1459,8 @@ body {
   function loadSessions() {
     fetch('/api/sessions/running', { headers: { 'x-auth-token': authToken || '' } })
       .then(function(res) { return res.json(); })
-      .then(function(sessions) {
+      .then(function(data) {
+        var sessions = data.sessions || [];
         renderSessionsList(sessions);
       })
       .catch(function() { /* 静默失败 */ });
@@ -1484,11 +1489,13 @@ body {
       var stepsHtml = (s.steps || []).length > 0
         ? '<div class="session-steps"><svg class="icon-svg icon-svg-xs" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/></svg> ' + s.steps.length + ' 步</div>'
         : '';
+      var abortBtn = '<button class="btn btn-danger btn-sm" onclick="abortSessionFromDashboard(\'' + esc(s.sessionId) + '\')">中止</button>';
       return '<div class="session-item">' +
         '<div class="session-header">' +
           '<span class="session-proxy-badge badge-' + esc(s.proxy) + '">' + esc(s.proxy) + '</span>' +
           '<span class="' + statusBadge + '">' + statusText + '</span>' +
           '<span class="session-age">⏱ ' + ageStr + '</span>' +
+          abortBtn +
         '</div>' +
         '<div class="session-id">' + esc(s.sessionId) + '</div>' +
         '<div class="session-task">' + esc((s.task || {}).title || '无标题') + '</div>' +
@@ -1496,6 +1503,23 @@ body {
       '</div>';
     }).join('');
   }
+
+  window.abortSessionFromDashboard = function(id) {
+    if (!confirm('确认中止此任务？')) return;
+    fetch('/api/sessions/' + id + '/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' },
+      body: JSON.stringify({ by: 'user' })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        showToast('任务已中止', 'success');
+        loadSessions();
+      }
+    })
+    .catch(function() {});
+  };
 
   // ===== Cross-tab status sync via BroadcastChannel =====
   try {

@@ -90,6 +90,7 @@ app.use((req, res, next) => {
       '/dashboard': 'dashboard.html',
       '/logs': 'logs.html',
       '/proxy-config': 'proxy-config.html',
+      '/sessions': 'sessions.html',
     };
     const page = routeMap[req.path] || 'dashboard.html';
     return res.sendFile(path.join(__dirname, 'public', page));

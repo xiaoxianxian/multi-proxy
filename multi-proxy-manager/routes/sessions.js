@@ -93,6 +93,21 @@ router.post('/:id/step', (req, res) => {
     }
 });
 
+// POST /api/sessions/:id/resume — 续跑（从最后一步继续）
+router.post('/:id/resume', (req, res) => {
+    try {
+        const session = getStore().get(req.params.id);
+        if (session.status !== 'failed' && session.status !== 'aborted') {
+            return res.status(400).json({ ok: false, error: '只能续跑 failed/aborted 状态的任务' });
+        }
+        // 重新标记为 running
+        const updated = getStore().update(req.params.id, { status: 'running', resumedAt: new Date().toISOString() });
+        res.json({ ok: true, session: updated });
+    } catch (e) {
+        res.status(400).json({ ok: false, error: e.message });
+    }
+});
+
 // POST /api/sessions/:id/abort
 router.post('/:id/abort', (req, res) => {
     try {
