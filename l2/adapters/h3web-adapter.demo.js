@@ -47,8 +47,8 @@ const ok = (msg, a) => { assert(a, msg); n += 1; console.log(`PASS  ${msg}`); };
 
     // ⑤ 任务接收 + 结果回传（1 个文生视频 round-trip：轮询到 done）
     const res = await adapter.run({ type: 'generate-video', prompt: '一只猫坐在窗台上看雨' });
-    ok('round-trip 终态 done', res.state === 'done');
-    ok('拿到 video_url', typeof res.result.video_url === 'string' && res.result.video_url.startsWith('/outputs/'));
+    ok('round-trip 终态 done', res.status === 'done');
+    ok('拿到 output 路径', typeof res.output === 'string' && res.output.startsWith('/outputs/'));
 
     // ⑥ 收尾
     await mock.close();

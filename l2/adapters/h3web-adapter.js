@@ -128,7 +128,7 @@ class H3webAdapter {
         if (r.status !== 200) throw new Error(`h3web submit failed: HTTP ${r.status}`);
         const j = JSON.parse(r.body);
         if (!j.job_id) throw new Error('h3web /api/gen did not return job_id');
-        return { task_id: j.job_id, state: j.state || 'pending' };
+        return { task_id: j.job_id, state: j.status || 'pending' };
     }
 
     // 接口 4：结果回传（转发到 h3web /api/status/:id）
@@ -144,7 +144,7 @@ class H3webAdapter {
         const { task_id } = await this.submit(task);
         for (let i = 0; i < maxTries; i += 1) {
             const r = await this.result(task_id);
-            if (r.state === 'done' || r.state === 'failed') {
+            if (r.status === 'done' || r.status === 'failed') {
                 return { task_id, ...r };
             }
             await new Promise((res) => setTimeout(res, pollMs));

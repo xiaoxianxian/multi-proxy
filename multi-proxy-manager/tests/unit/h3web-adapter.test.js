@@ -53,8 +53,8 @@ describe('h3web adapter contract', () => {
 
      test('任务接收 + 结果回传：1 个文生视频 round-trip 到 done', async () => {
         const res = await adapter.run({ type: 'generate-video', prompt: '一只猫坐在窗台上看雨' });
-        expect(res.state).toBe('done');
-        expect(res.result.video_url).toMatch(/^\/outputs\//);
+        expect(res.status).toBe('done');
+        expect(res.output).toMatch(/^\/outputs\//);
      });
 
      test('submit 缺 type 抛错', async () => {
