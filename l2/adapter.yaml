@@ -1,0 +1,19 @@
+# adapter.yaml — h3web adapter 示例骨架（决策 3 · 仅契约，P0 不做实现）
+# 演示：一个 adapter 的元数据用规范 YAML 描述，可被 Registry 读取；
+# 与 l2/specs 的"YAML 视图 <-> JSON canonical"同款互通性保证。
+# 铁律：adapter 对 h3web 只读、端口动态探测，绝不写死、绝不改 h3web 任何文件。
+adapter:
+    id: h3web
+    name: "h3web (local Minimax H3 video)"
+    transport: ["http"]            # h3web 是原生 HTTP 服务；MCP 待补
+    capabilities: ["video", "image"]
+    enabled: true
+    source: builtin
+    healthEndpoint: /adapter/health
+    capabilitiesEndpoint: /adapter/capabilities
+    targets:
+        - role: video-generation
+          discoverBy: port           # 动态探测，不写死端口
+          portCandidates: [8731, 8732]   # plist 写 8731、实测 8732，二者取在 LISTEN 的
+          probePath: /
+    specVersion: "1.0.0"
