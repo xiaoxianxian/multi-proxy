@@ -156,13 +156,27 @@ multi-proxy-manager (18792)
 > 2. **唯一能改真实行为的是 override 主路径语义**：但需先对齐 DB model 名与 fallbackChain——现 DB 仅有 `deepseek-v4-pro / agnes-2.5-flash / qwen3.8:27b-mlx`，而 fallbackChain 的 `qwen3.8-flash / deepseek-v4.1-flash` 在 DB 根本不存在，引擎建议会指向无 provider 的目标。
 > 3. **故 ① / 4d 均卡在「语义决策（override vs failover 仅兜底）+ DB 对齐」上，属老板 sign-off 项，非可独立完成的代码活。** 在语义拍板 + DB 对齐前，维持 shadow 观测态即可。
 
-**现状（精确对应代码）：**
-- `cursor-proxy/src/routing/routeEngine.ts` 的 `RouteConfig` 已声明：
-  - `rules: RoutingRule[]`（`RoutingRule = { id, condition: string, targetProvider }`，`condition` 例：`"model.contains('vision')"`）
-  - `strategy: 'priority' | 'round-robin' | 'cost-optimization'`
-- 但 `getNextRoute(modelName, config)` 实际**只实现** `round-robin`（共享 `currentRouteIndex`）和 `priority`（取 `fallbackChain[0]`）。
-- `condition` **从未被 evaluate**，`cost-optimization` **无对应分支**——两者就是为"任务类型派发"预留的空坑。
-- 已知 bug：`currentRouteIndex` 是单实例共享变量（D12 注释），跨 proxy 串号；且 `getNextRoute` 的 `modelName` 参数未被使用，也没有"消息/任务上下文"入口。
+---
+
+**M6 完整依赖清单（接真实路由前的前置，按顺序）：**
+
+| # | 依赖项 | 状态 | 说明 / 归属 |
+|---|--------|------|------------|
+| D1 | 引擎核心（4a/4b/4c + 默认四层配置） | ✅ 已完成 | `routeEngine.ts` / `taskClassifier.ts` / `ruleEvaluator.ts`，111 测试全绿 |
+| D2 | 影子观测层 | ✅ 已完成 | `routing-shadow.ts` + `chatHandler:205`，`PROXY_ROUTING_SHADOW=1` 只观测不改真实 |
+| D3 | ① 安全不变式测试 | ✅ 已完成 | `chat-handler-shadow.test.ts`：on/off 上游逐字节一致 |
+| **D4** | **语义决策：override vs failover-only** | ⛔ **老板 sign-off** | failover-only 已证 no-op（见上）；唯一有效的是 **override 主路径**。需拍「引擎能否覆盖老板已配 provider」——决定请求去向，不可机器代决 |
+| **D5** | **DB model 名 ↔ fallbackChain 对齐** | ⛔ **待办（卡 D4）** | DB 现有 `deepseek-v4-pro / agnes-2.5-flash / qwen3.8:27b-mlx`；链上 `qwen3.8-flash / deepseek-v4.1-flash` 不存在 → override 必 404。需补 provider 或改链上模型名 |
+| **D6** | **4d 健康信号接线** | ⛔ **待办（卡语义）** | `HealthMonitor` 按 provider **id** 记健康，候选按 **model 名** 排序 → 需定 model→provider 健康映射 + 补候选集构建 |
+| D7 | live 回归测试 | ⛔ 接真实后做 | 翻 override 前，先证「coding 请求确实改走 deepseek-v4.1-flash 且上游 200」 |
+
+**结论：D1-D3 已交付并测试；D4-D6 是老板决策 + 数据对齐，非纯代码活。D7 在 D4-D5 落地后做。当前 shadow 观测态已是稳态终点，非中途。**
+
+**现状（精确对应代码，2026-09-11 更新）：**
+- `cursor-proxy/src/routing/` 已完整落地 4a/4b/4c + 默认四层配置（`routeEngine.ts` / `taskClassifier.ts` / `ruleEvaluator.ts` / `routing-shadow.ts`），111 测试全绿。
+- `getNextRoute(taskType, model, config, ctx?)` 已实现 `cost-optimization`（最便宜且健康者）+ `round-robin`（按 config.id 分桶，D12 已修）+ `priority`；`evaluateRules` 已接白名单受限表达式求值（禁 eval）。
+- 引擎经 `routing-shadow.ts` 的 `routeShadow(model, messages)` 挂到 `chatHandler:205`，`PROXY_ROUTING_SHADOW=1` 只观测、不改真实路由（`findProviderConfig` 零改动）。
+- **接真实路由的前置见上方「M6 完整依赖清单」D4-D6（语义 + DB 对齐 + 健康映射），属老板决策项。**
 
 **目标：**
 在 failover/round-robin 之外增加一层**内容感知派发**：看懂每次请求的性质（编码/写作/多模态/廉价），自动送到性价比最高的可达节点。
