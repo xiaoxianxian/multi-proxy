@@ -149,7 +149,7 @@ multi-proxy-manager (18792)
 ### 方向四：按任务类型智能派发路由（优先级：中，独立方向）
 
 > 用户场景：日常「写代码做项目 / 写公众号 / 调 API」混用，希望不同任务自动派发给性价比最高的可达节点。
-> 现状：路由引擎只做 failover/round-robin，内容感知派发是空接口。
+> 现状：路由引擎原本只做 failover/round-robin，内容感知派发是空接口。2026-09-11 已完成 4a/4b/4c 引擎 + 默认四层配置 + shadow 观测（`PROXY_ROUTING_SHADOW=1` 仅观测，不改真实路由），4d 候选集「健康信号接线」需先定 model→provider 健康映射，待定。详见下方实现进度。
 
 **现状（精确对应代码）：**
 - `cursor-proxy/src/routing/routeEngine.ts` 的 `RouteConfig` 已声明：
