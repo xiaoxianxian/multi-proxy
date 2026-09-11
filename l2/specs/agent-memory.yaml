@@ -1,0 +1,30 @@
+# 人类可读视图 —— 必须由 agent-memory.json 双向无损转换而来
+# 机器/存储口径以 agent-memory.json (canonical) 为准；本文件仅便于人工查看/编辑。
+specVersion: "1.0.0"
+entries:
+  - id: mem-etimedout-no-proxy
+    type: error-pattern
+    scope: shared
+    key: etimedout-after-proxy-bypass
+    value: "所有 HTTP 请求绕过系统代理直连被墙 IP 导致 ETIMEDOUT；根因是全局 NO_PROXY 含裸 * 触发 hostname.endsWith('') 恒真。"
+    tags:
+      - network
+      - proxy
+      - etimedout
+      - "no-proxy"
+    source: "shared:error-patterns.json"
+    createdAt: "2026-07-03T00:00:00Z"
+    updatedAt: "2026-09-11T00:00:00Z"
+    specVersion: "1.0.0"
+  - id: mem-pref-response
+    type: preference
+    scope: shared
+    key: response-language
+    value: "简体中文作答；称用户为『老板』或『贾维斯』。"
+    tags:
+      - i18n
+      - persona
+    source: "shared:user-profile.json"
+    createdAt: "2026-07-04T00:00:00Z"
+    updatedAt: "2026-09-11T00:00:00Z"
+    specVersion: "1.0.0"

@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://multi-proxy-manager.local/spec/agent-memory/1.0.0",
+  "title": "Agent Memory (canonical interchange format)",
+  "type": "object",
+  "required": ["specVersion", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "specVersion": { "const": "1.0.0" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/memoryEntry" }
+     }
+   },
+  "definitions": {
+    "memoryEntry": {
+      "type": "object",
+       "required": [
+        "id", "type", "scope", "key", "value",
+        "tags", "source", "createdAt", "updatedAt", "specVersion"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "id": { "type": "string", "description": "稳定唯一 ID，跨方案保留" },
+         "type": {
+           "enum": ["error-pattern", "preference", "config", "template", "note"],
+           "description": "记忆种类；error-pattern 对应 L1 的 error-patterns.json"
+         },
+         "scope": {
+           "type": "string",
+           "description": "'shared' = 公共层跨 Agent 复用；其它值 = 该 agentId 的个性层"
+         },
+         "key": { "type": "string", "description": "人类可读的逻辑名" },
+         "value": {},
+         "tags": { "type": "array", "items": { "type": "string" } },
+         "source": { "type": "string", "description": "来源文件/scheme，便于回溯与去重" },
+         "createdAt": { "type": "string", "format": "date-time" },
+         "updatedAt": { "type": "string", "format": "date-time" },
+         "specVersion": { "const": "1.0.0" }
+       }
+     }
+   }
+}

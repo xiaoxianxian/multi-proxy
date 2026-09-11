@@ -1,0 +1,29 @@
+# 人类可读视图 —— 必须由 skill.json 双向无损转换而来
+# 机器/存储口径以 skill.json (canonical) 为准。content 保持单行以保证跨语言无损。
+specVersion: "1.0.0"
+entries:
+  - id: skill-lark-shared
+    name: lark-shared
+    trigger: "When first setting up lark-cli or running auth login"
+    description: "Lark auth login, base URL config, and shared preflight for all lark skills."
+    content: "Run `lark-cli auth login` first; base URL from env LARK_BASE_URL; all lark-* skills depend on this one."
+    version: "1.0.0"
+    tags:
+      - devops
+      - lark
+      - auth
+    enabled: true
+    source: builtin
+    specVersion: "1.0.0"
+  - id: skill-hermes-agent
+    name: hermes-agent
+    trigger: "Configure, extend, or troubleshoot Hermes Agent"
+    description: "Hermes Agent configuration, tool setup, and diagnostics."
+    content: "Call skill_view(name='hermes-agent') before changing; never hard-code global model.* across sessions."
+    version: "1.0.0"
+    tags:
+      - hermes
+      - config
+    enabled: true
+    source: builtin
+    specVersion: "1.0.0"

@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://multi-proxy-manager.local/spec/skill/1.0.0",
+  "title": "Agent Skill (canonical interchange format)",
+  "type": "object",
+   "required": ["specVersion", "entries"],
+   "additionalProperties": false,
+   "properties": {
+     "specVersion": { "const": "1.0.0" },
+     "entries": {
+       "type": "array",
+       "items": { "$ref": "#/definitions/skillEntry" }
+     }
+   },
+   "definitions": {
+     "skillEntry": {
+       "type": "object",
+       "required": [
+         "id", "name", "trigger", "description", "content",
+         "version", "tags", "enabled", "source", "specVersion"
+       ],
+       "additionalProperties": false,
+       "properties": {
+         "id": { "type": "string", "description": "稳定唯一 ID，跨方案保留" },
+         "name": { "type": "string", "description": "技能名，与源系统的 skill 名一致" },
+         "trigger": { "type": "string", "description": "何时加载该 skill（描述性触发条件）" },
+         "description": { "type": "string" },
+         "content": { "type": "string", "description": "技能正文；保持单行或稳定编码，保证跨语言无损" },
+         "version": { "type": "string", "description": "技能自身版本，如 1.0.0" },
+         "tags": { "type": "array", "items": { "type": "string" } },
+         "enabled": { "type": "boolean" },
+         "source": { "enum": ["builtin", "user", "shared"] },
+         "specVersion": { "const": "1.0.0" }
+       }
+     }
+   }
+}
