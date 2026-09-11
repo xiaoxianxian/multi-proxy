@@ -163,9 +163,24 @@ multi-proxy-manager (18792)
 3. manager 提供 `/api/errors/patterns` 和 `/api/errors/history` 端点
 4. logs.html 新增"错误模式"Tab
 
----
+> **M4 现状 + 卡点（2026-09-11，老板可决策）**
+>
+> - **3a 错误模式库 ✅**：`lib/error-patterns.js`，8 个**真实种子**（better-sqlite3 / EPERM / ECONNREFUSED / ETIMEDOUT / EADDRINUSE / MODULE_NOT_FOUND / ENOENT / Hermes 误报），全部从 CLAUDE.md / P0-FIXES / HANDOVER 真实错误提取，非臆造
+> - **3b 结构化历史 ✅ 数据层**：`recordError → error-history.jsonl`（jsonl + 裁剪，与 health-history 同策略）+ 频次持久化
+> - **3c 检索 ✅ 数据层**：`getPatterns / getHistory / searchHistory`（纯字符串，不靠 LLM）；`/api/errors/*` 端点就绪
+> - **16 单测 ✅**：匹配 / 历史 round-trip / 检索 / 频次 / 种子完整性 / 正则容错全绿
+> - **接 manager error log ⏸ defer**：`crash-recovery.test.js:67` 证实测试会打真实 error 日志 → 接 logger 会让测试污染真实 `error-history.jsonl`；需先做 jest global setup 测试隔离再接线
+> - **3c 前端"常见问题" Tab ⏸ defer**：改 logs.html（1251 行），风险高，数据层已就绪，下轮做
+> - **已知竞态 ⚠️**：`bumpPatternFreq` 写 `error-patterns.json` 与 `loadPatterns` 种子合并，多 worker 并发需加锁（低频场景先单进程）
+>
+> **共通卡点（高后果动作 gated，M2/M4 一致）**：自动 `enabled=false`（重排全局路由）/ 自动定时探活（真打上游，扣费限流）/ error log 接线（需测试隔离）——均默认关，须 sign-off。
 
-### 方向四：按任务类型智能派发路由（优先级：中，独立方向）
+**M4 完成标志：**
+- 8 个种子模式命中真实历史错误文案 ✅
+- 结构化历史持久化 + 检索 ✅
+- 16 单测全绿 ✅
+- 接 manager error log（defer）
+- 前端"常见问题"Tab（defer）
 
 > 用户场景：日常「写代码做项目 / 写公众号 / 调 API」混用，希望不同任务自动派发给性价比最高的可达节点。
 > 现状：路由引擎原本只做 failover/round-robin，内容感知派发是空接口。2026-09-11 已完成 4a/4b/4c 引擎 + 默认四层配置 + shadow 观测（`PROXY_ROUTING_SHADOW=1` 仅观测，不改真实路由），4d 候选集「健康信号接线」需先定 model→provider 健康映射，待定。详见下方实现进度。
