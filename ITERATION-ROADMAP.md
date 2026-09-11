@@ -150,6 +150,11 @@ multi-proxy-manager (18792)
 
 > 用户场景：日常「写代码做项目 / 写公众号 / 调 API」混用，希望不同任务自动派发给性价比最高的可达节点。
 > 现状：路由引擎原本只做 failover/round-robin，内容感知派发是空接口。2026-09-11 已完成 4a/4b/4c 引擎 + 默认四层配置 + shadow 观测（`PROXY_ROUTING_SHADOW=1` 仅观测，不改真实路由），4d 候选集「健康信号接线」需先定 model→provider 健康映射，待定。详见下方实现进度。
+>
+> **① 影子转真实评估结论（2026-09-11，已评估不可安全落地）：**
+> 1. **failover-only 语义 = 永真 no-op**：`findProviderConfig` 仅在「零启用 provider」时返 null；有 provider 时 round-robin / failover-model 路径都返回【某个】provider 而非 null——故「主路径 null 才用引擎」的 failover-only 接线在任何现实状态下都不改变结果（实测确认，曾尝试接线后回退，勿重做）。
+> 2. **唯一能改真实行为的是 override 主路径语义**：但需先对齐 DB model 名与 fallbackChain——现 DB 仅有 `deepseek-v4-pro / agnes-2.5-flash / qwen3.8:27b-mlx`，而 fallbackChain 的 `qwen3.8-flash / deepseek-v4.1-flash` 在 DB 根本不存在，引擎建议会指向无 provider 的目标。
+> 3. **故 ① / 4d 均卡在「语义决策（override vs failover 仅兜底）+ DB 对齐」上，属老板 sign-off 项，非可独立完成的代码活。** 在语义拍板 + DB 对齐前，维持 shadow 观测态即可。
 
 **现状（精确对应代码）：**
 - `cursor-proxy/src/routing/routeEngine.ts` 的 `RouteConfig` 已声明：
