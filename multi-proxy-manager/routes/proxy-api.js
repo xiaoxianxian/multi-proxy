@@ -4,6 +4,7 @@ const axios = require('axios');
 
 const { requireAuth } = require('../lib/auth');
 const { appendLog } = require('../lib/logger');
+const { recordProbe } = require('../lib/provider-health');
 const pm = require('../lib/process-manager');
 const {
   classifyUpstreamError,
@@ -62,12 +63,14 @@ router.post('/test-connection', requireAuth, async (req, res) => {
     }
 
     var resp = await axios(axiosConfig);
+    recordProbe(providerId, true, { source: 'manual' });
     res.json({ success: true, message: '连通成功' });
-  } catch (err) {
+   } catch (err) {
+    recordProbe(providerId, false, { source: 'manual' });
     const c = classifyUpstreamError(err);
     appendLog('warn', 'test-connection', 'Connection test failed: ' + err.message);
     res.status(c.status).json({ success: false, error: c.error });
-  }
+   }
 });
 
 // ==================== 模型列表获取 (MUST be before proxy wildcard) ====================
