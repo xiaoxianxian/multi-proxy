@@ -101,6 +101,25 @@ multi-proxy-manager (18792)
 - `routing-mode.json` 已存在，可扩展为包含 provider 健康状态的完整路由决策
 - 需要新的定时任务模块（可独立文件 `health-scheduler.js`）
 
+**M2 实现进度 + 卡点（2026-09-11）：**
+
+> 现状：**2a/2b 核心已落地，3a 已存在，自动动作 + 定时器 + UI 仍待做（gated）。**
+>
+> 已落地（commit `bb45837`）：
+> 1. `lib/provider-health.js` — `recordProbe(providerId, ok, {source})` 连续 N 次失败(默认 3)标记 `unhealthy` + `unhealthyUntil=now+5min`；纯记录/判定/聚合，**绝不触碰 providers.json、不改路由、不 flip enabled**。`correlateCrossProxy` 实现 2b：窗口内 ≥ `crossProxyThreshold`(默认 2) 个不同 proxy 报同 provider 失败 → `network-wide`，否则 `single-proxy`。状态持久化到 `~/.multi-proxy-manager/provider-health.json`（可注入时钟/文件，13 单测全绿）。
+> 2. `routes/proxy-api.js` 的 `POST /test-connection` 加 2 行 `recordProbe` 接线（加性、不改响应契约/路由顺序），用真实探活结果喂健康状态。
+> 3. 测试 420/420（+13）基线不破坏；live 冒烟验证状态机 + 聚合 + 落盘。
+>
+> 已存在（无需重做）：**2c proxy 崩溃恢复** —— `process-manager.js` 的 `proxyCrashRecovery` + `crash-recovery.json` + "连续 3 次熔断→需人工介入" 已实现。
+>
+> **卡点 / Deferred（高后果 + 真实流量，需 gated + sign-off，本轮不做）：**
+> 1. **自动 `enabled=false` / Round-Robin 跳过**：2a 原文的"自动标记 enabled=false"与 M6 ① 同构——**误禁用 provider 会重排全局路由**， blast radius 大于单纯 failover。决策：本轮 `PROXY_HEALTH_ISOLATE` 门控默认关 = observe-only，自动隔离留到独立 sign-off + live 回归。
+> 2. **定时调度器**（实现要点③每 30s 扫描）：自动发起 probe = 真实打上游（扣费 / 触发上游限流），高后果，defer。本轮只把 probe 挂在**用户手动 test-connection**上（零新增流量）。
+> 3. **Dashboard "Provider Health" 区块**（实现要点④）：UI 未做，数据已就绪（`listIsolated()` / `correlateCrossProxy()` 可直接供前端）。
+> 4. **2b 依赖 2a 先持久化**：`provider-health.json` 已落地，2b 聚合即可用——此依赖已解除。
+>
+> **决策记录**：自动动作类（enabled=false / 跳过 / 自动 probe）统一走 `PROXY_HEALTH_ISOLATE` gated 默认关，与 M6 ① 的安全姿态一致——observe 是稳态终点，执行动作需显式开启 + live 回归。
+
 ---
 
 ### 方向三：错误模式检索与复用（优先级：低，长期）
