@@ -9,6 +9,7 @@ const pm = require('./lib/process-manager');
 
 const authRoutes = require('./routes/auth');
 const controlRoutes = require('./routes/proxy-control');
+const registryRoutes = require('./routes/registry');
 const apiRoutes = require('./routes/proxy-api');
 const metaRoutes = require('./routes/meta');
 
@@ -57,6 +58,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // - /api/*        元信息（autostart/version/installed/env-check；health 在根级单独挂）
 app.use('/api/auth', authRoutes);
 app.use('/api', controlRoutes);
+// L2 P0 Registry：必须挂在代理 wildcard（apiRoutes 的 /:proxy/*）之前，
+// 否则 /api/registry/agents 会被 :proxy=registry 误捕获并被白名单 404。
+app.use('/api/registry', registryRoutes);
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
