@@ -306,16 +306,55 @@ def add_history(action, from_model, to_model, mode, success):
 @app.route('/health', methods=['GET'])
 @require_auth
 def health_check():
-    """Health check endpoint."""
+    """Health check — M1 DAG 健康依赖图：分级状态 + 各检查项 + 原因。
+
+    向后兼容：保留 status='healthy'（进程存活即健康）、current_model、uptime 等旧字段；
+    新增 checks（process/config/providers）与 reasons 供 manager 聚合、dashboard 展示原因。
+    """
     config_path = find_config_yaml()
     config_data = parse_config_yaml(config_path) if os.path.exists(config_path) else {}
     current_model = get_current_model(config_data)
 
+    checks = {'process': True, 'config': True, 'providers': True}
+    reasons = []
+
+    # config: 配置文件存在且可解析
+    if os.path.exists(config_path):
+        if not config_data:
+             # 文件存在但解析为空（YAML 解析异常或空文件）
+            checks['config'] = False
+            reasons.append('配置文件解析为空或异常')
+        elif current_model:
+             # 正常读到了当前模型
+            pass
+        else:
+            # 有 providers 但取不到 default_model —— 降级，非致命
+            checks['config'] = False
+            reasons.append('无法从配置读取当前模型')
+    else:
+        checks['config'] = False
+        reasons.append('未配置文件: ' + config_path)
+
+    # providers: providers.json 存在时校验合法性；不存在视为正常（默认态）
+    try:
+       if os.path.exists(PROVIDERS_FILE):
+           with open(PROVIDERS_FILE, 'r') as f:
+               data = json.load(f)
+           if not isinstance(data, list):
+               raise ValueError('providers.json 顶层不是数组')
+    except Exception as e:
+       checks['providers'] = False
+       reasons.append('providers.json 损坏: ' + str(e))
+
+    all_ok = checks['process'] and checks['config'] and checks['providers']
     return jsonify({
-        'status': 'healthy',
+        'status': 'healthy' if all_ok else 'degraded',
         'uptime': time.time(),
         'current_model': current_model,
-        'config_path': config_path
+        'config_path': config_path,
+        'checks': checks,
+        'reasons': reasons,
+        'timestamp': datetime.utcnow().isoformat(),
     })
 
 

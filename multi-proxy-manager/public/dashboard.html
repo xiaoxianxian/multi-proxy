@@ -1052,19 +1052,36 @@ body {
 
       var healthBadge = '';
       if (status.health) {
+        // M1: 归一化契约 status ∈ {'ok','degraded','down'}，old 'healthy' 已在上游归一化为 'ok'。
         var healthStatus = status.health.status;
-        var healthClass = healthStatus === 'healthy' ? 'status-badge online' : 'status-badge offline';
-        var healthText = healthStatus === 'healthy' ? '健康' : '异常';
-        healthBadge = '<span class="' + healthClass + '">' +
-          '<span class="dot"></span>' +
-          healthText +
-          '</span>';
-      } else if (!isRunning) {
+        var healthClass;
+        var healthText;
+        var healthReason = '';
+        var reasonsArr = Array.isArray(status.health.reasons) ? status.health.reasons : [];
+        if (reasonsArr.length > 0) healthReason = reasonsArr[0];
+
+        if (healthStatus === 'ok') {
+          healthClass = 'status-badge online';
+          healthText = '健康';
+        } else if (healthStatus === 'degraded') {
+          healthClass = 'status-badge degraded';
+          healthText = '降级' + (healthReason ? '·' + healthReason : '');
+        } else {
+          // 'down' / 未知 / 拉取失败
+          healthClass = 'status-badge offline';
+          healthText = healthReason || '异常';
+        }
+        var titleText = (reasonsArr.length > 0 ? reasonsArr.join('；') : healthText);
+        healthBadge = '<span class="' + healthClass + '" title="' + (titleText ? esc(titleText.slice(0, 200)) : '') + '">' +
+           '<span class="dot"></span>' +
+          esc(healthText.slice(0, 60)) +
+           '</span>';
+       } else if (!isRunning) {
         healthBadge = '<span class="status-badge offline">' +
-          '<span class="dot"></span>' +
-          '未检测' +
-          '</span>';
-      }
+           '<span class="dot"></span>' +
+           '未检测' +
+           '</span>';
+       }
 
       var uptimeText = status.uptime ? '运行 ' + status.uptime : '';
       var latencyText = status.health && status.health.latency ? '延迟 ' + status.health.latency : '';

@@ -238,6 +238,13 @@
   color: var(--color-warning-deep, var(--color-warning));
 }
 
+/* M1 DAG 健康依赖图：降级态（进程在跑但依赖项异常，如 better-sqlite3 缺失 / 配置损坏）
+   与「故障熔断」同级视觉（橙色），但语义不同，单独 token 以便文案区分。 */
+.status-badge.degraded {
+  background: var(--color-warning-light);
+  color: var(--color-warning-deep, var(--color-warning));
+}
+
 /* ============================================
    Unified Nav Tooltip (Rule D11: global, NOT in media query)
    ============================================ */

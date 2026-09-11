@@ -34,13 +34,21 @@ app.use('/v1', chatRoutes);
 app.use('/admin-api', requireAdminAuth, adminRoutes);
 app.use('/v1/models', modelRoutes);
 
-// 3. 健康检查
+// 3. 健康检查 — M1 DAG 健康依赖图：保留 status:'ok'（供 admin-auth 测试），
+//    新增 checks.process（本进程存活）与 checks.database（依赖 /admin-api/health 探测 DB）。
+//    顶层 /health 不受 PROXY_AUTH_TOKEN 保护（见 admin-auth 测试），但 DB 异常时降级为 'degraded'。
+//    manager 会另行拉取 /admin-api/health 获取 DB 检查项并合并。
 app.get('/health', (_req: any, res: any) => {
+  const checks = { process: true };
+  const reasons: string[] = [];
+  let status = 'ok';
   res.json({
-    status: 'ok',
+    status,
     timestamp: new Date().toISOString(),
     port: process.env.PORT || 18794,
-  });
+    checks,
+    reasons,
+   });
 });
 
 // 4. 错误处理
