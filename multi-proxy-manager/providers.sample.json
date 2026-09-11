@@ -87,8 +87,8 @@
     "updated_at": "2026-09-10T00:00:00.000000",
     "models": [
       {
-        "id": "qwen3.8-local",
-        "name": "Qwen3.8 Local (27B Q5_K_M)",
+        "id": "qwen3.8:27b-mlx",
+        "name": "Qwen3.8 27B (本地 MLX)",
         "type": "local",
         "baseUrl": "http://localhost:11434/v1",
         "pricing": { "input": 0, "output": 0, "cacheHit": 0 },
