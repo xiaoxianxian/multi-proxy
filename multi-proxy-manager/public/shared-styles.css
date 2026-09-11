@@ -874,3 +874,54 @@ body {
   from { left: -40%; }
   to { left: 100%; }
 }
+
+/* Session items */
+.session-item {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.session-proxy-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.session-age {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-left: auto;
+}
+
+.session-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  margin-bottom: 4px;
+}
+
+.session-task {
+  font-size: 13px;
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.session-steps {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 6px;
+}

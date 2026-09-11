@@ -806,6 +806,22 @@ body {
         </div>
       </div>
     </div>
+
+    <!-- Running Sessions Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">运行中任务</div>
+        <div class="card-subtitle">L2 编排引擎 Session 状态（自动刷新）</div>
+      </div>
+      <div class="card-body">
+        <div id="sessionsList">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="empty-text">暂无运行中任务</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -1435,12 +1451,59 @@ body {
     toggle.checked = true;
   }
 
+  // ===== Sessions Loading =====
+  function loadSessions() {
+    fetch('/api/sessions/running', { headers: { 'x-auth-token': authToken || '' } })
+      .then(function(res) { return res.json(); })
+      .then(function(sessions) {
+        renderSessionsList(sessions);
+      })
+      .catch(function() { /* 静默失败 */ });
+  }
+
+  function renderSessionsList(sessions) {
+    var container = document.getElementById('sessionsList');
+    if (!container) return;
+
+    if (!sessions || sessions.length === 0) {
+      container.innerHTML =
+        '<div class="empty-state">' +
+          '<div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>' +
+          '<div class="empty-text">暂无运行中任务</div>' +
+        '</div>';
+      return;
+    }
+
+    container.innerHTML = sessions.map(function(s) {
+      var ageMs = Date.now() - new Date(s.createdAt).getTime();
+      var ageMin = Math.floor(ageMs / 60000);
+      var ageSec = Math.floor((ageMs % 60000) / 1000);
+      var ageStr = ageMin > 0 ? ageMin + 'm' + ageSec + 's' : ageSec + 's';
+      var statusBadge = s.status === 'running' ? 'badge-success' : 'badge-warning';
+      var statusText = s.status === 'running' ? '运行中' : '待处理';
+      var stepsHtml = (s.steps || []).length > 0
+        ? '<div class="session-steps"><svg class="icon-svg icon-svg-xs" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/></svg> ' + s.steps.length + ' 步</div>'
+        : '';
+      return '<div class="session-item">' +
+        '<div class="session-header">' +
+          '<span class="session-proxy-badge badge-' + esc(s.proxy) + '">' + esc(s.proxy) + '</span>' +
+          '<span class="' + statusBadge + '">' + statusText + '</span>' +
+          '<span class="session-age">⏱ ' + ageStr + '</span>' +
+        '</div>' +
+        '<div class="session-id">' + esc(s.sessionId) + '</div>' +
+        '<div class="session-task">' + esc((s.task || {}).title || '无标题') + '</div>' +
+        stepsHtml +
+      '</div>';
+    }).join('');
+  }
+
   // ===== Cross-tab status sync via BroadcastChannel =====
   try {
     window.__statusChannel = new BroadcastChannel('proxy-status');
     window.__statusChannel.onmessage = function(e) {
       if (e.data && e.data.type === 'proxy-status-changed') {
         loadStatus();
+        loadSessions();
       }
     };
   } catch {}
@@ -1525,7 +1588,8 @@ body {
       Promise.all([
         new Promise(function(resolve) { loadStatus(); resolve(); }),
         new Promise(function(resolve) { loadVersion(); resolve(); })
-      }).then(function() {
+      ]).then(function() {
+        loadSessions();
         // Check API Key completeness
         fetch('/api/env-check')
           .then(function(res) { return res.json(); })
