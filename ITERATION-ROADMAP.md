@@ -170,7 +170,7 @@ multi-proxy-manager (18792)
 > - **3c 检索 ✅ 数据层**：`getPatterns / getHistory / searchHistory`（纯字符串，不靠 LLM）；`/api/errors/*` 端点就绪
 > - **16 单测 ✅**：匹配 / 历史 round-trip / 检索 / 频次 / 种子完整性 / 正则容错全绿
 > - **接 manager error log ✅ 已接入**：`appendLog` 的 error 分支 → `recordError`（best-effort，不阻塞主日志流）；jest setup `setLogFile/setHistoryFile/setPatternFile` 全部重定向到 tmp，**测试零污染**（17 套件确认），测试用 `persist:false` 规避写盘
-> - **3c 前端"常见问题" Tab ⏸ defer**：改 logs.html（1251 行），风险高，数据层已就绪，下轮做
+> - **3c 前端「常见问题」面板 ✅ 已落地**：`logs.html` 折叠面板（8 条模式卡片 + 250ms 防抖搜索 + 复制修复），`/api/errors/patterns` 已注册挂 `/api` 前缀（LIVE 冒烟确认返回 8 条）
 > - **已知竞态 ⚠️**：`bumpPatternFreq` 写 `error-patterns.json` 与 `loadPatterns` 种子合并，多 worker 并发需加锁（低频场景先单进程）
 >
 > **共通卡点（高后果动作 gated，M2/M4 一致）**：自动 `enabled=false`（重排全局路由）/ 自动定时探活（真打上游，扣费限流）/ error log 接线（需测试隔离）——均默认关，须 sign-off。
@@ -180,7 +180,7 @@ multi-proxy-manager (18792)
 - 结构化历史持久化 + 检索 ✅
 - 16 单测全绿 ✅
 - 接 manager error log ✅（3b 持久化 + 测试隔离，436/436 无破坏）
-- 前端"常见问题"Tab（⏸ defer，待 logs.html 改动，数据层已就绪）
+- 前端「常见问题」折叠面板 ✅（logs.html 8 条模式卡片 + 搜索 + 复制修复，LIVE 冒烟确证）
 
 > 用户场景：日常「写代码做项目 / 写公众号 / 调 API」混用，希望不同任务自动派发给性价比最高的可达节点。
 > 现状：路由引擎原本只做 failover/round-robin，内容感知派发是空接口。2026-09-11 已完成 4a/4b/4c 引擎 + 默认四层配置 + shadow 观测（`PROXY_ROUTING_SHADOW=1` 仅观测，不改真实路由），4d 候选集「健康信号接线」需先定 model→provider 健康映射，待定。详见下方实现进度。
@@ -304,8 +304,8 @@ multi-proxy-manager (18792)
 | **M1** | 方向一：DAG 健康依赖图 | 2-3 天 | 无 | ✅ 完成（`bb01ef0`，manager 420 绿）|
 | **M2** | 方向二 2a+2b：Provider 故障标记 + 跨 proxy 感知（observe） | 1-2 天 | M1 | ✅ 核心完成（`bb45837`）；**自动隔离/enabled=false 默认 gated（`PROXY_HEALTH_ISOLATE` 关）** |
 | **M3** | 方向二 2c：自动重启策略 | 1-2 天 | M2 | ✅ 已有（`process-manager.js` 连续 3 次熔断，无需重做）|
-| **M4** | 方向三 3a+3b：错误模式库 + 结构化日志 | 2-3 天 | 无（可并行）| ⬜ 未做 |
-| **M5** | 方向三 3c：日志页面增强 | 1 天 | M4 | ⬜ 未做 |
+| **M4** | 方向三 3a+3b：错误模式库 + 结构化日志 | 2-3 天 | 无（可并行）| ✅ 完成（3a/3b/前端面板）；全矩阵 646 绿 |
+| **M5** | 方向三 3c：日志页面「常见问题」面板 | 1 天 | M4 | ✅ 完成（logs.html 折叠面板 + 搜索 + 复制修复）|
 | **M6** | 方向四：按任务类型智能派发（4a+4b+4c + shadow） | 2-3 天 | 无 | ✅ 引擎+shadow（`a11a64a`）；**接真实路由 D4-D6 卡老板 sign-off + DB 对齐，defer** |
 
 **建议顺序：M1 → M2 → M4 → M3 → M5 → M6（M6 可与前序并行）**

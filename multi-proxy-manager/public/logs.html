@@ -435,6 +435,154 @@ body {
 }
 
 /* ============================================
+   M3 常见问题面板（折叠）
+    ============================================ */
+.error-panel {
+  margin-top: 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.error-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.error-panel-header .panel-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  color: var(--color-warning);
+  flex-shrink: 0;
+}
+
+.error-panel-header .panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.error-panel-header .panel-count {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-secondary);
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+
+.error-panel-header .panel-toggle {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  transition: transform var(--transition-fast);
+}
+
+.error-panel.collapsed .panel-toggle {
+  transform: rotate(-90deg);
+}
+
+.error-panel-body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.error-panel.collapsed .error-panel-body {
+  display: none;
+}
+
+.error-search {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.error-search:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.error-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--color-bg-secondary);
+}
+
+.error-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.error-card-id {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.error-card-freq {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.error-card-copy {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  transition: all var(--transition-fast);
+}
+
+.error-card-copy:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.error-card-resolution {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-panel .panel-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}
+
+/* ============================================
    Responsive
    ============================================ */
 @media (max-width: 768px) {
@@ -610,7 +758,23 @@ body {
   <div class="log-viewer" id="logViewer">
     <div class="empty-state">暂无日志，点击"刷新"加载日志数据。<br><small>也可以点击"自动刷新"开始实时监控。</small></div>
   </div>
-</main>
+
+  <!-- M3 常见问题面板（折叠） -->
+  <div class="error-panel" id="errorPanel">
+    <div class="error-panel-header" id="errorPanelHeader" onclick="toggleErrorPanel()">
+      <span class="panel-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg></span>
+      <span class="panel-title">常见问题</span>
+      <span class="panel-count" id="errorPanelCount">0</span>
+      <span class="panel-toggle">▼ 收起</span>
+    </div>
+    <div class="error-panel-body" id="errorPanelBody">
+      <input type="text" class="error-search" id="errorSearch" placeholder="搜索错误（如 ETIMEDOUT、better-sqlite3）查看历史与修复..." oninput="onErrorSearchInput()">
+      <div class="error-list" id="errorList">
+        <div class="panel-empty">加载中...</div>
+      </div>
+    </div>
+  </div>
+  </main>
 
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
@@ -1100,10 +1264,86 @@ body {
     }
   };
 
-  // ===== Navigation =====
-  document.getElementById('sidebarNav').addEventListener('click', function(e) {
-    var navItem = e.target.closest('.nav-item');
-    if (!navItem) return;
+  // ===== M3 常见问题面板 =====
+  var errorPatternsCache = [];
+  var errorSearchDebounce = null;
+
+  async function loadErrorPatterns() {
+   var count = document.getElementById('errorPanelCount');
+   try {
+     var res = await fetch('/api/errors/patterns', { headers: getAuthHeader() });
+     if (!res.ok) throw new Error('not ok');
+     var data = await res.json();
+     errorPatternsCache = data.patterns || [];
+     renderErrorPatterns(errorPatternsCache);
+     if (count) count.textContent = String(errorPatternsCache.length);
+    } catch (e) {
+     errorPatternsCache = [];
+     renderErrorPatterns([]);
+     if (count) count.textContent = '0';
+    }
+  }
+
+  function renderErrorPatterns(patterns) {
+   var list = document.getElementById('errorList');
+   if (!list) return;
+   if (!patterns || patterns.length === 0) {
+     list.innerHTML = '<div class="panel-empty">暂无已知错误模式<br><small>发生 error 级日志后会自动积累</small></div>';
+     return;
+    }
+   list.innerHTML = patterns.map(function(p) {
+     var freqTxt = (p.frequency || 0) > 0 ? ('出现 ' + p.frequency + ' 次') : '未触发';
+     return '<div class="error-card" data-id="' + esc(p.id) + '">' +
+       '<div class="error-card-top">' +
+         '<span class="error-card-id">' + esc(p.id) + '</span>' +
+         '<span class="error-card-freq">' + freqTxt + '</span>' +
+         '<button class="error-card-copy" id="copy-' + esc(p.id) + '" data-res="' + esc(p.resolution || '') + '">复制修复</button>' +
+       '</div>' +
+       '<div class="error-card-resolution">' + esc(p.resolution || '') + '</div>' +
+     '</div>';
+    }).join('');
+
+    // 事件委托：复制修复建议（避免逐卡片绑定）
+   list.onclick = function(e) {
+     var btn = e.target.closest('.error-card-copy');
+     if (!btn) return;
+     var text = btn.dataset.res || '';
+     if (navigator.clipboard && text) {
+       navigator.clipboard.writeText(text).then(function() {
+         showToast('修复建议已复制', 'success', 1500);
+         });
+     }
+   };
+  }
+
+  window.onErrorSearchInput = function() {
+   clearTimeout(errorSearchDebounce);
+   errorSearchDebounce = setTimeout(function() {
+     var q = (document.getElementById('errorSearch').value || '').trim().toLowerCase();
+     if (!q) {
+       renderErrorPatterns(errorPatternsCache);
+       return;
+     }
+     var matched = errorPatternsCache.filter(function(p) {
+       var hay = [p.id, p.pattern, p.resolution].join(' ').toLowerCase();
+       return hay.indexOf(q) !== -1;
+      });
+     renderErrorPatterns(matched);
+    }, 250);
+  };
+
+  window.toggleErrorPanel = function() {
+   var panel = document.getElementById('errorPanel');
+   if (!panel) return;
+   var collapsed = panel.classList.toggle('collapsed');
+   var toggle = panel.querySelector('.panel-toggle');
+   if (toggle) toggle.textContent = collapsed ? '▶ 展开' : '▼ 收起';
+   }
+
+   // ===== Navigation =====
+   document.getElementById('sidebarNav').addEventListener('click', function(e) {
+   var navItem = e.target.closest('.nav-item');
+   if (!navItem) return;
     if (navItem.classList.contains('proxy-nav-item')) {
       closeMobileSidebar();
       return;
@@ -1242,7 +1482,10 @@ body {
 
     // Load logs
     loadLogs();
-  }
+
+    // Load M3 常见问题面板
+    loadErrorPatterns();
+   }
 
   init();
 })();

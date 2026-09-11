@@ -109,4 +109,29 @@ router.get('/env-check', (_req, res) => {
   res.json({ emptyKeys, totalCount: emptyKeys.length });
 });
 
+// ==================== M3 方向三：错误模式库查询（只读） ====================
+// /api/errors/patterns  — 全部模式（按频次降序），前端"常见问题"面板用
+// /api/errors/history   — 结构化错误历史（最新在前），支持 ?q= 关键词检索
+// 只读 GET，不需 auth（与本文件其它元信息端点一致）
+const errorPatterns = require('../lib/error-patterns');
+
+router.get('/errors/patterns', (_req, res) => {
+  try {
+    res.json({ patterns: errorPatterns.getPatterns(true) });
+   } catch (e) {
+    res.status(500).json({ error: '读取错误模式失败', detail: e.message });
+   }
+});
+
+router.get('/errors/history', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const history = q ? errorPatterns.searchHistory(q, limit) : errorPatterns.getHistory(limit);
+    res.json({ history });
+   } catch (e) {
+    res.status(500).json({ error: '读取错误历史失败', detail: e.message });
+   }
+});
+
 module.exports = router;
