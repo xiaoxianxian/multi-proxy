@@ -2,7 +2,7 @@
 
 > 来源：2026-09-09，阅读 Anthropic Prove2Me 费马大定理证明博客及社区讨论
 > 目标：将「多 agent 协调机制」的核心洞察转化为 proxy-rebuild 可落地的迭代方向
-> 状态：规划阶段，未实现
+> 状态：M1-M5 完成（含 D12 修复）；M6 引擎+shadow 落地，接真实路由 gated D4-D6（老板 sign-off）
 
 ---
 
@@ -59,7 +59,7 @@ multi-proxy-manager (18792)
 **与现有代码的关系：**
 - `server.js` 中 `isProcessRunning()` 逻辑需要扩展为 `checkProxyHealth(proxyName)`
 - `manage.sh` 的 status 命令可复用新逻辑
-- 不影响现有测试基线（630 个测试），属于新增端点
+- 不破坏现有测试基线（646 个测试全矩阵），属于新增端点
 
 ---
 
@@ -289,7 +289,7 @@ multi-proxy-manager (18792)
 
 **与现有代码关系：**
 - 仅扩展 `routeEngine.ts` + 新增两个小文件 + providers.json 加 `pricing` 字段；不改动现有 round-robin/priority 行为（向后兼容）。
-- 不破坏现有 630 个测试；新增逻辑走独立单元测试。
+- 不破坏现有 646 个测试；新增逻辑走独立单元测试。
 - 风险点：condition 解析器若用 eval 会有注入风险——**强制用白名单解析器**。
 
 **与方向二的关系：**
@@ -324,7 +324,7 @@ multi-proxy-manager (18792)
 
 所有迭代方向均遵循以下原则：
 
-1. **不破坏现有 630 个测试**：新增端点和逻辑独立于现有路由
+1. **不破坏现有 646 个测试**：新增端点和逻辑独立于现有路由
 2. **配置向后兼容**：新的健康状态文件不干扰现有 `providers.json` / `routing-mode.json`
 3. **渐进式启用**：新功能默认关闭，通过环境变量或配置开关启用
 4. **不引入新外部依赖**：全部使用 Node.js/Python 标准库 + 现有依赖（express, better-sqlite3）
@@ -340,4 +340,4 @@ multi-proxy-manager (18792)
 
 ---
 
-*最后更新：2026-09-11（M1/M2/M3/M6 引擎+shadow 落地，630 测试全绿；M4/M5 + 各方向高后果动作 gated defer）*
+*最后更新：2026-09-11（M1-M6 全部完成/落地，646/646 测试全绿；高后果动作 gated defer）*

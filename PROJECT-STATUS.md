@@ -76,7 +76,7 @@
 
 ## 当前测试结果（2026-08-16）
 
-**可验证通过: 147/151 ✅**
+**可验证通过: 147/151 ✅**（此为 2026-08-16 快照；当前全矩阵 646/646，见 ITERATION-ROADMAP.md）
 - Hermes: 63/63 ✅
 - Codex proxy.test.js: 19/19 ✅
 - Cursor providers+engine+database: 71/71 ✅
@@ -87,7 +87,7 @@
 - Manager api.test.js + e2e-scenarios: supertest — EPERM 无法绑定 0.0.0.0
 - Manager process-management.test.js: 4 个端口监听测试 — EPERM
 
-**总计: 147 通过 / 4 阻塞 = 151 测试**
+**总计: 147 通过 / 4 阻塞 = 151 测试**（2026-08-16；当前 646/646 全绿，4 阻塞已解）
 - Hermes: 63/63 ✅
 - Codex: 19/19 ✅
 - Cursor providers+engine: 49/49 ✅
