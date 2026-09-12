@@ -14,6 +14,7 @@
 import { jest } from '@jest/globals';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import type { ProviderAdapter, ProviderConfig } from '../../src/providers/base.js';
+import { db } from '../../src/db/database.js';
 
 // 捕获 fetch 调用，返回一个可供非流式路径消费的 200 fake Response。
 const fetchMock = jest.fn(async (_url: string, _init?: any) => ({
@@ -95,10 +96,29 @@ async function runHandler(
 }
 
 describe('M6 ① 影子模式不改真实上游路由（chatHandler 级）', () => {
+  // 钉住 routing_mode = 'priority' 测试 scope，跑完还原真实值。
+  // 根因：round-robin 下 findProviderConfig 用持久化 rr_index 轮转 enabled providers，
+  // 本 suite 在每次调用 handler 前先调一次 findProviderConfig（决定注册哪个 adapter），
+  // handler 内部又调一次 → 两次落到不同 provider，后者没注册 adapter → 500，
+  // fetch 不触发 → mock.calls 为空 → 断言崩。priority 下模型名不命中走
+  // 「第一个 enabled provider」确定性路径，两次解析到同一 provider → 不变式成立。
+  let savedMode: string | undefined;
+  beforeEach(() => {
+    savedMode = (db.prepare("SELECT value FROM settings WHERE key = 'routing_mode'").get() as any)?.value;
+    db.prepare("INSERT OR REPLACE INTO settings (key, value, value_type) VALUES (?, ?, ?)")
+     .run('routing_mode', 'priority', 'string');
+   });
+
   afterEach(() => {
+    if (savedMode === undefined) {
+     db.prepare("DELETE FROM settings WHERE key = 'routing_mode'").run();
+    } else {
+     db.prepare("INSERT OR REPLACE INTO settings (key, value, value_type) VALUES (?, ?, ?)")
+      .run('routing_mode', savedMode, 'string');
+    }
     delete process.env.PROXY_ROUTING_SHADOW;
     fetchMock.mockClear();
-    });
+   });
 
   it('coding 任务：shadow on/off 转发到同一上游 URL + 同一 model', async () => {
     const model = 'qwen3.8-flash';
