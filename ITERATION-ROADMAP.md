@@ -115,7 +115,7 @@ multi-proxy-manager (18792)
 > **卡点 / Deferred（高后果 + 真实流量，需 gated + sign-off，本轮不做）：**
 > 1. **自动 `enabled=false` / Round-Robin 跳过**：2a 原文的"自动标记 enabled=false"与 M6 ① 同构——**误禁用 provider 会重排全局路由**， blast radius 大于单纯 failover。决策：本轮 `PROXY_HEALTH_ISOLATE` 门控默认关 = observe-only，自动隔离留到独立 sign-off + live 回归。
 > 2. **定时调度器**（实现要点③每 30s 扫描）：自动发起 probe = 真实打上游（扣费 / 触发上游限流），高后果，defer。本轮只把 probe 挂在**用户手动 test-connection**上（零新增流量）。
-> 3. **Dashboard "Provider Health" 区块**（实现要点④）：UI 未做，数据已就绪（`listIsolated()` / `correlateCrossProxy()` 可直接供前端）。
+> 3. **Dashboard "Provider Health" 区块**（实现要点④）：**（2026-09-12 修正）UI 已做**——`a7f5c8f` 加了健康展示 API + Dashboard 区块（`GET /api/provider-health` observe 只读，`listIsolated()`/`correlateCrossProxy()` 供前端）；原「UI 未做」为 09-11 快照。**仍 gated 的是**自动隔离 / 定时器（见上 1、2）。
 > 4. **2b 依赖 2a 先持久化**：`provider-health.json` 已落地，2b 聚合即可用——此依赖已解除。
 >
 > **决策记录**：自动动作类（enabled=false / 跳过 / 自动 probe）统一走 `PROXY_HEALTH_ISOLATE` gated 默认关，与 M6 ① 的安全姿态一致——observe 是稳态终点，执行动作需显式开启 + live 回归。
@@ -187,7 +187,7 @@ multi-proxy-manager (18792)
 >
 > **① 影子转真实评估结论（2026-09-11，已评估不可安全落地）：**
 > 1. **failover-only 语义 = 永真 no-op**：`findProviderConfig` 仅在「零启用 provider」时返 null；有 provider 时 round-robin / failover-model 路径都返回【某个】provider 而非 null——故「主路径 null 才用引擎」的 failover-only 接线在任何现实状态下都不改变结果（实测确认，曾尝试接线后回退，勿重做）。
-> 2. **唯一能改真实行为的是 override 主路径语义**：但需先对齐 DB model 名与 fallbackChain——现 DB 仅有 `deepseek-v4-pro / agnes-2.5-flash / qwen3.8:27b-mlx`，而 fallbackChain 的 `qwen3.8-flash / deepseek-v4.1-flash` 在 DB 根本不存在，引擎建议会指向无 provider 的目标。
+> 2. **唯一能改真实行为的是 override 主路径语义**：但需先对齐 DB model 名与 fallbackChain。**（2026-09-12 修正）** M6 引擎属 **cursor-proxy**，其 DB 是 `cursor-proxy/data/proxy.db`（非 `~/.multi-proxy-manager/providers.json`——那是 codex/hermes 共享目录，此前查错了源）；cursor DB 实际 `providers` 只有 1 个 `DeepSeek-Test`（enabled）、`models` 表为空，故 DEFAULT_ROUTE_CONFIG 四层（`qwen3.8-flash / deepseek-v4.1-flash / agnes-2.5-flash / qwen3.8:27b-mlx`）一个都无对应。引擎建议不会 404——`findProviderConfig` 找不到 model 时 fallback 到「第一个 enabled provider」=`DeepSeek-Test`→200，所以真接后 4 层会**塌缩到这一家**（路由退化为单 provider），且本地 `qwen3.8:27b-mlx` 离线层 cursor 拿不到（本地模型不走 HTTP 代理）。
 > 3. **故 ① / 4d 均卡在「语义决策（override vs failover 仅兜底）+ DB 对齐」上，属老板 sign-off 项，非可独立完成的代码活。** 在语义拍板 + DB 对齐前，维持 shadow 观测态即可。
 
 ---
@@ -200,7 +200,7 @@ multi-proxy-manager (18792)
 | D2 | 影子观测层 | ✅ 已完成 | `routing-shadow.ts` + `chatHandler:205`，`PROXY_ROUTING_SHADOW=1` 只观测不改真实 |
 | D3 | ① 安全不变式测试 | ✅ 已完成 | `chat-handler-shadow.test.ts`：on/off 上游逐字节一致 |
 | **D4** | **语义决策：override vs failover-only** | ⛔ **老板 sign-off** | failover-only 已证 no-op（见上）；唯一有效的是 **override 主路径**。需拍「引擎能否覆盖老板已配 provider」——决定请求去向，不可机器代决 |
-| **D5** | **DB model 名 ↔ fallbackChain 对齐** | ⛔ **待办（卡 D4）** | DB 现有 `deepseek-v4-pro / agnes-2.5-flash / qwen3.8:27b-mlx`；链上 `qwen3.8-flash / deepseek-v4.1-flash` 不存在 → override 必 404。需补 provider 或改链上模型名 |
+| **D5** | **DB model 名 ↔ fallbackChain 对齐** | ⛔ **待办（卡 D4）** | **（2026-09-12 修正）** cursor `data/proxy.db` 实查：`providers` 仅 `DeepSeek-Test`（enabled）、`models` 表空；链上 4 个模型均无对应 → **不 404，塌缩到唯一 enabled provider（`DeepSeek-Test`）**，本地 mlx 层拿不到。需补 provider/model 记录（或改链上模型名）才能让四层真正分化 |
 | **D6** | **4d 健康信号接线** | ⛔ **待办（卡语义）** | `HealthMonitor` 按 provider **id** 记健康，候选按 **model 名** 排序 → 需定 model→provider 健康映射 + 补候选集构建 |
 | D7 | live 回归测试 | ⛔ 接真实后做 | 翻 override 前，先证「coding 请求确实改走 deepseek-v4.1-flash 且上游 200」 |
 
