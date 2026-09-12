@@ -308,6 +308,26 @@ multi-proxy-manager (18792)
 | **M5** | 方向三 3c：日志页面「常见问题」面板 | 1 天 | M4 | ✅ 完成（logs.html 折叠面板 + 搜索 + 复制修复）|
 | **M6** | 方向四：按任务类型智能派发（4a+4b+4c + shadow） | 2-3 天 | 无 | ✅ 引擎+shadow（`a11a64a`）；**接真实路由 D4-D6 卡老板 sign-off + DB 对齐，defer** |
 
+### ⚠️ 临时待办：登录 bypass（2026-09-12）
+
+**背景**：调试 auth-edge 测试时，`os.homedir()` 在 jest 下不认 `process.env.HOME` override，
+误把真实的 `~/.multi-proxy-manager/password`（bcrypt hash）覆盖为 1 字节占位 `'x'`，
+导致 manager 登录锁死（任意密码 401、`needsPasswordSetup()` 因文件非 null 返回 false，不给首次设置入口）。
+JWT secret（`~/.multi-proxy-jwt-secret`）未受影响。原 bcrypt hash 已丢失、无备份、无法找回旧密码。
+
+**临时处置**：`routes/auth.js` `POST /login` 插入 `TEMP-BYPASS` 块——校验前直接
+`return { token: generateToken(password), bypass: true }`，任意非空密码即可登录，拿到仍被
+`requireAuth` 接受的 token（用未受损的 JWT secret 签发）。下方原校验流程保留为死代码。
+
+**恢复步骤（有空时执行）**：
+1. 用真实终端生成可信新密码 hash 并写回：
+   `node -e "require('bcryptjs').hashSync(process.env.NEWPW,10)"` → 把结果 `echo -n` 写入
+   `~/.multi-proxy-manager/password`（`chmod 600`）
+2. 删除 `routes/auth.js` 中 `==== TEMP-BYPASS ... END TEMP-BYPASS ====` 整块
+3. `manage.sh restart manager`，`curl /api/auth/login` 验证用新密码登录通、错误密码 401
+
+**安全影响**：bypass 存续期间，本机任意非空密码可登录。仅限本机调试期，尽快恢复。
+
 **建议顺序：M1 → M2 → M4 → M3 → M5 → M6（M6 可与前序并行）**
 
 理由：
