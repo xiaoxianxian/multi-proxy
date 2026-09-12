@@ -308,25 +308,20 @@ multi-proxy-manager (18792)
 | **M5** | 方向三 3c：日志页面「常见问题」面板 | 1 天 | M4 | ✅ 完成（logs.html 折叠面板 + 搜索 + 复制修复）|
 | **M6** | 方向四：按任务类型智能派发（4a+4b+4c + shadow） | 2-3 天 | 无 | ✅ 引擎+shadow（`a11a64a`）；**接真实路由 D4-D6 卡老板 sign-off + DB 对齐，defer** |
 
-### ⚠️ 临时待办：登录 bypass（2026-09-12）
+### ✅ 已恢复：登录 bypass（2026-09-12，已解决）
 
-**背景**：调试 auth-edge 测试时，`os.homedir()` 在 jest 下不认 `process.env.HOME` override，
-误把真实的 `~/.multi-proxy-manager/password`（bcrypt hash）覆盖为 1 字节占位 `'x'`，
-导致 manager 登录锁死（任意密码 401、`needsPasswordSetup()` 因文件非 null 返回 false，不给首次设置入口）。
-JWT secret（`~/.multi-proxy-jwt-secret`）未受影响。原 bcrypt hash 已丢失、无备份、无法找回旧密码。
+**事故**：auth-edge 测试时 `os.homedir()` 在 jest 不认 `HOME` override，误把真实
+`~/.multi-proxy-manager/password`（bcrypt hash）覆为占位 `'x'`，致 manager 登录锁死。
+`~/.multi-proxy-jwt-secret` 幸存（读优先，未被覆）。原 bcrypt hash 不可恢复。
 
-**临时处置**：`routes/auth.js` `POST /login` 插入 `TEMP-BYPASS` 块——校验前直接
-`return { token: generateToken(password), bypass: true }`，任意非空密码即可登录，拿到仍被
-`requireAuth` 接受的 token（用未受损的 JWT secret 签发）。下方原校验流程保留为死代码。
+**恢复已完成（2026-09-12）**：
+1. ✅ 新密码 `ding1234` 已写回 `~/.multi-proxy-manager/password`（bcrypt `hashSync(pw,10)`，权限 0600，read-back compare 通过）
+2. ✅ `routes/auth.js` 的 `TEMP-BYPASS` 块已删除（`git diff` 0 处 `TEMP-BYPASS`）
+3. ✅ `manage.sh restart`（实际用 kill -9 + nohup 重拉，因 manage.sh 的 stop 未杀干净）+ curl 全链路验证：`ding1234` 登录 200+token+无 bypass；错误密码 401；空密码 400；`/api/auth/status` `needsSetup:false`
 
-**恢复步骤（有空时执行）**：
-1. 用真实终端生成可信新密码 hash 并写回：
-   `node -e "require('bcryptjs').hashSync(process.env.NEWPW,10)"` → 把结果 `echo -n` 写入
-   `~/.multi-proxy-manager/password`（`chmod 600`）
-2. 删除 `routes/auth.js` 中 `==== TEMP-BYPASS ... END TEMP-BYPASS ====` 整块
-3. `manage.sh restart manager`，`curl /api/auth/login` 验证用新密码登录通、错误密码 401
+**⚠️ launchd 自启在 macOS 26 不可用（TCC 拦截）**：`install.sh --autostart` 写的 plist 跑 `bash Documents/.../manage.sh`，launchd 以 `Operation not permitted` 失败（macOS 26 TCC 不授权 launchd 执行 `~/Documents/` 下脚本，与 `+x` 无关）。已 `launchctl unload` 该 plist，manager 改由 **Hermes `background=true`（tracked 进程 `node server.js` on :18792）** 持有——它跨本 chat session 存续,但不随登录重拉。若需登录自启须改 plist `ProgramArguments` 指向 launchd 可执行目录（如 `~/.hermes/bin/`）并 `TCC grant`，超出本次修复范围。
 
-**安全影响**：bypass 存续期间，本机任意非空密码可登录。仅限本机调试期，尽快恢复。
+**当前 manager 状态（2026-09-12 收口）**：`node :18792` 由 Hermes 后台 session `proc_9905c3745c73`（pid 60586）持有，`ding1234` 可登录、bypass 已删除、日志 `~/Documents/AI项目/multi-proxy/logs/manager.log`。
 
 **建议顺序：M1 → M2 → M4 → M3 → M5 → M6（M6 可与前序并行）**
 
@@ -360,7 +355,7 @@ JWT secret（`~/.multi-proxy-jwt-secret`）未受影响。原 bcrypt hash 已丢
 
 ---
 
-*最后更新：2026-09-11（M1-M6 全部完成/落地，646/646 测试全绿；高后果动作 gated defer）*
+*最后更新：2026-09-12（M1-M6 全部完成/落地，646/646 测试全绿；方向五 M7 建议补 worktree 隔离 + 长时程续跑；方向六 Agentic Coding 工具趋势分析归档）*
 
 ---
 
@@ -388,3 +383,58 @@ JWT secret（`~/.multi-proxy-jwt-secret`）未受影响。原 bcrypt hash 已丢
 **与现有代码关系：** 复用 M2 的 `provider-health.js` 落盘模式、M4 的 jsonl 策略；新增 `lib/session-store.js` + `routes/sessions-api.js`；不破坏 646 测试基线。
 
 **依赖：** M1-M6 已完成，M7 独立，可并行启动。
+
+---
+
+### 方向六（建议列入）：多工具架构借鉴 — Orca/Paseo/Emdash/Superset
+
+> 来源：公众号「i 小声读书」2026-09-12 文章 + WorkBuddy 分析（见 `MEMORY.md` §十）
+> 状态：分析完成，待老板 sign-off 后选取高杠杆项落地
+
+#### 6.1 四个工具的架构借鉴点
+
+| 工具 | 核心架构模式 | 可借鉴到 multi-proxy 的哪块 |
+|------|-------------|---------------------------|
+| **Orca** | 一 prompt 扇出到 N 个 worktree → 比 diff → 合最优 | **M7 并行范式**：任务级 Session 的多 worktree 隔离 + 结果合并 |
+| **Paseo** | 常驻 daemon + 多端客户端（手机/桌面/Web/CLI）+ 本地语音 + cron | **L2 多端监工**：手机续看长时程 agent 的成品形态，可直接装来验证模式 |
+| **Emdash** | Tmux 长任务跨重连保活 + 工单集成(Linear/Jira/GitHub/Notion) | **M7 续跑机制**：Tmux session 保活 + checkpoint 的思路，补 sessions.json 设计 |
+| **Superset** | MCP server 导出 + 自动化 cron + TS SDK | **h3web 编排**：MCP server 导出思路可参考；但 ELv2 非真开源，**仅自用别 fork** |
+
+#### 6.2 对 multi-proxy 的具体建议（按推荐度）
+
+1. **最高杠杆：补 `git worktree` 隔离原语**
+   - 现状：multi-proxy 是单 checkout 切模型（串行）
+   - 目标：像 Orca/Emdash/Paseo 一样**每任务一个 worktree**
+   - 收益：从「串行切模型」升级成「并行多 agent 竞速择优」
+   - 工作量：小改动、大收益，建议作为 M7 的第一步
+
+2. **快验证：装 Paseo 跑通「手机续看长任务」模式**
+   - 命令：`brew install --cask paseo`
+   - 配置：指向本地 Ollama(Qwen) + 各 proxy（18792/18790/18793/18794）
+   - 验证：出门用手机继续监工本地 agent，看是否满足需求
+   - 决策点：跑通后决定「直接用 Paseo」还是「借鉴架构自研」
+
+3. **M7 sessions.json 设计参考**
+   - Emdash 的 Tmux 保活：长任务放进 Tmux session，agent 跨重连存活
+   - Orca 的 checkpoint：每步任务写 checkpoint，崩溃恢复读回跳过已完成步骤
+   - 把 `autonomous-continuity` skill 的「续跑提示词 + checkpoint」思路接进 multi-proxy
+
+4. **许可证 hygiene**
+   - Orca(MIT)、Emdash(Apache-2.0)、Paseo(待确认)：可放心参考代码架构
+   - Superset(ELv2)：源码可见但**不能 fork/再分发**，只能自用
+   - multi-proxy 自身建议选 MIT/Apache，别踩坑
+
+#### 6.3 h3web 旁支价值
+
+n8n 编排层（Wait/Resume、重试）本质也是「长时程 agent 调度」。这 4 个工具的编排思路（自动化 cron、远端 worktree）可参考进 h3web 的创作编排面板。
+
+#### 6.4 行动建议
+
+| 优先级 | 动作 | 依赖 |
+|--------|------|------|
+| P0 | 把本文 + MEMORY §八 Harness 分析合并归档为 L2 外部佐证 | 无 |
+| P1 | 给 M7 补 `git worktree` 隔离层（最小改动，先跑通） | M7 sessions.json 设计 |
+| P2 | 装 Paseo 验证「手机续看」模式 | 无 |
+| P3 | 参照 Emdash/Orca 设计 M7 sessions.json 的 checkpoint + Tmux 保活 | P1 完成后 |
+
+**结论：本文不是教你新东西，而是给你 multi-proxy 的 L2 方向做了一次行业背书。** 行业正收敛到你要做的「本地 Harness」，现在要做的就是补上 worktree 隔离和长时程续跑这两个原语，就能把优势拉开。
