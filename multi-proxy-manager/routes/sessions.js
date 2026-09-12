@@ -14,12 +14,15 @@
 const express = require('express');
 const router = express.Router();
 
-// 注入 sessionStore（从 server.js require）
+// 注入 sessionStore（从 server.js require）；未注入时 lazy 实例化
+// 注意：lib/session-store.js 导出的是 { SessionStore } 类模块，必须 new 出实例，
+// 否则 getStore().list/create 等方法不存在（曾导致 /api/sessions 全 400/500）。
 let sessionStore = null;
 
 function getStore() {
     if (!sessionStore) {
-        sessionStore = require('../lib/session-store');
+        const { SessionStore } = require('../lib/session-store');
+        sessionStore = new SessionStore();
     }
     return sessionStore;
 }

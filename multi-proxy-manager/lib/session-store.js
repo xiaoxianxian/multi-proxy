@@ -68,11 +68,18 @@ class SessionStore {
     }
 
     _save() {
+        // 确保目录存在（与 logger/health/error-patterns 一致；
+        // 干净 HOME 下 ~/.multi-proxy-manager 可能尚未创建，否则会 ENOENT 崩）
+        try {
+            if (!fs.existsSync(this.dir)) {
+               fs.mkdirSync(this.dir, { recursive: true });
+             }
+        } catch { /* best-effort */ }
         const tmp = this.file + '.tmp';
         const doc = { specVersion: SPEC_VERSION, sessions: [...this.sessions.values()] };
         fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), { encoding: 'utf8', mode: 0o600 });
         fs.renameSync(tmp, this.file);
-    }
+      }
 
     create(session) {
         const id = session.sessionId || `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
