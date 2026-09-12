@@ -48,18 +48,6 @@ router.post('/login', lockoutLimiter, authLimiter, async function(req, res) {
     return res.status(400).json({ success: false, error: 'Password required' });
   }
 
-  // ==== TEMP-BYPASS 登录密码校验（2026-09-12，临时）====
-  // 背景：调试 auth-edge 测试时 os.homedir() 在 jest 不认 HOME override，误把真实
-  //   ~/.multi-proxy-manager/password 覆盖为占位 'x'，导致任何密码 verifyPassword 失败 → 锁死。
-  //   JWT secret（~/.multi-proxy-jwt-secret）未受损，故签发的 token 仍被 requireAuth 接受。
-  // 临时跳过密码校验：任意非空密码即可登录并拿到有效 token。
-  // 恢复：删除本标注块即回到下方正常校验流程。
-  // 待办：用真实终端重置可信 password（bcrypt.hashSync(pw,10) 写回 0600 文件）后再移除此 bypass。
-  //   详见 ITERATION-ROADMAP「待办：临时登录 bypass」+ MEMORY。
-  // 安全影响：本机任意非空密码可登录，仅限 bypass 存续期间。
-  return res.json({ success: true, token: generateToken(password), bypass: true });
-  // ==== END TEMP-BYPASS ====
-
   const envPassword = process.env.MANAGER_PASSWORD;
   if (envPassword && envPassword.length > 0) {
     if (password === envPassword) {
