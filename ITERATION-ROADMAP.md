@@ -200,7 +200,7 @@ multi-proxy-manager (18792)
 | D2 | 影子观测层 | ✅ 已完成 | `routing-shadow.ts` + `chatHandler:205`，`PROXY_ROUTING_SHADOW=1` 只观测不改真实 |
 | D3 | ① 安全不变式测试 | ✅ 已完成 | `chat-handler-shadow.test.ts`：on/off 上游逐字节一致 |
 | **D4** | **语义决策：override vs failover-only** | ⛔ **老板 sign-off** | failover-only 已证 no-op（见上）；唯一有效的是 **override 主路径**。需拍「引擎能否覆盖老板已配 provider」——决定请求去向，不可机器代决 |
-| **D5** | **DB model 名 ↔ fallbackChain 对齐** | ⛔ **待办（卡 D4）** | **（2026-09-12 修正）** cursor `data/proxy.db` 实查：`providers` 仅 `DeepSeek-Test`（enabled）、`models` 表空；链上 4 个模型均无对应 → **不 404，塌缩到唯一 enabled provider（`DeepSeek-Test`）**，本地 mlx 层拿不到。需补 provider/model 记录（或改链上模型名）才能让四层真正分化 |
+| **D5** | **DB model 名 ↔ fallbackChain 对齐** | 🟡 **部分完成（接入✓/对齐⛔）** | **（2026-09-12 接入落地）** 3 家上游已接入 cursor `data/proxy.db` 并全 HTTP 200 验证：DeepSeek(`deepseek-flash`) / agnes(`agnes-2.5-flash`, base_url=apihub.agnes-ai.com) / kimi(`kimi-k3`)，3 家 enabled，key 加密入库(cursor 用 `secrets.encrypt`，DB 已 gitignore 不入仓)。**但「对齐」子项未做**：引擎 `DEFAULT_ROUTE_CONFIG.fallbackChain` 写死 `['qwen3.8-flash','deepseek-v4.1-flash','agnes-2.5-flash','qwen3.8:27b-mlx']`，其中 `deepseek-v4.1-flash` 是**死名(上游真实为 `deepseek-flash`/`deepseek-v4-pro`)**、kimi 不在链，改这 2 处牵热路径+配置属 D4/D6，**未擅动**。**当前 cursor 走 round-robin(不看 model 名，轮询 3 家 enabled)，死名暂不暴露；切 priority/override(D4) 后 dead name 会真 404/走 fallback** |
 | **D6** | **4d 健康信号接线** | ⛔ **待办（卡语义）** | `HealthMonitor` 按 provider **id** 记健康，候选按 **model 名** 排序 → 需定 model→provider 健康映射 + 补候选集构建 |
 | D7 | live 回归测试 | ⛔ 接真实后做 | 翻 override 前，先证「coding 请求确实改走 deepseek-v4.1-flash 且上游 200」 |
 
