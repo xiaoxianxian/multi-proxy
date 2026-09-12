@@ -203,6 +203,7 @@ multi-proxy-manager (18792)
 | **D5** | **DB model 名 ↔ fallbackChain 对齐** | 🟡 **部分完成（接入✓/对齐⛔）** | **（2026-09-12 接入落地）** 3 家上游已接入 cursor `data/proxy.db` 并全 HTTP 200 验证：DeepSeek(`deepseek-flash`) / agnes(`agnes-2.5-flash`, base_url=apihub.agnes-ai.com) / kimi(`kimi-k3`)，3 家 enabled，key 加密入库(cursor 用 `secrets.encrypt`，DB 已 gitignore 不入仓)。**但「对齐」子项未做**：引擎 `DEFAULT_ROUTE_CONFIG.fallbackChain` 写死 `['qwen3.8-flash','deepseek-v4.1-flash','agnes-2.5-flash','qwen3.8:27b-mlx']`，其中 `deepseek-v4.1-flash` 是**死名(上游真实为 `deepseek-flash`/`deepseek-v4-pro`)**、kimi 不在链，改这 2 处牵热路径+配置属 D4/D6，**未擅动**。**当前 cursor 走 round-robin(不看 model 名，轮询 3 家 enabled)，死名暂不暴露；切 priority/override(D4) 后 dead name 会真 404/走 fallback** |
 | **D6** | **4d 健康信号接线** | ⛔ **待办（卡语义）** | `HealthMonitor` 按 provider **id** 记健康，候选按 **model 名** 排序 → 需定 model→provider 健康映射 + 补候选集构建 |
 | D7 | live 回归测试 | ⛔ 接真实后做 | 翻 override 前，先证「coding 请求确实改走 deepseek-v4.1-flash 且上游 200」 |
+| **D7-pre** | **修 `chat-handler-shadow.test.ts` ESM mock** | 🟡 **pre-existing（非 D5 引入）** | **（2026-09-13 发现）** `jest --forceExit` 基线 110/111：该 suite 1/2 红——`unstable_mockModule('undici', …)` 在 Node 22.22 + `presets/default-esm` + `package.json {type:module}` 下，对 `chatHandler` 顶层 `import { fetch } from 'undici'` 的**首次 `await import()`** 未拦住，`fetchMock.mock.calls[0]` undefined → 断言崩。**这是测试基础设施缺陷，非生产 shadow 缺陷**——shadow 观测态正确（日志 `引擎建议=…(真实路由不变)` 证 `findProviderConfig` 零改动）。**D4 翻 override 前必须先修**，否则「影子不改热路径」的安全网测试失效 |
 
 **结论：D1-D3 已交付并测试；D4-D6 是老板决策 + 数据对齐，非纯代码活。D7 在 D4-D5 落地后做。当前 shadow 观测态已是稳态终点，非中途。**
 
