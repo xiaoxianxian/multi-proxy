@@ -826,6 +826,22 @@ body {
         </div>
       </div>
     </div>
+
+    <!-- Provider Health Card (M2 方向二) -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Provider 健康</div>
+        <div class="card-subtitle" id="phSubtitle">故障自动标记与跨 Proxy 感知（observe 模式）</div>
+      </div>
+      <div class="card-body">
+        <div id="phList">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+            <div class="empty-text">暂无隔离 Provider</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -1451,7 +1467,11 @@ body {
     if (window.__statusInterval) {
       clearInterval(window.__statusInterval);
     }
-    window.__statusInterval = setInterval(loadStatus, val * 1000);
+    window.__statusInterval = setInterval(function() {
+        loadStatus();
+        loadSessions();
+        loadProviderHealth();
+      }, val * 1000);
     toggle.checked = true;
   }
 
@@ -1510,16 +1530,64 @@ body {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' },
       body: JSON.stringify({ by: 'user' })
-    })
+     })
     .then(function(res) { return res.json(); })
     .then(function(data) {
       if (data.ok) {
         showToast('任务已中止', 'success');
         loadSessions();
-      }
-    })
+       }
+     })
     .catch(function() {});
-  };
+   };
+
+   // ===== Provider Health Loading (M2 方向二) =====
+  function loadProviderHealth() {
+    fetch('/api/provider-health', { headers: { 'x-auth-token': authToken || '' } })
+       .then(function(res) { return res.json(); })
+       .then(function(data) {
+        var list = data.isolated || [];
+        renderProviderHealth(list, data.isolateEnabled, data.threshold);
+       })
+       .catch(function() { /* 静默失败，不影响其它卡片 */ });
+   }
+
+  function renderProviderHealth(list, isolateEnabled, threshold) {
+    var container = document.getElementById('phList');
+    if (!container) return;
+
+    // 副标题：observe / live 模式文案
+    var sub = document.getElementById('phSubtitle');
+    if (sub) sub.textContent = (isolateEnabled ? '自动隔离已开启（live）' : 'observe 模式（仅建议，不改路由）');
+
+    if (!list || list.length === 0) {
+      container.innerHTML =
+         '<div class="empty-state">' +
+           '<div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>' +
+           '<div class="empty-text">所有 Provider 健康</div>' +
+         '</div>';
+      return;
+     }
+
+    container.innerHTML = list.map(function(p) {
+      // 距下一次自动恢复的时间
+      var remainMs = (p.unhealthyUntil || 0) - Date.now();
+      var remainMin = Math.max(0, Math.round(remainMs / 60000));
+      var corr = p.correlation || {};
+      var verdictText = corr.verdict === 'network-wide' ? '全网故障' : '单 Proxy 抖动';
+      var verdictClass = corr.verdict === 'network-wide' ? 'badge-error' : 'badge-warning';
+      var sources = (corr.sources || []).join(', ') || '—';
+      var fails = p.consecutiveFailures || 0;
+      return '<div class="session-item">' +
+         '<div class="session-header">' +
+           '<span class="session-proxy-badge badge-' + esc(p.providerId) + '">' + esc(p.providerId) + '</span>' +
+           '<span class="' + verdictClass + '">' + verdictText + '</span>' +
+           '<span class="session-age">⏱ ' + remainMin + 'min 后恢复</span>' +
+         '</div>' +
+         '<div class="session-id">连续失败 ' + fails + ' 次 · 来源：' + esc(sources) + '</div>' +
+        '</div>';
+     }).join('');
+   }
 
   // ===== Cross-tab status sync via BroadcastChannel =====
   try {
@@ -1612,10 +1680,11 @@ body {
       Promise.all([
         new Promise(function(resolve) { loadStatus(); resolve(); }),
         new Promise(function(resolve) { loadVersion(); resolve(); })
-      ]).then(function() {
-        loadSessions();
-        // Check API Key completeness
-        fetch('/api/env-check')
+       ]).then(function() {
+       loadSessions();
+       loadProviderHealth();
+       // Check API Key completeness
+       fetch('/api/env-check')
           .then(function(res) { return res.json(); })
           .then(function(envData) {
             if (envData.totalCount > 0 && !isApiKeyBannerDismissed()) {

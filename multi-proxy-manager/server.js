@@ -64,6 +64,8 @@ app.use('/api', controlRoutes);
 app.use('/api/registry', registryRoutes);
 // M7 Sessions：挂在代理 wildcard 之前，确保 /api/sessions/* 不被误捕获
 app.use('/api/sessions', sessionsRoutes);
+// M2 Provider Health：只读展示层，挂在代理 wildcard 之前（与 registry/sessions 同模式）
+app.use('/api/provider-health', require('./routes/provider-health'));
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
