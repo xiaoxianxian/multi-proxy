@@ -79,7 +79,7 @@ describe('M6 dry-run 不改变真实路由（核心安全不变式）', () => {
 
   it('关闭影子模式：仍不改变真实路由（且无副作用）', () => {
     process.env.PROXY_ROUTING_SHADOW = '0';
-    const model = 'deepseek-v4.1-flash';
+    const model = 'deepseek-v4-pro';
     const realConfig = makeRealConfig();
     const before = snapshot(realConfig);
       // 即便关闭，调 routeShadow 也不应触碰 config
@@ -89,12 +89,12 @@ describe('M6 dry-run 不改变真实路由（核心安全不变式）', () => {
 });
 
 describe('M6 建议计算 + 噪声抑制', () => {
-  it('coding 任务建议 deepseek-v4.1-flash（默认配置 r-coding）', () => {
-      // 默认配置的 defaultModel 是 qwen3.8-flash；coding 规则指向 deepseek-v4.1-flash → 产生切换建议
+  it('coding 任务建议 deepseek-v4-pro（默认配置 r-coding）', () => {
+      // 默认配置的 defaultModel 是 qwen3.8-flash；coding 规则指向 deepseek-v4-pro → 产生切换建议
     const suggestion = computeShadowSuggestion('qwen3.8-flash', [
       { role: 'user', content: '帮我重构这段排序算法' },
       ], DEFAULT_ROUTE_CONFIG);
-    expect(suggestion).toBe('deepseek-v4.1-flash');
+    expect(suggestion).toBe('deepseek-v4-pro');
     });
 
   it('建议与 defaultModel 相同时抑制（返回 null，避免噪声）', () => {
@@ -120,7 +120,7 @@ describe('M6 建议计算 + 噪声抑制', () => {
   it('routeShadow 返回结构完整（含 taskType 与建议）', () => {
     const res = routeShadow('qwen3.8-flash', [{ role: 'user', content: '修复 bug' }], DEFAULT_ROUTE_CONFIG);
     expect(res.taskType).toBe('coding');
-    expect(res.suggestion).toBe('deepseek-v4.1-flash');
+    expect(res.suggestion).toBe('deepseek-v4-pro');
     expect(res.defaultModel).toBe(DEFAULT_ROUTE_CONFIG.defaultModel);
     });
 });

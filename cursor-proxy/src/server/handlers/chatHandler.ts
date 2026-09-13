@@ -141,6 +141,50 @@ export function findProviderConfig(modelName: string): ProviderConfig | null {
 }
 
 /**
+ * D4=C · D5 对齐 · 按模型名的"类型"选首个启用的 provider（override 专属 helper）。
+ *
+ * DEFAULT_ROUTE_CONFIG 的 model 名是各上游 /v1/models 的【真实名】(deepseek-v4-pro /
+ * agnes-2.5-flash / kimi-k2.6 / qwen3.8:27b-mlx)，但 DB 的 provider.name 是【别名】
+ * (DeepSeek-Test / agnes-2.5-flash / kimi / qwen3.8:27b-mlx)，两边对不齐——
+ * 所以 override 不靠 models 表(0 行)，改靠【模型名 → provider_id 类型 → 首个启用该类型】。
+ *
+ * 这是 ① 在真实数据下的忠实实现：复用 providers.provider_id 列(deepseek/openai/generic/ollama)，
+ * 不写 DB、不硬编 UUID、不碰 findProviderConfig 热路径(live 走 models.name→provider_id，与本 helper 隔离)。
+ *
+ * 返回 null 时(无该类型启用)由调用方决定降级；本 helper 绝不伪造 provider。
+ */
+const MODEL_NAME_TO_PROVIDER_TYPE: Record<string, string> = {
+   'deepseek-v4-pro': 'deepseek',
+   'deepseek-flash':  'deepseek',
+   'agnes-2.5-flash': 'generic',
+   'kimi-k2.6':       'openai',
+   'kimi-k3':         'openai',
+   'qwen3.8:27b-mlx': 'ollama',
+};
+
+export function findProviderByType(modelName: string): ProviderConfig | null {
+  const type = MODEL_NAME_TO_PROVIDER_TYPE[modelName];
+  if (!type) return null;
+  const row = db.prepare(
+     'SELECT * FROM providers WHERE provider_id = ? AND enabled = 1 ORDER BY created_at DESC LIMIT 1'
+   ).get(type) as any;
+  if (!row) return null;
+  try {
+    return {
+      id: row.id,
+      name: row.name,
+      providerId: row.provider_id as any,
+      apiKey: secrets.decrypt(row.api_key),
+      baseUrl: row.base_url,
+      enabled: row.enabled === 1,
+     };
+    } catch {
+      // 单条解密/构造失败：返回 null，由调用方降级，不崩主链路
+      return null;
+     }
+}
+
+/**
  * D6-a · 列出所有已启用的 Provider 配置（健康检查 + 候选集构建单一数据源）。
  *
  * 与 findProviderConfig 共享「DB 行 → ProviderConfig（含 key 解密）」的构造，
@@ -286,7 +330,9 @@ export async function handleChatCompletion(req: Request, res: Response): Promise
      const shadowSuggestion = routeShadow(model, messages as any[]);
      const targetModel = shadowSuggestion.suggestion;
      if (targetModel != null && targetModel !== model) {
-       const newConfig = findProviderConfig(targetModel);
+       // D5 对齐：findProviderConfig 查 models 表（0 行 → fallback 首个 enabled，无法
+       // 按真实 model 名路由）。findProviderByType 靠 provider_id 类型选对 provider（不写 DB）。
+       const newConfig = findProviderByType(targetModel);
        if (newConfig != null) {
          Object.assign(providerConfig, newConfig);
          req.body.model = targetModel;

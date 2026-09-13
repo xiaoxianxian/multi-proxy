@@ -176,23 +176,30 @@ export const globalRouteEngine = new RouteEngine();
  */
 export const DEFAULT_ROUTE_CONFIG: RouteConfig = {
   id: 'default-four-tier',
-  defaultModel: 'qwen3.8-flash',
-  fallbackChain: ['qwen3.8-flash', 'deepseek-v4.1-flash', 'agnes-2.5-flash', 'qwen3.8:27b-mlx'],
+  defaultModel: 'qwen3.8:27b-mlx',
+  // D5 对齐(2026-09-13, 老板拍 ①): model 名改各上游 /v1/models 实测真名。
+  //  上游真名(各 provider /v1/models 实探):
+  //    deepseek   → deepseek-flash, deepseek-v4-pro   (api.deepseek.com)
+  //    agnes      → agnes-2.5-flash (+11 个 agnes-*)     (apihub.agnes-ai.com)
+  //    kimi       → kimi-k3, kimi-k2.6, kimi-k2.7-code   (api.moonshot.cn)
+  //    ollama     → qwen3.8:27b-mlx                       (本地 127.0.0.1:11434)
+  //  旧虚名 deepseek-v4.1-flash / qwen3.8-flash 上游不认(已删), override 一开即真 404。
+  fallbackChain: ['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-2.5-flash', 'kimi-k2.6'],
    rules: [
-    { id: 'r-cheap',   condition: "taskType == 'cheap'",   targetProvider: 'agnes-2.5-flash' },
-    { id: 'r-coding',  condition: "taskType == 'coding'",  targetProvider: 'deepseek-v4.1-flash' },
-    { id: 'r-writing', condition: "taskType == 'writing'", targetProvider: 'qwen3.8-flash' },
-    { id: 'r-vision',  condition: "taskType == 'vision'",  targetProvider: 'qwen3.8-flash' },
-    { id: 'r-private', condition: 'privacy == true',        targetProvider: 'qwen3.8:27b-mlx' },
-    { id: 'r-hard',    condition: "quality == 'high'",      targetProvider: 'deepseek-v4.1-flash' },
-   ],
-   maxRetries: 3,
-   strategy: 'cost-optimization',
-   pricing: {
-    'qwen3.8-flash':       { input: 0.8,  output: 2.7, cacheHit: 0.1 },
-    'deepseek-v4.1-flash': { input: 1,    output: 4,   cacheHit: 0.02 },
-    'agnes-2.5-flash':     { input: 0,    output: 0,   cacheHit: 0 },
-    'qwen3.8:27b-mlx':       { input: 0,    output: 0,   cacheHit: 0 },
+   { id: 'r-cheap',   condition: "taskType == 'cheap'",   targetProvider: 'agnes-2.5-flash' },
+   { id: 'r-coding',  condition: "taskType == 'coding'",  targetProvider: 'deepseek-v4-pro' },
+   { id: 'r-writing', condition: "taskType == 'writing'", targetProvider: 'qwen3.8:27b-mlx' },
+   { id: 'r-vision',  condition: "taskType == 'vision'",  targetProvider: 'qwen3.8:27b-mlx' },
+   { id: 'r-private', condition: 'privacy == true',        targetProvider: 'qwen3.8:27b-mlx' },
+   { id: 'r-hard',    condition: "quality == 'high'",      targetProvider: 'deepseek-v4-pro' },
+  ],
+  maxRetries: 3,
+  strategy: 'cost-optimization',
+  pricing: {
+    'qwen3.8:27b-mlx':      { input: 0,    output: 0,   cacheHit: 0 },   // 本地 ollama, 免费
+    'deepseek-v4-pro':      { input: 1,    output: 4,   cacheHit: 0.02 },
+    'agnes-2.5-flash':      { input: 0,    output: 0,   cacheHit: 0 },   // agnes 标免费
+    'kimi-k2.6':            { input: 0.6,  output: 2.5, cacheHit: 0.1 },  // 估算占位, 后续校准
    },
 };
 
