@@ -201,7 +201,8 @@ multi-proxy-manager (18792)
 | D3 | ① 安全不变式测试 | ✅ 已完成 | `chat-handler-shadow.test.ts`：on/off 上游逐字节一致 |
 | **D4** | **语义决策：override vs failover-only** | ⛔ **老板 sign-off** | failover-only 已证 no-op（见上）；唯一有效的是 **override 主路径**。需拍「引擎能否覆盖老板已配 provider」——决定请求去向，不可机器代决 |
 | **D5** | **DB model 名 ↔ fallbackChain 对齐** | 🟡 **部分完成（接入✓/对齐⛔）** | **（2026-09-12 接入落地）** 3 家上游已接入 cursor `data/proxy.db` 并全 HTTP 200 验证：DeepSeek(`deepseek-flash`) / agnes(`agnes-2.5-flash`, base_url=apihub.agnes-ai.com) / kimi(`kimi-k3`)，3 家 enabled，key 加密入库(cursor 用 `secrets.encrypt`，DB 已 gitignore 不入仓)。**但「对齐」子项未做**：引擎 `DEFAULT_ROUTE_CONFIG.fallbackChain` 写死 `['qwen3.8-flash','deepseek-v4.1-flash','agnes-2.5-flash','qwen3.8:27b-mlx']`，其中 `deepseek-v4.1-flash` 是**死名(上游真实为 `deepseek-flash`/`deepseek-v4-pro`)**、kimi 不在链，改这 2 处牵热路径+配置属 D4/D6，**未擅动**。**当前 cursor 走 round-robin(不看 model 名，轮询 3 家 enabled)，死名暂不暴露；切 priority/override(D4) 后 dead name 会真 404/走 fallback** |
-| **D6** | **4d 健康信号接线** | ⛔ **待办（卡语义）** | `HealthMonitor` 按 provider **id** 记健康，候选按 **model 名** 排序 → 需定 model→provider 健康映射 + 补候选集构建 |
+| **D6** | **4d 健康信号接线 — 设计草案已落** | 🟡 **设计完成（2026-09-13）** | `HealthMonitor` 按 provider **UUID**（`config.id`）记健康；`RouteEngine.RouteCandidate.id` 按 **model 名** 排序；二者之间无桥梁。草案见 方向四 末尾。草案结论：**D6-a 候选集构建（不卡 D4，shadow 观测增强、热路径零改动，可现在做）/ D6-b 健康决定真实路由（卡 D4）**。`HealthMonitor` 在 `src/` 完全未接线，实施 D6-a 前须先解决 `start.ts` 的 wiring。 |
+| **D8** | **getNextProviderIndex 生产隐患证伪** | ✅ **已证伪（2026-09-13，`e38357b`）** | 上轮曾报"priority 模式无条件推进 rr_index"，实测推翻：`getNextProviderIndex` L20-21 `if (mode !== 'round-robin') return 0`（写到 L26 前已返回）+ `findProviderConfig` L38 `if (mode === 'round-robin')` 才调用 → 双重 guard，非 round-robin 不写 `rr_index`。cursor 矩阵加 3 条 D8 回归测试锁定此不变式（111→114 绿，纯加锁，零生产改动）。 |
 | D7 | live 回归测试 | ⛔ 接真实后做 | 翻 override 前，先证「coding 请求确实改走 deepseek-v4.1-flash 且上游 200」 |
 | **D7-pre** | **修 `chat-handler-shadow.test.ts` 路由轮转耦合** | ✅ **已修（2026-09-13，本地未 push）** | **（2026-09-13 实测订正根因）** 原标记「ESM-mock 首次 import 未捕获」**被推翻**：实测 `isMockFn=true`、ON 运行 `mock.calls=1`，undici mock 并未失效。真实根因 = 持久化 `round-robin` 计数器：该 suite 在调 handler **前**先调一次 `findProviderConfig`（决定注册哪个 adapter），handler 内部又调一次 → 两次按 `rr_index` 轮转到**不同 enabled provider**，后者无注册 adapter → 500「Unknown provider」→ fetch 从不触发 → `mock.calls[0]` undefined。D5 把 3 家上游都 enabled 暴露了此潜在耦合。**修法**：测试 scope 内 `beforeEach` 钉 `routing_mode='priority'`（确定性「第一个 enabled provider」路径，两次解析同一 provider），`afterEach` 还原真实 `routing_mode`（实测跑前跑后均 `round-robin`，零污染）。cursor 矩阵 110→**111/111 绿**，安全网 `on/off 上游 URL+model 逐字节一致` 成立。仍属 D4 翻 override 前的前置闸门，但**本身不再阻塞**——override ship 还需 D4 语义 sign-off + D5 对齐 + D6 健康映射。 |
 
@@ -295,6 +296,44 @@ multi-proxy-manager (18792)
 
 **与方向二的关系：**
 - 方向二是"provider 故障维度"的协调（健康/隔离/重启）；方向四是"请求内容维度"的派发（任务类型）。两者正交，可叠加：先 4a/4b 选目标 provider，再交方向二的 failover/health 机制兜底。
+
+### D6 设计草案：model→provider 健康映射 + 候选集构建（2026-09-13 落）
+
+**精确缺口（按代码行定位，非印象）：**
+
+- `routeEngine.ts:38` `RouteCandidate { id; pricing?; health?: 'ok'|'degraded'|'down' }`——引擎的候选集按 **model 名**（`RouteCandidate.id`）组织；`pickByCost`（`:136`）对候选 `rankByCost` 按 `cost` 排序、`health` 字段虽在接口里但 `rankByCost` 当前未按 health 优先。
+- `healthMonitor.ts:8` `statuses = Map<providerId, {state,lastChecked,error}>`、`:25` `getStatus(providerId)`——`HealthMonitor` 按 provider **UUID**（`config.id`）记健康，30s 轮询各 enabled provider 的 `{baseUrl}/models`（`:44`）。
+- `routing-shadow.ts:28` `computeShadowSuggestion` 调 `getNextRoute(taskType, model, config, undefined)`——第 4 参 `ctx` 留 `undefined`，`:7` 注释明写「cost-optimization 暂无候选集（候选健康/价格待 4d 接线）」。
+- **核心断点**：`HealthMonitor` 的 key 是 provider UUID，`RouteEngine` 的 `RouteCandidate.id` 是 model 名，二者之间**无映射函数**；且 `HealthMonitor` 在 `src/` 中**完全未接线**（`grep import HealthMonitor` 仅 class 自身定义、`src/server/` 未引入），健康数据即使有也无消费方。
+
+**拆两层（关键——D6 大部分不卡 D4）：**
+
+- **D6-a · 候选集构建（不卡 D4，现在可做）**：在 `routing-shadow.ts` 把 `getNextRoute` 第 4 参 `ctx.candidates` 填实：遍历 enabled providers → 用 `findProviderConfig`/providers 表把每个 provider 的 model 名映射到其 UUID → 查 `HealthMonitor.getStatus(uuid).state` → 填进 `RouteCandidate.health` → 传 `ctx.candidates`。这是 shadow 观测增强，**`findProviderConfig` 热路径零改动**，无需 D4 sign-off。
+- **D6-b · 健康映射真正决定真实路由（卡 D4）**：只有 D4 翻 override、引擎建议接管真实路由时，候选集里的 `health` 才改请求走向。这层等 D4。
+
+**映射方案（三选一，推荐 B）：**
+
+| 方案 | 做法 | 评价 |
+|------|------|------|
+| A 显式映射表 | 新增 `modelHealthMap: Record<modelName, providerId>`，providers.json 加 `healthKey` 字段 | 最直观；但 DB model 名 ↔ provider UUID 已是 1:1（`findProviderConfig(model)` 返回唯一 provider），显式表冗余、易随 CRUD 漂移 |
+| **B 复用 findProviderConfig（推荐）** | 候选集构建里，对每个 enabled provider 取其 `id`（UUID）作 health key，其 model 名（`RouteCandidate.id`）作路由 key；一次 `findProviderConfig` 即完成 model→UUID | 复用既有唯一映射、零新字段、防 CRUD 漂移；成本是一次 DB 查询/请求级缓存 |
+| C 按 provider 名 | 候选集改用 provider 名而非 model 名作 `id` | 牵动 `RouteCandidate.id` 语义 + 现有 646 测试，破向后兼容，否决 |
+
+**实施步骤（D6-a，分阶段、可独立验证）：**
+
+1. 接线 `HealthMonitor`：`src/server/start.ts` 启动时 `new HealthMonitor().start(configsRef)`，`configsRef` 指向 providers 列表的响应式引用；停服 `stop()`。
+2. 新增 `routeEngine.ts` 或 `routing-shadow.ts` 内 `buildCandidates(config): RouteCandidate[]`：遍历 enabled providers，`findProviderConfig(model)` 取 UUID → `HealthMonitor.getStatus(uuid).state` 映射到 `'ok'|'degraded'|'down'`（healthy→ok、unhealthy→down、半开/超时→degraded）→ 装配 `candidate`。请求级缓存一次，不每 request 重查。
+3. `computeShadowSuggestion` 的 `getNextRoute` 第 4 参传 `{ candidates }`；`pickByCost` 增加「health 优先」排序维度（healthy 排在 down 前，同级再比 cost）。
+4. 回归测试：`routes-health-candidates.test.ts`——注入 `HealthMonitor` 各 state，断言候选集 health 与下游 provider 状态一致；shadow off/on 不变式（热路径仍走 `findProviderConfig`，不消费候选集）。
+
+**不变式（测试锁定）：** D6-a 仅增强 shadow 观测；`findProviderConfig` 热路径与 646/114 既有测试零回退；候选集构建异常被吞（影子模式永不影响主链路，沿用 `routing-shadow.ts:41` 的 catch 纪律）。
+
+**风险：**
+- `HealthMonitor.health: 'ok'|'degraded'|'down'` 与 `HealthMonitor.status.state: 'healthy'|'unhealthy'` 是两套词汇，映射时需固定 `healthy→ok / unhealthy→down / 半开→degraded`，测试覆盖三种。
+- D6-a 接线 `HealthMonitor.start()` 会引入每 30s 的 `/{baseUrl}/models` 网络轮询——shadow 态下这是**新增生产副作用**（虽不改路由），上线前须确认各上游 `/models` 可达、配额可承受；建议先 `PROXY_HEALTH_MONITOR=1` 门控，与 shadow 开关对齐。
+- 死名仍未消除：D5 的死名 `deepseek-v4.1-flash` 若进候选集，其 health 必然 `'down'`（无此 provider）——反而让健康映射「安全跳过死名」，与 D5 对齐方向一致，互为佐证。
+
+**结论：D6-a 不卡 D4、可现在实施（属 shadow 观测增强、热路径零改动）；D6-b 卡 D4。建议把 D6 从「卡 D4」改为「D6-a 独立可做 / D6-b 卡 D4」，降低 D4 决策压力。**
 
 ---
 
