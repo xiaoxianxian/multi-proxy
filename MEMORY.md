@@ -137,50 +137,14 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 
 ---
 
-## 九、AI短剧开源项目调研结论（2026-09-12，WorkBuddy执行）
+## 九、AI短剧开源项目调研（Jellyfish/火宝等）→ 已转 h3web 项目（2026-09-13 Hermes 整理）
 
-> 调研Jellyfish等AI短剧全流程开源项目，核心结论：编排层与引擎层分离，本地H3引擎是护城河，开源项目当"参考答案"。
-
-### 9.1 核心结论速览
-1. **Jellyfish是架构最干净、最接近"不绑定模型"的**，但"不绑定"目前是接口层不绑定、落地只接了2家云厂商（OpenAI + 火山引擎）。要接本地h3.c，得自己写集成模块。
-2. **火宝短剧、BigBanana都是CC BY-NC-SA非商用协议**——想做公众号IP/接商单有法律雷。**Jellyfish是Apache-2.0，可商用**，这是最关键的差异。
-3. **对你最值钱的不是用Jellyfish成品，而是它的"一致性实体+异步任务中心"这套设计**，正好补h3web/二期编排层还缺的骨架。
-4. **h3web已实现80%的"异步任务中心"**（JOBS + /api/status + /api/kill + 故事板进度），真正要补的只是"一致性实体子系统+任务落库"。
-5. **推荐A路（在h3web内补一致性实体+任务落库），不推荐B路（给Jellyfish写适配器）**——A路在熟悉的Flask栈里改，B路要养新栈（FastAPI+MySQL+Redis+RustFS）并在不熟的React/Vue里做前端。
-
-### 9.2 项目对比矩阵（关键差异）
-| 项目 | 协议 | Stars | 视频供应商 | 一致性管理 | 本地引擎 | 可用性 |
-|------|------|-------|-----------|-----------|---------|--------|
-| Jellyfish | Apache-2.0 | 6.4k | OpenAI Sora/火山 Seedance | ✅强 | ❌仅架构可插 | ✅协议友好+架构可借 |
-| 火宝短剧 | CC BY-NC-SA 4.0 | ~9.6k | MiniMax H3云端/Seedance/Wan3 | ✅ | ❌全云 | ⚠️UI最成熟，但NC协议+云端≠本地 |
-| BigBanana | CC BY-NC-SA 4.0 | 未公开 | 深度绑AntSK付费API | ✅ | ❌ | ❌已停更源码 |
-| Wind Comic | MIT | 5.2k | 8+引擎(BYO LLM) | ✅Vision评分 | ✅本地 | ✅竖屏短剧原生+CJK字幕 |
-| Toonflow-app | Apache-2.0 | 13k+ | TypeScript插件 | ✅无限画布 | ✅ONNX记忆 | ✅可编程Provider |
-
-### 9.3 与multi-proxy的映射关系
-- **编排层（n8n/Harness）** ↔ **Jellyfish的任务中心 + Wind Comic的Agent流水线**
-- **一致性实体子系统** ↔ **Jellyfish的角色/场景/道具/服装实体模型**
-- **多Provider抽象** ↔ **Wind Comic的BYO LLM + Jellyfish的多Model注册**
-- **任务状态机** ↔ **Jellyfish的pending→approved→queued→generating→done→failed**
-
-### 9.4 落地建议（按优先级）
-- **P0**：任务中心落库（加`generation_tasks`表，JOBS写入时同步落库）
-- **P0**：一致性实体：补Scene/Prop/Costume表（先补Scene）
-- **P1**：镜头硬引用实体 + 提交前查重
-- **P1**：统一task_kind + cancel_requested状态机
-- **P2**：提示词模板库、竖屏短剧模板
-
-### 9.5 避坑提醒
-- ❌ 火宝说支持"MiniMax H3"——那是云端H3 API，不是你本地h3.c
-- ❌ 火宝和BigBanana都是CC BY-NC-SA非商用协议——法律风险存在
-- ❌ BigBanana已停更源码，只发Docker镜像，可审计性为零
-- ✅ **核心打法**：别换框架。Jellyfish当"参考答案"——抄它的"一致性实体模型"和"任务中心落库"两件事，补进你已有的h3web + n8n。本地h3.c引擎是别人都没有的护城河，编排层用开源思路自己长出来最稳。
-
-### 9.6 详细报告位置
-- `~/Documents/AI项目/本地部署Minimax H3/Jellyfish调研与本地匹配分析.md`（主报告）
-- `~/Documents/AI项目/本地部署Minimax H3/Jellyfish-minimax_h3_local-适配器草案.md`（B路方案，暂不采用）
-- `~/Documents/AI项目/本地部署Minimax H3/公众号文章骨架-Jellyfish调研.md`（对外文章框架）
-- `~/Documents/AI项目/本地部署Minimax H3/MEMORY-2026-09-12.md`（今日日志）
+> AI 短剧开源项目调研（Jellyfish / 火宝短剧 / BigBanana / Wind Comic / Toonflow）属 **h3web（本地 Minimax H3）** 项目，非 multi-proxy。
+> 本体报告与结论已归档至 `~/Documents/AI项目/本地部署Minimax H3/`：
+> - `Jellyfish调研与本地匹配分析.md`（主报告）
+> - `Jellyfish-minimax_h3_local-适配器草案.md`（B 路适配器方案，暂不采用）
+> - 该项目 `MEMORY.md` 与 `MEMORY-2026-09-12.md`「AI 短剧 / Jellyfish」相关章节（结论 + 落地建议 + 避坑）
+> 本节原为跨项目记忆错配，由 Hermes 于 2026-09-13 整理迁移为指针，防止 multi-proxy 记忆混入 h3web 内容。
 
 ---
 
@@ -220,3 +184,13 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 1. D6-b 健康感知接生产路由决策（卡 D4=C sign-off，`PROXY_ROUTE_OVERRIDE=1` 灰度）
 2. `getOverrideLog()` 观测 1-2 天，确认 override 建议合理再 sign-off
 3. M7 任务级 Session（§8.5 P0，蓝图已列）；AIGC adapter 缺口（蓝图列、`find -iname "*aigc*"` 为空，P1）
+
+
+---
+
+## 十二、2026-09-13 后续整理（趋势跟进 cron + 文档归位 + L2 标注）
+
+1. **趋势跟进机制（Hermes 侧）**：新建 cron job `multi-proxy 趋势跟进（L2 蓝图/智能路由）`（job_id `44190b9bef9c`），schedule `0 9 1 * *`（每月 1 号 09:00，与 h3web「竞品复查」镜像同节奏但独立）。prompt 自包含，调研 Harness/Agentic Coding 近 30 天进展，落盘到本 MEMORY.md + L2-BLUEPRINT.md + ITERATION-ROADMAP.md，明令不碰 `~/.workbuddy/` h3web 侧。deliver=local（结果本地存，需 cronjob list 查）。
+2. **文档归位**：§九「AI 短剧 Jellyfish/火宝」属 h3web 项目（本体在 `~/Documents/AI项目/本地部署Minimax H3/`），已从 multi-proxy §九 47 行正文转为一行指针，防跨项目记忆错配。
+3. **L2 蓝图标注校准**：L2-BLUEPRINT.md 状态行由「未实施，等老板拍板」改为「M6 方向四 + M2 健康增强已闭环（D1-D8/D5 真名/D7 live 200）；L2 P0-P3 新模块蓝图已定待排期」；4.6 健康监控增强标为「部分（M2+D6-a 已做，缺告警/成本分析）」。诚实标注，未实施模块仍记「未开始」。
+4. **章节物理顺序遗留**：MEMORY.md 物理顺序 §八→§十→§九→§十一（§十 物理排在 §九 前），编号按内容保留未重排（避免误改 WorkBuddy 已有内容）。待老板定是否理顺。
