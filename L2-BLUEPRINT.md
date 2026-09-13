@@ -343,7 +343,7 @@
 | 优先级 | 模块 | 工作量 | 依赖 | 交付物 | 状态 |
 |--------|------|--------|------|--------|------|
 | **P0** | 插件运行时框架 | 2-3 天 | 无 | 插件加载器 + 接口契约 + 示例插件（含 zg 成本优化样例） | ✅ 已落地：`plugin-runtime.js`+demo 14 checks PASS（状态机+热插拔+能力聚合，零依赖非侵入） |
-| **P0** | **Agent Adapter 协议** | 2-3 天 | 插件运行时 | 任务接收/结果回传/能力声明/健康检查 契约 + Codex/Hermes/h3web/AIGC 各 1 样例 | ⚠️ 部分：4 接口契约定稿 + h3web 样例收口（mock round-trip 6 checks）；Codex/Hermes/AIGC 样例未做 |
+| **P0** | **Agent Adapter 协议** | 2-3 天 | 插件运行时 | 任务接收/结果回传/能力声明/健康检查 契约 + Codex/Hermes/h3web/AIGC 各 1 样例 | ⚠️ 部分：4 接口契约定稿 + h3web + AIGC 两样例收口（mock round-trip，h3web 6 + AIGC 10 checks PASS）；Codex/Hermes 样例未做 |
 | **P0** | Agent Registry | 1-2 天 | 插件运行时 | Agent Profile CRUD API + 能力标签注册 | ✅ 已落地：`agent-registry.js`+demo 18 checks PASS + 接 manager HTTP API（jest 12/12 + :18792 真跑 200/401） |
 | **P1** | 记忆服务（公共+个性+环境变量注入） | 2 天 | Agent Registry | 记忆合并 + 规范数据格式 + 方案适配器 + 环境变量注入 | ⚠️ 部分：规范格式+互通性已落地（`specs/agent-memory` node/py 两侧 PASS）；完整合并/适配器/注入服务未做 |
 | **P1** | 技能服务（含互通性） | 2 天 | Agent Registry | Skill CRUD + 版本 + 规范格式适配 | ⚠️ 部分：规范格式+互通性已落地（`specs/skill` ALL PASS）；完整 Skill CRUD 服务未做 |

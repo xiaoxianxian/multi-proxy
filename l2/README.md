@@ -65,6 +65,15 @@ Agent Profile 的 CRUD + 能力标签注册/查询，编排引擎"按能力路�
 - 真跑：`node l2/adapters/h3web-adapter.demo.js`（6 checks 全 PASS）；jest `tests/unit/h3web-adapter.test.js`（5/5 PASS，锁 HTTP round-trip 进 CI）。
 - **环境漂移记录（重要）**：实测 8732 上跑的是 `wechat-style-extractor-py` 的 `server.py`（非 h3web）——印证 adapter「必须动态探测、绝不写死端口」的铁律现实价值；故 P0 用 mock 替身验证契约，真实 h3web 接入待 P1 服务起来再做。
 
+## adapters/aigc-adapter.js — AIGC（绘境 AI 生图生视频）样例（P0 增量 5 · AIGC 缺口收口）
+
+据老板反馈（AIGC adapter 缺口 = 本地 `~/Documents/AIGC生图生视频` = 绘境 AI / hujing-ai），把 AIGC 包成第 5 个 adapter 样例，证明「任意本地 HTTP 服务实现 4 接口即可接入 Agent Registry」：
+- **真实契约核实（非臆测）**：据 hujing-ai `backend/app/routers/tasks.py` + `schemas/task.py` + `models/task.py` —— `POST /api/v1/tasks`（`{subtype, params}`）+ `GET /api/v1/tasks/:id` + `POST /:id/cancel` + `GET /api/v1/health`；状态机 `pending → processing → 终态 completed|failed|cancelled`；7 种 subtype（text/image/matte/outpaint/bg/style/img2video）。
+- **AIGC 独有（区别于 h3web）**：① **OAuth2 Bearer 鉴权**（`_authHeaders` 注入 token；token 由调用方注入，adapter 不打印/不落盘，缺失/错误 → 401）② **任务 cancel 语义**（`cancel(taskId)` POST `/api/v1/tasks/:id/cancel`，支撑 M7 session 崩溃恢复/手动中止）③ `/api/v1` 前缀 + 原生 `/api/v1/health`（无需补桩，比 h3web 更规范）。
+- **非侵入④ 实测**：对 AIGC 只读转发（不写其文件、不改配置）；端口动态探测（候选 `[8731, 8732]`，AIGC 实测漂移）；零依赖（仅 node 内置 http）。
+- **下游替身**：`mock-aigc.js`（node 最小 HTTP，模拟 AIGC FastAPI 的 `/api/v1/tasks*` 状态机 + Bearer 鉴权 + 7 subtype），零副作用——不起真 AIGC、不触生图/生视频云端。**真实"起 AIGC 服务 + 真文生视频 round-trip"属 P1**（AIGC 当前未运行、需真实 token、需云端调用）。
+- 真跑：`node l2/adapters/aigc-adapter.demo.js`（**10 checks 全 PASS**，含鉴权 401 路径 + cancel）。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；
