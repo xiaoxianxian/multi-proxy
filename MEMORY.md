@@ -1,7 +1,7 @@
 # MEMORY.md — multi-proxy 项目记忆
 
 > 供 WorkBuddy / Claude / Codex / Hermes 等 agent 读取，作为本项目单一事实来源。
-> 仅内部使用，分发包剔除。最后更新：2026-09-10（原名 proxy-rebuild，已合并改名）
+> 仅内部使用，分发包剔除。最后更新：2026-09-12（新增 §十 Agentic Coding 工具趋势分析）
 
 ## 一、项目定位
 - `codex-multi-model-proxy` 的合并升级版：挂多个 agent 代理的统一壳子，目标根治 WorkBuddy 等 agent 因 API 限速导致的任务中断。
@@ -62,6 +62,17 @@
 | **Session** | 跨轮次保存任务状态 | **待建**：任务级 Session/checkpoint 存储（provider-health.json / error-history.jsonl 是资源健康维度雏形，缺「任务进度」维度） |
 | **Events & Items** | 记录每步产出/工具调用/结果 | TaskCreate/TaskList 任务清单 + 工具调用日志 + context-guard 上下文监测 |
 
+### 8.3 Harness 文章分析（2026-09-12，整合文章 + WorkBuddy 评估）
+> 文章：「Codex想让Harness消失，Claude Code却要把它做成「承重墙」」（InfoQ）
+> 核心结论：**"教做事"的轻了，"保安全/长跑/并行"的重了。**
+
+#### 8.3.1 两派观点速览
+
+| 派别 | 代表 | 对 Harness 的态度 |
+|------|------|-----------------|
+| 变轻派 | OpenAI Codex (Tibo) | 模型越强，"教模型做事"的拐杖可删；临时补丁等模型追上来后移除 |
+| 变重派 | Anthropic Claude Code (Thariq) | 模型越强，Harness 越复杂——Auto Mode/Sandbox/Workflow 变成"承重墙" |
+
 ### 8.3 对 multi-proxy 迭代规划的具体帮助
 1. **定位校准**：别把自己做成「薄代理壳」，要做厚成「本地 Harness」——把 M6 路由 + 健康/错误库 + 任务级 Session 串成「能观察、能干预、能续跑」的运行时（对齐四对象）。
 2. **补缺失对象——Session（任务级）**：建议在 `~/.multi-proxy-manager/` 增加 `sessions.json`（任务 id → 当前 proxy/目标 provider/已执行步骤/checkpoint），使 proxy 重启后可续跑。
@@ -81,3 +92,131 @@
   2. **P1-任务幂等**：代理切换/provider故障时，已有操作能做补偿或标记，不重复执行。是 M2（健康隔离）的自然延伸。
   3. **P2-事件流/Webhook**：让用户订阅 agent 进度，支持中途干预。全新能力，可作差异化。
 - **警示**：文章原话"如果 Harness 只是公共管道，托管更经济"。proxy-rebuild 目前多模型路由（M6）+健康图/熔断是核心竞争力，但任务级Session/恢复是短板。方向对，但要加快 M7 落地，否则回到"薄平台"陷阱。
+
+---
+
+## 十、外部参考：Agentic Coding 工具趋势（2026-09-12，公众号「i 小声读书」+ WorkBuddy 分析）
+
+> 来源：https://mp.weixin.qq.com/s/vw6DVHGf4JNaAJ42xm3LLQ
+> 核心论点：下一代 IDE 是「软件工程 Agent 调度中心」——一个 Repo → 多个 Git Worktree → 多个 Agent 并行开工。
+
+### 10.1 四个工具速查（已实测核验）
+
+| 工具 | 协议(实测) | 它解决的多 agent 痛点 | 对 multi-proxy 的对应物/借鉴点 |
+|------|-----------|---------------------|-------------------------------|
+| **Orca** (onorca.dev) | **MIT** ✅ | 一 prompt 扇出到 N 个 worktree，比 diff 合最优 | = M7 并行的标准范式。代码 MIT 可读，**最值得扒架构** |
+| **Paseo** (paseo.sh) | AGPL-3.0 / Apache-2.0 说法不一⚠️ | **常驻 daemon + 手机/桌面/Web/CLI 多端监工**，本地语音、cron | = L2「调度中心 + 手机续看」的**成品**。可直接装来跑通模式验证 |
+| **Emdash** (emdash.com) | Apache-2.0（HN 帖称 MIT，有出入⚠️） | **Tmux 长任务跨重连保活**；工单集成(Linear/Jira/GitHub/Notion) | = M7 sessions.json 续跑的参考实现；工单集成可接 Obsidian/任务流 |
+| **Superset** (superset.sh) | **ELv2 源码可见≠真开源**；免费+Pro $20/席/月 | 自动化 cron + TS SDK + **MCP server 导出** + 云端 | MCP server 导出思路有用；但闭源倾向/付费，**仅自用别 fork** |
+
+### 10.2 对 multi-proxy 迭代的具体建议（按推荐度）
+
+1. **方向验证**：本文论点与 MEMORY §八 OpenAI Harness 分析**完全一致**——行业正收敛到你要做的「本地 Harness」，极大降低押错方向风险。建议两篇合并归档为 L2 外部佐证。
+
+2. **最高杠杆**：给 M7 补 `git worktree` 隔离原语。现在 multi-proxy 是单 checkout 切模型；真正「多 agent 并行」必须像 Orca/Emdash/Paseo 一样**每任务一个 worktree**。小改动、大收益——从「串行切模型」升级成「并行多 agent 竞速择优」。
+
+3. **「手机续看长时程 agent」别从零造**：先 `brew install --cask paseo` 跑起来验证模式，再决定自研还是二开。直接指向本地 Ollama(Qwen) + 各 proxy（18792/18790/18793/18794）。
+
+4. **M7 sessions.json 设计参考**：Emdash 的 Tmux 保活 + Orca 的 checkpoint 模式。把 `autonomous-continuity` skill 的「续跑提示词 + checkpoint」思路接进 multi-proxy，补 MEMORY 8.5 警示的「任务级 Session 短板」。
+
+5. **许可证 hygiene**：multi-proxy 自身建议 MIT/Apache；借鉴只取 Orca(MIT)/Emdash(Apache)/Paseo(待确认)；**Superset 的 ELv2 不能 fork/再分发**，只能自用。
+
+### 10.3 h3web 旁支价值
+
+n8n 编排层（Wait/Resume、重试）本质也是「长时程 agent 调度」。这 4 个工具的编排思路（自动化 cron、远端 worktree）可参考进 h3web 的创作编排面板。
+
+### 10.4 WorkBuddy 分析评估
+
+WorkBuddy 分析**扎实**，有四处值得肯定：
+- 架构映射准确（Orca=M7 并行范式、Paseo=手机续看成品、Emdash=Tmux 保活参考）
+- 工具核验到位（每个协议都标了实测来源，Superset ELv2 警告正确）
+- 自我纠错机制好（发现旧名 `codex-multi-model-proxy` 被云端过期记忆带偏后，用本地 MEMORY 纠正为 `multi-proxy`）
+- 建议分层合理（P0 归档佐证 → P1 worktree 隔离 → P2 装 Paseo 验证 → P3 M7 sessions.json）
+
+需二次核实两点：Paseo 协议（AGPL vs Apache 说法不一）、Emdash 协议（Apache vs MIT 有出入）。装之前去 GitHub 确认 LICENSE 文件。
+
+---
+
+## 九、AI短剧开源项目调研结论（2026-09-12，WorkBuddy执行）
+
+> 调研Jellyfish等AI短剧全流程开源项目，核心结论：编排层与引擎层分离，本地H3引擎是护城河，开源项目当"参考答案"。
+
+### 9.1 核心结论速览
+1. **Jellyfish是架构最干净、最接近"不绑定模型"的**，但"不绑定"目前是接口层不绑定、落地只接了2家云厂商（OpenAI + 火山引擎）。要接本地h3.c，得自己写集成模块。
+2. **火宝短剧、BigBanana都是CC BY-NC-SA非商用协议**——想做公众号IP/接商单有法律雷。**Jellyfish是Apache-2.0，可商用**，这是最关键的差异。
+3. **对你最值钱的不是用Jellyfish成品，而是它的"一致性实体+异步任务中心"这套设计**，正好补h3web/二期编排层还缺的骨架。
+4. **h3web已实现80%的"异步任务中心"**（JOBS + /api/status + /api/kill + 故事板进度），真正要补的只是"一致性实体子系统+任务落库"。
+5. **推荐A路（在h3web内补一致性实体+任务落库），不推荐B路（给Jellyfish写适配器）**——A路在熟悉的Flask栈里改，B路要养新栈（FastAPI+MySQL+Redis+RustFS）并在不熟的React/Vue里做前端。
+
+### 9.2 项目对比矩阵（关键差异）
+| 项目 | 协议 | Stars | 视频供应商 | 一致性管理 | 本地引擎 | 可用性 |
+|------|------|-------|-----------|-----------|---------|--------|
+| Jellyfish | Apache-2.0 | 6.4k | OpenAI Sora/火山 Seedance | ✅强 | ❌仅架构可插 | ✅协议友好+架构可借 |
+| 火宝短剧 | CC BY-NC-SA 4.0 | ~9.6k | MiniMax H3云端/Seedance/Wan3 | ✅ | ❌全云 | ⚠️UI最成熟，但NC协议+云端≠本地 |
+| BigBanana | CC BY-NC-SA 4.0 | 未公开 | 深度绑AntSK付费API | ✅ | ❌ | ❌已停更源码 |
+| Wind Comic | MIT | 5.2k | 8+引擎(BYO LLM) | ✅Vision评分 | ✅本地 | ✅竖屏短剧原生+CJK字幕 |
+| Toonflow-app | Apache-2.0 | 13k+ | TypeScript插件 | ✅无限画布 | ✅ONNX记忆 | ✅可编程Provider |
+
+### 9.3 与multi-proxy的映射关系
+- **编排层（n8n/Harness）** ↔ **Jellyfish的任务中心 + Wind Comic的Agent流水线**
+- **一致性实体子系统** ↔ **Jellyfish的角色/场景/道具/服装实体模型**
+- **多Provider抽象** ↔ **Wind Comic的BYO LLM + Jellyfish的多Model注册**
+- **任务状态机** ↔ **Jellyfish的pending→approved→queued→generating→done→failed**
+
+### 9.4 落地建议（按优先级）
+- **P0**：任务中心落库（加`generation_tasks`表，JOBS写入时同步落库）
+- **P0**：一致性实体：补Scene/Prop/Costume表（先补Scene）
+- **P1**：镜头硬引用实体 + 提交前查重
+- **P1**：统一task_kind + cancel_requested状态机
+- **P2**：提示词模板库、竖屏短剧模板
+
+### 9.5 避坑提醒
+- ❌ 火宝说支持"MiniMax H3"——那是云端H3 API，不是你本地h3.c
+- ❌ 火宝和BigBanana都是CC BY-NC-SA非商用协议——法律风险存在
+- ❌ BigBanana已停更源码，只发Docker镜像，可审计性为零
+- ✅ **核心打法**：别换框架。Jellyfish当"参考答案"——抄它的"一致性实体模型"和"任务中心落库"两件事，补进你已有的h3web + n8n。本地h3.c引擎是别人都没有的护城河，编排层用开源思路自己长出来最稳。
+
+### 9.6 详细报告位置
+- `~/Documents/AI项目/本地部署Minimax H3/Jellyfish调研与本地匹配分析.md`（主报告）
+- `~/Documents/AI项目/本地部署Minimax H3/Jellyfish-minimax_h3_local-适配器草案.md`（B路方案，暂不采用）
+- `~/Documents/AI项目/本地部署Minimax H3/公众号文章骨架-Jellyfish调研.md`（对外文章框架）
+- `~/Documents/AI项目/本地部署Minimax H3/MEMORY-2026-09-12.md`（今日日志）
+
+---
+
+## 十一、方向四 D1-D8 实施进展（cursor-proxy，Hermes 执行，2026-09-13）
+
+> `ITERATION-ROADMAP.md` 方向四"任务类型智能派发"完整闭环。commit 链 `2e13d6d→0b7bd5f→071650e`，已 push origin/main，全量 jest 124/124 + tsc 净。
+
+### 11.1 实施状态
+
+| 子项 | 状态 | 说明 |
+|---|---|---|
+| D4 | ✅ **已实施（C 机制）** | `PROXY_ROUTE_OVERRIDE` 门控（默认 off），off 时逐字节等价、on 时改路由。热路径 `findProviderConfig` 函数体零改动，override 是 `handleChatCompletion` 新增前置分支 |
+| D5 | ✅ **已落地** | ④拉上游真实 model 名单 → ①虚名→真名 + `findProviderByType` 引擎级映射；enable ollama provider |
+| D6 | ✅ D6-a + docs；⏳ D6-b | D6-a 健康信号接 shadow 观测门控；D6-b 接生产路由决策，**卡 D4 sign-off**，生产零改动 |
+| D7 | ✅ **闭环：live 真实 200 / 162ms / 上游回 model=deepseek-v4-pro** | 翻 `PROXY_ROUTE_OVERRIDE` 前安全前置（host 断言锁 `api.deepseek.com`）已做 |
+| D8 | ✅ **已证伪** | round-robin 下 override 不生效是伪命题；回归 `chat-handler-rr-index` 3 tests 锁死 |
+
+### 11.2 关键决策
+
+- **D4=C（override 主路径 + 分步门控）**：off=行为不变=安全默认，on=改路由；安全由门控 + 上游真名 + 健康信号共同保证。
+- **D5 映射方式**：`findProviderByType` 引擎级映射（虚名→按 `provider_id` 选 enabled provider，不写 DB）。**`models`/`routes` 表 0 行**，`findProviderConfig` 在 models=0 时固定 fallback 首个 enabled provider，**不按 model 名匹配 `provider.name`**——D5 修复的核心 bug。
+- **D5 上游实测真名（④ 拉 `/v1/models`，密钥只在内存、绝不打印）**：DeepSeek→`deepseek-v4-pro`·`deepseek-flash`；agnes→`agnes-2.5-flash`；kimi→`kimi-k2.6` 等；ollama→本地 `qwen3.8:27b-mlx`。
+
+### 11.3 避坑
+
+- **D7-pre 根因订正**：round-robin 下 `findProviderConfig` 按 `rr_index` 轮转，不是 ESM-mock；`chat-handler-shadow.test.ts` 红因 `rr_index` 轮转，修=pin `routing_mode='priority'` + save/restore，非 mock 问题。
+- **Ollama 与 H3 绝不并发（48GB 内存）**；密钥只在内存用、绝不打印/落盘。
+- **测试断言须锁实测值**（`api.deepseek.com`/`deepseek-v4-pro`/真实 200），禁理论值（`api.kimi.com`）。
+- patch markdown 表格行：`new_string` 以 `\n` 结尾会把字面 `\n` 粘进文档（已踩 3 次，用 Python `chr(92)` 修复）。
+
+### 11.4 D8 证伪
+
+`chat-handler-rr-index.test.ts` 3 tests 证实 round-robin 下 `findProviderConfig` 轮转、override 不生效是伪命题。
+
+### 11.5 下一步（卡 D6-b sign-off，需老板定）
+
+1. D6-b 健康感知接生产路由决策（卡 D4=C sign-off，`PROXY_ROUTE_OVERRIDE=1` 灰度）
+2. `getOverrideLog()` 观测 1-2 天，确认 override 建议合理再 sign-off
+3. M7 任务级 Session（§8.5 P0，蓝图已列）；AIGC adapter 缺口（蓝图列、`find -iname "*aigc*"` 为空，P1）
