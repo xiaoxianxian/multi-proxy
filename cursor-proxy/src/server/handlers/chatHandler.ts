@@ -14,6 +14,50 @@ function getRoutingMode(): string {
   return row ? String(row.value) : 'failover';
 }
 
+/**
+ * D4=C · 路由 override 门控（2026-09-13 落盘）
+ *
+ * PROXY_ROUTE_OVERRIDE=1 时启用引擎接管真实路由。默认 0（行为不变）。
+ * Step 3（观察期后翻转默认值）由老板 sign-off 后执行，不在本次。
+ */
+export function isRouteOverrideEnabled(): boolean {
+  return process.env['PROXY_ROUTE_OVERRIDE'] === '1';
+}
+
+/**
+ * D4=C · override 决策审计日志（内存环形缓冲，最多 1000 条）
+ *
+ * 与 D2 影子建议日志（recordShadowEntry / getShadowLog）分离：override 是
+ * "真正接管路由"的决策，单独记录便于灰度期复盘。只读快照，绝不修改 D2 不变式。
+ */
+export interface OverrideLogEntry {
+  timestamp: string;
+  requestModel: string;      // 客户端原始请求 model
+  engineTaskType: string;    // 引擎分类（来自 routeShadow 的 ShadowSuggestion.taskType）
+  overrideModel: string;     // 引擎建议的 model（实际转发到上游的 model 字段值，Q2=①）
+  provider: string;          // 经 D5 对齐 / findProviderConfig 命中的 provider
+  applied: boolean;          // override 是否真正生效（映射成功）
+}
+
+const OVERRIDE_LOG_MAX = 1000;
+const overrideLog: OverrideLogEntry[] = [];
+
+export function recordOverrideEntry(entry: OverrideLogEntry): void {
+  overrideLog.push(entry);
+  if (overrideLog.length > OVERRIDE_LOG_MAX) {
+    overrideLog.shift();
+   }
+}
+
+/** 只读快照：审计 / 不变式测试用。 */
+export function getOverrideLog(): ReadonlyArray<OverrideLogEntry> {
+  return overrideLog.slice();
+}
+
+export function clearOverrideLog(): void {
+  overrideLog.length = 0;
+}
+
 /** Round-robin index (persisted in settings so it survives restarts) */
 function getNextProviderIndex(providerCount: number): number {
   if (providerCount <= 0) return 0;
@@ -231,11 +275,41 @@ export async function handleChatCompletion(req: Request, res: Response): Promise
 
   console.log(`[ChatHandler] model=${model}, provider=${providerConfig.name}, stream=${stream}`);
 
-   // M6 影子路由建议（dry-run，不改变真实路由；仅 PROXY_ROUTING_SHADOW=1 时落日志）
-  try {
-    routeShadow(model, messages);
-   } catch {
-    // 影子模式绝不影响主链路——异常即静默忽略
+   // D4=C · 路由 override（PROXY_ROUTE_OVERRIDE=1 时引擎建议接管真实路由，默认关）
+   // 设计原则：门控关闭时整段跳过，shadow-only 块照常跑，热路径与今天逐字节一致；
+   //   门控开启时，引擎建议的 model 经 findProviderConfig（D5 对齐：models.name→provider）
+   //   重新解析 ProviderConfig 并写入 reqBody.model（Q2=① 发给上游的 model 用引擎建议名）。
+   // 复用 routeShadow()（它负责写 getShadowLog 不变式表）：override 命中即跳过下方 shadow-only 块，
+   //   保证单请求一次 shadow 条目，不破坏 D2 不变式。
+   let overrideApplied = false;
+   if (isRouteOverrideEnabled()) {
+     const shadowSuggestion = routeShadow(model, messages as any[]);
+     const targetModel = shadowSuggestion.suggestion;
+     if (targetModel != null && targetModel !== model) {
+       const newConfig = findProviderConfig(targetModel);
+       if (newConfig != null) {
+         Object.assign(providerConfig, newConfig);
+         req.body.model = targetModel;
+         overrideApplied = true;
+         recordOverrideEntry({
+           timestamp: new Date().toISOString(),
+           requestModel: model,
+           engineTaskType: shadowSuggestion.taskType,
+           overrideModel: targetModel,
+           provider: newConfig.name,
+           applied: true,
+         });
+         console.log(`[ChatHandler][Override] model=${model} → ${targetModel} (provider=${newConfig.name}, task=${shadowSuggestion.taskType})`);
+       }
+     }
+   }
+   if (!overrideApplied) {
+     // M6 影子路由建议（dry-run，不改变真实路由；仅 PROXY_ROUTING_SHADOW=1 时落日志）
+     try {
+       routeShadow(model, messages as any[]);
+     } catch {
+       // 影子模式绝不影响主链路——异常即静默忽略
+     }
    }
 
   try {
