@@ -150,8 +150,11 @@ describe('M6 D4=C · 路由 override 机制（chatHandler 级）', () => {
   it('门控开启时 coding 任务：引擎建议写入请求体（Q2=① 发引擎名 deepseek-v4-pro）', async () => {
     const { url, bodyModel } = await runHandler(true, 'qwen3.8-flash', MESSAGES.coding);
     expect(url).toMatch(/\/chat\/completions$/);
-    expect(bodyModel).toBe('deepseek-v4-pro');    // D5 对齐后：coding → deepseek-v4-pro
-    });
+    expect(bodyModel).toBe('deepseek-v4-pro');      // D5 对齐后：coding → deepseek-v4-pro
+     // D5 核心修复 + D7 host 验收(安全前置): coding 必须路由到 deepseek 的 base_url，
+     // 绝不 fallback 到 kimi(api.moonshot.cn，DeepSeek-Test 别名歧义)。翻灰度前的前置证据。
+    expect(url).toContain('api.deepseek.com');
+     });
 
   it('门控开启时 coding 任务：override 落审计日志（applied=true）', async () => {
     const mod = await import('../../src/server/handlers/chatHandler.js');
