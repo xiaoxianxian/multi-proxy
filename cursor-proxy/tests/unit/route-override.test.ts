@@ -79,10 +79,14 @@ async function runHandler(
 
   fetchMock.mockClear();
 
-   // 让真实 DB 选定的 provider 有 adapter 可用，否则 forward 路径 500、不发起 fetch。
-  const realConfig = mod.findProviderConfig(model) as ProviderConfig | null;
-  if (realConfig) {
-    ProviderRegistry.getInstance().register(makeAdapter(realConfig.providerId));
+   // 让真实 DB 中所有启用的 provider 类型都有 adapter 可用（override 可能改写到任意类型），
+   // 否则 forward 路径 500、不发起 fetch。
+   const allTypes = db.prepare(
+     "SELECT DISTINCT provider_id FROM providers WHERE enabled = 1"
+    ).all().map((r: any) => r.provider_id as string);
+   const reg = ProviderRegistry.getInstance();
+   for (const ptype of allTypes) {
+     reg.register(makeAdapter(ptype));
     }
 
   const res: any = {
@@ -140,13 +144,13 @@ describe('M6 D4=C · 路由 override 机制（chatHandler 级）', () => {
   it('门控关闭（默认）时 coding 任务：请求体 model 不被 override 改写（逐字节不变）', async () => {
     const { url, bodyModel } = await runHandler(false, 'qwen3.8-flash', MESSAGES.coding);
     expect(url).toMatch(/\/chat\/completions$/);
-    expect(bodyModel).toBe('qwen3.8-flash');   // 未被 deepseek-v4.1-flash 改写
+    expect(bodyModel).toBe('qwen3.8-flash');     // 未被 override 改写，保持输入原样
     });
 
-  it('门控开启时 coding 任务：引擎建议写入请求体（Q2=① 发引擎名 deepseek-v4.1-flash）', async () => {
+  it('门控开启时 coding 任务：引擎建议写入请求体（Q2=① 发引擎名 deepseek-v4-pro）', async () => {
     const { url, bodyModel } = await runHandler(true, 'qwen3.8-flash', MESSAGES.coding);
     expect(url).toMatch(/\/chat\/completions$/);
-    expect(bodyModel).toBe('deepseek-v4.1-flash');   // 实测：coding → deepseek-v4.1-flash
+    expect(bodyModel).toBe('deepseek-v4-pro');    // D5 对齐后：coding → deepseek-v4-pro
     });
 
   it('门控开启时 coding 任务：override 落审计日志（applied=true）', async () => {
@@ -158,7 +162,7 @@ describe('M6 D4=C · 路由 override 机制（chatHandler 级）', () => {
     expect(last).toBeDefined();
     expect(last.applied).toBe(true);
     expect(last.requestModel).toBe('qwen3.8-flash');
-    expect(last.overrideModel).toBe('deepseek-v4.1-flash');
+    expect(last.overrideModel).toBe('deepseek-v4-pro');
     expect(last.engineTaskType).toBe('coding');
      });
 

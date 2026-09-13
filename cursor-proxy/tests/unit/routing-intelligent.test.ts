@@ -227,15 +227,15 @@ describe('M6-D 默认四层 RouteConfig', () => {
   it('默认配置结构完整', () => {
     expect(DEFAULT_ROUTE_CONFIG.id).toBe('default-four-tier');
     expect(DEFAULT_ROUTE_CONFIG.strategy).toBe('cost-optimization');
-    expect(DEFAULT_ROUTE_CONFIG.fallbackChain).toEqual(['qwen3.8-flash', 'deepseek-v4.1-flash', 'agnes-2.5-flash', 'qwen3.8:27b-mlx']);
+    expect(DEFAULT_ROUTE_CONFIG.fallbackChain).toEqual(['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-2.5-flash', 'kimi-k2.6']);
     expect(DEFAULT_ROUTE_CONFIG.pricing).toBeDefined();
-    expect(Object.keys(DEFAULT_ROUTE_CONFIG.pricing!)).toContain('qwen3.8-flash');
+    expect(Object.keys(DEFAULT_ROUTE_CONFIG.pricing!)).toContain('qwen3.8:27b-mlx');
    });
 
-  it('coding 任务命中 r-coding → deepseek-v4.1-flash', () => {
+  it('coding 任务命中 r-coding → deepseek-v4-pro', () => {
     const eng = new RouteEngine();
-    const t = eng.getNextRoute('coding', 'deepseek-v4.1-flash', DEFAULT_ROUTE_CONFIG);
-    expect(t).toBe('deepseek-v4.1-flash');
+    const t = eng.getNextRoute('coding', 'deepseek-v4-pro', DEFAULT_ROUTE_CONFIG);
+    expect(t).toBe('deepseek-v4-pro');
    });
 
   it('cheap 任务命中 r-cheap → agnes-2.5-flash', () => {

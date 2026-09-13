@@ -49,17 +49,19 @@ describe('M6 D6-a 健康信号端到端接线', () => {
   test('① 未注入 health context：buildHealthCandidates 返 undefined，computeShadowSuggestion 走纯引擎路径', () => {
      expect(buildHealthCandidates(freshConfig())).toBeUndefined();
      // 无 health context → buildHealthCandidates 返 undefined → 引擎走纯 cost-optimization
-     // DEFAULT 里 agnes-2.5-flash pricing=0（免费）→ 最便宜→ 建议 agnes（非 defaultModel）
-     const sugg = computeShadowSuggestion('qwen3.8-flash', genMessages('hello', 'world'), freshConfig());
-  expect(sugg).toBe('agnes-2.5-flash'); // 与 D6-a 前行为一致（纯引擎比价路径，无健康参与）
+     // qwen3.8:27b-mlx 现为 free(0/0) 且是 fallbackChain[0]+defaultModel。
+     // "hello" 被分类为 cheap → r-cheap 指向 local → 选 qwen3.8:27b-mlx(免费、链首位)
+     // → 与 defaultModel 相同 → 噪声抑制返 null（证明仍走纯引擎路径，非异常 fallback）。
+     const sugg = computeShadowSuggestion('qwen3.8:27b-mlx', genMessages('hello', 'world'), freshConfig());
+     expect(sugg).toBeNull();
     });
 
   test('② 注入 health context：候选集按健康映射，cost-optimization 感知健康差异', () => {
     const mon = new MockHealthMonitor() as unknown as HealthMonitor;
     // model→UUID 映射（模拟 start.ts 构建的）
     const m2u = new Map<string, string>([
-       ['qwen3.8-flash', 'PU_QWEN'],
-       ['deepseek-v4.1-flash', 'PU_DS'],
+       ['qwen3.8:27b-mlx', 'PU_QWEN'],
+       ['deepseek-v4-pro', 'PU_DS'],
        ['agnes-2.5-flash', 'PU_AG'],
       ]);
     setHealthContext(mon, m2u);
@@ -72,17 +74,17 @@ describe('M6 D6-a 健康信号端到端接线', () => {
       expect(['ok', 'degraded', 'down']).toContain(c.health);
       expect(typeof c.id).toBe('string');
      }
-    // 'qwen3.8-flash' → healthy → 'ok'；'deepseek-v4.1-flash' → unhealthy → 'down'
-    const qw = candidates!.find((c) => c.id === 'qwen3.8-flash');
-    const ds = candidates!.find((c) => c.id === 'deepseek-v4.1-flash');
+    // 'qwen3.8:27b-mlx' → healthy → 'ok'；'deepseek-v4-pro' → unhealthy → 'down'
+    const qw = candidates!.find((c) => c.id === 'qwen3.8:27b-mlx');
+    const ds = candidates!.find((c) => c.id === 'deepseek-v4-pro');
     expect(qw?.health).toBe('ok');
     expect(ds?.health).toBe('down');
-    // 'qwen3.8:27b-mlx' 无映射 → 'down'（死名）
-    const mlx = candidates!.find((c) => c.id === 'qwen3.8:27b-mlx');
+    // 'kimi-k2.6' 无映射 → 'down'（在 fallbackChain 但不在这个测试的 m2u 中）
+    const mlx = candidates!.find((c) => c.id === 'kimi-k2.6');
     expect(mlx?.health).toBe('down');
     // 健康信号改变了 shadow 建议：deepseek 挂掉 → 不再建议 deepseek
-    const suggBefore = 'deepseek-v4.1-flash';
-    const sugg = computeShadowSuggestion('qwen3.8-flash', genMessages('a', 'b'), freshConfig());
+    const suggBefore = 'deepseek-v4-pro';
+    const sugg = computeShadowSuggestion('kimi-k2.6', genMessages('a', 'b'), freshConfig());
      // deepseek down → rankByCost 把 healthy 的 qwen 排到 deepseek 前，
      // 与纯引擎路径（无健康）不同 → 证明候选集真正被引擎消费
     expect(sugg).not.toBe(suggBefore);
@@ -124,8 +126,8 @@ describe('M6 D6-a 候选集起效（shadow 级，非 defaultModel = 有切换建
     ...DEFAULT_ROUTE_CONFIG,
     strategy: 'cost-optimization',
     pricing: {
-      'qwen3.8-flash':       { input: 0.8, output: 5.4, cacheHit: 0.1 },
-      'deepseek-v4.1-flash': { input: 1,   output: 4,   cacheHit: 0.02 },
+      'qwen3.8:27b-mlx':       { input: 0.8, output: 5.4, cacheHit: 0.1 },
+      'deepseek-v4-pro': { input: 1,   output: 4,   cacheHit: 0.02 },
     },
    };
 
@@ -136,10 +138,10 @@ describe('M6 D6-a 候选集起效（shadow 级，非 defaultModel = 有切换建
          { puuid: 'PU_DS',   state: 'unhealthy' }, // deepseek 宕 → health=down
        ]);
     setHealthContext(mon, modelMap(['PU_QWEN', 'PU_DS']));
-    const sugg = computeShadowSuggestion('qwen3.8-flash', genMessages('a', 'b'), CFG_C);
+    const sugg = computeShadowSuggestion('qwen3.8:27b-mlx', genMessages('a', 'b'), CFG_C);
      // 候选集生效 → cost-optimization 比价路径（非 priority 的 defaultModel）
     expect(sugg).not.toBeNull();
-    expect(sugg!).not.toBe('qwen3.8-flash'); // 健康差异在建议中留痕
+    expect(sugg!).not.toBe('qwen3.8:27b-mlx'); // 健康差异在建议中留痕
     clearHealthContext();
    });
 
@@ -149,9 +151,9 @@ describe('M6 D6-a 候选集起效（shadow 级，非 defaultModel = 有切换建
        { puuid: 'PU_DS', state: 'healthy' },
      ]);
     setHealthContext(mon, modelMap(['PU_AG', 'PU_DS']));
-    const sugg = computeShadowSuggestion('qwen3.8-flash', genMessages('a', 'b'), CFG_C);
+    const sugg = computeShadowSuggestion('qwen3.8:27b-mlx', genMessages('a', 'b'), CFG_C);
     expect(sugg).not.toBeNull();
-    expect(sugg!).not.toBe('qwen3.8-flash'); // agnes 免费 + deepseek 健康均参与 → 比价选最便宜
+    expect(sugg!).not.toBe('qwen3.8:27b-mlx'); // agnes 免费 + deepseek 健康均参与 → 比价选最便宜
     clearHealthContext();
    });
 });
