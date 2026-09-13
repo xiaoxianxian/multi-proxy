@@ -5,13 +5,63 @@
  * 让智能路由引擎「算出它会选谁」并落日志供观测，一段时间后再决定是否真接。
  *
  * 关键不变式（由测试保证）：
- *   - buildShadowSuggestion 是纯计算 + 日志，绝不修改真实路由；
- *   - 仅在 PROXY_ROUTING_SHADOW=1 时产生建议日志；
- *   - 任何异常都被吞掉（影子模式永不影响主链路）。
+ *    - buildShadowSuggestion 是纯计算 + 日志，绝不修改真实路由；
+ *    - 仅在 PROXY_ROUTING_SHADOW=1 时产生建议日志；
+ *    - 任何异常都被吞掉（影子模式永不影响主链路）。
  *
  * 接真实路由属后续独立步骤，本模块只观测。
  */
-import { globalRouteEngine, classifyTask, DEFAULT_ROUTE_CONFIG, type RouteConfig } from './routeEngine.js';
+import { globalRouteEngine, classifyTask, DEFAULT_ROUTE_CONFIG, type RouteConfig, type RouteCandidate } from './routeEngine.js';
+import type { HealthMonitor } from '../monitoring/healthMonitor.js';
+
+// D6-a · 健康信号注入接口
+// start.ts 在 PROXY_HEALTH_MONITOR 门控下创建 HealthMonitor + model→UUID 映射
+// 后调 setHealthContext 注入；本模块在候选集构建时查健康、填 health 字段。
+let _healthMonitor: HealthMonitor | null = null;
+let _modelToProvider: Map<string, string> | null = null;
+
+/**
+ * 由 start.ts（PROXY_HEALTH_MONITOR=1 时）调用，注入健康监控状态。
+ * 不接线时 _healthMonitor=null，候选集构建返回 undefined health。
+ */
+export function setHealthContext(monitor: HealthMonitor, modelToProvider: Map<string, string>): void {
+  _healthMonitor = monitor;
+  _modelToProvider = modelToProvider;
+}
+
+/** 测试辅助：清除健康上下文 */
+export function clearHealthContext(): void {
+  _healthMonitor = null;
+  _modelToProvider = null;
+}
+
+/**
+ * D6-a · 由 model 名 + fallbackChain 构建带健康状态的候选集。
+ *
+ * health 值域：'ok' / 'degraded' / 'down'。
+ * 映射：HealthMonitor.status.state 为 'healthy' → 'ok'；'unhealthy' → 'down'；
+ * 无状态 / 半开 → 'degraded'。
+ *
+ * 纯函数（不碰热路径、不改 DB），异常返回 undefined（候选集构建不崩主链路）。
+ */
+export function buildHealthCandidates(config: RouteConfig): RouteCandidate[] | undefined {
+  if (!_healthMonitor || !_modelToProvider) return undefined;
+  const out: RouteCandidate[] = [];
+  for (const model of config.fallbackChain) {
+    const providerUuid = _modelToProvider.get(model);
+    let health: 'ok' | 'degraded' | 'down' | undefined;
+    if (providerUuid) {
+      const st = _healthMonitor.getStatus(providerUuid);
+      if (st?.state === 'healthy') health = 'ok';
+      else if (st?.state === 'unhealthy') health = 'down';
+      else health = 'degraded'; // 未知 / 半开超时
+    } else {
+      health = 'down'; // 无映射（死名），标记 down，让成本排序跳过
+    }
+    out.push({ id: model, health });
+  }
+  return out.length > 0 ? out : undefined;
+}
 
 /**
  * 影子建议：用 classifyTask + RouteEngine 算出「如果按智能路由，应选谁」。
@@ -26,16 +76,22 @@ export function computeShadowSuggestion(
 ): string | null {
   try {
     const taskType = classifyTask(messages);
-     // 第 4 参数 ctx 当前留空：cost-optimization 暂无候选集（候选健康/价格待 4d 接线）。
-    const suggestion = globalRouteEngine.getNextRoute(taskType, model, config, undefined);
-     // 与引擎默认模型相同时不产生「切换」建议，避免噪声。
+    // D6-a: 健康信号接线——若 HealthMonitor 已注入，用带健康状态的候选集驱动
+    // cost-optimization（健康优先、其次比价）；未接入时传 undefined，行为向后兼容。
+    const candidates = buildHealthCandidates(config);
+    // pricing 仅用于比价；cost-optimization 缺价候选会被跳过。DEFAULT_ROUTE_CONFIG
+    // 已带 pricing，其它自定义 config 若无 pricing 则不注入（rankByCost 退化为按序）。
+    const cfg = config.pricing ? config : { ...config, pricing: undefined };
+    const suggestion = globalRouteEngine.getNextRoute(taskType, model, cfg,
+       { candidates });
+    // 与引擎默认模型相同时不产生「切换」建议，避免噪声。
     if (suggestion && suggestion !== config.defaultModel) {
       return suggestion;
      }
     return null;
    } catch {
-     // 影子模式绝不影响主链路——异常即静默放弃建议。
-     return null;
+      // 影子模式绝不影响主链路——异常即静默放弃建议。
+    return null;
    }
 }
 

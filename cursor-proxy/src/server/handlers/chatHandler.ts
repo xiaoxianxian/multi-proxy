@@ -97,6 +97,37 @@ export function findProviderConfig(modelName: string): ProviderConfig | null {
 }
 
 /**
+ * D6-a · 列出所有已启用的 Provider 配置（健康检查 + 候选集构建单一数据源）。
+ *
+ * 与 findProviderConfig 共享「DB 行 → ProviderConfig（含 key 解密）」的构造，
+ * 但去掉「按 model 名选」的逻辑——这里要全量 enabled provider，供 HealthMonitor
+ * 轮询 /models 与候选集构建复用。绝不触碰 findProviderConfig 热路径。
+ *
+ * 仅只读查询；单条解密/构造失败时静默跳过（健康观测可降级，绝不崩）。
+ */
+export function loadEnabledProviderConfigs(): ProviderConfig[] {
+  const rows = db.prepare(
+    'SELECT * FROM providers WHERE enabled = 1 ORDER BY created_at DESC'
+   ).all() as any[];
+  const out: ProviderConfig[] = [];
+  for (const row of rows) {
+    try {
+      out.push({
+        id: row.id,
+        name: row.name,
+        providerId: row.provider_id as any,
+        apiKey: secrets.decrypt(row.api_key),
+        baseUrl: row.base_url,
+        enabled: row.enabled === 1,
+      });
+    } catch {
+      // 单条解密/构造失败：跳过该 provider，其余照常
+    }
+  }
+  return out;
+}
+
+/**
  * 转发请求到上游 Provider
  */
 export async function forwardToProvider(
