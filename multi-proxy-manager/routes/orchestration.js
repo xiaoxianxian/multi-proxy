@@ -18,6 +18,7 @@ const express = require('express');
 const router = express.Router();
 const { Orchestrator } = require('../../l2/orchestrator.js');
 const { decompose } = require('../../l2/decomposer.js');
+const { makeLlmDecomposer } = require('../../l2/llm-decomposer.js');
 
 // 长寿命单例：协作历史内存态累积（重启即失；持久化留 P3 dir 落盘）
 let _orchestrator = null;
@@ -37,6 +38,24 @@ function getOrchestrator() {
 function isGatedOpen() {
   const v = String(process.env.PROXY_ORCHESTRATION || '').toLowerCase();
   return v === '1' || v === 'true' || v === 'on';
+}
+
+// 门控：PROXY_LLM_DECOMPOSE ∈ {1,true,on} 才用 LLM 拆解，缺省关 → 走内置模板拆解。
+//    LLM 拆解仅发生在 shadow 前置（纯数据、不触真实 adapter），任何失败已在 makeLlmDecomposer 内
+//    降级回 templateDecompose，故关/开都不破坏热路径；默认关 = 零 LLM 依赖、确定可复现。
+function isLlmDecomposeOpen() {
+  const v = String(process.env.PROXY_LLM_DECOMPOSE || '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'on';
+}
+
+// LLM 拆解连接配置（全部来自 env，缺省走内核默认 127.0.0.1:11434）
+function buildLlmCfg() {
+  return {
+    baseUrl: process.env.PROXY_LLM_BASE_URL || undefined,
+    model: process.env.PROXY_LLM_MODEL || undefined,
+    token: process.env.PROXY_LLM_TOKEN || undefined,
+    timeoutMs: process.env.PROXY_LLM_TIMEOUT_MS ? Number(process.env.PROXY_LLM_TIMEOUT_MS) : undefined,
+  };
 }
 
 const NOT_OPEN_MSG =
@@ -72,12 +91,19 @@ router.post('/run', async (req, res) => {
     orch.setShadowMode(shadowMode);
     let result;
     if (dag && Array.isArray(dag.subtasks) && dag.subtasks.length > 0) {
-      // 直供 DAG（跳过拆解，便于测试 + 高级用法）
+       // 直供 DAG（跳过拆解，便于测试 + 高级用法）
       result = await orch.run(dag, { maxRetries, ctx: reqBody.ctx });
-    } else if (typeof input === 'string' && input.length > 0) {
-      // 从原始输入拆解（用单例已注入的 decomposer）
-      result = await orch.runFromInput(input, { maxRetries, ctx: reqBody.ctx });
-    } else {
+     } else if (typeof input === 'string' && input.length > 0) {
+       if (isLlmDecomposeOpen()) {
+        // LLM 拆解（PROXY_LLM_DECOMPOSE 开）：内核内已带失败降级，恒产出合法 DAG →
+        // 走「直供 DAG」同一路径，不触碰单例的 shadow/历史语义。
+        const llmDecompose = makeLlmDecomposer(buildLlmCfg());
+        result = await orch.run(await llmDecompose(input, { input }), { maxRetries, ctx: reqBody.ctx });
+       } else {
+        // 默认：内置模板拆解（确定性、零 LLM 依赖）
+        result = await orch.runFromInput(input, { maxRetries, ctx: reqBody.ctx });
+       }
+     } else {
       return res.status(400).json({ error: 'orchestration-no-input', hint: 'body 须提供 input 或 dag' });
     }
     res.json({
