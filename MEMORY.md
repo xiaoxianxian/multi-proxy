@@ -194,3 +194,18 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 2. **文档归位**：§九「AI 短剧 Jellyfish/火宝」属 h3web 项目（本体在 `~/Documents/AI项目/本地部署Minimax H3/`），已从 multi-proxy §九 47 行正文转为一行指针，防跨项目记忆错配。
 3. **L2 蓝图标注校准**：L2-BLUEPRINT.md 状态行由「未实施，等老板拍板」改为「M6 方向四 + M2 健康增强已闭环（D1-D8/D5 真名/D7 live 200）；L2 P0-P3 新模块蓝图已定待排期」；4.6 健康监控增强标为「部分（M2+D6-a 已做，缺告警/成本分析）」。诚实标注，未实施模块仍记「未开始」。
 4. **章节物理顺序遗留**：MEMORY.md 物理顺序 §八→§十→§九→§十一（§十 物理排在 §九 前），编号按内容保留未重排（避免误改 WorkBuddy 已有内容）。待老板定是否理顺。
+
+---
+
+## 十三、2026-09-14 收口（L1 adapter + WorkBuddy automation + 方向六 P1 worktree）
+
+1. **L2 P0 adapter 收满**：新增 `l2/adapters/l1-agent-adapter.js`（Codex 真 chat / Hermes discovery 退化，25 checks）+ `mock-l1.js` + demo，全 mock-first 零副作用。`l2/` 7 个 demo 全绿（h3web 6 + AIGC 10 + L1 25 + Registry 18 + Plugin 14 + route-engine + validate ALL PASS）。commit `9a46c7f`。
+2. **WorkBuddy 侧趋势 automation 已注册（③）**：`~/.workbuddy/workbuddy.db` 的 `automations` 表新行 `ff900140`「multi-proxy 趋势跟进（L2 蓝图 / 智能路由）」，`schedule_type=recurring` + `rrule=FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=9;BYMINUTE=0` + `next_run_at=1790816400000`（2026-10-01 09:00，与 Hermes cron `44190b9bef9c` 同节奏双保险）。写前双备份（`~/.workbuddy-backups/` + `/tmp/workbuddy-pre-insert-*.db`，`con.backup()` 一致性快照，WAL 感知），写后读回验证；上轮孤立的 `automation-multi-proxy-trend/` 文件夹已移至备份目录。⚠️ 注意：写 db 时 WorkBuddy 进程在跑（改走 WAL 并发写协议，未做 TRUNCATE checkpoint）。**外部事实：真实 automations 表是 10 行，之前记的"9 行"是写前快照**。
+3. **方向六 P1 git worktree 隔离原语落地**：`multi-proxy-manager/lib/worktree-manager.js`（createForSession/exists/remove/prune/list，纯库 + spawn git 零依赖，worktree 落 `~/.multi-proxy-manager/worktrees/<sessionId>`，sessionId/branch/baseRef 字符白名单，remove 永不碰 main checkout）+ `tests/unit/worktree-manager.test.js` 10/10（真 git 仓库往返：隔离性/force/baseRef/注入拒绝/fail-fast）。全量 manager 测试 522/522 零回归。commit `f99111f`。
+4. **方向六 P2/P3 未动**：P2 = 装 Paseo（`brew install --cask paseo`，brew 上确认真实存在 v0.8.0，2026-09-14 开始安装）；P3 = 参照 Emdash/Orca 设计 sessions.json checkpoint + Tmux 保活（依赖 P1 已完成，可排期）。
+5. **未 push 提示**：`9a46c7f`/`0d33824`/`f99111f` 三个 commit 在本地 main，未 push（push 需老板点头）。
+
+### 13.1 教训
+
+- **写外部运行态 db 前查进程**：上轮"WorkBuddy 没在跑可以 TRUNCATE checkpoint"的前提这轮失效了（进程在跑），改为 WAL 并发写 + `con.backup()` 一致性快照。前提变了流程就得跟着变，不能照搬旧脚本。
+- **commit message 与实际改动对齐**：`0d33824` message 写"校准 MEMORY.md §十三"但实际只改了 L2-BLUEPRINT——§十三 是这轮才补写的。message 是给别人（和自己）的契约，写之前对着 `git status -s` 核一遍。
