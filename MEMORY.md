@@ -183,7 +183,7 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 
 1. D6-b 健康感知接生产路由决策（卡 D4=C sign-off，`PROXY_ROUTE_OVERRIDE=1` 灰度）
 2. `getOverrideLog()` 观测 1-2 天，确认 override 建议合理再 sign-off
-3. M7 任务级 Session（§8.5 P0，蓝图已列）；AIGC adapter 缺口（蓝图列、`find -iname "*aigc*"` 为空，P1）
+3. ~~M7 任务级 Session / AIGC adapter 缺口~~→ **已落地**：M7 任务级 Session 即 `multi-proxy-manager/lib/session-store.js`（+ `session-keepalive.js` 方向六 P3-c 胶水）；AIGC adapter 即 `l2/adapters/aigc-adapter.js`（+ `aigc-adapter.demo.js`，L2 P0 收口）。2026-09-13 时点此条记的"未做"，实为 09-14 后已补；保留原文仅作历史锚点。
 
 
 ---

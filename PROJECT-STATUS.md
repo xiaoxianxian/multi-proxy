@@ -161,9 +161,21 @@ cd cursor-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
 | P1-3 | 优化 logs.html 的日志渲染性能 | ✅ 完成 | 事件委托替代 per-line 监听器 (500→1)、搜索输入 250ms 防抖 |
 | P1-4 | 为所有 API 请求添加加载状态 | ✅ 完成 | 全局 loading bar (CSS动画)、3 个页面共 8 个 API 调用已包裹 loading 状态 |
 
-## 剩余待办（无）
+## 剩余待办（校准于 2026-09-14）
 
-所有 P0 和 P1 任务已完成。项目处于可验收状态（修复环境问题后）。
+> 本节原为 2026-07-04 老快照，称"剩余待办（无）/ 全部可验收"，已严重滞后，以下为按代码现状订正（2026-09-14）。
+
+**主干已收口**：M1-M5 + M6 方向四（智能派发引擎+shadow 已实现，生产路由 gated）+ M2 健康增强 + M7 任务级 Session（`session-store.js`/`session-keepalive.js`）+ L2 P0 三模块（含 AIGC/记忆/技能规范互通）。全量测试 763/763 全绿。
+
+**仍未完成（非 bug，属规划项）**：
+1. D6-b 健康感知接生产路由——gated，卡 D4 sign-off（`getOverrideLog` 观测 1-2 天，现状零生产改动）
+2. L2 P1 记忆/技能服务完整版（完整合并/适配器/注入/CRUD）
+3. L2 P2 编排引擎完整方案（拆解+执行+聚合+5 用例含 h3web 视频流）
+4. L2 P2 健康监控增强（告警 + 成本分析）
+5. L2 P3 文档/3 案例/性能测试报告
+6. P5 可选：Marvis 式 GUI 看板 / 编排面板 + 插件市场 UI（可延后）
+
+详见 `MEMORY.md §13` + `L2-BLUEPRINT.md` 方向六/排期表。
 
 ## 环境问题与修复
 
