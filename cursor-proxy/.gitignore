@@ -34,3 +34,6 @@ prisma/migrations/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+
+# D6-b override 审计日志（运行时落盘，非源码，不进库；append-only）
+data/*.jsonl
