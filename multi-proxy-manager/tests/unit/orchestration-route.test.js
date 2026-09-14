@@ -26,7 +26,9 @@ describe('L2 P2 orchestration route (/api/orchestration)', () => {
 
   afterEach(() => {
     delete process.env.PROXY_ORCHESTRATION;
-   });
+    delete process.env.PROXY_LLM_DECOMPOSE;
+    delete process.env.PROXY_LLM_BASE_URL;
+    });
 
   it('门控关(默认)：GET + POST 均 403，零副作用', async () => {
     build();
@@ -100,5 +102,49 @@ describe('L2 P2 orchestration route (/api/orchestration)', () => {
     await request(app).post('/api/orchestration/run').send({ dag });
     const hist = await request(app).get('/api/orchestration');
     expect(hist.body.length).toBe(2);
-   });
+    });
+
+  it('LLM 拆解(默认关)：input 走内置模板，200 + template 非 llm', async () => {
+    process.env.PROXY_ORCHESTRATION = '1';              // PROXY_LLM_DECOMPOSE 不设置 → 关
+    build();
+    const r = await request(app).post('/api/orchestration/run')
+        .send({ input: '做一个短片 视频创作 demo' });
+    expect(r.status).toBe(200);
+    expect(r.body.template).toBe('video-workflow');      // 内置模板，非 LLM
+    });
+
+  it('LLM 拆解(开)：真 http 假 LLM → 200 + template=llm + 子任务全 done', async () => {
+    const http = require('http');
+    const dagJson = JSON.stringify({
+      subtasks: [
+            { id: 'design', type: 'plan', prompt: '设计', deps: [] },
+            { id: 'impl', type: 'code', prompt: '实现', deps: ['design'] },
+          ],
+    });
+    const server = http.createServer((req, res) => {
+      let buf = '';
+      req.on('data', (c) => { buf += c; });
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: 'x', model: 'default',
+             choices: [{ message: { content: dagJson } }] }));
+        });
+     });
+    await new Promise((res) => server.listen(0, '127.0.0.1', res));
+    const port = server.address().port;
+
+    process.env.PROXY_ORCHESTRATION = '1';
+    process.env.PROXY_LLM_DECOMPOSE = '1';
+    process.env.PROXY_LLM_BASE_URL = `http://127.0.0.1:${port}`;
+    build();
+    try {
+       const r = await request(app).post('/api/orchestration/run').send({ input: '帮我做带设计+实现的东西' });
+      expect(r.status).toBe(200);
+      expect(r.body.template).toBe('llm');                 // 走了 LLM 拆解
+      expect(r.body.subtasks.length).toBe(2);
+      expect(r.body.subtasks.every((s) => s.status === 'done')).toBe(true);
+     } finally {
+       server.close();
+     }
+    });
 });

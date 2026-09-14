@@ -81,7 +81,18 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **orchestrator.js**：拆解 DAG → 拓扑调度（无依赖子任务并行、条件分支 `when(ctx)` 跳过、重试 `retry` + 降级 `fallback`）→ 经可注入 `executor` 执行 → 聚合（JSON + Markdown 报告）→ 协作历史。
 - **非侵入④ + shadow 优先**：默认 shadow 只跑调度不触真实 adapter（executor 零调用）；协作历史默认仅内存，注入 `dir` 才原子落盘（写注入 dir，绝不写 home/agent 文件）；全程零依赖。
 - **修复 2 个调度真 bug（真跑发现，非纸面）**：① `for (const id of ready) remaining.delete(id)`——`ready` 元素是子任务对象非 id，导致 `remaining` 永不收敛；② 全 done 时误把全部子任务标 `blocked`。改用 `processed/total` 驱动终止。
-- 真跑：`node l2/decomposer.demo.js`（19 PASS）+ `node l2/orchestrator.demo.js`（16 PASS，含 5 用例 + 条件分支 + 容错重试降级 + 环拒绝 + 非侵入落盘）。
+- **真跑**：`node l2/decomposer.demo.js`（19 PASS）+ `node l2/orchestrator.demo.js`（16 PASS，含 5 用例 + 条件分支 + 容错重试降级 + 环拒绝 + 非侵入落盘）。
+
+## llm-decomposer.js — LLM 拆解内核（P2.2 · 填 `llmDecompose` 预留缝）
+
+`decomposer.js` 预留的 `llmDecompose` 注入缝，由本内核填充（P2.2 落地，2026-09-15）：
+- **`makeLlmDecomposer(cfg)`**：返回 `async (input, opts) => DAG`，形状即 `decompose(input, { llmDecompose })` 缝。默认传输 = OpenAI 兼容 `/v1/chat/completions`（node 内置 http，零依赖，与 `adapters/l1-agent-adapter.js` 同构）。
+- **transport 可注入**（cfg.transport）——测试用内存替身不触网络；缺省走 http。
+- **四道纪律**：① 非侵入（只产 DAG 数据，不写盘/不改 agent 配置/不触真实上游，shadow 前置）；② **容错优先**——LLM 宕机/非法 JSON/自环 DAG/退化空，一律降级回 `templateDecompose`，绝不把异常冒泡进编排热路径；③ `hasCycle` 对 LLM 输出**复算**（幻觉出环 → 拒收降级）；④ 零 LLM 依赖为默认。
+- **`meta.source`** 标识走 `llm` 还是降级 `template(...)`；降级原因归类 `llm-down`/`llm-http-error`/`llm-bad-json`/`llm-error`。
+- 生产接线：`routes/orchestration.js` 门控 `PROXY_LLM_DECOMPOSE`（默认关→走内置模板，确定可复现；开→LLM 拆解，LLM 配置全来自 env `PROXY_LLM_BASE_URL/MODEL/TOKEN/TIMEOUT_MS`）。
+- 真跑：`node l2/llm-decomposer.demo.js`（**19 PASS**，真起 http 假 LLM + 全降级路径 + 注入 + 接 Orchestrator）；jest `tests/unit/llm-decomposer.test.js`（8 例）+ `tests/unit/orchestration-route.test.js` 扩 2 例。全 manager jest **556/556**（34 suites）。
+- **真跑教训**：默认 http 传输首版返回整个 OpenAI 信封当 `content`，致解析失败全降级；修复=传输内解信封取 `choices[0].message.content`，与注入 transport 契约（content=助手消息文本）对齐。
 
 ## 铁律（落地前必读）
 
