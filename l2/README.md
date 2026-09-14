@@ -94,6 +94,14 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - 真跑：`node l2/llm-decomposer.demo.js`（**19 PASS**，真起 http 假 LLM + 全降级路径 + 注入 + 接 Orchestrator）；jest `tests/unit/llm-decomposer.test.js`（8 例）+ `tests/unit/orchestration-route.test.js` 扩 2 例。全 manager jest **556/556**（34 suites）。
 - **真跑教训**：默认 http 传输首版返回整个 OpenAI 信封当 `content`，致解析失败全降级；修复=传输内解信封取 `choices[0].message.content`，与注入 transport 契约（content=助手消息文本）对齐。
 
+## memory-merge.js — 记忆服务内核（P1.1a · §4.4 公共+个性 + §5.2 非侵入投影）
+
+- 内核：`merge(shared, personal, opts)`（公共+个性按 key 合并，冲突策略 `personal`（默认覆盖）/`shared`/`error`）+ `envInject(merged, opts)`（投影环境变量 `AGENT_SYSTEM_PROMPT/ERROR_PATTERNS/TOOLS_ALLOWED/CONFIG/MEMORY_CONTEXT`，type→目标可配，多同类倒序、超长截断）+ `registerAdapter/getAdapters`（可热插拔 scheme 适配器：json 规范 canonical / yaml-text 纯文本零依赖 / view 摘要）。
+- **非侵入铁律（§5.2）**：`envInject` **只产出映射对象、绝不写 `process.env`、绝不碰 `~/.codex·~/.hermes·~/.cursor`**——agent 感知不到中枢，真正注 env 是调用方 agent 启动时拿映射去做。全默认零网络零文件零 LLM。
+- 真跑：`node l2/memory-merge.demo.js`（**11 PASS**，含非侵入证明：跑完全程 process.env 不漏内核 5 个 AGENT_* 键）；jest `tests/unit/memory-merge.test.js`（14 例）。全 manager jest **570/570**（35 suites）。规范格式权威校验仍 `node l2/specs/validate.mjs`（ALL PASS）。
+- **真跑教训**：① demo 抓到 kernel bug——`merge` 的 `personal` 策略原漏替换胜出方数据字段，致"个性覆盖公共"假绿，修=胜出时用 e 覆盖 cur 全字段；② `process.exit(pass+fail===0?0:1)` 总非零致全绿 demo 在 CI 报 fail，修=`process.exit(fail===0?0:1)`。
+- **边界**：P1.1a 止于合并+适配器+投影；P1.1b（agent 启动真注 env 接线 + 持久化）暂无非侵入接入缝，列后续（YAGNI）。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；
