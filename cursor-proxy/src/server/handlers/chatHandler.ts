@@ -1,10 +1,16 @@
 import { Request, Response } from 'express';
 import { fetch } from 'undici';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ProviderRegistry } from '../../providers/registry.js';
 import { ProviderAdapter, ProviderConfig } from '../../providers/base.js';
 import { db } from '../../db/database.js';
 import { SecretsManager } from '../../utils/crypto.js';
 import { routeShadow } from '../../routing/routing-shadow.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const secrets = new SecretsManager();
 
@@ -42,16 +48,73 @@ export interface OverrideLogEntry {
 const OVERRIDE_LOG_MAX = 1000;
 const overrideLog: OverrideLogEntry[] = [];
 
+// D6-b · 持久化审计 sink（可注入，默认关闭）
+// 内存环形缓冲 overrideLog 是实时快照、重启即失；持久化 sink 把每条 override 决策
+// 按 JSONL 追加落盘，供灰度期跨重启复盘。默认 sink=null（行为与改造前逐字节一致，
+// 3 个现有测试零破坏）；由 start.ts 在 PROXY_ROUTE_OVERRIDE 门控开启时接上落盘——
+// 门控关 → 零写盘、零热路径开销（与"D6-b 灰度 hold"语义对齐）。
+let overrideAuditSink: string | null = null;
+
+/** 接上/切走持久化落盘路径；传 null 关闭。仅改指向，不截断既有文件（审计 append-only）。 */
+export function setOverrideLogSink(filePath: string | null): void {
+  overrideAuditSink = filePath;
+}
+
+/** 当前持久化落盘路径（未接时为 null）。 */
+export function getOverrideAuditPath(): string | null {
+  return overrideAuditSink;
+}
+
+function defaultOverrideAuditPath(): string {
+  return path.join(__dirname, '..', '..', '..', 'data', 'override-audit.jsonl');
+}
+
 export function recordOverrideEntry(entry: OverrideLogEntry): void {
   overrideLog.push(entry);
   if (overrideLog.length > OVERRIDE_LOG_MAX) {
     overrideLog.shift();
-   }
+  }
+  // 持久化追加：异常绝不冒泡（审计是旁路，绝不拖垮路由主链路，与影子模式同原则）。
+  if (overrideAuditSink) {
+    try {
+      fs.mkdirSync(path.dirname(overrideAuditSink), { recursive: true });
+      fs.appendFileSync(overrideAuditSink, JSON.stringify(entry) + '\n');
+    } catch {
+      // 落盘失败静默吞掉——主链路优先。
+    }
+  }
 }
 
-/** 只读快照：审计 / 不变式测试用。 */
+/** 只读快照（内存）：审计 / 不变式测试用。 */
 export function getOverrideLog(): ReadonlyArray<OverrideLogEntry> {
   return overrideLog.slice();
+}
+
+/**
+ * 读持久化审计日志（跨重启留存）——D6-b 灰度 sign-off 观测的真正入口。
+ * getOverrideLog 只读内存（重启即失），readOverrideAudit 读盘才有长期观测价值。
+ * @param opts.limit 取最近 N 条（默认全量，尾部）。
+ * @param opts.path  指定文件（默认当前 sink；未设时回退默认 data/ 路径）。
+ */
+export function readOverrideAudit(opts: { limit?: number; path?: string } = {}): OverrideLogEntry[] {
+  const file = opts.path ?? overrideAuditSink ?? defaultOverrideAuditPath();
+  if (!fs.existsSync(file)) return [];
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const out: OverrideLogEntry[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      out.push(JSON.parse(line));
+    } catch {
+      // 坏行跳过，不整批丢弃
+    }
+  }
+  return typeof opts.limit === 'number' ? out.slice(-opts.limit) : out;
 }
 
 export function clearOverrideLog(): void {
