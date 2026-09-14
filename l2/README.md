@@ -74,6 +74,15 @@ Agent Profile 的 CRUD + 能力标签注册/查询，编排引擎"按能力路�
 - **下游替身**：`mock-aigc.js`（node 最小 HTTP，模拟 AIGC FastAPI 的 `/api/v1/tasks*` 状态机 + Bearer 鉴权 + 7 subtype），零副作用——不起真 AIGC、不触生图/生视频云端。**真实"起 AIGC 服务 + 真文生视频 round-trip"属 P1**（AIGC 当前未运行、需真实 token、需云端调用）。
 - 真跑：`node l2/adapters/aigc-adapter.demo.js`（**10 checks 全 PASS**，含鉴权 401 路径 + cancel）。
 
+## decomposer.js + orchestrator.js — 任务拆解 + 编排调度内核（P2 增量 6 · 收口）
+
+L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engine 之上：
+- **decomposer.js**：规则模板拆解（`fastapi-jwt` / `video-workflow` 两条内置 + 兜底单节点）+ 可注入 `llmDecompose`（接口预留，不内置 LLM）+ 可注入 `templates` 缝 + `hasCycle` 环检测。**19 checks PASS**。
+- **orchestrator.js**：拆解 DAG → 拓扑调度（无依赖子任务并行、条件分支 `when(ctx)` 跳过、重试 `retry` + 降级 `fallback`）→ 经可注入 `executor` 执行 → 聚合（JSON + Markdown 报告）→ 协作历史。
+- **非侵入④ + shadow 优先**：默认 shadow 只跑调度不触真实 adapter（executor 零调用）；协作历史默认仅内存，注入 `dir` 才原子落盘（写注入 dir，绝不写 home/agent 文件）；全程零依赖。
+- **修复 2 个调度真 bug（真跑发现，非纸面）**：① `for (const id of ready) remaining.delete(id)`——`ready` 元素是子任务对象非 id，导致 `remaining` 永不收敛；② 全 done 时误把全部子任务标 `blocked`。改用 `processed/total` 驱动终止。
+- 真跑：`node l2/decomposer.demo.js`（19 PASS）+ `node l2/orchestrator.demo.js`（16 PASS，含 5 用例 + 条件分支 + 容错重试降级 + 环拒绝 + 非侵入落盘）。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；
