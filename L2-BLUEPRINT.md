@@ -398,7 +398,7 @@
 | **P2 Paseo 安装验证** | `brew install --cask paseo` + daemon 探针 | ✅ 已验证 2026-09-14：Paseo 0.8.0 装上，daemon 起于 127.0.0.1:6767（PID 86062），Codex provider available（Claude not found）。daemon relay disabled（安全模式） |
 | **P3-a 设计草案** | `l2/p3-sessions-checkpoint-design.md` | ✅ 已落盘 commit `58d30da`（checkpoint schema + tmux-keepalive 原语 + 崩溃恢复流程 + 与 P1 协同） |
 | **P3-b tmux-keepalive 实现** | `lib/tmux-keepalive.js` + 测试 | ✅ 已落地 `lib/tmux-keepalive.js` + `tests/unit/tmux-keepalive.test.js`（10/10 全绿，真 tmux 3.7c 往返 + 注入假 binary 覆盖 not-found 降级；per-binary 可用性守卫；m7- 前缀隔离自有 session 不碰用户） |
-| **P3-c session-store 接入** | checkpoint 写入/读取 + tmux 关联 | 就绪待开：P3-b 原语已就绪，可接入 `lib/session-store.js` 的 `steps[].checkpoint` 字段 |
-| **P3-d 崩溃恢复 e2e** | 杀进程 → 重启 → 续跑 | 等 P3-c |
+| **P3-c session-store 接入** | `lib/session-keepalive.js` 胶水层 + 测试 | ✅ 已落地 commit 待 push：`bindSessionKeepalive`（起 tmux + 写 checkpoint）/ `resumeSessionKeepalive`（从 checkpoint 读 tmux 名 + 崩溃重建）；非侵入（不碰 session-store 热路径，opt-in）；6/6 全绿，真 SessionStore+TmuxKeepalive 联调 |
+| **P3-d 崩溃恢复 e2e** | 杀进程 → 重启 → 续跑 | ✅ 核心场景已在 P3-c 覆盖：「resume 模拟崩溃(tmux 被杀) → 从 checkpoint 自动重建」已全绿；完整进程级杀-重启闭环待补 |
 
 **Paseo 验证结论（P2）**：Paseo 已能管本地 agent（Codex available），daemon 模式跑通。P3-b 是否自研 tmux 保活，取决于 Paseo 的保活能力是否满足需求——Paseo 自带 daemon + 多端监工，可能可直接借用，不必自研。建议老板决定：**P3-b 继续自研 or 直接用 Paseo 原生能力**。
