@@ -1,0 +1,152 @@
+#!/usr/bin/env node
+'use strict';
+
+// override-audit-report — D6-b · override 决策审计复盘脚本（sign-off 用）
+//
+// 背景：D6-b 把 override 决策审计落成 data/override-audit.jsonl（append-only），
+// 但"观测 1-2 天再 sign-off"需要把散行 JSONL 汇总成人能读的报告。本脚本读盘、
+// 聚合、出报告，sign-off 那天跑一下即可判断"override 是否值得开闸门"。
+//
+// 设计（零依赖，纯 stdlib fs，与 tools/agent-proxy-switch 同风格）：
+//   - 默认读 cursor-proxy/data/override-audit.jsonl；可 --file <path> 覆盖
+//   - 坏行跳过（与 readOverrideAudit 同原则），不整批丢
+//   - 聚合：总决策数 / 命中数(applied) / 命中率 / 按 taskType 分布 / 按 provider 分布
+//   - sign-off 判定：命中率为 0 或样本 < 阈值 → 建议继续观测；否则给报告
+//
+// 用法：
+//   node tools/override-audit-report [--file <path>] [--since <ISO>] [--min-sample N]
+//   --since   只统计该时间戳（ISO）之后的条目
+//   --min-sample  判定的最少样本数（默认 50）
+
+const fs = require('fs');
+const path = require('path');
+
+// ---- 参数解析 ----
+function parseArgs(argv) {
+  const opts = { file: null, since: null, minSample: 50 };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--file' && argv[i + 1]) opts.file = argv[++i];
+    else if (a === '--since' && argv[i + 1]) opts.since = argv[++i];
+    else if (a === '--min-sample' && argv[i + 1]) opts.minSample = parseInt(argv[++i], 10) || 50;
+  }
+  return opts;
+}
+
+// ---- 默认审计路径：tools/ 与 cursor-proxy/ 同级 ----
+function defaultAuditPath() {
+  const repoRoot = path.resolve(__dirname, '..');
+  return path.join(repoRoot, 'cursor-proxy', 'data', 'override-audit.jsonl');
+}
+
+// ---- 读盘 + 坏行跳读（与 chatHandler.readOverrideAudit 同原则）----
+function loadAudit(file, since) {
+  if (!fs.existsSync(file)) return { entries: [], skipped: 0 };
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {
+    return { entries: [], skipped: 0 };
+  }
+  const entries = [];
+  let skipped = 0;
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let obj;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      skipped++;
+      continue;
+    }
+    if (since && obj.timestamp && String(obj.timestamp) < String(since)) continue;
+    entries.push(obj);
+  }
+  return { entries, skipped };
+}
+
+// ---- 聚合 ----
+function aggregate(entries, minSample) {
+  const total = entries.length;
+  let applied = 0;
+  const byTaskType = Object.create(null);
+  const byProvider = Object.create(null);
+  for (const e of entries) {
+    if (e.applied === true || e.applied === 'true') applied++;
+    const t = e.engineTaskType ?? e.taskType ?? '(unknown)';
+    byTaskType[t] = (byTaskType[t] || 0) + 1;
+    const p = e.provider ?? '(unknown)';
+    byProvider[p] = (byProvider[p] || 0) + 1;
+  }
+  const hitRate = total > 0 ? applied / total : 0;
+  // sign-off 判定
+  let verdict;
+  if (total === 0) {
+    verdict = 'NO_DATA';         // 无样本（闸门未开或无 override 决策）
+  } else if (total < minSample) {
+    verdict = 'OBSERVING';       // 样本不足，继续观测
+  } else if (hitRate === 0) {
+    verdict = 'NO_OVERRIDE';     // 有样本但引擎从不真正 override → 无需开闸门
+  } else {
+    verdict = 'SIGNOFF_READY';   // 样本充足且有真实命中 → 可评估开闸门
+  }
+  return { total, applied, hitRate, byTaskType, byProvider, verdict, minSample };
+}
+
+function distTable(title, dist) {
+  const rows = Object.entries(dist).sort((a, b) => b[1] - a[1]);
+  if (rows.length === 0) return `${title}：（无）\n`;
+  const max = Math.max(...rows.map((r) => r[1]));
+  let out = `${title}（按频次降序）\n`;
+  for (const [k, v] of rows) {
+    const bar = '█'.repeat(Math.max(1, Math.round((v / max) * 24)));
+    out += `  ${k.padEnd(20)} ${String(v).padStart(5)}  ${bar}\n`;
+  }
+  return out;
+}
+
+// ---- 主流程 ----
+function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  const file = opts.file || defaultAuditPath();
+
+  if (!fs.existsSync(file)) {
+    console.log(`[override-audit-report] 审计文件不存在：${file}`);
+    console.log('  原因：PROXY_ROUTE_OVERRIDE 默认关，无 override 决策落盘（符合预期，D6-b 仍 hold）。');
+    console.log('  开灰度后：PROXY_ROUTE_OVERRIDE=1 node cursor-proxy/src/server/start.ts，');
+    console.log('  本脚本即可出报告。');
+    process.exit(3);
+  }
+
+  const { entries, skipped } = loadAudit(file, opts.since);
+  const a = aggregate(entries, opts.minSample);
+  const pct = (n) => (n * 100).toFixed(1) + '%';
+
+  console.log('=== D6-b override 决策审计复盘报告 ===');
+  console.log(`审计文件：${file}`);
+  if (opts.since) console.log(`时间窗：${opts.since} 之后`);
+  console.log(`总决策：${a.total}  实际生效(applied=true)：${a.applied}  命中率：${pct(a.hitRate)}`);
+  if (skipped > 0) console.log(`（已跳过 ${skipped} 条坏行）`);
+  console.log('');
+  process.stdout.write(distTable('按任务类型 taskType', a.byTaskType));
+  process.stdout.write(distTable('按 provider', a.byProvider));
+  console.log('--- sign-off 判定 ---');
+  switch (a.verdict) {
+    case 'NO_DATA':
+      console.log('NO_DATA：无 override 样本，无法判定。开 PROXY_ROUTE_OVERRIDE=1 观测。');
+      break;
+    case 'OBSERVING':
+      console.log(`OBSERVING：样本 ${a.total} < 最低 ${a.minSample}，继续观测（或 --min-sample 调低）`);
+      break;
+    case 'NO_OVERRIDE':
+      console.log('NO_OVERRIDE：有样本但命中率 0——引擎从未真正 override，无需开闸门。');
+      break;
+    case 'SIGNOFF_READY':
+      console.log(`SIGNOFF_READY：样本 ${a.total} ≥ ${a.minSample} 且命中率 ${pct(a.hitRate)}，可评估开闸门。`);
+      break;
+  }
+}
+
+if (require.main === module) main();
+
+module.exports = { loadAudit, aggregate, parseArgs, defaultAuditPath, distTable };
