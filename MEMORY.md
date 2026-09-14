@@ -205,8 +205,8 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 4. **方向六 P2/P3 全部落地**：P2 = Paseo 0.8.0 安装 + daemon 验证（`127.0.0.1:6767`，Codex provider available，relay disabled 安全模式）。P3 四步全收口：P3-a 设计草案 `l2/p3-sessions-checkpoint-design.md`（`58d30da`）→ P3-b `lib/tmux-keepalive.js` 保活原语 10/10（`fc5cf96`，真 tmux 3.7c 往返 + per-binary 可用性守卫 + m7- 前缀隔离）→ P3-c `lib/session-keepalive.js` 胶水层 6/6（`9641925`，非侵入：bindSessionKeepalive/resumeSessionKeepalive 走 checkpoint 预埋字段，不碰 session-store 热路径）→ P3-d `tests/unit/p3d-crash-recovery.test.js` 崩溃恢复 e2e 2/2（`754fedd`，进程级 kill-重启-续跑 + 二次崩溃循环）。M7 长任务保活链路打通：worktree 隔离 → tmux 保活 → checkpoint 落盘 sessions.json → 崩溃后从 checkpoint 自动重建。全量 540/540 tests（32 suites）零回归。
 5. **全部已 push**：至 `60b970e` 全部在 `origin/main`（local=origin diff 0），含 P3-b/c/d + L2-BLUEPRINT P1-P3 状态行回填。
 6. **挂起项（新会话接手）**：
-   - **P3-c.1 Paseo 对接**（决策：先不动）：Paseo 已暴露 `import`/`hooks`/`terminal`/`daemon` 能力，可把 M7 session 注册进 Paseo 做 agent 管理（用其原生保活替代外层）。P3-c 已自洽稳定，此为优化非缺口，需单独立项评估。
-   - **`MUNDER-REFERENCE-NOTE.md` 入库判断**：根目录 untracked 的 106 行设计借鉴笔记（Munder Difflin → L2：registry schema 扩展 / single-writer / GOD 分级 gate / FIPA-lite act+hops / 记忆层选型 5 个可抄点，见第 4 节落地优先级）。非本次产出，是否作为 docs 参考文档入库待老板定。
+   - **P3-c.1 Paseo 对接 — 已评估（2026-09-14，`5663044`）**：立项评估入 `l2/p3-c1-paseo-integration.md`，结论维持现状（方案 A）——P3-c 自研 tmux 保活（fc5cf96）+ 崩溃恢复 e2e（754fedd）已完全自洽、零外部依赖，非缺口；Paseo 0.8.0 保活能力绑其自身 agent 生命周期（`run`/`import`/`send`/`wait`），无「绑定任意本地 session 做 tmux 式保活」的通用 API，`import` 只吃 provider 原生 session/thread id（已核实），接不进 M7 体系外本地 session。Paseo 唯一增量=多端/手机续看；全替代（C）性价比负不做。触发条件=明确的「手机端续看长跑任务」需求，届时走外包式对接（B：`paseo run -d` + sessions.json 记 `paseoAgentId` + `attach/logs` 续看，P3-c 保活不回归）。
+   - **`MUNDER-REFERENCE-NOTE.md` 已入库（2026-09-14，`5663044`）**：根目录 106 行 Munder Difflin→L2 设计借鉴笔记（5 可抄点：registry schema 扩展 / single-writer 搬箱 / GOD 分级 gate / FIPA-lite act+hops / 记忆层 markdown+FTS 优先），按根目录平铺 `*.md` 惯例 git add 入库（零移动零改写）。配套 `MEMORY-2026-09-12.md`（09-12 会话日志）同 commit 一并入库。
    - **D6-b 灰度**：继续 hold，等部署验收。
 
 ### 13.1 教训
