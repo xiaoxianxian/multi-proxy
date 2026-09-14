@@ -202,8 +202,12 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 1. **L2 P0 adapter 收满**：新增 `l2/adapters/l1-agent-adapter.js`（Codex 真 chat / Hermes discovery 退化，25 checks）+ `mock-l1.js` + demo，全 mock-first 零副作用。`l2/` 7 个 demo 全绿（h3web 6 + AIGC 10 + L1 25 + Registry 18 + Plugin 14 + route-engine + validate ALL PASS）。commit `9a46c7f`。
 2. **WorkBuddy 侧趋势 automation 已注册（③）**：`~/.workbuddy/workbuddy.db` 的 `automations` 表新行 `ff900140`「multi-proxy 趋势跟进（L2 蓝图 / 智能路由）」，`schedule_type=recurring` + `rrule=FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=9;BYMINUTE=0` + `next_run_at=1790816400000`（2026-10-01 09:00，与 Hermes cron `44190b9bef9c` 同节奏双保险）。写前双备份（`~/.workbuddy-backups/` + `/tmp/workbuddy-pre-insert-*.db`，`con.backup()` 一致性快照，WAL 感知），写后读回验证；上轮孤立的 `automation-multi-proxy-trend/` 文件夹已移至备份目录。⚠️ 注意：写 db 时 WorkBuddy 进程在跑（改走 WAL 并发写协议，未做 TRUNCATE checkpoint）。**外部事实：真实 automations 表是 10 行，之前记的"9 行"是写前快照**。
 3. **方向六 P1 git worktree 隔离原语落地**：`multi-proxy-manager/lib/worktree-manager.js`（createForSession/exists/remove/prune/list，纯库 + spawn git 零依赖，worktree 落 `~/.multi-proxy-manager/worktrees/<sessionId>`，sessionId/branch/baseRef 字符白名单，remove 永不碰 main checkout）+ `tests/unit/worktree-manager.test.js` 10/10（真 git 仓库往返：隔离性/force/baseRef/注入拒绝/fail-fast）。全量 manager 测试 522/522 零回归。commit `f99111f`。
-4. **方向六 P2/P3 未动**：P2 = 装 Paseo（`brew install --cask paseo`，brew 上确认真实存在 v0.8.0，2026-09-14 开始安装）；P3 = 参照 Emdash/Orca 设计 sessions.json checkpoint + Tmux 保活（依赖 P1 已完成，可排期）。
-5. **未 push 提示**：`9a46c7f`/`0d33824`/`f99111f` 三个 commit 在本地 main，未 push（push 需老板点头）。
+4. **方向六 P2/P3 全部落地**：P2 = Paseo 0.8.0 安装 + daemon 验证（`127.0.0.1:6767`，Codex provider available，relay disabled 安全模式）。P3 四步全收口：P3-a 设计草案 `l2/p3-sessions-checkpoint-design.md`（`58d30da`）→ P3-b `lib/tmux-keepalive.js` 保活原语 10/10（`fc5cf96`，真 tmux 3.7c 往返 + per-binary 可用性守卫 + m7- 前缀隔离）→ P3-c `lib/session-keepalive.js` 胶水层 6/6（`9641925`，非侵入：bindSessionKeepalive/resumeSessionKeepalive 走 checkpoint 预埋字段，不碰 session-store 热路径）→ P3-d `tests/unit/p3d-crash-recovery.test.js` 崩溃恢复 e2e 2/2（`754fedd`，进程级 kill-重启-续跑 + 二次崩溃循环）。M7 长任务保活链路打通：worktree 隔离 → tmux 保活 → checkpoint 落盘 sessions.json → 崩溃后从 checkpoint 自动重建。全量 540/540 tests（32 suites）零回归。
+5. **全部已 push**：至 `60b970e` 全部在 `origin/main`（local=origin diff 0），含 P3-b/c/d + L2-BLUEPRINT P1-P3 状态行回填。
+6. **挂起项（新会话接手）**：
+   - **P3-c.1 Paseo 对接**（决策：先不动）：Paseo 已暴露 `import`/`hooks`/`terminal`/`daemon` 能力，可把 M7 session 注册进 Paseo 做 agent 管理（用其原生保活替代外层）。P3-c 已自洽稳定，此为优化非缺口，需单独立项评估。
+   - **`MUNDER-REFERENCE-NOTE.md` 入库判断**：根目录 untracked 的 106 行设计借鉴笔记（Munder Difflin → L2：registry schema 扩展 / single-writer / GOD 分级 gate / FIPA-lite act+hops / 记忆层选型 5 个可抄点，见第 4 节落地优先级）。非本次产出，是否作为 docs 参考文档入库待老板定。
+   - **D6-b 灰度**：继续 hold，等部署验收。
 
 ### 13.1 教训
 
