@@ -388,3 +388,17 @@
 ---
 
 *最后更新：2026-09-11 v2（决策对齐）→ 2026-09-13 Hermes 补充：M6 方向四 / M2 健康增强 已闭环；L2 P0-P3 待排期，确认后再动手。*
+---
+
+## 方向六 P1-P3 实施状态（2026-09-14）
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| **P1 worktree 隔离** | `lib/worktree-manager.js` + 测试 | ✅ 已落地 commit `f99111f`（522/522 全绿，真 git 往返） |
+| **P2 Paseo 安装验证** | `brew install --cask paseo` + daemon 探针 | ✅ 已验证 2026-09-14：Paseo 0.8.0 装上，daemon 起于 127.0.0.1:6767（PID 86062），Codex provider available（Claude not found）。daemon relay disabled（安全模式） |
+| **P3-a 设计草案** | `l2/p3-sessions-checkpoint-design.md` | ✅ 已落盘 commit `58d30da`（checkpoint schema + tmux-keepalive 原语 + 崩溃恢复流程 + 与 P1 协同） |
+| **P3-b tmux-keepalive 实现** | `lib/tmux-keepalive.js` + 测试 | 就绪待开：tmux 3.7c 已装，P1 worktree 已落地。待老板确认是否现在实施 |
+| **P3-c session-store 接入** | checkpoint 写入/读取 + tmux 关联 | 等 P3-b |
+| **P3-d 崩溃恢复 e2e** | 杀进程 → 重启 → 续跑 | 等 P3-c |
+
+**Paseo 验证结论（P2）**：Paseo 已能管本地 agent（Codex available），daemon 模式跑通。P3-b 是否自研 tmux 保活，取决于 Paseo 的保活能力是否满足需求——Paseo 自带 daemon + 多端监工，可能可直接借用，不必自研。建议老板决定：**P3-b 继续自研 or 直接用 Paseo 原生能力**。
