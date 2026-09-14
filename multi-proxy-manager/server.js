@@ -62,6 +62,9 @@ app.use('/api', controlRoutes);
 // L2 P0 Registry：必须挂在代理 wildcard（apiRoutes 的 /:proxy/*）之前，
 // 否则 /api/registry/agents 会被 :proxy=registry 误捕获并被白名单 404。
 app.use('/api/registry', registryRoutes);
+// L2 P2：orchestration — 编排引擎接线（门控 PROXY_ORCHESTRATION 默认关，shadow 默认开）
+const orchestrationRoutes = require('./routes/orchestration');
+app.use('/api/orchestration', orchestrationRoutes);
 // M7 Sessions：挂在代理 wildcard 之前，确保 /api/sessions/* 不被误捕获
 app.use('/api/sessions', sessionsRoutes);
 // M2 Provider Health：只读展示层，挂在代理 wildcard 之前（与 registry/sessions 同模式）
