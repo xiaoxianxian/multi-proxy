@@ -213,3 +213,11 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 
 - **写外部运行态 db 前查进程**：上轮"WorkBuddy 没在跑可以 TRUNCATE checkpoint"的前提这轮失效了（进程在跑），改为 WAL 并发写 + `con.backup()` 一致性快照。前提变了流程就得跟着变，不能照搬旧脚本。
 - **commit message 与实际改动对齐**：`0d33824` message 写"校准 MEMORY.md §十三"但实际只改了 L2-BLUEPRINT——§十三 是这轮才补写的。message 是给别人（和自己）的契约，写之前对着 `git status -s` 核一遍。
+
+### 13.2 2026-09-15 收口（D6-b 观测脚本 + L2 P2 生产接线）
+
+1. **D6-b 持久化改造（cursor-proxy，commit `c7ab5fa`，已 push）**：override 审计原本内存环数组（`OVERRIDE_LOG_MAX` shift 淘汰，重启即失），加可注入 `overrideSink`（默认 null → 行为逐字节不变，3 测试零破坏）+ `readOverrideAudit` 跨重启读盘；`start.ts` 在 `PROXY_ROUTE_OVERRIDE` 门控开时接落盘 `data/override-audit.jsonl`（可 `PROXY_OVERRIDE_AUDIT_LOG` 覆盖），门控关零写盘。新测试 `tests/unit/override-audit-persist.test.ts` 7/7（jest 131/131，基线 124+新7）。`.gitignore` 加 `data/*.jsonl`。教训：mock 跑不出 lazy 实例化/写盘目录缺陷，live 起 server+curl 冒烟才暴露（同 M7 session-store 那轮）
+2. **D6-b 复盘脚本 `tools/override-audit-report`（commit `4b4542b`，已 push）**：零依赖 Node（镜像 agent-proxy-switch 风格），读 JSONL 聚合出报告（总决策/命中率/taskType·provider 分布）+ sign-off 判定（NO_DATA/OBSERVING/NO_OVERRIDE/SIGNOFF_READY），`--file`/`--since`/`--min-sample`，坏行跳读。5 路真验：默认路径(无文件→exit3)/全量聚合/--since 窗/模块聚合(4 verdict+unknown 桶+parseArgs)。D6-b 观测线收口。
+3. **L2 P2 编排引擎 → 生产接线（commit `20ae61c`，已 push）**：`routes/orchestration.js` 镜像 registry/sessions 挂载风格，把 P2 内核（`l2/orchestrator.js`+`decomposer.js`，35 checks 全绿）接上 manager `/api/orchestration`：Orchestrator 长寿命单例（协作历史跨请求累积）+ 门控 `PROXY_ORCHESTRATION`（默认关→403 零副作用）+ shadowMode 默认开（非侵入）+ 异常→4xx 不冒泡；路由面最小（get 历史 / run 编排 / shadow 开关，YAGNI）。`server.js` 挂 registry 后、wildcard 前。测试 6/6（门控关 403/直供 DAG 200+历史1/视频模板拆解 200/环 DAG 400 前置 hasCycle 拦截/无 input 400/单例累积 2）。全 manager jest **546/546**（基线 540+新6，零回归）+ 内核 demo 35/35 仍绿。
+4. **push 状态**：本轮 `1d2ddd2..4b4542b..20ae61c` 全部在 `origin/main`（local=origin diff 0）。
+5. **教训（本轮）**：① force-push 前 `git fetch` 核实 origin/main 最新 head==我上轮 push 的、非他人 rebase，单提交 `--force-with-lease`；② 误把 `.hermes/plans/*.md` 显式 `git add` 进库（破坏"`.hermes/` 不进库"约定）→ amend + `rm --cached` + force-with-lease 纠正，文件留盘供会话连续性；③ 测试断言要核内核**真实抛文措辞**（orchestrator 抛 "unresolvable dependency / cycle" 非裸 "cycle"），别按自己预期写 assert。

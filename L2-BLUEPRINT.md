@@ -347,7 +347,7 @@
 | **P0** | Agent Registry | 1-2 天 | 插件运行时 | Agent Profile CRUD API + 能力标签注册 | ✅ 已落地：`agent-registry.js`+demo 18 checks PASS + 接 manager HTTP API（jest 12/12 + :18792 真跑 200/401） |
 | **P1** | 记忆服务（公共+个性+环境变量注入） | 2 天 | Agent Registry | 记忆合并 + 规范数据格式 + 方案适配器 + 环境变量注入 | ⚠️ 部分：规范格式+互通性已落地（`specs/agent-memory` node/py 两侧 PASS）；完整合并/适配器/注入服务未做 |
 | **P1** | 技能服务（含互通性） | 2 天 | Agent Registry | Skill CRUD + 版本 + 规范格式适配 | ⚠️ 部分：规范格式+互通性已落地（`specs/skill` ALL PASS）；完整 Skill CRUD 服务未做 |
-| **P2** | 编排引擎（任务拆解+路由+执行+聚合） | 5-7 天 | Agent Registry + 记忆服务 + Adapter | 编排 API + 5 用例（含 h3web 视频工作流） | ⚠️ 部分：`route-engine.js` 按能力路由 demo PASS；完整"拆解+执行+聚合+5 用例（h3web 视频流）"未做 |
+| **P2** | 编排引擎（任务拆解+路由+执行+聚合） | 5-7 天 | Agent Registry + 记忆服务 + Adapter | 编排 API + 5 用例（含 h3web 视频工作流） | ✅ 落地：`l2/orchestrator.js`+`decomposer.js`（拆解+调度+容错+聚合+协作历史，19+16=35 checks PASS）+ `/api/orchestration` 生产接线（`routes/orchestration.js`，门控 `PROXY_ORCHESTRATION` 默认关/shadow 默认开，manager jest 546/546）；P2.2 LLM 拆解（注入 `llmDecompose`）仍预留未做 |
 | **P2** | 健康监控增强（告警+成本分析） | 2-3 天 | Agent Registry | 告警服务 + 成本报告 | 部分（M2 有故障记录 + D6-a 健康信号已观测门控 + D7 熔断 live 实证；缺告警/成本分析） |
 | **P3** | 文档 + 案例 + 性能测试 | 1 周 | 全部 | README / ARCHITECTURE / 3 案例 / 测试报告 | ⚠️ 部分：`L2-BLUEPRINT`+`l2/README`+各 demo 已起；3 案例 + 性能报告未做 |
 | **P5（可选）** | Marvis 式 GUI 看板（锦上添花） | 3-5 天 | 编排引擎 | Electron 壳 + 前端组件 | 未开始，可延后 |
