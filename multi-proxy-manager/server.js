@@ -69,6 +69,8 @@ app.use('/api/orchestration', orchestrationRoutes);
 app.use('/api/sessions', sessionsRoutes);
 // M2 Provider Health：只读展示层，挂在代理 wildcard 之前（与 registry/sessions 同模式）
 app.use('/api/provider-health', require('./routes/provider-health'));
+// L2 P2 告警生产接线：/api/alert 把 alert.js 内核接上真实信号源（门控 PROXY_HEALTH_ALERT 默认关）
+app.use('/api/alert', require('./routes/alert'));
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);

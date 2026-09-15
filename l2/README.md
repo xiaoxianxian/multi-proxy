@@ -120,7 +120,17 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **可插拔 sink**：`log`（默认收集型零副作用）/ `registerSink(name, fn)` 热插（邮件/Telegram/微信 sink 在此挂），`dispatch` 每 sink 包 try/catch 隔离（单个崩不影响其它/主流程，best-effort）；工厂 `createAlertService({store})` 每实例独立 events store（测试隔离）。
 - **真跑教训（本轮·3 条）**：① 信号注入式是 l2/ 内核统一范式——要消费 manager 的 provider-health/error-patterns 又不破坏内核自包含，解法不是 require manager lib，而是让调用方注入现成信号（同 memory-merge envInject 接 merged、orchestrator 接 DAG）。② 非侵入用「门控跳过落盘 + 断言 `fs.existsSync===false`」双向验证——jest 用 `setEventsFile(tmp)+emit(persist:true)+断言文件不存在` 证 observe 下即使调用方要求落盘也不落盘。③ 成本块「规则就位但不采集则不触发」是 YAGNI 正形态，未接的信号源=未触发的规则，不强行接。
 - 真跑：`node l2/alert.demo.js`（**13 PASS**）；jest `tests/unit/alert.test.js`（13 例）。全 manager jest **596/596**（37 suites，+13 零回归）+ l2 六 demo 全绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13 / alert 13）。
-- **边界**：P2 告警服务内核已落地；生产接线（调度 emit + 路由 + sink 实发 + agent 注 env + 持久化）列后续（YAGNI，暂无非侵入接入缝）。
+
+## alert-wiring — 告警生产接线（P2 · 路由 `routes/alert.js` · 门控 `PROXY_HEALTH_ALERT` · 拉式接线）
+
+把 signal-driven 的 `alert.js` 内核接到 manager 真实信号源，非侵入拉式（读现有健康/错误/成本数据，不在路由热路径 emit）。
+
+- **路由**：`routes/alert.js` — `GET /api/alert`（列事件+计数）/ `POST /api/alert/collect`（采集三源→`alertSvc.emit`）/ `GET /api/alert/config`（门控状态+sink 列表+observeOnly）。门控 `PROXY_HEALTH_ALERT` 默认 off → 全路由 403 `alert-gate-closed`（非侵入：默认零副作用、不调任何信号源）。开（=1/true/yes/on）→ 采集 emit，observeOnly=false 真落盘 `alert-events.jsonl`。挂 `server.js` 的 `/api/provider-health` 之后、`/api`(wildcard) 之前。
+- **三信号源（拉式 collectFromSources）**：① `provider-health.listIsolated()` → `provider-unhealthy`/`provider-network-wide`；② `error-patterns.getHistory()` 按 `pattern_id` 聚合频次（≥`errorFrequencyThreshold` 默认 5 触发 `error-pattern-frequent`，SEED_PATTERNS 已内置）；③ `cost.js.produceAlertSignal(name,{budget})` → `cost-budget-exceeded`（需 `PROXY_COST_TRACK=1` + `PROXY_COST_BUDGET_<name>`，YAGNI 未接 scheduler，仅 collect 时按需读 `/balances` 快照喂内核，不自动跑定时探测）。
+- **设计原则**：① 拉式——路由是「采集器」，读现成信号源，不向 `forward.js` 热路径注入 emit；② 门控——`PROXY_HEALTH_ALERT` 默认 off（与 alert.js 内核 gate 同义），关时零副作用；③ 非侵入——collect 只读、不写 providers.json/config；门控开时才经内核 persist 落盘 alert-events.jsonl（sink best-effort try/catch 隔离，单个 sink 崩不影响其它/主流程）。
+- **教训（本轮·1 条）**：jest 测试 `error-pattern-frequent` 失败——`beforeEach` 的 `ep.resetErrorPatterns()` 把 SEED_PATTERNS 清空，致 `matchError` 返 null、频次不累加。修法：测试内 `ep.loadPatterns()` 先恢复种子（生产启动时 `initErrorPatterns()` 已 seed，路由 collect 直接读 SEED，不影响真跑）。
+- 真跑：jest `tests/unit/alert-route.test.js`（**8 例**：门控 off 返 403 ×2 / 门控开 config + 空事件 / provider-unhealthy / provider-network-wide / error-pattern-frequent / 全空 0 事件 / persist 落盘）；全 manager jest **620/620**（39 suites，+8 零回归）。live 冒烟：`node server.js`（`PORT=18892`）实测 `/api/alert` 门控关 → HTTP 403 `alert-gate-closed`（GET+POST 均挡），`/api/provider-health`+`/health` 仍 200（未破坏既有序列）。
+- **边界**：P2 告警生产接线已落地（`/api/alert` 路由 + 三源拉式采集 + 门控 403 默认 + live 冒烟实证）；成本信号源 scheduler（定时 `/balances` 探测 schedule 喂 cost.js `record()`）+ A 路 token×单价 埋点改 `forward.js` 热路径列后续独立增量（YAGNI，需单独门控）。
 
 ## cost.js — 成本分析内核（P2 健康监控增强 · §4.6 成本分析报告 · 信号源无关 + 非侵入 observe）
 

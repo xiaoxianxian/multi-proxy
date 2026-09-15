@@ -263,3 +263,18 @@ _最后更新: 2026-09-15(P1.1a `16affe3` + P1.1b `57e2c23` + P2 告警 `l2/aler
 5. **`.gitignore` 补 `.hermes/`**——Hermes agent 运行时产物（plans/临时状态），非项目源码，勿 commit。
 
 _最后更新: 2026-09-15(+ P2 成本分析 `l2/cost.js` B 路余额趋势) _
+
+### 13.8 2026-09-15 P2 告警生产接线落地（`routes/alert.js` · /api/alert · 门控 PROXY_HEALTH_ALERT · 拉式接线）
+
+**§13.6 把告警内核的生产接线列「后续（暂无非侵入接入缝）」——本增量补上。**
+
+1. **路由 `routes/alert.js`（~126 行，门控 `PROXY_HEALTH_ALERT` 默认 off→全路由 403 `alert-gate-closed`）**：
+   - `GET /api/alert` 列事件+计数 / `POST /api/alert/collect` 采集三源→`alertSvc.emit` / `GET /api/alert/config` 门控状态+sink 列表+observeOnly。
+   - **三信号源拉式 `collectFromSources`**：① `provider-health.listIsolated()` + `correlateCrossProxy` → `provider-unhealthy`/`provider-network-wide`；② `error-patterns.getHistory()` 按 `pattern_id` 聚合频次（≥`errorFrequencyThreshold`=5 触发 `error-pattern-frequent`）；③ `cost.js.produceAlertSignal(name,{budget})` → `cost-budget-exceeded`（需 `PROXY_COST_TRACK=1`+`PROXY_COST_BUDGET_<name>`，YAGNI 未接 scheduler，仅 collect 时按需读，不自动定时）。
+   - 挂 `server.js` 的 `/api/provider-health` 之后、`/api`(wildcard) 之前（与 orchestration/registry/sessions 同序）。
+   - **非侵入**：collect 只读不写 providers.json/config；门控开时才经内核 persist 落盘 `alert-events.jsonl`；sink best-effort try/catch 隔离。
+2. **验证**：jest `tests/unit/alert-route.test.js` **8/8**（门控 off 返 403 ×2 / 门控开 config+空事件 / provider-unhealthy / provider-network-wide / error-pattern-frequent / 全空 0 事件 / persist 落盘）；全 manager jest **620/620（39 suites，基线 612+新 8，零回归）**；live 冒烟 `node server.js PORT=18892` 实测 `/api/alert` 门控关→HTTP 403 `alert-gate-closed`（GET+POST 均挡）+ `/api/provider-health`+`/health` 仍 200（未破坏既有路由序）。
+3. **教训（本轮·1 条）**：jest `error-pattern-frequent` 假失败——`beforeEach` 的 `ep.resetErrorPatterns()` 把 `SEED_PATTERNS` 清空致 `matchError` 返 null、频次不累加；修法：测试内 `ep.loadPatterns()` 恢复种子（生产 `initErrorPatterns()` 已 seed，路由 collect 直接读，不影响真跑）。
+4. **边界（诚实）**：P2 告警生产接线已落地（`/api/alert` + 三源拉式 + 门控 403 默认 + live 冒烟实证）；**成本信号源 scheduler（定时 `/balances` 探测喂 cost.js `record()`）+ A 路 token×单价 埋点改 `forward.js` 热路径列后续独立增量**（YAGNI，改热路径需单独门控）。
+
+_最后更新: 2026-09-15(+ P2 告警生产接线 `routes/alert.js` /api/alert 门控 PROXY_HEALTH_ALERT) _
