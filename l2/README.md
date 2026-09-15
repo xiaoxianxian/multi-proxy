@@ -102,6 +102,15 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **真跑教训**：① demo 抓到 kernel bug——`merge` 的 `personal` 策略原漏替换胜出方数据字段，致"个性覆盖公共"假绿，修=胜出时用 e 覆盖 cur 全字段；② `process.exit(pass+fail===0?0:1)` 总非零致全绿 demo 在 CI 报 fail，修=`process.exit(fail===0?0:1)`。
 - **边界**：P1.1a 止于合并+适配器+投影；P1.1b（agent 启动真注 env 接线 + 持久化）暂无非侵入接入缝，列后续（YAGNI）。
 
+## skill-service.js — 技能服务内核（P1.1b · §4.5 Skill CRUD / 版本 / 市场 / 规范格式适配）
+
+- 内核：`createSkillService({ clock })` 纯内存 store——`create(raw, opts)`（id 缺省 `skill-<name-slug>`、version 缺省 `1.0.0`、enabled 默认 true）/ `get`（id 或 name 取最新 version）/ `update`（缺省 bump patch）/ `bump(key, { version })`（保留旧版本、旧版禁用新版启用）/ `rollback(key, target)`（翻启用权到旧版）/ `remove` / `list(filter)`（source/tags/enabled + 默认折叠同名最新）/ `search(q)`（case-insensitive 子串）/ `toCapabilities()`（投影最新启用版给编排器/Registry）；市场 `registerBuiltin`/`upload`（带 source 标签的 create，YAGNI 不另起）；`validateSkill` 轻量校验（必填 + 类型 + version 形如 X.Y.Z），`toEntry` 在校验前 stamp 默认值。
+- **可热插拔适配器（§4.8）**：`json`（规范 canonical）/ `yaml-text`（纯文本零依赖往返）/ `view`（摘要去 content）+ `registerAdapter(name, {toDoc, fromDoc})`。
+- **非侵入铁律**：纯内存、不写盘、不写 `process.env`、不碰 `~/.codex·~/.hermes·~/.cursor`；全默认零网络零文件零 LLM。
+- 真跑：`node l2/skill-service.demo.js`（**13 PASS**）；jest `tests/unit/skill-service.test.js`（13 例）。全 manager jest **583/583**（36 suites）。规范 `specs/skill` validate 仍 ALL PASS（未动规范）。
+- **真跑教训（本轮·3 坑）**：① `create(raw, opts)` 原忽略 `opts` → `registerBuiltin` 的 `{source:'builtin'}` 被丢弃、source 恒 fallback；修=`{...raw, ...opts}` 合并再 stamp。② jest 测试隔离假失败（`beforeEach` 全 fresh，断言了依赖跨测试的 `_store`）；修=测试自包含。③ 校验 assertion 正则过宽；修=构造缺字段 raw 精确断言 `missing content`。
+- **边界**：P1.1b 内核已落地；生产接线（API 路由 + 持久化 `~/.multi-proxy-manager/`）列后续（YAGNI，无非侵入接入缝）。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；
