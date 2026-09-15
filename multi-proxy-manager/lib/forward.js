@@ -162,6 +162,12 @@ async function forwardProxy(req, res) {
     const elapsed = Date.now() - startTime;
     console.log(`[FORWARD OK] ${method} ${proxyName}/${rest} -> ${response.status} (${elapsed}ms)`);
     appendLog('info', proxyName, `${method.toUpperCase()} ${rest} completed in ${elapsed}ms`, { status: response.status });
+
+    // L2 P2 A路·token×单价埋点（门控 PROXY_COST_TRACK 关时零开销：只做 rest 字符串比较）
+    if (rest === '/v1/chat/completions' && response.data && response.data.usage) {
+        try { require('./cost-track').accumulate(proxyName, response.data.usage); } catch { /* 非致命 */ }
+    }
+
     res.json(response.data);
   } catch (error) {
     const elapsed = Date.now() - startTime;

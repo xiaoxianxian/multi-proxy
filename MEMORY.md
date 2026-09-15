@@ -1,7 +1,7 @@
 # MEMORY.md — multi-proxy 项目记忆
 
 > 供 WorkBuddy / Claude / Codex / Hermes 等 agent 读取，作为本项目单一事实来源。
-> 仅内部使用，分发包剔除。最后更新：2026-09-15（P1.1a 记忆服务内核 `l2/memory-merge.js` + P1.1b 技能服务内核 `l2/skill-service.js` + P2 告警服务内核 `l2/alert.js` + P2 成本分析内核 `l2/cost.js` B 路余额趋势 落地；§13.4 + §13.5 + §13.6 + §13.7）
+> 仅内部使用，分发包剔除。最后更新：2026-09-15（P1.1a 记忆服务内核 `l2/memory-merge.js` + P1.1b 技能服务内核 `l2/skill-service.js` + P2 告警服务内核 `l2/alert.js` + P2 成本分析内核 `l2/cost.js` B 路余额趋势 + P2 成本分析 A 路 token×单价 埋点 `lib/cost-track.js`（`forward.js` 热路径 line 168，门控 `PROXY_COST_TRACK` 默认关，非侵入） 落地；§13.4 + §13.5 + §13.6 + §13.7 + §13.9）
 
 ## 一、项目定位
 - `codex-multi-model-proxy` 的合并升级版：挂多个 agent 代理的统一壳子，目标根治 WorkBuddy 等 agent 因 API 限速导致的任务中断。
@@ -277,4 +277,18 @@ _最后更新: 2026-09-15(+ P2 成本分析 `l2/cost.js` B 路余额趋势) _
 3. **教训（本轮·1 条）**：jest `error-pattern-frequent` 假失败——`beforeEach` 的 `ep.resetErrorPatterns()` 把 `SEED_PATTERNS` 清空致 `matchError` 返 null、频次不累加；修法：测试内 `ep.loadPatterns()` 恢复种子（生产 `initErrorPatterns()` 已 seed，路由 collect 直接读，不影响真跑）。
 4. **边界（诚实）**：P2 告警生产接线已落地（`/api/alert` + 三源拉式 + 门控 403 默认 + live 冒烟实证）；**成本信号源 scheduler（定时 `/balances` 探测喂 cost.js `record()`）+ A 路 token×单价 埋点改 `forward.js` 热路径列后续独立增量**（YAGNI，改热路径需单独门控）。
 
-_最后更新: 2026-09-15(+ P2 告警生产接线 `routes/alert.js` /api/alert 门控 PROXY_HEALTH_ALERT) _
+_last更新: 2026-09-15(+ P2 告警生产接线 `routes/alert.js` /api/alert 门控 PROXY_HEALTH_ALERT) _
+
+### 13.9 2026-09-15 P2 成本分析 A 路 token×单价 埋点落地（`lib/cost-track.js` + `forward.js` 热路径 · 门控 PROXY_COST_TRACK · 非侵入）
+
+**§13.7 item4 + §13.8 item4 把「A 路 token×单价 埋点改 `forward.js` 热路径」列后续——本增量落地。**
+1. **内核 `lib/cost-track.js`（纯内存，零 manager 依赖）**：`accumulate(proxyName, usage)` 热路径主入口——门控 `PROXY_COST_TRACK` 关时**零开销**（仅 `enabled()` 布尔判断 + 不建 state + 不写盘）；开时从 upstream `usage` 提 token 数（兼容 OpenAI `prompt_tokens/completion_tokens` + Anthropic `input_tokens/output_tokens` + `cache_read_input_tokens` 缓存折扣），按 per-proxy `pricing`（每百万 tokens）累计 `cost`。pricing 由 `setPricing(name,{input,output,cacheHit?})`（**幂等**）或 `loadPricingFromEnv()`（读 `PROXY_PRICING_<proxy>` JSON）注入；无 pricing 默认 0（本地模型 cost=0、仍累 token 数）。
+2. **接线 `forward.js` line 168**：`res.json(response.data)` 前 `if (rest === '/v1/chat/completions' && response.data?.usage) { try { require('./cost-track').accumulate(proxyName, response.data.usage) } catch {} }`——只读 usage、不改 response、非致命 try/catch 隔离，热路径改动 < 1 行 + 门控关零副作用。
+3. **未接 `server.js` 启动注入（YAGNI 决策）**：`pricing` 是**模型级**字段（`PROVIDERS-README` `pricing:{input,output,cacheHit}`、routeEngine cost-optimization 查表），**不在 proxy config 上**（已核实 `getProxyConfigs()` 的 `PROXY_CONFIGS` 只有 name/port/scriptPath 三字段）；本增量交付「提 usage + 累计 token + 注入缝」，实际 model→pricing 数据源映射接 `forward.js` 列后续增量。故**不加 `server.js` `loadPricingFromEnv()` 调用**（避免凭空造无消费者的注入——"修好实际没改"反向坑）。
+4. **验证**：jest `tests/unit/cost-track.test.js` **15/15**（门控开/关 + OpenAI/Anthropic 字段 + cacheHit 折扣 + 多次累加 + 无 pricing 0 cost + pricing 全 0 + 部分字段 + getAll + 6 位四舍五入 + 不写盘 + 门控关不建 state + reset）；全量 manager jest **635/635（40 suites，基线 620+新 15，零回归）**；live 冒烟：门控关 `getAll()={}`（非侵入实证）/ 门控开 3×(1000×10/1M+500×20/1M)=**0.06** / Anthropic cacheHit 折扣 (1M−0.4M)×25/1M+0.1M×125/1M+0.4M×3/1M=**28.7**（真跑核实，非纸面）。
+5. **教训（本轮·2 条）**：
+    - **① `setPricing` 幂等**——原实现 `_state[name]={…全新 state}` 会清掉已累 tokens/cost，启动注入 pricing 后成本归零；改「`existing ? {...existing, 换 pricing} : 新建`」。这是"修好实际没改"类坑的主动自查发现（非测试暴露）——注入式 API 若重置累计态，热路径累计即假。
+    - **② `getCost()` 对外快照剥离内部 `lastTs`**——时间戳字段让确定性 `toEqual` 抖动；对外契约只暴露纯累计量+花费。
+6. **边界（诚实）**：A 路埋点（提 usage + 累计 token + 定价注入缝）已落地，门控默认关非侵入，live 实证；**model 级 pricing 数据源接 `forward.js` + 成本信号源 scheduler（定时 `/balances` 探测喂 `cost.js record()`）+ 成本报告路由 + 报告落盘** 仍列后续独立增量（YAGNI）。
+
+_last更新: 2026-09-15(+ P2 成本分析 A 路 `lib/cost-track.js` + `forward.js` 热路径 门控 PROXY_COST_TRACK) _
