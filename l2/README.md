@@ -111,6 +111,17 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **真跑教训（本轮·3 坑）**：① `create(raw, opts)` 原忽略 `opts` → `registerBuiltin` 的 `{source:'builtin'}` 被丢弃、source 恒 fallback；修=`{...raw, ...opts}` 合并再 stamp。② jest 测试隔离假失败（`beforeEach` 全 fresh，断言了依赖跨测试的 `_store`）；修=测试自包含。③ 校验 assertion 正则过宽；修=构造缺字段 raw 精确断言 `missing content`。
 - **边界**：P1.1b 内核已落地；生产接线（API 路由 + 持久化 `~/.multi-proxy-manager/`）列后续（YAGNI，无非侵入接入缝）。
 
+## alert.js — 告警服务内核（P2 健康监控增强 · §4.6 告警机制 · 信号驱动 + 非侵入 observe）
+
+- 内核：`alert.js`（~220 行，全内存，零 manager 依赖）**信号注入式**消费健康信号——不 `require('../lib/*')`、不触 manager 热路径，信号（`provider-health.listIsolated()` / `error-patterns.getHistory()` 的产出）由调用方注入。`evaluate(signal)` 纯判定产告警数组。
+- **4 条内置规则**映射 §4.6 增强：`provider-network-wide`（跨 proxy 全网故障 → critical）/ `provider-unhealthy`（单点连续失败进隔离窗口 → warning）/ `error-pattern-frequent`（错误频次≥`errorFrequencyThreshold` 默认 5，≥4× 阈值升 critical）/ `cost-budget-exceeded`（成本≥预算 → warning，**规则就位但 `forward.js` 暂无 usage 埋点 → 不采集则不触发，YAGNI**）。`signal.source` 三态 `provider-health` / `error-patterns` / `cost`。
+- **非侵入 + 门控**：`PROXY_HEALTH_ALERT` 默认关 = **observe**（事件照常判级 + 收集进内存 `events[]` + cooldown 去重，但 sink 不真发；即使 `persist:true` 也不落盘，门控权在内核不在调用方）；开（=1/true/on）= 真 dispatch 各 sink，落盘 `alert-events.jsonl`。
+- **防告警风暴**：`cooldownMs`（默认 5min）对同 `(rule+key)` 去重，窗口内第二次 `deduped=true` 不再 dispatch，超 cooldown 重发。
+- **可插拔 sink**：`log`（默认收集型零副作用）/ `registerSink(name, fn)` 热插（邮件/Telegram/微信 sink 在此挂），`dispatch` 每 sink 包 try/catch 隔离（单个崩不影响其它/主流程，best-effort）；工厂 `createAlertService({store})` 每实例独立 events store（测试隔离）。
+- **真跑教训（本轮·3 条）**：① 信号注入式是 l2/ 内核统一范式——要消费 manager 的 provider-health/error-patterns 又不破坏内核自包含，解法不是 require manager lib，而是让调用方注入现成信号（同 memory-merge envInject 接 merged、orchestrator 接 DAG）。② 非侵入用「门控跳过落盘 + 断言 `fs.existsSync===false`」双向验证——jest 用 `setEventsFile(tmp)+emit(persist:true)+断言文件不存在` 证 observe 下即使调用方要求落盘也不落盘。③ 成本块「规则就位但不采集则不触发」是 YAGNI 正形态，未接的信号源=未触发的规则，不强行接。
+- 真跑：`node l2/alert.demo.js`（**13 PASS**）；jest `tests/unit/alert.test.js`（13 例）。全 manager jest **596/596**（37 suites，+13 零回归）+ l2 六 demo 全绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13 / alert 13）。
+- **边界**：P2 告警服务内核已落地；成本分析（A usage 埋点 / B 余额趋势）+ 生产接线（调度 emit + 路由 + sink 实发 + agent 注 env + 持久化）列后续（YAGNI，暂无非侵入接入缝）。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；

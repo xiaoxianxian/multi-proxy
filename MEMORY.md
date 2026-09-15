@@ -1,7 +1,7 @@
 # MEMORY.md — multi-proxy 项目记忆
 
 > 供 WorkBuddy / Claude / Codex / Hermes 等 agent 读取，作为本项目单一事实来源。
-> 仅内部使用，分发包剔除。最后更新：2026-09-15（P1.1a 记忆服务内核 `l2/memory-merge.js` + P1.1b 技能服务内核 `l2/skill-service.js` 落地；§13.4 + §13.5）
+> 仅内部使用，分发包剔除。最后更新：2026-09-15（P1.1a 记忆服务内核 `l2/memory-merge.js` + P1.1b 技能服务内核 `l2/skill-service.js` + P2 告警服务内核 `l2/alert.js` 落地；§13.4 + §13.5 + §13.6）
 
 ## 一、项目定位
 - `codex-multi-model-proxy` 的合并升级版：挂多个 agent 代理的统一壳子，目标根治 WorkBuddy 等 agent 因 API 限速导致的任务中断。
@@ -241,3 +241,14 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 2. **验证**：`l2/skill-service.demo.js` **13/13 PASS**（CRUD / 市场 / bump 保留历史 / rollback 翻转 / 坏 version 拒 / list 过滤+折叠 / search / 非侵入（process.env 不漏 / 无 fs）/ json 规范往返 / yaml-text 往返 / view 摘要 / 热插拔 csv / 终极非侵入）；jest `tests/unit/skill-service.test.js` **13/13**；全量回归 **manager jest 583/583（36 suites，基线 570+新 13，零回归）** + l2 demo 五绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13）。
 3. **边界（诚实）**：P1.1b = CRUD + 版本 + 市场 + 规范格式适配内核，**已落地**；**生产接线（API 路由 + 持久化 store）列后续**——manager 侧暂无「技能 store 持久化到 `~/.multi-proxy-manager/`」的非侵入接入缝，不强行做（YAGNI）。
 4. **教训（本轮·3 坑）**：① **kernel bug**：`create(raw, opts)` 原只调 `toEntry(raw, ...)` 完全忽略 `opts` → `registerBuiltin(s)` 的 `{source:'builtin'}` 被丢弃，source 始终 fallback DEFAULT_SOURCE；修=合并 `{...raw, ...opts}` 再 stamp。② **jest 测试隔离**：`svc` 在 `beforeEach` 全 fresh，测试 2 的 `non-invasive` 断言假设 `svc._store.entries.length≥3` 但实际每测试只有当前新增 → 假失败；修=自包含数据不依赖跨测试。③ **测试 5 的 regex**：`/missing|content/` 同时漏 `content`、`description`、`trigger` 中一个就 pass，但 `toEntry` 默认 stamp `content=raw.content` 而 `base.content='c'` 非空，所以不会抛；修=构造缺 `content` 的 raw 精确断言 `/missing content/`。
+
+### 13.6 2026-09-15 P2 告警服务内核落地（`l2/alert.js` · 信号驱动告警规则引擎 + 非侵入 observe）
+
+**为什么先做告警(纯增量)·成本分析另议(有前置依赖)：§4.6 把 P2 健康增强拆「告警」+「成本报告」两块。核查现状：`provider-health.js`(故障记录+跨 proxy 聚合 `correlateCrossProxy`+隔离门控 `PROXY_HEALTH_ISOLATE` observe 默认)与 `error-patterns.js`(错误模式库 8 条种子 + `matchError` + `error-history.jsonl` 历史)都已是现成信号源 → **告警是纯增量内核**(消费两现成信号、无前置依赖、低风险，同 P1.1a/1b 纪律)。成本分析**非纯增量**——`grep` 确认 `forward.js` 不采集 token usage(只透传上游响应、不解析 `choices[].usage`)，`proxy-api.js` 只有 `/balances` 账户余额透传、无消耗累加 → 需先定 **A(`forward.js` usage 埋点+单价表，改热路径，需门控+非侵入)** vs **B(从 `/balances` 定时快照算余额变化，零热路径但精度低)**，**列独立增量**。本增量只做告警；成本规则在 `alert.js` 已就位但 `forward.js` 无 usage 管道 → **不采集则不触发(YAGNI)**。
+
+1. **内核 `l2/alert.js`（~220 行，全内存，零 manager 依赖，信号注入式消费）**：① **4 条内置规则**映射 §4.6 增强——`provider-network-wide`(跨 proxy 全网故障 `correlation.verdict==='network-wide'`→critical) / `provider-unhealthy`(单点连续失败进隔离窗口 `status==='unhealthy'`→warning) / `error-pattern-frequent`(错误频次≥`errorFrequencyThreshold` 默认 5，≥4×阈值升 critical) / `cost-budget-exceeded`(成本≥预算→warning)；② **信号注入式**(与 l2/ 其它内核铁律一致)——`alert.js` **不 `require('../lib/*')`、不触 manager 热路径**，信号由调用方注入(demo/jest 喂 `provider-health.listIsolated()` / `error-patterns.getHistory()` 产出)，`evaluate(signal)` 纯判定产告警数组；`signal.source` 三态 `provider-health`/`error-patterns`/`cost`；③ **非侵入 + 门控** `PROXY_HEALTH_ALERT` 默认关=**observe**(事件照常判级+收集进内存 events[]+cooldown 去重，但 sink 不真发)；开(=1/true/on)=真 dispatch 各 sink；④ **防告警风暴**——`cooldownMs`(默认 5min)对同 `(rule+key)` 去重，窗口内第二次 `deduped=true` 不再 dispatch，超 cooldown 重发；⑤ **可插拔 sink**——`log`(默认收集型零副作用)/`registerSink(name,fn)` 热插(邮件/Telegram/微信 sink 在此挂)，`dispatch` 每 sink 包 try/catch 隔离(单个崩不影响其它/主流程，best-effort)；⑥ **工厂 `createAlertService({store})`** 每实例独立 events store(测试隔离)，默认模块级单例。
+2. **验证(全内存，零 manager 依赖，demo 13/13 PASS)**：4 规则各触发 + 不触发(健康/低频/预算内) + 门控默认 observe + dedup cooldown + cooldown 过期重发 + registerSink 真发(门控开) + **非侵入(observe 下 `persist:true` 仍不落盘，断言 `fs.existsSync===false`)** + list/count/reset + setConfig 调阈值 + registerSink 参数校验；jest `tests/unit/alert.test.js` **13/13**；全量回归 **manager jest 596/596(37 suites，基线 583+新 13，零回归)** + l2 六 demo 全绿(decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13 / **alert 13**)。
+3. **教训(本轮·3 条)**：① **信号注入式是 l2/ 内核的统一范式**——alert.js 要消费 manager 的 provider-health/error-patterns，但 l2/ 铁律**零 manager 依赖**；解法不是 require manager lib，而是让调用方把现成信号注入内核，内核"喂了就算"(同 memory-merge envInject 接 merged、orchestrator 接 DAG)。跨目录硬绑会破坏内核自包含。② **非侵入用「门控跳过落盘 + 断言 fs 不存在」双向验证**——光说不写盘不够，jest 用 `setEventsFile(tmp)+emit(persist:true)+断言 fs.existsSync(tmp)===false` 证 observe 模式**即使调用方要求落盘也不落盘**(门控权在内核不在调用方)，是最强非侵入证据。③ **成本块「规则就位但不采集则不触发」是 YAGNI 的正形态**——`cost-budget-exceeded` 规则已写，`forward.js` 无 usage 管道 → 规则天然 inert，不为"完整"铺埋点(那是另一增量、且改热路径需额外门控)；范围有界内核里**未接的信号源=未触发的规则**，不必强行接。
+4. **边界(诚实)**：P2 告警服务 = 信号驱动规则引擎 + 非侵入 observe，**已落地**；生产接线(调度 emit + 路由 + sink 实发 email/Telegram/微信 + agent 启动注 env + 持久化 `alert-events.jsonl`)列后续(暂无非侵入接入缝，YAGNI)。**成本分析列独立增量**，需先定 A(usage 埋点/改热路径) vs B(余额趋势/零热路径)。
+
+_最后更新: 2026-09-15(P1.1a `16affe3` + P1.1b `57e2c23` + P2 告警 `l2/alert.js`)。_
