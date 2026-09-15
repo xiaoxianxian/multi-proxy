@@ -65,19 +65,39 @@ OpenAI 3×(1000×10/1M + 500×20/1M)=**0.06**、Anthropic cacheHit=(1M−0.4M)×
 
 ---
 
-## 3. 开放性能项（review 已列、尚未量化/未闭环，诚实标注）
+## 3. 开放项（review 已列、待 live 复现后定夺是否修，诚实标注优先级）
 
-review-2026-08-24 提出的性能类问题，非本次收口范围，列此备忘（YAGNI 边界）：
+review-2026-08-24 提的问题分两类：**C2/B7 是 P1 级功能 bug**（非性能优化），**rr_index / 50mb 是真 YAGNI 性能优化**。
+2026-09-16 现查核实（非引旧行号）：`forward.js:139/140/141/143/171` C2 仍在；`codex-proxy/proxy.js:604` B7 仍在。
 
-- **C2 / 架构师#7 流式转发**：`forwardProxy` 的 `axios timeout:15000` + 全响应体缓冲 + `res.json`
-  一次性吐出，破坏 SSE 流式语义；`maxBodyLength` 大缓冲大请求内存翻倍。
-  **现状未闭环**，需 SSE 透传 + idle timeout 改造（另一增量）。
-- **B7 120s 掐断长流**：`AbortSignal.timeout` 从请求发起计时对所有流全程有效，>2min 长生成被 abort。
-  **现状未闭环**，需「收响应头后清 signal / 改 idle timeout」。
+### 3.1 C2 / 架构师#7 流式转发不支 SSE —— **P1 功能 bug，但影响面窄**
+- 形态：`forwardProxy` 走 axios `timeout:15000` + `maxBodyLength 100MB` 全响应体缓冲 + 强制
+  `Content-Type: application/json` + `res.json(response.data)`（`forward.js:135-171`），SSE 被整体缓冲后
+  一次性吐出，>15s 生成必超时，流式语义被破坏。
+- **实测影响（2026-09-16 全机 grep 坐实）**：codex-proxy 无 `/v1/chat/completions` 端点（仅 `/v1/models`+admin API）；
+  hermes-proxy 同理无 chat 端点；**只有 cursor-proxy 有真正的 SSE `/chat/completions`**
+   （`cursor-proxy/src/server/handlers/chatHandler.ts:325` `res.write(decoder.decode…)`，且它直连上游、不经过 manager）。
+  **全机 grep 18792 在 agent 配置/环境变量里零调用方**（2026-09-16）：Codex→`127.0.0.1:15721`（cc-switch）、
+  Hermes→agnes/ollama（11434）、claude/trae 均无 18792 命中；manager 前端也仅调 `/api/cursor/admin-api/*`。
+  → **当前零 agent 经 manager 代理 chat 流，C2/B7 是 latent 幽灵路径：线上无人用，改它 = "修好实际没改"反向坑。**
+  判定命令（可复现）：`grep -rn 18792 ~ --include=*.toml --include=*.json --include=*.yaml --include=*.env
+  --include=*.plist | grep -vi 'node_modules\|logs\|backups\|tokenizer.json'`（预期空 = 零调用方）。
+  **修法触发条件**：仅当未来真把某 agent 切到经 manager 18792 代理 chat 流时才需修（届时 `forwardProxy`
+  对 `stream:true`/`text/event-stream` 走 pipe 透传 + idle timeout 替代固定 15s，门控非侵入）；当前修无收益。
+
+### 3.2 B7 120s 掐断长流 —— **P1 功能 bug（同上路径）**
+- 形态：`codex-proxy/proxy.js:604` `AbortSignal.timeout(120000)` 从请求发起计时，对流式全程有效，
+  >2min 长生成被中途 abort（cursor `chatHandler.ts:129` 同类）。
+- 修法（若做）：收到上游响应头后清除 signal / 改 idle timeout。
+
+### 3.3 真 YAGNI 性能优化（可延后）
 - **rr_index 持久化写放大**：cursor `chatHandler.ts:21-27` 每次聊天一次 SQLite 写（含 fsync），
-  高并发纯开销，建议存内存。**现状未闭环**。
-- **50mb body limit 内存行为**：review#6 指出未量化；本次仅做 appendLog 量化，body limit 内存峰值
-  未做基准（需压测环境，列后续）。
+  高并发纯开销，建议存内存。未闭环。
+- **50mb body limit 内存峰值**：review#6 指出未量化；需压测环境，列后续。
+
+**优先级判断（2026-09-16）**：C2/B7 是 review 挂账的 P1 功能 bug，但因当前 manager 不代理 chat 流、
+仅 cursor 一路有 SSE，线上零爆炸面 → 建议**先 live 复现确认可现性**再决定是否修，
+不盲目改热路径（改了无人用 = "修好实际没改"反向坑）。修复需 gate + 非侵入 + SSE 透传 + idle timeout。
 
 ---
 

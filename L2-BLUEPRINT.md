@@ -2,7 +2,7 @@
 
 > 项目重定位：proxy-rebuild 从"多模型代理"升级为"Agent 编排中枢"  
 > 日期：2026-09-11  
-> 状态：**M6 方向四智能路由 + M2 健康增强已闭环（方向四 D1-D8 / D5 真名映射 / D7 live 200 已实证，jest 124/124）**；L2 P0 三大模块（插件运行时 / Agent Adapter 协议 / Agent Registry）**已收口**（`l2/` 7 个 demo 全绿：h3web 6 + AIGC 10 + L1chat 25 + Registry 18 + Plugin 14 + route-engine PASS + validate ALL PASS，mock-first 零副作用）；P1（记忆服务 / 技能服务完整版）部分落地，P2/P3 未开始
+> 状态（2026-09-16）：**P0–P3 核心全 ✅**。P0 三模块收口（插件运行时 14 / Agent Adapter 4 样例 h3web 6+AIGC 10+L1chat 25 / Registry 18，7 demo 全绿）；P1 记忆服务+技能服务**内核**落地（`memory-merge.js` 11 / `skill-service.js` 13，P1.1b 生产接线是 YAGNI 且无非侵入缝）；P2 编排引擎+告警+成本分析**生产接线**落地（orchestration/shadow 门控 / `routes/alert.js` / `lib/cost-track.js` A 路埋点，jest 635/635·40 suites）；P3 文档+3 案例+性能报告（`l2/CASES.md`+`l2/PERF-REPORT.md`，数字全真跑）收口于 `e3bcded`。**遗留 P1 功能 bug（非本文档范围）**：C2 manager 转发不支 SSE（`forward.js:139` axios 15s 超时+100MB 缓冲+`res.json`）+ B7 120s 掐断长流（`codex-proxy/proxy.js:604`）——见 `l2/PERF-REPORT.md` §3，待 live 复现定夺是否修。
 
 ---
 
