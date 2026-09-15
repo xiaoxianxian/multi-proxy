@@ -1,7 +1,7 @@
 # MEMORY.md — multi-proxy 项目记忆
 
 > 供 WorkBuddy / Claude / Codex / Hermes 等 agent 读取，作为本项目单一事实来源。
-> 仅内部使用，分发包剔除。最后更新：2026-09-15（P1.1a 记忆服务内核 `l2/memory-merge.js` + P1.1b 技能服务内核 `l2/skill-service.js` + P2 告警服务内核 `l2/alert.js` 落地；§13.4 + §13.5 + §13.6）
+> 仅内部使用，分发包剔除。最后更新：2026-09-15（P1.1a 记忆服务内核 `l2/memory-merge.js` + P1.1b 技能服务内核 `l2/skill-service.js` + P2 告警服务内核 `l2/alert.js` + P2 成本分析内核 `l2/cost.js` B 路余额趋势 落地；§13.4 + §13.5 + §13.6 + §13.7）
 
 ## 一、项目定位
 - `codex-multi-model-proxy` 的合并升级版：挂多个 agent 代理的统一壳子，目标根治 WorkBuddy 等 agent 因 API 限速导致的任务中断。
@@ -251,4 +251,15 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 3. **教训(本轮·3 条)**：① **信号注入式是 l2/ 内核的统一范式**——alert.js 要消费 manager 的 provider-health/error-patterns，但 l2/ 铁律**零 manager 依赖**；解法不是 require manager lib，而是让调用方把现成信号注入内核，内核"喂了就算"(同 memory-merge envInject 接 merged、orchestrator 接 DAG)。跨目录硬绑会破坏内核自包含。② **非侵入用「门控跳过落盘 + 断言 fs 不存在」双向验证**——光说不写盘不够，jest 用 `setEventsFile(tmp)+emit(persist:true)+断言 fs.existsSync(tmp)===false` 证 observe 模式**即使调用方要求落盘也不落盘**(门控权在内核不在调用方)，是最强非侵入证据。③ **成本块「规则就位但不采集则不触发」是 YAGNI 的正形态**——`cost-budget-exceeded` 规则已写，`forward.js` 无 usage 管道 → 规则天然 inert，不为"完整"铺埋点(那是另一增量、且改热路径需额外门控)；范围有界内核里**未接的信号源=未触发的规则**，不必强行接。
 4. **边界(诚实)**：P2 告警服务 = 信号驱动规则引擎 + 非侵入 observe，**已落地**；生产接线(调度 emit + 路由 + sink 实发 email/Telegram/微信 + agent 启动注 env + 持久化 `alert-events.jsonl`)列后续(暂无非侵入接入缝，YAGNI)。**成本分析列独立增量**，需先定 A(usage 埋点/改热路径) vs B(余额趋势/零热路径)。
 
-_最后更新: 2026-09-15(P1.1a `16affe3` + P1.1b `57e2c23` + P2 告警 `l2/alert.js`)。_
+_最后更新: 2026-09-15(P1.1a `16affe3` + P1.1b `57e2c23` + P2 告警 `l2/alert.js` + P2 成本分析 `l2/cost.js` B 路余额趋势) _
+
+### 13.7 2026-09-15 P2 成本分析内核落地（`l2/cost.js` · 余额趋势 + 喂 alert.js + 信号源无关）
+
+**§13.6 把成本分析列「独立增量、需先定 A vs B」——本增量先做 B 内核，A 留后续。**
+1. **内核 `l2/cost.js`（216 行，全内存，零 manager 依赖，信号源无关）**：① **B 路余额趋势**——`/balances` 账号余额**快照**由调用方注入 `record(name, balance, {now, providerId, budget, persist})`，内核算**消费额**（`首快照−末快照`，`Math.max(0, …)` 封顶非负——充值/余额上升不误报负消费）/`trend(name)` 段趋势/`report({windowMs})` 窗口内消费聚合（`cutoff = clock()−windowMs`，按 spent 倒序）；② **喂 alert.js**——`produceAlertSignal(name, {budget})` 产 `{ source:'cost', providerId, cost, budget }`（与 alert.js `cost-budget-exceeded` 规则契约精确对齐，**端到端 test 实证：`A.evaluate(C.produceAlertSignal(...))` → rule='cost-budget-exceeded'、severity='warning'**）；③ **信号源无关**——B 路（余额快照）是进料，A 路（`forward.js` token×单价，改热路径）后续只需把 `token×单价` 累加成"余额下降"喂进**同一** `record()` 入口，**内核不重写**；`alert.js` 那侧成本规则已就位（§13.6 13 checks 实证），两端对接实证；④ **非侵入 + 门控** `PROXY_COST_TRACK` 默认关=**observe**（内存 snapshot 照常累积、消费/报告照常算，但 `persist:true` 也**不落盘** `cost-snapshots.jsonl`——断言 `fs.existsSync(tmp)===false` 实证）；开=落盘 JSONL（best-effort `try/catch`，门控权在内核不在调用方）；⑤ **工厂 `createCostService({store, clock, maxSnapshots})`** 每实例独立 store（测试隔离），`maxSnapshots` 裁剪保最近、保头；默认模块级单例。
+2. **验证（全内存，零 manager 依赖，demo 14/14 PASS + 端到端告警实证）**：余额↓消费 + 充值封顶 0 + 多 provider 聚合 + 窗口过滤 + record 产 alert 契约 + 端到端喂 alert.js 触发/不触发 + 边界 cost===budget 触发 + **A 路信号源无关（token×单价喂同入口→同信号形状）** + 门控默认 observe 不落盘 + 门控开落盘 + `persist:false` 覆盖 + `maxSnapshots` 裁剪 + 实例隔离 + report 窗口聚合 + 容错（NaN coerce 0/空序列/未知 provider 安全）+ **非侵入（默认不往 `process.env` 注入 `COST_*` 键）**；jest `tests/unit/cost.test.js` **16/16**；全量回归 **manager jest 612/612（38 suites，基线 596+新 16，零回归）** + l2 **七 demo 全绿**（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13 / alert 13 / **cost 14**）+ `l2/specs/validate.mjs` ALL PASS。
+3. **教训（本轮·1 条）**：① **窗口时间裁剪必须注入 `clock`，否则窄窗口确定性 demo 全滤**——`report()` 用 `cutoff = clock()−windowMs` 裁窗口；若 demo 用确定性时间戳（`now:1..1000`）又不注入 `clock`、又跑 `windowMs` 级别窄窗口，`cutoff` 落在 `Date.now()`（2026）附近 → 全部快照被 `ts>=cutoff` 滤掉、`spent=0`、排序失效（demo check #3、#12 首跑即栽这上，paper 推算必漏）。修法：`createCostService` 支持 `opts.clock` 注入（实例级、默认模块 `Date.now`），确定性 demo/jest 显式注入。**这是"纸面推算必漏、真跑才暴露"的第二例**（第一例 §13.6 的 `merge` 覆盖假绿、第二例本轮 `report` 窗全滤）→ l2 内核的确定性测试一律注入 `clock`/固定时间戳。
+4. **边界（诚实）**：成本分析内核 **B 路（余额趋势）** 已落地 + 端到端喂 alert.js 实证；**生产接线（定时 `/balances` 探测 schedule + 成本报告路由 + A 路 token 埋点改 `forward.js` + 报告落盘）列独立增量**（YAGNI，`forward.js` 改热路径需额外门控）。A 路（token×单价）后续"换进料管不换内核"即可接入。
+5. **`.gitignore` 补 `.hermes/`**——Hermes agent 运行时产物（plans/临时状态），非项目源码，勿 commit。
+
+_最后更新: 2026-09-15(+ P2 成本分析 `l2/cost.js` B 路余额趋势) _
