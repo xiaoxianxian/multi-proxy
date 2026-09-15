@@ -139,7 +139,16 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **非侵入 + 门控**：`PROXY_COST_TRACK` 默认关 = **observe**（内存 snapshot 照常累积、消费/报告照常算，但 `persist:true` 也不落盘 `cost-snapshots.jsonl`——断言 `fs.existsSync(tmp)===false` 实证）；开 = 落盘 JSONL（best-effort try/catch）。
 - **教训（本轮·1 条）**：`report()` 的窗口裁剪用 `clock()` 做 `cutoff = now - windowMs`，若 demo 用确定性时间戳（1..1000ms）不注入 clock、又跑 `windowMs:5ms` 级别的窄窗口，cutoff 在 `Date.now()`（2026）附近 → 全滤。修法：demo 显式注入 `clock:()=>固定值`；`jest` 用 `setClock(()=>10000)` 保证 `cutoff` 在窗口内。
 - 真跑：`node l2/cost.demo.js`（**14 PASS**）；jest `tests/unit/cost.test.js`（**16 例**）。全 manager jest **612/612**（38 suites，+16 零回归）+ l2 七 demo 全绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13 / alert 13 / **cost 14**）+ validate.mjs ALL PASS。
-- **边界**：成本分析内核（B 路余额趋势）已落地；生产接线（定时 `/balances` 探测 schedule + 成本报告路由 + A 路 token 埋点改 `forward.js` + 报告落盘）列独立增量（YAGNI，`forward.js` 改热路径需额外门控）。
+- **边界**：成本分析内核 B 路（余额趋势）已落地；**A 路 token×单价 埋点已落地（见下 cost-track.js 段）**；**仅剩** 生产接线（定时 `/balances` 探测 schedule + 成本报告路由 + 报告落盘 + model 级 pricing 数据源）列独立增量（YAGNI）。
+
+## cost-track.js — A 路 token×单价 埋点（P2 成本分析 · 热路径 · 门控非侵入）
+
+- **内核**：`lib/cost-track.js`（纯内存，零 manager 依赖）。`accumulate(proxyName, usage)` 热路径主入口——门控 `PROXY_COST_TRACK` 关时零开销（仅 `enabled()` 布尔判断 + 不建 state、不写盘）；开时从 upstream `usage` 提 token 数（兼容 OpenAI `prompt_tokens/completion_tokens` + Anthropic `input_tokens/output_tokens` + `cache_read_input_tokens` 缓存折扣），按 per-proxy `pricing`（每百万 tokens）累计 `cost`。
+- **接线**：`forward.js` line 168，`res.json(response.data)` 前 `try { require('./cost-track').accumulate(proxyName, response.data.usage) } catch {}`——只读 usage、不改 response、非致命 try/catch 隔离，热路径改动 < 1 行 + 门控关零副作用。
+- **门控非侵入**：`PROXY_COST_TRACK` 默认关（与 cost.js B 路同义 observe）；pricing 由 `setPricing(name, {input,output,cacheHit?})` 注入（**幂等**：保留已累计 tokens/cost、只换 pricing）或 `loadPricingFromEnv()`（读 `PROXY_PRICING_<proxy>` JSON）；无 pricing 默认 0（本地模型 cost=0、仍累 token 数）。
+- **定价来源边界**：`pricing` 是**模型级**字段（PROVIDERS-README `pricing: {input, output, cacheHit}`，routeEngine cost-optimization 查表），不在 proxy config 上；本增量已交付「提 usage + 累计 token + 注入缝（setPricing/loadPricingFromEnv）」，**实际 model 级 pricing 数据源接 `forward.js` 仍 YAGNI**（需 model→pricing 映射，后续增量）。
+- **教训（本轮·2 条）**：① `setPricing` 幂等——原实现「`_state[name] = {…new}`」会清掉已累 tokens/cost，启动注入 pricing 后成本归零（"修好实际没改"坑）→ 改「existing ? `{...existing, 换 pricing}` : 新建」。② `getCost()` 对外快照剥离内部 `lastTs`（时间戳让确定性 `toEqual` 抖动）→ 暴露纯累计量 + 花费。
+- **真跑**：jest `tests/unit/cost-track.test.js` **15/15**；全量 manager jest **635/635（40 suites，+15 cost-track 零回归，含前序 +8 alert-route）**；live 冒烟：门控关 `getAll()={}`（非侵入）/ 门控开 3×(1000×10/1M+500×20/1M)=0.06 / Anthropic cacheHit 折扣 (1M−0.4M)×25/1M+0.1M×125/1M+0.4M×3/1M=28.7。
 
 ## 铁律（落地前必读）
 
