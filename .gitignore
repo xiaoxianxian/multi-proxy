@@ -9,3 +9,6 @@ multi-proxy-manager/check-*.mjs
 
 # 真实密钥配置（含 api_key），切勿提交；模板见 multi-proxy-manager/providers.sample.json
 providers.json
+
+# Hermes agent 运行时产物（plans / 临时状态），非项目源码
+.hermes/

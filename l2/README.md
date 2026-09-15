@@ -120,7 +120,16 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **可插拔 sink**：`log`（默认收集型零副作用）/ `registerSink(name, fn)` 热插（邮件/Telegram/微信 sink 在此挂），`dispatch` 每 sink 包 try/catch 隔离（单个崩不影响其它/主流程，best-effort）；工厂 `createAlertService({store})` 每实例独立 events store（测试隔离）。
 - **真跑教训（本轮·3 条）**：① 信号注入式是 l2/ 内核统一范式——要消费 manager 的 provider-health/error-patterns 又不破坏内核自包含，解法不是 require manager lib，而是让调用方注入现成信号（同 memory-merge envInject 接 merged、orchestrator 接 DAG）。② 非侵入用「门控跳过落盘 + 断言 `fs.existsSync===false`」双向验证——jest 用 `setEventsFile(tmp)+emit(persist:true)+断言文件不存在` 证 observe 下即使调用方要求落盘也不落盘。③ 成本块「规则就位但不采集则不触发」是 YAGNI 正形态，未接的信号源=未触发的规则，不强行接。
 - 真跑：`node l2/alert.demo.js`（**13 PASS**）；jest `tests/unit/alert.test.js`（13 例）。全 manager jest **596/596**（37 suites，+13 零回归）+ l2 六 demo 全绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13 / alert 13）。
-- **边界**：P2 告警服务内核已落地；成本分析（A usage 埋点 / B 余额趋势）+ 生产接线（调度 emit + 路由 + sink 实发 + agent 注 env + 持久化）列后续（YAGNI，暂无非侵入接入缝）。
+- **边界**：P2 告警服务内核已落地；生产接线（调度 emit + 路由 + sink 实发 + agent 注 env + 持久化）列后续（YAGNI，暂无非侵入接入缝）。
+
+## cost.js — 成本分析内核（P2 健康监控增强 · §4.6 成本分析报告 · 信号源无关 + 非侵入 observe）
+
+- **内核**：`cost.js`（216 行，全内存，零 manager 依赖）**消费 `/balances` 账号余额快照 → 消费额/趋势/报告 + 喂 alert.js `cost-budget-exceeded`**。`createCostService({store, clock, maxSnapshots})` 独立 store（工厂隔离）；`record(name, balance, {now, providerId, budget, persist})` 追加快照算消费；`consumption(name)` / `trend(name)` / `report({windowMs})` 窗口内消费聚合；`produceAlertSignal(name, {budget})` → `{source:'cost', providerId, cost, budget}`（alert.js 契约，喂了就算）。
+- **信号源无关**：当前 B 路（`/balances` 余额趋势，零热路径）是进料；A 路（token × 单价累加，改 `forward.js` 热路径）后续接入只需把 `token×单价` 累加成"余额下降"喂进同一 `record()` 入口——内核不重写。`alert.js` 那侧 `cost-budget-exceeded` 成本规则已就位（13 checks 实证），两端对接实证。
+- **非侵入 + 门控**：`PROXY_COST_TRACK` 默认关 = **observe**（内存 snapshot 照常累积、消费/报告照常算，但 `persist:true` 也不落盘 `cost-snapshots.jsonl`——断言 `fs.existsSync(tmp)===false` 实证）；开 = 落盘 JSONL（best-effort try/catch）。
+- **教训（本轮·1 条）**：`report()` 的窗口裁剪用 `clock()` 做 `cutoff = now - windowMs`，若 demo 用确定性时间戳（1..1000ms）不注入 clock、又跑 `windowMs:5ms` 级别的窄窗口，cutoff 在 `Date.now()`（2026）附近 → 全滤。修法：demo 显式注入 `clock:()=>固定值`；`jest` 用 `setClock(()=>10000)` 保证 `cutoff` 在窗口内。
+- 真跑：`node l2/cost.demo.js`（**14 PASS**）；jest `tests/unit/cost.test.js`（**16 例**）。全 manager jest **612/612**（38 suites，+16 零回归）+ l2 七 demo 全绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13 / alert 13 / **cost 14**）+ validate.mjs ALL PASS。
+- **边界**：成本分析内核（B 路余额趋势）已落地；生产接线（定时 `/balances` 探测 schedule + 成本报告路由 + A 路 token 埋点改 `forward.js` + 报告落盘）列独立增量（YAGNI，`forward.js` 改热路径需额外门控）。
 
 ## 铁律（落地前必读）
 
