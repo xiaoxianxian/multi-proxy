@@ -346,7 +346,7 @@
 | **P0** | **Agent Adapter 协议** | 2-3 天 | 插件运行时 | 任务接收/结果回传/能力声明/健康检查 契约 + Codex/Hermes/h3web/AIGC 各 1 样例 | ✅ 已收口：4 接口契约定稿 + 4 样例全跑（h3web 6 + AIGC 10 + L1 25 checks PASS）；Codex/Hermes 走 L1chat 3 分支（真 chat / discovery 退化），全 mock-first 零副作用 |
 | **P0** | Agent Registry | 1-2 天 | 插件运行时 | Agent Profile CRUD API + 能力标签注册 | ✅ 已落地：`agent-registry.js`+demo 18 checks PASS + 接 manager HTTP API（jest 12/12 + :18792 真跑 200/401） |
 | **P1** | 记忆服务（公共+个性+环境变量注入） | 2 天 | Agent Registry | 记忆合并 + 规范数据格式 + 方案适配器 + 环境变量注入 | ⚠️ **P1.1a 落地**：规范格式+互通性（`specs/agent-memory` node/py 两侧 PASS）+ **合并/适配器/注入内核 `l2/memory-merge.js`**（merge 公共+个性·冲突策略 personal/shared/error + envInject 非侵入投影 `AGENT_SYSTEM_PROMPT/ERROR_PATTERNS/TOOLS_ALLOWED/CONFIG/MEMORY_CONTEXT` + 可热插拔 scheme 适配器 json/yaml-text/view，demo 11/11、jest 14/14、规范 validate ALL PASS，manager jest 570/570）；**剩 P1.1b**：agent 启动注 env 接线 + 持久化（暂无非侵入接入缝，列后续） |
-| **P1** | 技能服务（含互通性） | 2 天 | Agent Registry | Skill CRUD + 版本 + 规范格式适配 | ⚠️ 部分：规范格式+互通性已落地（`specs/skill` ALL PASS）；完整 Skill CRUD 服务未做 |
+| **P1** | 技能服务（含互通性） | 2 天 | Agent Registry | Skill CRUD + 版本 + 规范格式适配 | ✅ **P1.1b 落地**：`l2/skill-service.js`（Skill CRUD + 版本管理 bump/rollback + 市场 registerBuiltin/upload + 规范格式适配 json/yaml-text/view + 热插拔适配器，demo 13/13、jest 13/13、规范 `specs/skill` validate ALL PASS，manager jest 583/583）；**剩 P1.1b**：生产接线（API 路由 + 持久化 store）列后续（YAGNI，无非侵入接入缝） |
 | **P2** | 编排引擎（任务拆解+路由+执行+聚合） | 5-7 天 | Agent Registry + 记忆服务 + Adapter | 编排 API + 5 用例（含 h3web 视频工作流） | ✅ 落地：`l2/orchestrator.js`+`decomposer.js`（拆解+调度+容错+聚合+协作历史，19+16=35 checks PASS）+ `/api/orchestration` 生产接线（`routes/orchestration.js`，门控 `PROXY_ORCHESTRATION` 默认关/shadow 默认开，manager jest 546/546）；**P2.2 LLM 拆解已落地**（`l2/llm-decomposer.js` `makeLlmDecomposer` 填 `decomposer.js` 预留缝：可注入 OpenAI-兼容 http 传输 + DAG 解析/环复算/全路径降级回 template，19 checks PASS；`routes/orchestration.js` 门控 `PROXY_LLM_DECOMPOSE` 默认关，接 LLM 拆解路径，manager jest 556/556） |
 | **P2** | 健康监控增强（告警+成本分析） | 2-3 天 | Agent Registry | 告警服务 + 成本报告 | 部分（M2 有故障记录 + D6-a 健康信号已观测门控 + D7 熔断 live 实证；缺告警/成本分析） |
 | **P3** | 文档 + 案例 + 性能测试 | 1 周 | 全部 | README / ARCHITECTURE / 3 案例 / 测试报告 | ⚠️ 部分：`L2-BLUEPRINT`+`l2/README`+各 demo 已起；3 案例 + 性能报告未做 |
@@ -387,7 +387,7 @@
 **确认后再动手，不擅自实施。**
 ---
 
-*最后更新：2026-09-11 v2（决策对齐）→ 2026-09-13 Hermes 补充：M6 方向四 / M2 健康增强 已闭环；L2 P0-P3 待排期，确认后再动手。*
+*最后更新：2026-09-11 v2（决策对齐）→ 2026-09-13 Hermes 补充：M6 方向四 / M2 健康增强 已闭环；L2 P0-P3 待排期，确认后再动手 → 2026-09-15 P1.1a 记忆服务内核 + P1.1b 技能服务内核落地，P2/P3-a/b 已收口。*
 ---
 
 ## 方向六 P1-P3 实施状态（2026-09-14）

@@ -1,7 +1,7 @@
 # MEMORY.md — multi-proxy 项目记忆
 
 > 供 WorkBuddy / Claude / Codex / Hermes 等 agent 读取，作为本项目单一事实来源。
-> 仅内部使用，分发包剔除。最后更新：2026-09-12（新增 §十 Agentic Coding 工具趋势分析）
+> 仅内部使用，分发包剔除。最后更新：2026-09-15（P1.1a 记忆服务内核 `l2/memory-merge.js` + P1.1b 技能服务内核 `l2/skill-service.js` 落地；§13.4 + §13.5）
 
 ## 一、项目定位
 - `codex-multi-model-proxy` 的合并升级版：挂多个 agent 代理的统一壳子，目标根治 WorkBuddy 等 agent 因 API 限速导致的任务中断。
@@ -235,3 +235,9 @@ WorkBuddy 分析**扎实**，有四处值得肯定：
 2. **验证**：`l2/memory-merge.demo.js` **11/11 PASS**（合并/三种冲突策略/envInject 非侵入证明 process.env 不漏内核键/多类不串扰/超长截断/三类适配器往返/热插拔/校验）；jest `tests/unit/memory-merge.test.js` **14/14**；全量回归 **manager jest 570/570（35 suites，基线 556+新14，零回归）** + l2 demo 四绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11）。
 3. **边界（诚实）**：P1.1a = 合并+适配器+**投影**内核，已落地；**P1.1b（agent 启动时真注 env 的接线 + 记忆持久化）列后续**——目前 manager 侧暂无"非侵入注入 env 到 agent 进程"的接入缝，强行接 = 投机/污染，故未做（YAGNI）。
 4. **教训（本轮·2 坑）**：① **demo 抓到真 kernel bug**——`merge` 的 `personal` 策略原只改 `_layer/updatedAt`、**没替换胜出方的数据字段**，致"个性覆盖公共"假绿；修=胜出时用 e 覆盖 cur 的 id/type/scope/key/value/tags/... 全字段。这印证 demo 真跑对 kernel（非仅 mock 喂值）的价值。② **`process.exit(pass+fail===0?0:1)` = 永远非零**（`pass+fail` 总>0）→ 全绿 demo 在 CI 里报 fail；修=`process.exit(fail===0?0:1)`，与另 4 个 l2 demo 的 `.catch(()=>process.exit(1))`（成功走 exit 0）对齐。
+
+### 13.5 2026-09-15 P1.1b 技能服务内核落地（`l2/skill-service.js` · CRUD / 版本 / 市场 / 规范格式适配）
+1. **内核 `l2/skill-service.js`（§4.5「技能服务 Skill 管理」+ P1 验收项 3 条：CRUD / 版本 / 规范格式适配，全默认零网络零文件零 LLM，纯内存非侵入）**：`createSkillService({ clock })` 返回 store，核心 API：`create(raw, opts)`（id 缺省 = `skill-<name-slug>`、version 缺省 `1.0.0`、enabled 缺省 true、stamp `createdAt/updatedAt`）/ `get`（id 或 name，取最新 version）/ `update(key, patch)`（缺省 bump patch）/ `bump(key, { version })`（保留旧版、旧版 enabled→false、新版→true）/ `rollback(key, target)`（翻启用权到旧版）/ `remove(key)` / `list(filter)`（filter 支持 source/tags/enabled + 默认 latest 折叠同名多版本）/ `search(q)`（case-insensitive 子串匹配 name/trigger/description/content）/ `toCapabilities()`（同名取最新 enabled，投影给编排器/Registry）；市场：`registerBuiltin`/`upload`（带 source 标签的 create，YAGNI 不另起）；适配器：`json`（规范 canonical）/ `yaml-text`（纯文本零依赖往返）/ `view`（摘要去 content）+ `registerAdapter(name, {toDoc, fromDoc})` 热插拔。`validateSkill` 轻量校验（必填 + 类型 + version 形如 X.Y.Z），`toEntry` 在 `validateSkill` 前 stamp 默认值。
+2. **验证**：`l2/skill-service.demo.js` **13/13 PASS**（CRUD / 市场 / bump 保留历史 / rollback 翻转 / 坏 version 拒 / list 过滤+折叠 / search / 非侵入（process.env 不漏 / 无 fs）/ json 规范往返 / yaml-text 往返 / view 摘要 / 热插拔 csv / 终极非侵入）；jest `tests/unit/skill-service.test.js` **13/13**；全量回归 **manager jest 583/583（36 suites，基线 570+新 13，零回归）** + l2 demo 五绿（decomposer 19 / orchestrator 16 / llm-decomposer 19 / memory-merge 11 / skill-service 13）。
+3. **边界（诚实）**：P1.1b = CRUD + 版本 + 市场 + 规范格式适配内核，**已落地**；**生产接线（API 路由 + 持久化 store）列后续**——manager 侧暂无「技能 store 持久化到 `~/.multi-proxy-manager/`」的非侵入接入缝，不强行做（YAGNI）。
+4. **教训（本轮·3 坑）**：① **kernel bug**：`create(raw, opts)` 原只调 `toEntry(raw, ...)` 完全忽略 `opts` → `registerBuiltin(s)` 的 `{source:'builtin'}` 被丢弃，source 始终 fallback DEFAULT_SOURCE；修=合并 `{...raw, ...opts}` 再 stamp。② **jest 测试隔离**：`svc` 在 `beforeEach` 全 fresh，测试 2 的 `non-invasive` 断言假设 `svc._store.entries.length≥3` 但实际每测试只有当前新增 → 假失败；修=自包含数据不依赖跨测试。③ **测试 5 的 regex**：`/missing|content/` 同时漏 `content`、`description`、`trigger` 中一个就 pass，但 `toEntry` 默认 stamp `content=raw.content` 而 `base.content='c'` 非空，所以不会抛；修=构造缺 `content` 的 raw 精确断言 `/missing content/`。
