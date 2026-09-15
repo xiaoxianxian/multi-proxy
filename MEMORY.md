@@ -291,4 +291,14 @@ _last更新: 2026-09-15(+ P2 告警生产接线 `routes/alert.js` /api/alert 门
     - **② `getCost()` 对外快照剥离内部 `lastTs`**——时间戳字段让确定性 `toEqual` 抖动；对外契约只暴露纯累计量+花费。
 6. **边界（诚实）**：A 路埋点（提 usage + 累计 token + 定价注入缝）已落地，门控默认关非侵入，live 实证；**model 级 pricing 数据源接 `forward.js` + 成本信号源 scheduler（定时 `/balances` 探测喂 `cost.js record()`）+ 成本报告路由 + 报告落盘** 仍列后续独立增量（YAGNI）。
 
-_last更新: 2026-09-15(+ P2 成本分析 A 路 `lib/cost-track.js` + `forward.js` 热路径 门控 PROXY_COST_TRACK) _
+### 13.10 2026-09-16 方向五 P3 文档 + 案例 + 性能报告落地（`l2/CASES.md` + `l2/PERF-REPORT.md`，收口非侵入纪律）
+
+**§13.4「3 案例 + 性能报告未做」本增量闭环。** 全部数字由 demo/live 真跑产出，非纸面。
+
+1. **`l2/CASES.md` 三案例**（真跑核实）：① 编排引擎视频工作流——`orchestrator.demo.js` 16 PASS（video-workflow 模板 storyboard→gen-clip-a/b→compose，shadow/条件分支/retry 降级/环拒绝/落盘非 home）+ `decomposer.demo.js` 19 + `llm-decomposer.demo.js` 19（真起 http 假 LLM + 全降级路径）；② 告警——`alert.demo.js` 13 PASS（4 规则 + cooldown 去重 + 可插拔 sink + observe 非侵入不落盘）；③ 成本——`cost.demo.js` 14 PASS（B 路余额趋势 + 喂 alert cost-budget-exceeded + 信号源无关）+ **A 路 live 冒烟** `lib/cost-track.js`：gate-off `getAll()={}` 非侵入 / OpenAI 3×(1000×10/1M+500×20/1M)=**0.06** / 幂等 setPricing 不清零 / Anthropic cacheHit (1M−0.4M)×25/1M+0.1M×125/1M+0.4M×3/1M=**28.7**（真跑精确复现，非臆造）。
+2. **`l2/PERF-REPORT.md`**：appendLog O(n²) 写放大是 review-2026-08-24 C1/架构师🟡/测试#6 发现的旧形态，**现状已修**——`lib/logger.js`（`f19aeb6`）改计数触发裁剪 `TRIM_INTERVAL=500`（文件稳 5000~5005 行）。实测基准 `/tmp/bench-logger.mjs`（M5/Node 22.22.3，`hrtime`）：旧 per-append 全重写 1670.4/20157.9/40156.6 ms（N=5k/50k/100k）vs 新 amortized 131.0/1019.6/2216.4 ms = **12.8×/19.8×/18.1× 加速**，最终文件字节一致（424915 B，功能等价）。开放性能项 C2 流式转发 / B7 120s 掐断长流 / rr_index SQLite 写放大**诚实标注未闭环**（YAGNI 边界，非本次范围）。
+3. **全量回归零回归**：manager jest **635/635（40 suites）**；l2 七 demo 全绿（decomposer 19/orchestrator 16/llm-decomposer 19/memory-merge 11/skill-service 13/alert 13/cost 14）+ 三 adapter（h3web 6/AIGC 10/L1 25）+ `specs/validate.{mjs,py}` ALL PASS。
+4. **纪律**：内核非侵入（不写 agent 文件 / 不注入全局 env / 门控默认关）；真跑验证才收口；性能数字全部来自基准脚本真实输出，**不臆造**；发现 O(n²) 已被 `f19aeb6` 修复时如实记「已闭环」而非重复修。
+5. **教训（本轮·1 条）**：性能报告别抄 review 旧结论当现状——review-2026-08-24 的 C1 是**当时**形态，落盘前先查 git log/SOURCE 确认是否已修，避免「对着旧报告重写已解决问题的修复代码」（修好实际没改反向坑）。
+
+_last更新: 2026-09-16(+ 方向五 P3 文档+案例+性能报告落地 l2/CASES.md+l2/PERF-REPORT.md，数字全部 demo/live 真跑) _

@@ -349,7 +349,7 @@
 | **P1** | 技能服务（含互通性） | 2 天 | Agent Registry | Skill CRUD + 版本 + 规范格式适配 | ✅ **P1.1b 落地**：`l2/skill-service.js`（Skill CRUD + 版本管理 bump/rollback + 市场 registerBuiltin/upload + 规范格式适配 json/yaml-text/view + 热插拔适配器，demo 13/13、jest 13/13、规范 `specs/skill` validate ALL PASS，manager jest 583/583）；**剩 P1.1b**：生产接线（API 路由 + 持久化 store）列后续（YAGNI，无非侵入接入缝） |
 | **P2** | 编排引擎（任务拆解+路由+执行+聚合） | 5-7 天 | Agent Registry + 记忆服务 + Adapter | 编排 API + 5 用例（含 h3web 视频工作流） | ✅ 落地：`l2/orchestrator.js`+`decomposer.js`（拆解+调度+容错+聚合+协作历史，19+16=35 checks PASS）+ `/api/orchestration` 生产接线（`routes/orchestration.js`，门控 `PROXY_ORCHESTRATION` 默认关/shadow 默认开，manager jest 546/546）；**P2.2 LLM 拆解已落地**（`l2/llm-decomposer.js` `makeLlmDecomposer` 填 `decomposer.js` 预留缝：可注入 OpenAI-兼容 http 传输 + DAG 解析/环复算/全路径降级回 template，19 checks PASS；`routes/orchestration.js` 门控 `PROXY_LLM_DECOMPOSE` 默认关，接 LLM 拆解路径，manager jest 556/556） |
 | **P2** | 健康监控增强（告警+成本分析） | 2-3 天 | Agent Registry | 告警服务 + 成本报告 | ✅ **告警内核 `l2/alert.js`** + ✅ **成本分析内核 `l2/cost.js`（B 路余额趋势，2026-09-15 补完）**：告警 4 规则 + cooldown 去重 + 可插拔 sink + 非侵入（不写 providers.json/不触路由/不落盘）；成本分析 `createCostService()` 余额快照→消费额→报告 + 信号喂 alert.js `cost-budget-exceeded`（端到端 test 实证，B 路零热路径、A 路 token×单价 信号源无关、`PROXY_COST_TRACK` 门控默认 observe 不写盘）。demo 13+14/13+16=33、全量 jest 620/620（39 suites，+8 alert-route 零回归）+ l2 七 demo 全绿。✅ **告警生产接线 `routes/alert.js`（/api/alert，门控 PROXY_HEALTH_ALERT 默认 403，2026-09-15）**：三信号源（provider-health / error-patterns / cost）拉式→`alertSvc.emit`，零热路径、非侵入，live 冒烟 403/200 实证，jest +8 零回归。cost 信号源 B 路余额趋势未接 scheduler（仍 YAGNI）。✅ **A 路 token×单价 埋点 `lib/cost-track.js` + `forward.js` 热路径 line 168（门控 `PROXY_COST_TRACK` 默认关，非侵入，2026-09-15）**：从 upstream `usage` 提 token×定价内存累计（setPricing 幂等 + loadPricingFromEnv 注入缝），jest +15 零回归（**635/635·40 suites**），live 冒烟门控关 `getAll()={}`/门控开累计 0.06/Anthropic cacheHit 折扣 28.7 实证。 |
-| **P3** | 文档 + 案例 + 性能测试 | 1 周 | 全部 | README / ARCHITECTURE / 3 案例 / 测试报告 | ⚠️ 部分：`L2-BLUEPRINT`+`l2/README`+各 demo 已起；3 案例 + 性能报告未做 |
+| **P3** | 文档 + 案例 + 性能测试 | 1 周 | 全部 | README / ARCHITECTURE / 3 案例 / 测试报告 | ✅ **已落地（2026-09-16）**：`l2/CASES.md` 3 案例（① 编排视频 orchestrator 16+decomposer 19+llm-decomposer 19 / ② 告警 alert 13 / ③ 成本 cost 14 + A 路 token×单价 live 0.06/28.7）+ `l2/PERF-REPORT.md`（appendLog O(n²) review C1 已修 `f19aeb6` 计数触发裁剪，实测旧 1670→40157ms vs 新 131→2216ms = 12.8×→19.8× 加速 N=5k→100k + 开放性能项 C2/B7/rr_index 诚实标注）；数字全部 demo/live 真跑，非纸面；jest 635/635·40 suites + l2 七 demo + 3 adapter + specs validate 全绿。 |
 | **P5（可选）** | Marvis 式 GUI 看板（锦上添花） | 3-5 天 | 编排引擎 | Electron 壳 + 前端组件 | 未开始，可延后 |
 | **P5（可选）** | 编排面板 + 插件市场 UI | 2-3 天 | 编排引擎 + 插件运行时 | 任务流可视化 + 插件卡片 | 未开始，可延后 |
 
@@ -387,7 +387,7 @@
 **确认后再动手，不擅自实施。**
 ---
 
-*最后更新：2026-09-11 v2（决策对齐）→ 2026-09-13 Hermes 补充：M6 方向四 / M2 健康增强 已闭环；L2 P0-P3 待排期，确认后再动手 → 2026-09-15 P1.1a 记忆服务内核 + P1.1b 技能服务内核落地，P2/P3-a/b 已收口。*
+*最后更新：2026-09-11 v2（决策对齐）→ 2026-09-13 Hermes 补充：M6 方向四 / M2 健康增强 已闭环；L2 P0-P3 待排期，确认后再动手 → 2026-09-15 P1.1a 记忆服务内核 + P1.1b 技能服务内核落地，P2/P3-a/b 已收口 → 2026-09-16 方向五 P3 文档+案例+性能报告落地（`l2/CASES.md` 3 案例 + `l2/PERF-REPORT.md`，数字全部真跑）*
 ---
 
 ## 方向六 P1-P3 实施状态（2026-09-14）

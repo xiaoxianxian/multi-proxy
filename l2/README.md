@@ -1,5 +1,7 @@
 # l2/ — L2 Agent 编排中枢 P0 落地
 
+> 配套文档：`L2-BLUEPRINT.md`（架构与排期）· `l2/CASES.md`（3 落地案例：编排视频 / 告警 / 成本，2026-09-16）· `l2/PERF-REPORT.md`（性能实测，2026-09-16）。
+
 P0 第一交付物：互通性地基（决策 2）+ Agent Adapter 协议契约（决策 3）。
 P0 模块顺序：**Agent Registry → 插件运行时 → Adapter 协议**（见 MEMORY-2026-09-11「三决策已拍板」）。
 
