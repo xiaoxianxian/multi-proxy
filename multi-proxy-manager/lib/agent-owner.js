@@ -52,7 +52,7 @@ function readHermesUrl() {
       continue;
     }
     if (inModel && /^  base_url:/.test(line)) {
-      return line.replace(/^  base_url:[ \t]*/, '').replace(/^"|"$/g, '').trim() || null;
+      return line.replace(/^  base_url:[ \t]*/, '').replace(/^"|"$ /g, '').trim() || null;
     }
   }
   return null;
@@ -68,7 +68,7 @@ const READERS = {
 };
 
 /**
- * 检测某 agent 是否被其他工具占用。
+ * 检测单个 agent 是否被其他工具占用。
  * @param {string} agent codex | hermes | cursor
  * @returns {{ occupied: boolean, by?: string, baseUrl?: string }}
  */

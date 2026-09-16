@@ -480,7 +480,18 @@ case "${1:-status}" in
       logs) show_logs manager ;;
       *) print_error "未知命令: $2"; echo "用法: $0 manager [start|stop|restart|status|logs]" ;;
     esac
-    ;;
+     ;;
+  # 桌面壳：打开 Electron 壳（自包含：复用/启动后端 + 装载 UI + 开壳前占检测）
+ gui)
+    cd "$MANAGER_DIR" || exit 1
+    if [ ! -d "node_modules/electron" ]; then
+      print_warning "electron 未安装，正在安装（走 .npmrc mirror）..."
+      npm install electron --save-dev --no-audit --no-fund 2>/dev/null
+    fi
+    print_status "启动桌面壳 Manager Desktop (端口 $MANAGER_PORT)..."
+    # exec 替换：壳退出即脚本退出。后端由壳自管（见 main.js ensureBackend）。
+    exec npx electron main.js
+     ;;
   *)
     echo "Multi-Proxy Manager 管理脚本"
     echo ""
