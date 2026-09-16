@@ -302,3 +302,20 @@ _last更新: 2026-09-15(+ P2 告警生产接线 `routes/alert.js` /api/alert 门
 5. **教训（本轮·1 条）**：性能报告别抄 review 旧结论当现状——review-2026-08-24 的 C1 是**当时**形态，落盘前先查 git log/SOURCE 确认是否已修，避免「对着旧报告重写已解决问题的修复代码」（修好实际没改反向坑）。
 
 _last更新: 2026-09-16(+ 方向五 P3 文档+案例+性能报告落地 l2/CASES.md+l2/PERF-REPORT.md，数字全部 demo/live 真跑) _
+
+### 13.11 2026-09-16 待办 / 未启动清单盘点（HEAD `2522018`，基于 git log + grep 实核非臆造）
+
+**已闭环（方向三/五/六 · 含 M7，全 P1-P3 落地，全绿）**：D4 override / D5 健康感知 / D6 审计 / M6? 见下 / M7 长任务保活链路
+（worktree `f99111f` → tmux 保活 `fc5cf96` → session 胶水 `9641925` → 崩溃恢复 e2e `754fedd`）/
+方向五 L2 编排+告警+成本（A 路 `43b5706` + B 路 `7431b43` + 告警 `7c87b71` + 报告 `b69fc77`）。
+
+**待办 / 未启动（真实状态）**：
+
+1. **方向二 D2 商业化 — 未做**：`docs/02-competitive/commercialization-questions.md` 仍是占位（20 问未答）。商业/付费模型是决策项，非纯技术，需老板拍板。
+2. **sign-off 是观测+决策动作（非 code bug，卡 1-2 天观察）**：方向一 D4/D5/D6 的 code 已 gated 默认关合入，但 sign-off 是"看够样本再 flip 默认"——D4 `getOverrideLog` 观察、D5 看 `/api/health/isolation`、D6 跑 `tools/override-audit-report`。当前默认全关 observe（6 个 `PROXY_*` 门控：HEALTH_ISOLATE/COST_TRACK/HEALTH_ALERT/ROUTING_SHADOW/HEALTH_MONITOR/ROUTE_OVERRIDE 全默认关）。
+3. **M6 方向七 智能路由 P0 — 未启动，卡三前置**（见 `ITERATION-ROADMAP.md` §"依赖清单"）：①成本基线 ②质量基线 ③路由策略 spec。Phase1 Shadow 是 code-first 可做，但也需这三基线 + 路由策略 spec + M6 总开关设计。
+4. **DSH DS2/DS3 — 暂缓**：DS1 已落（`64edc10`，2 SKILL + `dsh-integration.md`）；DS2 npm 包化等 DSH 0.2 稳定、DS3 生态运行等 guardrail #1496 落地。
+5. **C2/B7 幽灵路径 — 默认不修**：`b69fc77` 坐实零调用方，修 = "修好实际没改"反向坑；保留观察。
+6. **P5 GUI 桌面壳 — 暂缓**：锦上添花非阻塞。
+
+_最后更新: 2026-09-16(+ §13.11 待办盘点：D2 未做 / sign-off 待观测 / M6-P0 卡三前置 / DSH DS2·3 暂缓 / C2B7 不修 / P5 暂缓；HEAD 2522018 全绿)_
