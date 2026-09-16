@@ -27,15 +27,22 @@
 ## 二、两个老板决策项（代码已就位，待拍 + 待 push）
 
 ### 决策 1（D5）· 写 DB：enable ollama qwen3.8:27b-mlx provider
-- **现状**：`DEFAULT_ROUTE_CONFIG` 已用真名，但 DB 里 qwen3.8:27b-mlx 这条 provider 的 `enabled` 可能还是 0（disabled），路由到它不生效。
-- **动作**：`UPDATE providers SET enabled=1 WHERE name='qwen3.8:27b-mlx'`（或走 UI enable）
-- **前置确认**（老板跑）：olllama 在跑、非与 H3 并发、内存不爆（22/48GB 已实测）。
-- **风险**：本地层在 fallbackChain 末位，云端全挂才用，开它只是兜底更稳。
+- **现状（2026-09-16 实核 `data/proxy.db`）**：`qwen3.8:27b-mlx`（provider_id=ollama，base_url=http://127.0.0.1:11434/v1）**`enabled=1`，已在库，无需动作**。
+  - 4 个 provider 全部 `enabled=1`：DeepSeek-Test / agnes-2.5-flash / qwen3.8:27b-mlx / kimi。
+- **前置确认（已完成，只读实测）**：ollama 在跑（PID 813，端口 11434 LISTEN）；H3 服务未起（8731/8732 无 LISTEN，仅有 H3 权重下载进程，非服务，不冲突）；内存 free 43%。
+- **结论：决策 1 已满足。无需写 DB。**
 
 ### 决策 2（D4）· 翻 override 灰度：`PROXY_ROUTE_OVERRIDE=1`
-- **现状**：默认 0（行为逐字节不变，shadow 态是稳态终点）。
-- **动作**：灰度 1-2 天看 `getOverrideLog()` 的 `applied/provider/requestModel/overrideModel/taskType` 是否合理。
-- **风险**：翻 1 后引擎建议**接管真实路由**（非只观测），需 D5 对齐（决策 1）已做，否则路由塌缩。
+- **现状（2026-09-16 实核）**：默认 0（行为逐字节不变，shadow 态是稳态终点）。
+- **⚠️ 隐藏前置（实核发现）**：`dist/server/handlers/chatHandler.js`（9/11 编译）**不含 `PROXY_ROUTE_OVERRIDE`**——override 代码（`chatHandler.ts:30/385`）从未编译进运行产物。
+   `start.ts`（9/15）比 `dist`（9/11）新 4 天 → **翻 env 前必须先 `npm run build`**，否则翻了也是空操作。
+- **注入方式（非侵入铁律，绝不全局 `launchctl setenv`）**：
+   - cursor 无 `.env` 加载、无运行时 toggle → 只能靠**子进程 env + 重启**：`PROXY_ROUTE_OVERRIDE=1 node dist/server/start.js`；
+   - 固化：`manage.sh start_cursor`(nohup 前)注入，或 `.env` + dotenv（需先加 dotenv，当前 `src/` 无 dotenv）。
+   - **绝不** `launchctl setenv PROXY_ROUTE_OVERRIDE 1`（全局 env 注入，违反 ADR-0003 非侵入）。
+- **验证（做，不擅自固化常驻）**：先 `npm run build` → 带 env 起 cursor → 发 **1 条 coding 请求**，看是否路由到 `deepseek-v4-pro` + HTTP 200（D7 已证此路 mock+live 通）；确认无误后老板定是否写进 `manage.sh` 常驻。
+- **风险**：翻 1 后引擎建议**接管真实路由**（非只观测）；4 provider 全 enabled + `findProviderByType` 真名对齐 → 不再塌缩（旧 09-12 风险已消除，见 D5）。
+- **回退**：停该进程即回 shadow 稳态（默认 0）。
 
 ---
 
@@ -66,7 +73,8 @@
 ---
 
 ## 四、下一步（老板选）
-1. **执行 2 个决策**：跑 §二 的 `UPDATE` + `PROXY_ROUTE_OVERRIDE=1`
-2. **校 kimi pricing**：确认汇率 + 人民币价 → 改 `routeEngine.ts:202` → 跑 cursor tsc+测试（119）确认不破
-3. **kimi 真连验证**（花点钱 + 用 key，老板决定何时跑）
-4. 都先不动，保持 shadow 稳态（也是合理终点）
+1. **M6 真接管**（决策 2）：`cd cursor-proxy && npm run build`（dist 缺 override 代码）→ `PROXY_ROUTE_OVERRIDE=1 node dist/server/start.js` → 发 1 条 coding 请求验证路由到 deepseek-v4-pro（HTTP 200）→ 老板定是否写进 `manage.sh start_cursor` 常驻。
+   - **决策 1（DB enable qwen3.8）已满足，无需动作**（4 provider 全 enabled）。
+2. **校 kimi pricing**：确认汇率 + 人民币价 → 改 `routeEngine.ts:202` → 跑 cursor tsc+测试（119）确认不破。
+3. **kimi 真连验证**（花点钱 + 用 key，老板决定何时跑）。
+4. 都先不动，保持 shadow 稳态（也是合理终点）。
