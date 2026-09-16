@@ -50,6 +50,8 @@ bash manage.sh stop
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
+| `docs/09-review/consistency-report.md` | `docs/09-review/` | 一致性报告（E批，doc↔code） |
+| `docs/09-review/unknowns.md` | `docs/09-review/` | 未知/待补清单（E批） |
 | `docs/05-design/visual-design.md` | `docs/05-design/` | 视觉设计规范（D批，token层提取） |
 | `docs/07-ops/deployment.md` | `docs/07-ops/` | 部署指南（C档，三模式） |
 | `docs/07-ops/runbook.md` | `docs/07-ops/` | 运维手册（C档） |

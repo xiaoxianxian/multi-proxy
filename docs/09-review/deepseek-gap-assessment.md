@@ -81,11 +81,14 @@ DeepSeek 的 7 步里有不少和现有文档重叠。按「能复用就复用�
 |---|------|------|
 | `docs/05-design/visual-design.md` | 原标 [待确认]"纯静态页无设计系统"→ 实查 `colors_and_type.css` token 层完整（明暗双/brand/provider 色） | ✅ 4604B，据实纠正 |
 
-### E. 收口
+### E. 收口 — ✅ 2026-09-17 完成（真对比 doc↔code，非编造）
 
-| 项 | 处理 |
-|---|---|
-| 09-review/consistency-report + unknowns | 放最后，真对比 doc↔code（用 project-hygiene / requesting-code-review skill），不编 |
+| 项 | 处理 | 状态 |
+|---|------|------|
+| `docs/09-review/consistency-report.md` | doc↔code 数字核对 + 遗留标记分类（有意保留 vs 需处理） | ✅ 2958B |
+| `docs/09-review/unknowns.md` | 9 项 unknown 汇总（商业待信号/功能待实现/幽灵/一致性） | ✅ 2531B |
+
+**收口判定**：核心数字全文一致无漂移（635/63/端口/L2 数）；唯一不一致为 `CLAUDE.md` L53-65 旧测试数（受保护，建议加注不改数字）。
 
 ---
 
