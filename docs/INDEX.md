@@ -55,7 +55,8 @@ bash manage.sh stop
 | `docs/06-test/` | `docs/` | test-cases.md 全模块测试方案（数字真跑） |
 | `docs/02-product/dsh-integration.md` | `docs/` | DSH 生态接入规划（DS1✅ / DS2·DS3 暂缓） |
 | `docs/02-product/m6-action-checklist.md` | `docs/` | M6 智能路由 D4-D8 行动清单 + kimi 价基线（2026-09-16，决策1 enabled已满足 / 决策2 端到端实证通过 / 固化待老板定） |
-| `docs/04-business/` | `docs/` | 商业化决策框架 D2（`commercialization-questions.md`，15 题，待老板拍；2026-09-16 新增） |
+| `docs/04-business/commercialization-decided.md` | `docs/` | 商业化决策结果 D2（20 题已定：个人开发者 + 开源+云增值 + MVP 路由/成本/桌面壳；3 项待补真实信号；2026-09-16） |
+| `docs/04-business/commercialization-questions.md` | `docs/04-business/` | 商业化决策框架 D2（15 题 + 现状锚点 + 怎么逐项回答；2026-09-16） |
 
 ### 三级模块文档
 
