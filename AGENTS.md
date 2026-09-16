@@ -1,10 +1,7 @@
-# AGENTS.md（草稿）
+# AGENTS.md
 
-> **状态：待老板批准**。这是给所有 AI 代理（Hermes / WorkBuddy / Claude Code / Codex 等）
-> 定的统一规则。因系统把 `AGENTS.md` 视同受保护的 agent 指令文件，agent 无法自行创建根目录版本，
-> 故先存草稿，由老板 review 后落地。
-> 落地方式（二选一）：① 老板在对话中明确批准我写根目录 `AGENTS.md`；② 老板手动 `mv docs/_proposed-AGENTS.md AGENTS.md`。
-> 关联：`CLAUDE.md`（项目铁律，写保护，优先读）。
+> **状态：已批准**。这是给所有 AI 代理（Hermes / WorkBuddy / Claude Code / Codex 等）
+> 定的统一规则。关联：`CLAUDE.md`（项目铁律，写保护，优先读）。
 
 ## 0 · 必读前置
 
