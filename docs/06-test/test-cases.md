@@ -29,7 +29,7 @@ related_docs:
 |------|------|-----------|------------|------|
 | multi-proxy-manager | Jest (Node) | 46 files（39 unit + 7 e2e） | 635 tests · 40 suites | 全绿，覆盖 4 页 UI + 9 route + 13 lib |
 | cursor-proxy | Jest (TS/TS-jest) | 11 files | 119 tests · 9 suites | 全绿 |
-| codex-proxy | Jest (Node) | 2 files | — | 薄，考虑 P? 补 |
+| codex-proxy | Jest (Node) | 3 files | 53 tests · 3 suites | 全绿，补 auth/CRUD/switch/balances guard（2026-09-16） |
 | hermes-proxy | pytest | 3 files | 63 test functions | 覆盖基本，无 E2E |
 | L2 demo | node 原生 | 13 demos | ~169 checks | 全 PASS |
 | Shell (bats) | bats-core | 1 file | 11 tests | 覆盖 manage.sh 启停 |
@@ -103,13 +103,16 @@ cd cursor-proxy && npx --no-install jest --silent
 
 ## 3 · codex-proxy
 
-| 测试文件 | 内容 |
-|---------|------|
-| `integration.test.js` | 集成测试 |
-| `proxy.test.js` | 代理逻辑 |
+| 测试文件 | 测试数 | 内容 |
+|---------|--------|------|
+| `proxy.test.js` | 20 | 代理逻辑（findProvider 三级 fallback / parseConfigToml / updateConfigToml） |
+| `integration.test.js` | 11 | HTTP 端点（/v1/models、/health、/api/routing-mode、status、history、clear-history、chat） |
+| `auth-and-admin.test.js` | 17 | requireAuth 401/200 · /api/settings · /api/providers CRUD（含 api_key 脱敏/409 冲突）· /api/balances · switch-model & test-connection 的 guard 分支 |
 
-> **缺口**：仅 2 个文件，相对偏薄。建议 P? 补 4-6 个核心 case：
-> 超时/流式断流/认证/模型切换/供应商 CRUD/日志。
+> **已补（2026-09-16）**：3 文件 / 53 tests 全绿。新文件 `auth-and-admin.test.js` 内联 mirror express
+> app（不 require proxy.js，避免与运行态 18790 端口冲突），全部离线确定性——providers 用内存数组、
+> 不写盘、不发真实网络（/api/balances 仅断言 `未启用` 分支，不触发上游 fetch）。
+> 仍开放：超时/流式断流的真实 pipeTo 路径（需 mock upstream 流，非本次范围）。
 
 ---
 

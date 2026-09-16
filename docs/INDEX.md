@@ -100,7 +100,7 @@ bash manage.sh stop
 | 4 个前端页面 | 4/4 上线 | ✅ |
 | L2 核心模块 | 10/10 实现 | ✅ |
 | L2 adapter | 3/3 实现 | ✅ |
-| 总测试（全模块） | 约 828 tests / 635 jest / 63 pytest / 170 l2 checks / 11 bats | ✅ 全绿 |
+| 总测试（全模块） | 约 1064 checks / 807 jest / 63 pytest / ~182 l2 checks / 11 bats | ✅ 全绿 |
 | 文档缺口 | 无（本次已补 INDEX / feature-matrix / AGENTS / 模板） | ✅ |
 | DSH 生态接入 | DS1 骨架已落（2 SKILL + 规划文档）；DS2/DS3 暂缓（#1496 guardrail 未修） | ✅ |
 | 商业化文档 | 待老板回答 20 问后补 | ⏳ |
@@ -115,7 +115,9 @@ bash manage.sh stop
 2. **hermes-proxy 测试覆盖度**：3 文件 / 63 pytest 项，覆盖基本够用（无 E2E）；
    后续 P? 考虑补 E2E 测试。
 
-3. **codex-proxy 测试**：2 个 test 文件，相对偏薄；考虑 P? 补。
+3. **codex-proxy 测试**：已补 `auth-and-admin.test.js`，3 文件 / 53 tests 全绿（2026-09-16，
+   auth 401/200 + settings + providers CRUD/脱敏/409 + balances + switch/test-connection guard）；
+   仅剩超时/流式断流的真实 pipeTo 路径未覆盖（需 mock upstream 流，非本次范围）。
 
 4. **P5 GUI 看板 / 编排面板**：锦上添花，非阻塞，暂不实现。
 
@@ -130,6 +132,7 @@ bash manage.sh stop
 
 | 日期 | 变更 | 负责人 |
 |------|------|--------|
+| 2026-09-16 | 补 `codex-proxy/tests/auth-and-admin.test.js`（+17 tests，3 文件 / 53 全绿）+ 同步 INDEX/test-cases/feature-matrix（缺口#4 闭环） | Hermes |
 | 2026-09-16 | 落 `.dsh/skills/`（2 SKILL，DSH 规范）+ `docs/02-product/dsh-integration.md`（DS1✅/DS2·DS3 暂缓） | Hermes |
 | 2026-09-16 | 落 `docs/03-adr/`（3 ADR）+ `docs/06-test/test-cases.md`（6 模块测试方案，数字真跑） | Hermes |
 | 2026-09-16 | 补建 `AGENTS.md` / `docs/INDEX.md` / `docs/01-feature-matrix.md` / `docs/_templates/` | Hermes |
