@@ -71,12 +71,12 @@
 |------|--------|--------|------|
 | multi-proxy-manager | 40 files | 635 tests | 40 suites |
 | cursor-proxy | 11 files | 119 tests | 9 suites |
-| codex-proxy | 2 files | — | 2 suites（薄）|
+| codex-proxy | 3 files | 53 tests | 3 suites |
 | hermes-proxy | 3 pytest files | 63 checks | 3 suites（基本够用，无 E2E）|
 | L2 demo | 14 .demo.js | ~182 checks 全 PASS | 各自独立运行 |
 | shell (bats) | 1 .bats | 11 tests | — |
 
-**总计：828+ tests 全绿**（jest 756 + pytest 63 + bats 11 + l2 demo ~182 = 约 1000+ checks）。
+**总计：~1064 checks 全绿**（jest 807 + pytest 63 + bats 11 + l2 demo ~182）。
 
 ---
 
@@ -87,9 +87,9 @@
 | 1 | C2 `forward.js` axios 15s+100MB 全缓冲 | 大文件/长流式时 manager 可能超时 | 触发条件出现时再修（当前零调用方） | P1（触发时） |
 | 2 | B7 `codex-proxy/proxy.js` 120s+pipeTo | 长流式超时 | 同上 | P1（触发时） |
 | 3 | hermes-proxy 无 E2E | 集成风险 | P? 补 1 个 pytest E2E | 中 |
-| 4 | codex-proxy 仅 2 test 文件 | 相对偏薄 | P? 补 4-6 个核心 case | 中 |
+| 4 | ~~codex-proxy 仅 2 test 文件~~ | ✅ 已补 3 文件 / 53 tests（auth+CRUD+switch+balances guard，2026-09-16） | — | ✅ 已闭环 |
 | 5 | P5 GUI 看板 | 易用性，非阻塞 | 暂缓 | 低 |
-| 6 | DSH 生态（DS1 SKILL.md 待产）| 品牌 / 种子用户 | **本次推进** | 高 |
+| 6 | ~~DSH 生态（DS1 SKILL.md 待产）~~ | ✅ DS1 已落（2 SKILL + `docs/02-product/dsh-integration.md`）；DS2/DS3 暂缓（#1496） | ✅ 已闭环 |
 
 ---
 
