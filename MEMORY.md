@@ -336,4 +336,14 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 - §"已知风险与开放项"#6 收口：D6-b（健康决定真实路由）现卡 **D4 override + D5 enable ollama provider**（指向 `docs/02-product/m6-action-checklist.md`）；
 - 目录树：`docs/04-business/commercialization-questions.md` + `docs/02-product/m6-action-checklist.md`（Python 前缀剥除 bug 导致 2 个目录条漏插，patch 补上）
 - 变更日志：本轮 D2 + M6 行动清单 + kimi 价基线一行已入
-- **HEAD 仍 `2522018`（本地 `a75cb40` 未 push），全绿不变**
+- 注：本节「HEAD 仍 2522018 未 push」已过时——实际后续已 push 到 `5cdae17`（见 §13.11c）。
+
+### 13.11c 2026-09-16 续（M6 实证 / D2 决策 / P5 壳 / DeepSeek 评估 · 当日日志 MEMORY-2026-09-16.md）
+
+- **M6 决策2 端到端实证**（commit `0049e36`）：隔离端口 18800，coding→deepseek-v4-pro，上游 HTTP 200 + 审计落盘，**排掉假象**（发 model=deepseek-v4-pro=suggestion 不 override 是设计正确）；老板选 A **暂不固化常驻**，固化命令 `manage.sh start_cursor` 注入 `PROXY_ROUTE_OVERRIDE=1` 已备。
+- **D2 商业化决策**（commit `5cdae17`，已 push，ahead 归零）：`docs/04-business/commercialization-decided.md`（91 行 20 题全决策：个人开发者+开源云增值+MVP），三题定→推 17 题（A/A/A/A）。
+- **P5 GUI 桌面壳（代码完成 + 635/635 全绿，卡在 GUI 渲染·未闭环·未提交）**：`multi-proxy-manager/main.js`（自包含 Electron 壳,detectAll 占检查+复用后端+loadUI) + `manage.sh gui` 子命令 + `agent-owner.js` 缩进错乱重写(99 行,6/6 全过) + `package.json` main→main.js/加 electron@31。真因:① npm 拦 electron postinstall→`ELECTRON_MIRROR=... node install.js` 解;② agent daemon spawn electron **exit 137 SIGKILL**(GUI 需老板交互登录 WindowServer,daemon 挂不上)→ **GUI 渲染必须老板本人终端跑**;③ 老板双击报「移到废纸篓/恶意软件」→已 `xattr -cr` 清 quarantine,仍待老板在「隐私与安全性」放行。**P5 唯一未闭环点=窗口能否正常显示,未验不收**(working tree 5 文件未 commit)。详见 MEMORY-2026-09-16.md。
+- **DeepSeek 会话评估**：`docs/09-review/deepseek-gap-assessment.md`（会话用 desktop_preview 右侧 pane 读，不碰老板 Chrome）——10 项文档缺失本地全确认真缺,按实际重排 A/B/C/D/E 不照搬 7 步;纠正它远观 2 处(AGENTS.md 已在根目录非 mv;漏本地已有 commercialization-decided/m6/deepseek-baseline)。
+- **交互铁律（老板定）**：发链接/URL 一律 desktop_preview 右侧 pane,绝不 browser_exec real-profile 抢老板 Chrome(本轮曾误杀一次,已纠正)。
+- **待办**：P5 老板验收窗口→commit+push 5 文件;DeepSeek 清单等老板定范围(A 档 codebase-map/data-model/api);AGENTS.md 批准转正;交互铁律补存全局 memory(本轮库满 2200 未落)。
+- **HEAD = `5cdae17` = origin/main,working tree 有 P5 5 文件 + deepseek-gap-assessment.md 未提交(带病不前进,GUI 未验不收)。**
