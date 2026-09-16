@@ -40,8 +40,16 @@
    - cursor 无 `.env` 加载、无运行时 toggle → 只能靠**子进程 env + 重启**：`PROXY_ROUTE_OVERRIDE=1 node dist/server/start.js`；
    - 固化：`manage.sh start_cursor`(nohup 前)注入，或 `.env` + dotenv（需先加 dotenv，当前 `src/` 无 dotenv）。
    - **绝不** `launchctl setenv PROXY_ROUTE_OVERRIDE 1`（全局 env 注入，违反 ADR-0003 非侵入）。
-- **验证（做，不擅自固化常驻）**：先 `npm run build` → 带 env 起 cursor → 发 **1 条 coding 请求**，看是否路由到 `deepseek-v4-pro` + HTTP 200（D7 已证此路 mock+live 通）；确认无误后老板定是否写进 `manage.sh` 常驻。
-- **风险**：翻 1 后引擎建议**接管真实路由**（非只观测）；4 provider 全 enabled + `findProviderByType` 真名对齐 → 不再塌缩（旧 09-12 风险已消除，见 D5）。
+- **验证已完成（2026-09-16 端到端实证，隔离端口 18800，跑完即停，未碰生产 18794）**：
+   `npm run build`（dist 9/11→9/16，chatHandler.js 含 `PROXY_ROUTE_OVERRIDE`）→ 起隔离实例 `PROXY_ROUTE_OVERRIDE=1 PORT=18800` →
+    发 coding 请求 `model=qwen3.8:27b-mlx` →
+   引擎 `classifyTask=coding` → override → `deepseek-v4-pro`（`findProviderByType`→ DeepSeek-Test，不靠 models 表）→
+   **上游真实回 `model=deepseek-v4-pro` / HTTP 200**。
+   - 审计落盘 1 条：`{requestModel=qwen3.8:27b-mlx, engineTaskType=coding, overrideModel=deepseek-v4-pro, provider=DeepSeek-Test, applied=true}`。
+   - 服务日志：`[ChatHandler][Override] model=qwen3.8:27b-mlx → deepseek-v4-pro (provider=DeepSeek-Test, task=coding)`。
+   - **结论：引擎已真实接管真实路由（非 shadow 只观测），coding→deepseek 无 404（决策 1 四 provider 全 enabled 消除旧塌缩）**。
+- **是否固化常驻：老板定**（不擅写 manage.sh / 不擅全局 env，非侵入铁律）。
+   可选固化：`manage.sh start_cursor` nohup 前注入 `PROXY_ROUTE_OVERRIDE=1`，或加 dotenv + `cursor-proxy/.env`。
 - **回退**：停该进程即回 shadow 稳态（默认 0）。
 
 ---
