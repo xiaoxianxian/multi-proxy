@@ -51,8 +51,9 @@ bash manage.sh stop
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
 | `docs/01-feature-matrix.md` | `docs/` | 功能完成度矩阵（必读）|
-| `docs/03-adr/` | `docs/` | 架构决策记录（待补） |
-| `docs/06-test/` | `docs/` | 测试方案（待补） |
+| `docs/03-adr/` | `docs/` | ADR-0001 lsof绝对路径 / 0002 NO_PROXY铁律 / 0003 L2非侵入4铁律 |
+| `docs/06-test/` | `docs/` | test-cases.md 全模块测试方案（数字真跑） |
+| `docs/02-product/dsh-integration.md` | `docs/` | DSH 生态接入规划（DS1✅ / DS2·DS3 暂缓） |
 
 ### 三级模块文档
 
@@ -101,7 +102,7 @@ bash manage.sh stop
 | L2 adapter | 3/3 实现 | ✅ |
 | 总测试（全模块） | 约 828 tests / 635 jest / 63 pytest / 170 l2 checks / 11 bats | ✅ 全绿 |
 | 文档缺口 | 无（本次已补 INDEX / feature-matrix / AGENTS / 模板） | ✅ |
-| DSH 生态接入 | DS1 规划中（SKILL.md 待产） | 🟡 |
+| DSH 生态接入 | DS1 骨架已落（2 SKILL + 规划文档）；DS2/DS3 暂缓（#1496 guardrail 未修） | ✅ |
 | 商业化文档 | 待老板回答 20 问后补 | ⏳ |
 
 ---
@@ -129,6 +130,8 @@ bash manage.sh stop
 
 | 日期 | 变更 | 负责人 |
 |------|------|--------|
+| 2026-09-16 | 落 `.dsh/skills/`（2 SKILL，DSH 规范）+ `docs/02-product/dsh-integration.md`（DS1✅/DS2·DS3 暂缓） | Hermes |
+| 2026-09-16 | 落 `docs/03-adr/`（3 ADR）+ `docs/06-test/test-cases.md`（6 模块测试方案，数字真跑） | Hermes |
 | 2026-09-16 | 补建 `AGENTS.md` / `docs/INDEX.md` / `docs/01-feature-matrix.md` / `docs/_templates/` | Hermes |
 | 2026-09-16 之前 | `L2-BLUEPRINT` P3 ✅ / `l2/CASES.md` / `l2/PERF-REPORT.md` / `l2/adapter-protocol.md` / `CLAUDE.md` | Hermes / WorkBuddy |
 
