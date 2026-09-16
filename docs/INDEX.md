@@ -2,7 +2,7 @@
 
 > **用途**：所有 agent / 人类读项目的第一个入口。只需读本文件 + `docs/01-feature-matrix.md`
 > 即可掌握项目全貌；不需要翻全仓库。
-> 最后更新：2026-09-16
+| 最后更新：2026-09-17 |
 
 ---
 
@@ -50,7 +50,10 @@ bash manage.sh stop
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
-| `docs/01-feature-matrix.md` | `docs/` | 功能完成度矩阵（必读）|
+| `docs/01-feature-matrix.md` | `docs/` | 功能完成度矩阵（必读） |
+| `docs/00-codebase-map.md` | `docs/` | 代码库地图 + 模块速查（A档） |
+| `docs/04-tech/data-model.md` | `docs/` | SQLite 数据模型 schema（A档） |
+| `docs/04-tech/api.md` | `docs/` | API 接口文档（全部端点，A档） |
 | `docs/03-adr/` | `docs/` | ADR-0001 lsof绝对路径 / 0002 NO_PROXY铁律 / 0003 L2非侵入4铁律 |
 | `docs/06-test/` | `docs/` | test-cases.md 全模块测试方案（数字真跑） |
 | `docs/02-product/dsh-integration.md` | `docs/` | DSH 生态接入规划（DS1✅ / DS2·DS3 暂缓） |
@@ -95,7 +98,7 @@ bash manage.sh stop
 
 ## 功能完成度摘要
 
-详见 `docs/01-feature-matrix.md`。截至 2026-09-17（HEAD `2163ca9`，main）：
+| 详见 `docs/01-feature-matrix.md`。截至 2026-09-17（HEAD `68c585f`，main）： |
 
 | 层级 | 数量 | 状态 |
 |------|------|------|
