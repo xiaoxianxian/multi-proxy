@@ -50,7 +50,9 @@ bash manage.sh stop
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
-| `docs/01-feature-matrix.md` | `docs/` | 功能完成度矩阵（必读） |
+| `docs/02-product/business-intro.md` | `docs/02-product/` | 商业简介（B档，对外/汇报） |
+| `docs/03-architecture/architecture.md` | `docs/03-architecture/` | 架构文档（B档，四层+L2模块） |
+| `docs/02-product/PRD.md` | `docs/02-product/` | 产品需求文档（B档，反向推） |
 | `docs/00-codebase-map.md` | `docs/` | 代码库地图 + 模块速查（A档） |
 | `docs/04-tech/data-model.md` | `docs/` | SQLite 数据模型 schema（A档） |
 | `docs/04-tech/api.md` | `docs/` | API 接口文档（全部端点，A档） |
