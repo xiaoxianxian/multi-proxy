@@ -50,6 +50,10 @@ bash manage.sh stop
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
+| `docs/07-ops/deployment.md` | `docs/07-ops/` | 部署指南（C档，三模式） |
+| `docs/07-ops/runbook.md` | `docs/07-ops/` | 运维手册（C档） |
+| `docs/07-ops/rollback.md` | `docs/07-ops/` | 回滚指南（C档） |
+| `docs/08-user/faq.md` | `docs/08-user/` | 常见问题（C档） |
 | `docs/02-product/business-intro.md` | `docs/02-product/` | 商业简介（B档，对外/汇报） |
 | `docs/03-architecture/architecture.md` | `docs/03-architecture/` | 架构文档（B档，四层+L2模块） |
 | `docs/02-product/PRD.md` | `docs/02-product/` | 产品需求文档（B档，反向推） |
@@ -100,7 +104,7 @@ bash manage.sh stop
 
 ## 功能完成度摘要
 
-详见 `docs/01-feature-matrix.md`。截至 2026-09-17（HEAD `b21ff24`，main）：
+详见 `docs/01-feature-matrix.md`。截至 2026-09-17（HEAD `a94de96`，main）：
 
 | 层级 | 数量 | 状态 |
 |------|------|------|

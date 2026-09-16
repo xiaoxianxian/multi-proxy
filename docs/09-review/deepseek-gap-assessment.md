@@ -66,12 +66,14 @@ DeepSeek 的 7 步里有不少和现有文档重叠。按「能复用就复用�
 | 02-product/PRD.md | 反向推 | commercialization-decided + 01-feature-matrix |
 | 02-product/business-intro.md | 商业决策已定，可**自动成稿**，不需人写 | commercialization-decided |
 
-### C. 部分重叠 · 借鉴现有（manage.sh/CLAUDE 已覆盖 70%）
+### C. 部分重叠 · 借鉴现有（manage.sh/CLAUDE 已覆盖 70%）— ✅ 2026-09-17 完成（commit a94de96 后）
 
-| 项 | 处理 |
-|---|---|
-| 07-ops/deployment / runbook / rollback.md | 从 manage.sh / install.sh / CLAUDE 已知坑提炼，补 Docker/配置项/回滚缺口 |
-| 08-user/faq.md | 从 CLAUDE 已知坑 + USER-GUIDE 提炼，真跑验证 |
+| 项 | 处理 | 状态 |
+|---|------|------|
+| `docs/07-ops/deployment.md` | 三种部署模式（manage.sh/install.sh/Docker）+ 环境表 + 门控 | ✅ 3634B |
+| `docs/07-ops/runbook.md` | 日常速查 + 故障诊断 + NO_PROXY 铁律 + 安全清单 | ✅ 4610B |
+| `docs/07-ops/rollback.md` | 5 类回滚场景 + docker/配置回滚 + 检查清单 | ✅ 3400B |
+| `docs/08-user/faq.md` | Q1-Q8 实跑验证问答 | ✅ 3211B |
 
 ### D. 缓 / 标 [待确认]
 
