@@ -311,11 +311,29 @@ _last更新: 2026-09-16(+ 方向五 P3 文档+案例+性能报告落地 l2/CASES
 
 **待办 / 未启动（真实状态）**：
 
-1. **方向二 D2 商业化 — 未做**：`docs/02-competitive/commercialization-questions.md` 仍是占位（20 问未答）。商业/付费模型是决策项，非纯技术，需老板拍板。
+1. **方向二 D2 商业化 — 从 0 起草**:本轮新建 `docs/04-business/commercialization-questions.md`（15 题决策框架 + 现状锚点），商业/付费模型需老板拍板（非纯技术活）。
 2. **sign-off 是观测+决策动作（非 code bug，卡 1-2 天观察）**：方向一 D4/D5/D6 的 code 已 gated 默认关合入，但 sign-off 是"看够样本再 flip 默认"——D4 `getOverrideLog` 观察、D5 看 `/api/health/isolation`、D6 跑 `tools/override-audit-report`。当前默认全关 observe（6 个 `PROXY_*` 门控：HEALTH_ISOLATE/COST_TRACK/HEALTH_ALERT/ROUTING_SHADOW/HEALTH_MONITOR/ROUTE_OVERRIDE 全默认关）。
-3. **M6 方向七 智能路由 P0 — 未启动，卡三前置**（见 `ITERATION-ROADMAP.md` §"依赖清单"）：①成本基线 ②质量基线 ③路由策略 spec。Phase1 Shadow 是 code-first 可做，但也需这三基线 + 路由策略 spec + M6 总开关设计。
+3. **M6 方向四 智能路由 — 代码全落地，剩 2 决策**：D1-D8 全部代码已写+测试（`chatHandler.findProviderByType` + `DEFAULT_ROUTE_CONFIG` 真名对齐 + D7 live 已实证 deepseek 200），唯一没做的是：① enable ollama qwen3.8:27b-mlx provider（写 DB）② 翻 `PROXY_ROUTE_OVERRIDE=1` 灰度 override 灰度。两决策见 `docs/02-product/m6-action-checklist.md`。
 4. **DSH DS2/DS3 — 暂缓**：DS1 已落（`64edc10`，2 SKILL + `dsh-integration.md`）；DS2 npm 包化等 DSH 0.2 稳定、DS3 生态运行等 guardrail #1496 落地。
 5. **C2/B7 幽灵路径 — 默认不修**：`b69fc77` 坐实零调用方，修 = "修好实际没改"反向坑；保留观察。
 6. **P5 GUI 桌面壳 — 暂缓**：锦上添花非阻塞。
 
-_最后更新: 2026-09-16(+ §13.11 待办盘点：D2 未做 / sign-off 待观测 / M6-P0 卡三前置 / DSH DS2·3 暂缓 / C2B7 不修 / P5 暂缓；HEAD 2522018 全绿)_
+_最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §13.11b kimi 价基线；D2 从 0 起草 / M6 剩 2 决策 + pricing 校准；HEAD 2522018 全绿)_
+
+### 13.11a M6 智能路由行动清单（2026-09-16 · 代码实核 + kimi 价基线初稿）
+
+**D1-D8 真实状态（git 实核非摘要）**：D1-D3 ✅ 代码+测试落地；**D4** 拍 C（override）代码已落（`PROXY_ROUTE_OVERRIDE=1` 默认关，翻 1 属老板决策）；**D5** `findProviderByType`+ `DEFAULT_ROUTE_CONFIG` 真名对齐代码已落（DB enable ollama + push 属老板决策）；**D6-a** `loadEnabledProviderConfigs` 已完成（D6-b 卡 D4）；**D8** 双 guard 证伪；**D7** live 已实证（deepseek 200/162ms，密钥不打印）。**D1-D8 代码全落地并测试，剩 2 老板决策：enable ollama provider + 翻 override 灰度**。
+
+**价格基线初稿 `docs/02-product/m6-action-checklist.md`**（不改代码，只给参考）：
+- kimi-k2.6 官方价（Kimi 帮助中心）：input miss $0.95/1M / cache hit $0.16 / output $4.00（美元，假设汇率 7.2 → ¥6.84/¥1.15/¥28.80）
+- 项目 pricing（`routeEngine.ts:198-202`）：qwen3.8:27b-mlx / agnes 免费；deepseek-v4-pro ¥1/¥4/¥0.02（缓存红利）；kimi ¥0.6/¥2.5/¥0.1（估算占位）
+- **结论**：kimi 真实 output ~¥28.8 vs deepseek ~¥4 output，kimi 在 cost-optimization 里不会被选中，只在 deepseek/agnes down 时兜底。校准 kimi pricing 是定价决策（不擅改）。
+
+**教训（本轮·1 条）**：kimi 价查证前未跑 tsc 确认 cursor 测试不破（119），且 kimi 可能 disabled 在 DB，校准是空改——定价决策需老板拍 + DB 真名对齐后再做。
+
+### 13.11b INDEX 同步（2026-09-16 · 3 处收口）
+
+- §"已知风险与开放项"#6 收口：D6-b（健康决定真实路由）现卡 **D4 override + D5 enable ollama provider**（指向 `docs/02-product/m6-action-checklist.md`）；
+- 目录树：`docs/04-business/commercialization-questions.md` + `docs/02-product/m6-action-checklist.md`（Python 前缀剥除 bug 导致 2 个目录条漏插，patch 补上）
+- 变更日志：本轮 D2 + M6 行动清单 + kimi 价基线一行已入
+- **HEAD 仍 `2522018`（本地 `a75cb40` 未 push），全绿不变**

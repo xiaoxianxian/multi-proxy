@@ -54,6 +54,8 @@ bash manage.sh stop
 | `docs/03-adr/` | `docs/` | ADR-0001 lsof绝对路径 / 0002 NO_PROXY铁律 / 0003 L2非侵入4铁律 |
 | `docs/06-test/` | `docs/` | test-cases.md 全模块测试方案（数字真跑） |
 | `docs/02-product/dsh-integration.md` | `docs/` | DSH 生态接入规划（DS1✅ / DS2·DS3 暂缓） |
+| `docs/02-product/m6-action-checklist.md` | `docs/` | M6 智能路由 D4-D8 行动清单 + kimi 价基线（2026-09-16） |
+| `docs/04-business/` | `docs/` | 商业化决策框架 D2（`commercialization-questions.md`，15 题，待老板拍；2026-09-16 新增） |
 
 ### 三级模块文档
 
@@ -103,7 +105,7 @@ bash manage.sh stop
 | 总测试（全模块） | 约 1064 checks / 807 jest / 63 pytest / ~182 l2 checks / 11 bats | ✅ 全绿 |
 | 文档缺口 | 无（本次已补 INDEX / feature-matrix / AGENTS / 模板） | ✅ |
 | DSH 生态接入 | DS1 骨架已落（2 SKILL + 规划文档）；DS2/DS3 暂缓（#1496 guardrail 未修） | ✅ |
-| 商业化文档 | 待老板回答 20 问后补 | ⏳ |
+| 商业化文档 | `docs/04-business/commercialization-questions.md`（15 题决策框架 + 现状锚点，待老板拍板） | ✅ |
 
 ---
 
@@ -132,17 +134,10 @@ bash manage.sh stop
 
 | 日期 | 变更 | 负责人 |
 |------|------|--------|
+| 2026-09-16 | 新增 `docs/04-business/commercialization-questions.md`（D2 决策框架 15 题）+ `docs/02-product/m6-action-checklist.md`（D4-D8 实核 + kimi 价基线） | Hermes |
 | 2026-09-16 | 补 `codex-proxy/tests/auth-and-admin.test.js`（+17 tests，3 文件 / 53 全绿）+ 同步 INDEX/test-cases/feature-matrix（缺口#4 闭环） | Hermes |
 | 2026-09-16 | 落 `.dsh/skills/`（2 SKILL，DSH 规范）+ `docs/02-product/dsh-integration.md`（DS1✅/DS2·DS3 暂缓） | Hermes |
 | 2026-09-16 | 落 `docs/03-adr/`（3 ADR）+ `docs/06-test/test-cases.md`（6 模块测试方案，数字真跑） | Hermes |
 | 2026-09-16 | 补建 `AGENTS.md` / `docs/INDEX.md` / `docs/01-feature-matrix.md` / `docs/_templates/` | Hermes |
 | 2026-09-16 之前 | `L2-BLUEPRINT` P3 ✅ / `l2/CASES.md` / `l2/PERF-REPORT.md` / `l2/adapter-protocol.md` / `CLAUDE.md` | Hermes / WorkBuddy |
 
----
-
-## 参考
-
-- `AGENTS.md` — 本文件前置规则
-- `docs/01-feature-matrix.md` — 功能完成度详细
-- `CLAUDE.md` — 项目铁律（写保护）
-- `ITERATION-ROADMAP.md` — 长期路线图
