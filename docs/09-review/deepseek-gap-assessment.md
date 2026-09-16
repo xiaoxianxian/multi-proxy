@@ -75,11 +75,11 @@ DeepSeek 的 7 步里有不少和现有文档重叠。按「能复用就复用�
 | `docs/07-ops/rollback.md` | 5 类回滚场景 + docker/配置回滚 + 检查清单 | ✅ 3400B |
 | `docs/08-user/faq.md` | Q1-Q8 实跑验证问答 | ✅ 3211B |
 
-### D. 缓 / 标 [待确认]
+### D. 缓 / 标 [待确认] — ✅ 2026-09-17 完成（visual-design 据实纠正，token 层完整）
 
-| 项 | 处理 |
-|---|---|
-| 05-design/visual-design.md | 管理面板是纯 Express 静态页，无设计系统 → 低优先，标 [待确认] |
+| 项 | 处理 | 状态 |
+|---|------|------|
+| `docs/05-design/visual-design.md` | 原标 [待确认]"纯静态页无设计系统"→ 实查 `colors_and_type.css` token 层完整（明暗双/brand/provider 色） | ✅ 4604B，据实纠正 |
 
 ### E. 收口
 
