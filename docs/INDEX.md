@@ -95,7 +95,7 @@ bash manage.sh stop
 
 ## 功能完成度摘要
 
-详见 `docs/01-feature-matrix.md`。截至 2026-09-16（HEAD `b69fc77`，main）：
+详见 `docs/01-feature-matrix.md`。截至 2026-09-17（HEAD `2163ca9`，main）：
 
 | 层级 | 数量 | 状态 |
 |------|------|------|
@@ -103,10 +103,11 @@ bash manage.sh stop
 | 4 个前端页面 | 4/4 上线 | ✅ |
 | L2 核心模块 | 10/10 实现 | ✅ |
 | L2 adapter | 3/3 实现 | ✅ |
-| 总测试（全模块） | 约 1064 checks / 807 jest / 63 pytest / ~182 l2 checks / 11 bats | ✅ 全绿 |
-| 文档缺口 | 无（本次已补 INDEX / feature-matrix / AGENTS / 模板） | ✅ |
+| 总测试（全模块） | 635 jest / 63 pytest / ~182 l2 checks / 11 bats | ✅ 全绿 |
+| P5 GUI 桌面壳 | 已验收（截图确认窗口正常显示，2163ca9 push） | ✅ |
+| 文档缺口 | 无（INDEX / feature-matrix / AGENTS / 模板已补） | ✅ |
 | DSH 生态接入 | DS1 骨架已落（2 SKILL + 规划文档）；DS2/DS3 暂缓（#1496 guardrail 未修） | ✅ |
-| 商业化文档 | `docs/04-business/commercialization-questions.md`（15 题决策框架 + 现状锚点，待老板拍板） | ✅ |
+| 商业化文档 | `docs/04-business/commercialization-decided.md`（D2 20 题全决策已定） | ✅ |
 
 ---
 
@@ -122,7 +123,7 @@ bash manage.sh stop
    auth 401/200 + settings + providers CRUD/脱敏/409 + balances + switch/test-connection guard）；
    仅剩超时/流式断流的真实 pipeTo 路径未覆盖（需 mock upstream 流，非本次范围）。
 
-4. **P5 GUI 看板 / 编排面板**：锦上添花，非阻塞，暂不实现。
+|| 4. **P5 GUI 看板 / 编排面板**：锦上添花，非阻塞，暂不实现。 → **已验收（2163ca9）** |
 
 5. **DSH 生态 guardrail**：社区尚在修 `dsh plugin add` 安装可靠性（#1496）；
    本次只做文档 + SKILL.md 骨架，不实际发 npm 包。
@@ -133,9 +134,10 @@ bash manage.sh stop
 
 ## 变更日志
 
-| 日期 | 变更 | 负责人 |
-|------|------|--------|
-| 2026-09-16 | 新增 `docs/04-business/commercialization-questions.md`（D2 决策框架 15 题）+ `docs/02-product/m6-action-checklist.md`（D4-D8 实核 + kimi 价基线） | Hermes |
+|| 日期 | 变更 | 负责人 |
+||------|------|--------|
+|| 2026-09-17 | P5 GUI 桌面壳验收通过（commit `2163ca9`,已 push）— Electron 壳 + launch-gui.sh + 端口复用 + 占用检测；截图确认 Proxy Manager - Dashboard 窗口正常显示；测试 635/635 全绿 | Hermes |
+|| 2026-09-16 | 新增 `docs/04-business/commercialization-questions.md`（D2 决策框架 15 题）+ `docs/02-product/m6-action-checklist.md`（D4-D8 实核 + kimi 价基线） | Hermes |
 | 2026-09-16 | 补 `codex-proxy/tests/auth-and-admin.test.js`（+17 tests，3 文件 / 53 全绿）+ 同步 INDEX/test-cases/feature-matrix（缺口#4 闭环） | Hermes |
 | 2026-09-16 | 落 `.dsh/skills/`（2 SKILL，DSH 规范）+ `docs/02-product/dsh-integration.md`（DS1✅/DS2·DS3 暂缓） | Hermes |
 | 2026-09-16 | 落 `docs/03-adr/`（3 ADR）+ `docs/06-test/test-cases.md`（6 模块测试方案，数字真跑） | Hermes |
