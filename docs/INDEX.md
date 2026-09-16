@@ -98,7 +98,7 @@ bash manage.sh stop
 
 ## 功能完成度摘要
 
-| 详见 `docs/01-feature-matrix.md`。截至 2026-09-17（HEAD `68c585f`，main）： |
+详见 `docs/01-feature-matrix.md`。截至 2026-09-17（HEAD `b21ff24`，main）：
 
 | 层级 | 数量 | 状态 |
 |------|------|------|
