@@ -9,7 +9,7 @@
 
 | 路径 | 用途 | 关键文件 |
 |------|------|----------|
-| 根目录/ | 项目入口 + 文档 | `AGENTS.md`, `CLAUDE.md`, `manage.sh`, `docker-compose.yml`, `ITERATION-ROADMAP.md` |
+| 根目录/ | 项目入口 + 文档 | `AGENTS.md`, `manage.sh`, `docker-compose.yml`, `ITERATION-ROADMAP.md` |
 | multi-proxy-manager/ | Node.js+Express 管理后端（Web UI） | `server.js`, `lib/`, `routes/`, `public/`, `main.js`（Electron 壳） |
 | codex-proxy/ | Node.js+Express Codex CLI 代理 | `proxy.js` |
 | hermes-proxy/ | Python+Flask Hermes Agent 代理 | `proxy.py`, `tests/` |

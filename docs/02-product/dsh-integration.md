@@ -11,7 +11,7 @@ related_code:
     - l2/adapter-protocol.md
 related_docs:
     - docs/INDEX.md
-    - CLAUDE.md
+    - AGENTS.md
     - AGENTS.md
 ---
 

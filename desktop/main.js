@@ -4,7 +4,7 @@
 //   - codex/hermes/cursor 三个代理进程由 manager 管理，壳绝不直接碰
 //   - 附着模式: manager 已在跑(原生或 LaunchAgent)时只开窗口，
 //     退出不杀 —— 避免断连正在使用代理的 Codex CLI / Hermes Agent
-// 铁律: 绝不写全局 NO_PROXY / launchctl setenv（见 CLAUDE.md）
+// 铁律: 绝不写全局 NO_PROXY / launchctl setenv（见 AGENTS.md §2 / 03-adr/0002）
 
 const { app, BrowserWindow, shell, dialog } = require('electron');
 const { spawn, execSync } = require('child_process');

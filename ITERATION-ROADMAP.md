@@ -165,7 +165,7 @@ multi-proxy-manager (18792)
 
 > **M4 现状 + 卡点（2026-09-11，老板可决策）**
 >
-> - **3a 错误模式库 ✅**：`lib/error-patterns.js`，8 个**真实种子**（better-sqlite3 / EPERM / ECONNREFUSED / ETIMEDOUT / EADDRINUSE / MODULE_NOT_FOUND / ENOENT / Hermes 误报），全部从 CLAUDE.md / P0-FIXES / HANDOVER 真实错误提取，非臆造
+> - **3a 错误模式库 ✅**：`lib/error-patterns.js`，8 个**真实种子**（better-sqlite3 / EPERM / ECONNREFUSED / ETIMEDOUT / EADDRINUSE / MODULE_NOT_FOUND / ENOENT / Hermes 误报），全部从 AGENTS.md / P0-FIXES / HANDOVER 真实错误提取，非臆造
 > - **3b 结构化历史 ✅ 数据层**：`recordError → error-history.jsonl`（jsonl + 裁剪，与 health-history 同策略）+ 频次持久化
 > - **3c 检索 ✅ 数据层**：`getPatterns / getHistory / searchHistory`（纯字符串，不靠 LLM）；`/api/errors/*` 端点就绪
 > - **16 单测 ✅**：匹配 / 历史 round-trip / 检索 / 频次 / 种子完整性 / 正则容错全绿

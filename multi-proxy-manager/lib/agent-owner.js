@@ -14,7 +14,7 @@ const os = require('os');
 const path = require('path');
 
 // 已知「其他代理工具」占用的端口。base_url 指向其中任一即视为被占用。
-// cc-switch 监听 15721（见 CLAUDE.md / agent-proxy-switch）。
+// cc-switch 监听 15721（见 AGENTS.md §3 / 03-adr / agent-proxy-switch）。
 const OCCUPANT_PORTS = (process.env.PROXY_OCCUPANT_PORTS || '15721')
   .split(',')
   .map(s => s.trim())

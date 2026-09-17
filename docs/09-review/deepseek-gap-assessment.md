@@ -1,5 +1,7 @@
 # DeepSeek 文档缺口清单评估（2026-09-16）
 
+> 注（2026-09-17）：`CLAUDE.md` 已归档至 `docs/09-review/archive/`；下文 `CLAUDE.md` 指归档前版本，铁律现收敛于 `AGENTS.md` / `03-adr/` / `07-ops/ENV-NOTES.md` / `P0-FIXES.md`。
+
 > 来源：`chat.deepseek.com/share/6phvit41x6blxpxaik`（右侧 preview pane 读取，未开用户浏览器）。
 > 核实方式：按本地 `find docs` + 根目录 `ls` 实测。DeepSeek 凭 GitHub 远观，可能滞后——
 > 本仓已 push 的部分文档它没看到，下面逐条按**项目实际**重排，不 100% 照搬它的 7 步。

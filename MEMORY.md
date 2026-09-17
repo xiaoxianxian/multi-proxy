@@ -8,7 +8,7 @@
 - 原名 `proxy-rebuild`，现改名 `multi-proxy` 并迁入 `~/Documents/AI项目/multi-proxy`（有 .git，由旧 `~/proxy-rebuild` 重命名合并而来）。当前 bug 较多，正用 Claude 与 Hermes 修复。
 
 ## 二、已固化关键配置
-- 服务端口（以 docker-compose.yml / CLAUDE.md 为准）：
+- 服务端口（以 docker-compose.yml / AGENTS.md 为准）：
   - `multi-proxy-manager`：18792（Web 管理界面，前端 dashboard + `proxy-config.html` 模型切换页，Node.js+Express）
   - `codex-proxy`：18790（Codex CLI 代理，Node.js+Express）
   - `hermes-proxy`：18793（Hermes Agent 代理，Python+Flask）
@@ -18,15 +18,15 @@
 - 已集成 zg 作为检索层（见下「近期决策」）。
 
 ## 三、致命坑与避坑
-- 当前版本 bug 多，改动前先读 `ITERATION-ROADMAP.md` / `CLAUDE.md` 对齐现状，别凭空改。
+- 当前版本 bug 多，改动前先读 `ITERATION-ROADMAP.md` / `AGENTS.md` 对齐现状，别凭空改。
 - 网络：上游经 Clash Verge（7897/7895），不启用 TUN；订阅过期会中断，需持续监控。
 
 ## 四、运维要点
 - 本地调试走 WorkBuddy / Claude / Hermes；提交规范见用户「项目版本管理习惯」（打 tag、.gitignore 权重与产物）。
-- 关键文档：`README.md`、`CLAUDE.md`（Claude 专用上下文）、`ITERATION-ROADMAP.md`、`FUNCTIONS.md`、`HANDOVER-*.md`。
+- 关键文档：`README.md`、`AGENTS.md`（开发规范入口，原 CLAUDE.md 已 09-17 归档）、`ITERATION-ROADMAP.md`、`FUNCTIONS.md`、`HANDOVER-*.md`。
 
 ## 五、目录导航
-- `ITERATION-ROADMAP.md`：迭代路线；`FUNCTIONS.md`：功能清单；`ACCEPTANCE-CHECKLIST.md`：验收；`CLAUDE.md`：Claude 上下文。
+- `ITERATION-ROADMAP.md`：迭代路线；`FUNCTIONS.md`：功能清单；`ACCEPTANCE-CHECKLIST.md`：验收；`AGENTS.md`：开发规范（CLAUDE.md 已归档）。
 - `.zvec-grep/`：zg 索引缓存（检索层）。
 
 ## 六、近期关键决策

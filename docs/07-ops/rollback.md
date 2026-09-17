@@ -1,6 +1,6 @@
 # 回滚指南（rollback）
 
-> 提炼自 `manage.sh`、`CLAUDE.md`、`docker-compose.yml`。
+> 提炼自 `manage.sh`、`07-ops/ENV-NOTES.md`、`docker-compose.yml`。
 > 生成日期：2026-09-17。
 
 ---
@@ -117,6 +117,6 @@ docker compose ps
 ## 数据源
 
 - `manage.sh`（启停/重启机制）
-- `CLAUDE.md §P0 安全修复记录`
+- `P0-FIXES.md` / `07-ops/ENV-NOTES.md`
 - `docs/04-business/commercialization-decided.md` M6 门控
 - `docker-compose.yml`

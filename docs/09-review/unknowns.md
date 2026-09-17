@@ -1,5 +1,7 @@
 # 未知/待补清单（unknowns）
 
+> 注（2026-09-17）：`CLAUDE.md` 已归档至 `docs/09-review/archive/`；下文 `CLAUDE.md` 均指归档前版本。铁律现收敛于 `AGENTS.md` / `03-adr/` / `07-ops/ENV-NOTES.md` / `P0-FIXES.md`。
+
 > 收口时汇总"已知但未决/未验"项，避免遗漏。生成日期 2026-09-17（HEAD `57c2774`）。
 > 原则：诚实标注，不臆造。区分「有意保留」与「需处理」。
 

@@ -1,5 +1,7 @@
 # 一致性报告（consistency-report）
 
+> 注（2026-09-17）：`CLAUDE.md` 已归档至 `docs/09-review/archive/`；下文 `CLAUDE.md` 均指归档前版本。铁律现收敛于 `AGENTS.md` / `03-adr/` / `07-ops/ENV-NOTES.md` / `P0-FIXES.md`。
+
 > doc↔code 真核对。生成日期 2026-09-17（HEAD `57c2774`，main）。
 > 方法：全文 grep 关键数字/标记，逐项比对实测（jest/l2 demo 实测、端口声明、模块数）。
 

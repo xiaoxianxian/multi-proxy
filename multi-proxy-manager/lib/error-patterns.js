@@ -1,6 +1,6 @@
 // ==================== M4 方向三：错误模式检索与复用（core matching + history） ====================
 //
-// 3a. 错误模式库：常见错误的 pattern + 解决建议（种子从历史 handover/P0/CLAUDE.md 真实错误提取，非臆造）
+// 3a. 错误模式库：常见错误的 pattern + 解决建议（种子从历史 handover/P0/AGENTS.md/03-adr 真实错误提取，非臆造）
 // 3b. 结构化日志：error 级日志匹配到 pattern 后，追加一条 { ts, proxy, pattern_id, ... } 到 error-history.jsonl
 // 3c (defer)：logs.html "常见问题" Tab —— 改 1251 行 HTML，风险高，本轮不做，数据层已就绪供前端直接拉 /api/errors/*
 //
@@ -14,11 +14,11 @@ const ERROR_PATTERNS_FILE = path.join(os.homedir(), '.multi-proxy-manager', 'err
 const ERROR_HISTORY_FILE = path.join(os.homedir(), '.multi-proxy-manager', 'error-history.jsonl');
 const MAX_HISTORY_LINES = 2000;
 
-// ---------- 种子错误模式库（真实来源：CLAUDE.md / P0-FIXES.md / HANDOVER / PROJECT-STATUS） ----------
+// ---------- 种子错误模式库（真实来源：AGENTS.md / 03-adr / P0-FIXES.md / HANDOVER / PROJECT-STATUS） ----------
 // id, pattern(RegExp source), resolution(人类可读修复), first_seen
 const SEED_PATTERNS = [
   { id: 'better-sqlite3-mismatch', pattern: 'better-sqlite3|NODE_MODULE_VERSION|ABI (mismatch|不匹配|[0-9]{3})',
-    resolution: 'cursor-proxy 的 better-sqlite3 native module 与当前 Node 版本不匹配（prebuild 仅支持 Node v22/ABI 127，Node v24/ABI 137 报错）。修复：`cd cursor-proxy && npm rebuild better-sqlite3`（或 `npm install`）。详见 CLAUDE.md「环境问题」。',
+    resolution: 'cursor-proxy 的 better-sqlite3 native module 与当前 Node 版本不匹配（prebuild 仅支持 Node v22/ABI 127，Node v24/ABI 137 报错）。修复：`cd cursor-proxy && npm rebuild better-sqlite3`（或 `npm install`）。详见 07-ops/ENV-NOTES.md。',
     first_seen: '2026-08-24' },
   { id: 'eperm-bind', pattern: 'EPERM|EACCES.*(bind|listen|0\\.0\\.0\\.0)',
     resolution: 'supertest/端口监听测试在沙箱环境因 EPERM 无法绑定 0.0.0.0。这是环境问题非代码 bug，在正常本地环境或 Docker 中通过；测试需设 PORT 或跳过绑定。',
@@ -27,7 +27,7 @@ const SEED_PATTERNS = [
     resolution: '上游/代理未启动或端口不通。检查 `manage.sh status`，必要时 `manage.sh start`；或确认 proxy 监听端口（codex 18790 / hermes 18793 / cursor 18794 / manager 18792）。',
     first_seen: '2026-08-26' },
   { id: 'etimedout', pattern: 'ETIMEDOUT|timed?\\s*out|超时',
-    resolution: '网络/上游超时。检查 NO_PROXY 是否误配裸 `*`（会导致所有请求直连被墙 IP 而超时，见 CLAUDE.md NO_PROXY 铁律）、代理可达性、上游限流。',
+    resolution: '网络/上游超时。检查 NO_PROXY 是否误配裸 `*`（会导致所有请求直连被墙 IP 而超时，见 03-adr/0002 / AGENTS.md §2 NO_PROXY 铁律）、代理可达性、上游限流。',
     first_seen: '2026-08-24' },
   { id: 'port-conflict', pattern: 'EADDRINUSE|address already in use|端口.*冲突|already in use',
     resolution: '端口被其它工具占用（如 cc-switch:15721）。用 `tools/agent-proxy-switch` 在 multi-proxy 与 cc-switch 间切换 agent base_url，确认端口归属后再启服务。',

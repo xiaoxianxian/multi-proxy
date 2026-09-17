@@ -80,7 +80,7 @@
 
 ---
 
-## 五、一致性要点（从 CLAUDE.md 已知点）
+## 五、一致性要点（从 AGENTS.md 已知点）
 
 - 供应商启用 toggle：`checkbox` 用 `pointer-events: none` + `opacity: 0` 隐藏，`label` 包裹整个 toggle 区域点击触发（非标准 radio 样式）。
 - 跨页面状态：`stop/start` 成功后广播 `proxy-status-changed`，其它页面 `loadStatus()` 刷新（实时同步，不整页重载）。
@@ -102,5 +102,5 @@
 
 - token 值：`multi-proxy-manager/public/colors_and_type.css`（107 行，全量提取）
 - 组件层：`multi-proxy-manager/public/shared-styles.css`
-- 主题同步 / toggle 交互：`CLAUDE.md §前端路由` + 实测页面
+- 主题同步 / toggle 交互：`AGENTS.md` / `05-design/` + 实测页面
 - 评估原标 `[待确认]` 因判断为"纯静态页无设计系统"——实查 token 层完整，本稿据实纠正。

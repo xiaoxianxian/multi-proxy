@@ -1,6 +1,6 @@
 # 部署指南（deployment）
 
-> 提炼自 `manage.sh`、`install.sh`、`docker-compose.yml`、各 `.env.example`、`CLAUDE.md`。
+> 提炼自 `manage.sh`、`install.sh`、`docker-compose.yml`、各 `.env.example`、`07-ops/ENV-NOTES.md`。
 > 生成日期：2026-09-17（HEAD `a94de96`，main）。
 
 ---
@@ -45,7 +45,7 @@
 
 plist 路径：`~/Library/LaunchAgents/com.multi-proxy-manager.plist`。
 
-**关键注意（来自 CLAUDE.md）**：
+**关键注意（来自 07-ops/ENV-NOTES.md / 03-adr）**：
 - `lsof` **必须用完整路径 `/usr/sbin/lsof`**，Node.js 子进程 PATH 不含 `/usr/sbin`，违反则代理状态检测全部失败（所有代理显示"未运行"）。
 - `killPort` 使用 SIGTERM → 500ms → SIGKILL 两阶段。
 - 启动轮询等端口绑定（最多 5s），非固定延迟。

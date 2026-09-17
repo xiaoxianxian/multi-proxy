@@ -46,7 +46,7 @@ bash manage.sh stop
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | `AGENTS.md` | 根目录 | AI 代理铁律（本文件前置）|
-| `CLAUDE.md` | 根目录 | 项目铁律 + 已知坑（写保护）|
+| `docs/09-review/archive/CLAUDE.md` | 根目录→archive | 原铁律库（Claude Code 弃用后 09-17 归档；铁律已收敛 `AGENTS.md`/`03-adr/`/`07-ops/ENV-NOTES.md`/`P0-FIXES.md`）|
 | `README.md` | 根目录 | 项目入门 + 功能概述 |
 | `USER-GUIDE.md` | 根目录 | 用户手册 |
 
