@@ -55,6 +55,8 @@ bash manage.sh stop
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
+| `ACCEPTANCE-CHECKLIST.md` | 根目录 | 验收准备（安装/配置/启动/882/882 测试表/验收清单，78 行）|
+| `docs/06-test/acceptance.md` | `docs/06-test/` | 验收结论（AC-1~7 标准 / 签署 / 待确认项 9 项处置，2026-09-17 据 DeepSeek 第四轮收口）|
 | `docs/09-review/consistency-report.md` | `docs/09-review/` | 一致性报告（E批，doc↔code）✅ 已收口 |
 | `docs/09-review/risk-register.md` | `docs/09-review/` | 风险登记册（DeepSeek 第三轮补齐：已知问题/代码TODO/幽灵路径/测试盲区分级，P0-F0 阻塞判定） |
 | `docs/09-review/unknowns.md` | `docs/09-review/` | 未知/待补清单（E批）✅ 已收口（9 unknown 全标注处置）|
