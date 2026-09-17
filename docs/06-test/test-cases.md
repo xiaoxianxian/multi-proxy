@@ -28,7 +28,7 @@ related_docs:
 | 模块 | 框架 | 测试文件数 | 测试/断言数 | 备注 |
 |------|------|-----------|------------|------|
 | multi-proxy-manager | Jest (Node) | 46 files（39 unit + 7 e2e） | 635 tests · 40 suites | 全绿，覆盖 4 页 UI + 9 route + 13 lib |
-| cursor-proxy | Jest (TS/TS-jest) | 11 files | 119 tests · 9 suites | 全绿 |
+| cursor-proxy | Jest (TS/TS-jest) | 11 files | 131 tests · 11 suites | 全绿（需 NODE_OPTIONS=--experimental-vm-modules，ESM+ts-jest，2026-09-17 真跑） |
 | codex-proxy | Jest (Node) | 3 files | 53 tests · 3 suites | 全绿，补 auth/CRUD/switch/balances guard（2026-09-16） |
 | hermes-proxy | pytest | 3 files | 63 test functions | 覆盖基本，无 E2E |
 | L2 demo | node 原生 | 13 demos | ~169 checks | 全 PASS |
@@ -97,7 +97,7 @@ cd multi-proxy-manager && npx --no-install jest --silent
 cd cursor-proxy && npx --no-install jest --silent
 ```
 
-预期：`Tests: 119 passed, 9 suites`
+预期：`Tests: 131 passed, 11 suites`（需 `NODE_OPTIONS=--experimental-vm-modules`，ESM+ts-jest 设计）
 
 ---
 

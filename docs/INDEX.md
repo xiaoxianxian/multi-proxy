@@ -55,13 +55,13 @@ bash manage.sh stop
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
-| `docs/09-review/consistency-report.md` | `docs/09-review/` | 一致性报告（E批，doc↔code） |
-| `docs/09-review/unknowns.md` | `docs/09-review/` | 未知/待补清单（E批） |
+| `docs/09-review/consistency-report.md` | `docs/09-review/` | 一致性报告（E批，doc↔code）✅ 已收口 |
+| `docs/09-review/unknowns.md` | `docs/09-review/` | 未知/待补清单（E批）✅ 已收口（9 unknown 全标注处置）|
 | `docs/05-design/visual-design.md` | `docs/05-design/` | 视觉设计规范（D批，token层提取） |
 | `docs/07-ops/deployment.md` | `docs/07-ops/` | 部署指南（C档，三模式） |
 | `docs/07-ops/runbook.md` | `docs/07-ops/` | 运维手册（C档） |
 | `docs/07-ops/rollback.md` | `docs/07-ops/` | 回滚指南（C档） |
-| `docs/08-user/faq.md` | `docs/08-user/` | 常见问题（C档） |
+| `docs/08-user/faq.md` | `docs/08-user/` | 常见问题（C档）；用户手册见根目录 `USER-GUIDE.md`（docs/08-user/ 仅存 FAQ 与补充材料）|
 | `docs/02-product/business-intro.md` | `docs/02-product/` | 商业简介（B档，对外/汇报） |
 | `docs/03-architecture/architecture.md` | `docs/03-architecture/` | 架构文档（B档，四层+L2模块） |
 | `docs/02-product/PRD.md` | `docs/02-product/` | 产品需求文档（B档，反向推） |
@@ -86,6 +86,7 @@ bash manage.sh stop
 | `ITERATION-ROADMAP.md` | 根目录 | 长期路线图 + DSH 接入规划 |
 | `docs/09-review/archive/PLUGGABLE-ARCH-ASSESSMENT-2026-08-25.md` | 根目录→archive | 可插拔架构评估（已归档）|
 | `docs/09-review/archive/PROJECT-STATUS.md` | 根目录→archive | 项目状态快照（已归档）|
+| `docs/09-review/archive/README.md` | (见上) | 过程文件归档区（归档规则 + 入档清单，见本 README）|
 
 ### 运维 / 部署
 
@@ -155,6 +156,7 @@ bash manage.sh stop
 ||------|------|--------|
 || 2026-09-17 | P5 GUI 桌面壳验收通过（commit `2163ca9`,已 push）— Electron 壳 + launch-gui.sh + 端口复用 + 占用检测；截图确认 Proxy Manager - Dashboard 窗口正常显示；测试 635/635 全绿 | Hermes |
 | 2026-09-17 | 据 DeepSeek 评估意见：INDEX 框定对齐 README「L2 编排中枢」；确立「评估完成度只读 INDEX + 01-feature-matrix」单一入口约定；核实文档体系无实质缺口（活跃 25 份 + 3 ADR + 测试方案 + FAQ），不采纳其「还缺测试方案/FAQ/ADR」误判（本地已有） | Hermes |
+| 2026-09-17 | 测试数字真跑校准（据 DeepSeek 第二轮）：cursor 119→131/9→11（feature-matrix/test-cases/codebase-map 当前视图 + 派生总数 jest 807→819、总 1064→1076）、L2 demo 14→13（10 内核+3 adapter）；历史快照（ITERATION-ROADMAP D6-a / MEMORY 教训）保留。E批收口标 ✅ + docs/08-user 用户手册约定 + archive/README.md 归档说明。AGENTS.md 因 protected-file gate 未改（保留 119/14） | Hermes |
 || 2026-09-16 | 新增 `docs/04-business/commercialization-questions.md`（D2 决策框架 15 题）+ `docs/02-product/m6-action-checklist.md`（D4-D8 实核 + kimi 价基线） | Hermes |
 | 2026-09-16 | 补 `codex-proxy/tests/auth-and-admin.test.js`（+17 tests，3 文件 / 53 全绿）+ 同步 INDEX/test-cases/feature-matrix（缺口#4 闭环） | Hermes |
 | 2026-09-16 | 落 `.dsh/skills/`（2 SKILL，DSH 规范）+ `docs/02-product/dsh-integration.md`（DS1✅/DS2·DS3 暂缓） | Hermes |
