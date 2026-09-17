@@ -1,6 +1,6 @@
 # 运维手册（runbook）
 
-> 提炼自 `manage.sh`、`CLAUDE.md` §已知限制/开发注意/P0修复。
+> 提炼自 `manage.sh`、`07-ops/ENV-NOTES.md`、`P0-FIXES.md`、`03-adr/`。
 > 生成日期：2026-09-17。
 
 ---
@@ -32,13 +32,13 @@
 
 ### 2.1 所有代理显示"未运行"
 
-**根因（CLAUDE.md §关键约束）**：`lsof` 未用 `/usr/sbin/lsof` 绝对路径，Node.js 子进程 PATH 不含 `/usr/sbin`。
+**根因（03-adr/0001；AGENTS.md §1）**：`lsof` 未用 `/usr/sbin/lsof` 绝对路径，Node.js 子进程 PATH 不含 `/usr/sbin`。
 
 **修复**：检查 `isProcessRunning` 的 `execSync` 调用是否带绝对路径；用 `pkill -f node.*proxy.js` 手动停后 `./manage.sh start` 重试。
 
 ### 2.2 Cursor database.test.ts 22 个全 fail
 
-**根因（CLAUDE.md §环境问题）**：`better-sqlite3` native module prebuild 仅支持 Node 18 (NODE_MODULE_VERSION 127)，当前系统 Node 24 (137)。
+**根因（07-ops/ENV-NOTES.md）**：`better-sqlite3` native module prebuild 仅支持 Node 18 (NODE_MODULE_VERSION 127)，当前系统 Node 24 (137)。
 
 **修复**：
 ```bash
@@ -74,7 +74,7 @@ npm config set cache /tmp/npm-cache && npm rebuild better-sqlite3
 
 > **严禁往全局 launchd 环境注入裸 `*` 的 `NO_PROXY`。**
 
-**根因（CLAUDE.md §绝对禁止）**：HTTP 客户端按逗号拆 NO_PROXY 做 `hostname.endsWith(项)`；`*` 去前导通配符后为空串 → `endsWith('')` 恒真 → 所有请求绕过系统代理 → 直连被墙 IP → `ETIMEDOUT`，曾把 WorkBuddy/CC Switch 全部带崩。
+**根因（03-adr/0002；AGENTS.md §2）**：HTTP 客户端按逗号拆 NO_PROXY 做 `hostname.endsWith(项)`；`*` 去前导通配符后为空串 → `endsWith('')` 恒真 → 所有请求绕过系统代理 → 直连被墙 IP → `ETIMEDOUT`，曾把 WorkBuddy/CC Switch 全部带崩。
 
 **正确做法**：需绕过 localhost，只在 LaunchAgent plist `<EnvironmentVariables>` 里设 `NO_PROXY=127.0.0.1,localhost,::1`，不用 `launchctl setenv` 污染全局。
 
@@ -85,7 +85,7 @@ npm config set cache /tmp/npm-cache && npm rebuild better-sqlite3
 | 检查项 | 状态 | 来源 |
 |--------|------|------|
 | `/api/:proxy/*` 认证 | ✅ 已修（P0 通配符绕过） | `P0-FIXES.md` |
-| `x-proxy-auth` 认证头 | ✅ codex-proxy/hermes-proxy 已支持 | `CLAUDE.md §P0` |
+| `x-proxy-auth` 认证头 | ✅ codex-proxy/hermes-proxy 已支持 | `P0-FIXES.md` |
 | `PROXY_AUTH_TOKEN` 环境变量 | ✅ cursor-proxy 已支持 | `cursor-proxy/.env.example` |
 | `JWT_SECRET` 已改随机串 | 需检查 | `multi-proxy-manager/.env` |
 | 登录速率限制 | ✅ | `install.sh` 生成 |
@@ -123,6 +123,6 @@ npm config set cache /tmp/npm-cache && npm rebuild better-sqlite3
 ## 数据源
 
 - `manage.sh`（全 514 行）
-- `CLAUDE.md §已知限制/开发注意/P0`
+- `07-ops/ENV-NOTES.md` / `P0-FIXES.md` / `03-adr/`
 - `docs/04-business/commercialization-decided.md` 门控配置
 - `docs/02-product/m6-action-checklist.md` M6 固化命令

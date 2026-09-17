@@ -445,7 +445,7 @@ proxy-rebuild/
 ├── manage.sh              # 服务管理脚本（启停、状态、日志）
 ├── install.sh             # 安装/卸载/自启脚本
 ├── README.md              # 项目文档
-├── CLAUDE.md              # 开发规范
+├── AGENTS.md              # 开发规范
 │
 ├── multi-proxy-manager/   # Web 管理后台
 │   ├── server.js          # 后端（Express）

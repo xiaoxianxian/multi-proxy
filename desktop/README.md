@@ -50,7 +50,7 @@ cp -R "dist-app/mac-arm64/Proxy Manager.app" /Applications/
 
 - `PROXY_MANAGER_REPO`：显式指定仓库根（默认 `~/proxy-rebuild`）
 - 壳进程树内注入完整 PATH（~/.local/bin、homebrew 等，规避 GUI PATH 缺失）
-- 仅壳进程树内设 `NO_PROXY=127.0.0.1,localhost,::1`——**绝不污染全局 launchd 环境**（CLAUDE.md 铁律）
+- 仅壳进程树内设 `NO_PROXY=127.0.0.1,localhost,::1`——**绝不污染全局 launchd 环境**（AGENTS.md §2 / 03-adr/0002 铁律）
 
 ## 已验证路径
 

@@ -292,7 +292,7 @@ proxy-rebuild/
 ├── manage.sh              # 服务管理脚本
 ├── install.sh             # 安装/卸载脚本
 ├── logs/                  # 日志输出目录
-├── CLAUDE.md              # 开发规范
+├── AGENTS.md              # 开发规范
 ├── README.md              # 用户文档
 ├── USER-GUIDE.md          # 新用户上手指南
 ├── docs/09-review/archive/PROJECT-STATUS.md  # 项目状态记录（已归档）

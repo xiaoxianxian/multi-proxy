@@ -6,7 +6,7 @@ confidence: high
 last_updated: 2026-09-16
 related_code:
    - multi-proxy-manager/lib/process-manager.js
-   - CLAUDE.md
+   - AGENTS.md
 related_docs:
    - docs/INDEX.md
 ---
@@ -62,4 +62,4 @@ Node.js spawn 子进程时 `PATH` 通常继承自 shell，但 `launchd`（Launch
 - 非 macOS 平台需调整路径（Dockerfile 中需确认镜像内 lsof 路径）
 
 ### 后续工作
-- [ ] Docker 模式下用 `docker container inspect` 替代 lsof（已有，见 CLAUDE.md 铁律④ Docker）
+- [ ] Docker 模式下用 `docker container inspect` 替代 lsof（已有，见 04-tech / 07-ops/ENV-NOTES.md）

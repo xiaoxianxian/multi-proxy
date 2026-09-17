@@ -6,7 +6,7 @@ confidence: high
 last_updated: 2026-09-16
 related_code:
    - install.sh（当前无 NO_PROXY 写法，已 grep 证实零残留）
-   - CLAUDE.md "NO_PROXY 铁律" 节
+   - AGENTS.md "NO_PROXY 铁律" 节
 related_docs:
    - docs/INDEX.md
    - AGENTS.md 第 2 节
@@ -24,7 +24,7 @@ related_docs:
 ### 事故来源（前驱项目，非本仓）
 
 旧版 `codex-multi-model-proxy-deploy` 的 `install.sh:195-196`（已删，
-CLAUDE.md 明确标注）执行了：
+AGENTS.md §2 明确标注）执行了：
 
 ```bash
 launchctl setenv NO_PROXY "...,*,..."

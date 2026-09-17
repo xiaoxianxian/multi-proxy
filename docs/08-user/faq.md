@@ -1,6 +1,6 @@
 # FAQ 常见问题
 
-> 提炼自 `CLAUDE.md §已知限制/开发注意/P0/环境问题` + `manage.sh` + `runbook.md`。
+> 提炼自 `07-ops/ENV-NOTES.md`（环境）+ `P0-FIXES.md`（P0）+ `manage.sh` + `runbook.md`。
 > 生成日期：2026-09-17。命令均在 macOS（M5 Pro, 48GB, Node 24, Python 3.11）实测验证。
 
 ---
@@ -123,7 +123,7 @@ codesign -s - node_modules/electron/dist/Electron.app
 
 ## 数据源
 
-- `CLAUDE.md §已知限制/环境问题/NO_PROXY 铁律`
+- `07-ops/ENV-NOTES.md` / `03-adr/0002`（NO_PROXY 铁律）
 - `docs/07-ops/runbook.md`
 - `manage.sh`
 - `docs/09-review/archive/MEMORY-2026-09-17.md` P5 桌面壳修复记录
