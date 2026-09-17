@@ -62,7 +62,7 @@ proxy-rebuild 已从「多模型代理管理工具」（L1）升级为 **Agent �
 | 成本分析 `cost.js` + `lib/cost-track.js` | ✅ P2 | B 路余额趋势 14 checks；A 路 token×单价 埋点 `forward.js` 热路径 line 168，门控 `PROXY_COST_TRACK` 默认关（live 实证 0.06 / cacheHit 28.7） |
 | 文档 + 3 案例 + 性能 | ✅ P3 | `l2/CASES.md` + `l2/PERF-REPORT.md`，收口 `e3bcded` |
 
-**全量测试基线**：jest **635/635（40 suites）** + l2 demo 全绿 + 3 adapter + specs validate（2026-09-17 E2E 复验，见 `MEMORY-2026-09-17.md` C 档）。
+**全量测试基线**：jest **635/635（40 suites）** + l2 demo 全绿 + 3 adapter + specs validate（2026-09-17 E2E 复验，见 `docs/09-review/archive/MEMORY-2026-09-17.md` C 档）。
 
 ---
 
@@ -137,4 +137,4 @@ L2 区别于 CC-Switch / codex++ 的本质：**不锁定主流 agent，任何能
 | 模块落地状态 + demo 数字 | `L2-BLUEPRINT.md` 七、实施路径；`docs/01-feature-matrix.md` |
 | 开放接入协议 | `l2/adapter-protocol.md` |
 | 幽灵路径 C2/B7 | `l2/PERF-REPORT.md §3` |
-| 测试基线 635/635 | 2026-09-17 E2E `l2/*.demo.js` + jest 复验，见 `MEMORY-2026-09-17.md` 与 `docs/00-codebase-map.md` |
+| 测试基线 635/635 | 2026-09-17 E2E `l2/*.demo.js` + jest 复验，见 `docs/09-review/archive/MEMORY-2026-09-17.md` 与 `docs/00-codebase-map.md` |
