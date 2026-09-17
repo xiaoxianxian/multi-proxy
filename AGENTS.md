@@ -1,12 +1,12 @@
 # AGENTS.md
 
 > **状态：已批准**。这是给所有 AI 代理（Hermes / WorkBuddy / Claude Code / Codex 等）
-> 定的统一规则。关联：`CLAUDE.md`（项目铁律，写保护，优先读）。
+> 定的统一规则。关联：`03-adr/`（3 份 ADR）+ `07-ops/ENV-NOTES.md`（环境）+ `P0-FIXES.md`。
 
 ## 0 · 必读前置
 
-动手前先读 `CLAUDE.md`（项目铁律，写保护，不可改写）。
-再读 `docs/INDEX.md`（项目文档总入口）和 `docs/01-feature-matrix.md`（功能完成度）。
+动手前先读 `03-adr/`（3 份 ADR）、`07-ops/ENV-NOTES.md`（环境）、`P0-FIXES.md`（安全修复）——原 `CLAUDE.md` 铁律已 09-17 弃用归档。
+再读 `docs/INDEX.md`（项目文档总入口）和 `docs/01-feature-matrix.md`（功能完成度，评估单一入口）。
 
 ---
 
@@ -83,9 +83,9 @@ NO_PROXY 仅允许 localhost 类项：127.0.0.1 / localhost / ::1
 - L2 编排内核全部在 `l2/` 目录，共 10 个核心模块 + 3 个 adapter。
 - 测试总计（截至 2026-09-16）：
    - multi-proxy-manager: 40 files / 635 测试
-   - cursor-proxy: 11 files / 119 测试
+     - cursor-proxy: 11 files / 131 测试（需 NODE_OPTIONS=--experimental-vm-modules）
    - hermes-proxy: 3 files / 63 pytest 项
-   - l2: 14 demo / 约 182 checks（全部 PASS）
+     - l2: 13 demo（10 内核 + 3 adapter） / 约 182 checks（全部 PASS）
    - shell: 11 bats
 
 ---
@@ -99,7 +99,7 @@ NO_PROXY 仅允许 localhost 类项：127.0.0.1 / localhost / ::1
 
 ## 8 · 禁止事项清单
 
-- ❌ 不得改写 `CLAUDE.md`（写保护）
+- ❌ 不得改写 `03-adr/` / `07-ops/ENV-NOTES.md`（原 CLAUDE.md 铁律，09-17 收敛至此，改动需授权）
 - ❌ 不得 `launchctl setenv NO_PROXY '*','...'` 类全局裸通配
 - ❌ 不得 `git add -A` / `git add .`
 - ❌ 不得向 `forward.js` / `codex-proxy/proxy.js` 热路径注入未经授权的改动
@@ -110,7 +110,7 @@ NO_PROXY 仅允许 localhost 类项：127.0.0.1 / localhost / ::1
 
 ## 9 · 参考文件
 
-- `CLAUDE.md` — 项目铁律 + 已知坑（写保护，优先读）
+- `03-adr/`（3 份 ADR：lsof/NO_PROXY/L2 非侵入）+ `07-ops/ENV-NOTES.md` + `P0-FIXES.md` — 原 CLAUDE.md 铁律/已知坑，09-17 弃用归档
 - `docs/INDEX.md` — 全项目文档入口
 - `docs/01-feature-matrix.md` — 功能完成度矩阵
 - `ITERATION-ROADMAP.md` — 长期迭代路线图 + DSH 接入规划
