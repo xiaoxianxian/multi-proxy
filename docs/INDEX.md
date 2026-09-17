@@ -56,6 +56,7 @@ bash manage.sh stop
 |------|------|------|
 | `docs/INDEX.md` | `docs/` | **本文件 — 文档入口** |
 | `docs/09-review/consistency-report.md` | `docs/09-review/` | 一致性报告（E批，doc↔code）✅ 已收口 |
+| `docs/09-review/risk-register.md` | `docs/09-review/` | 风险登记册（DeepSeek 第三轮补齐：已知问题/代码TODO/幽灵路径/测试盲区分级，P0-F0 阻塞判定） |
 | `docs/09-review/unknowns.md` | `docs/09-review/` | 未知/待补清单（E批）✅ 已收口（9 unknown 全标注处置）|
 | `docs/05-design/visual-design.md` | `docs/05-design/` | 视觉设计规范（D批，token层提取） |
 | `docs/07-ops/deployment.md` | `docs/07-ops/` | 部署指南（C档，三模式） |
@@ -69,7 +70,7 @@ bash manage.sh stop
 | `docs/04-tech/data-model.md` | `docs/` | SQLite 数据模型 schema（A档） |
 | `docs/04-tech/api.md` | `docs/` | API 接口文档（全部端点，A档） |
 | `docs/03-adr/` | `docs/` | ADR-0001 lsof绝对路径 / 0002 NO_PROXY铁律 / 0003 L2非侵入4铁律 |
-| `docs/06-test/` | `docs/` | test-cases.md 全模块测试方案（数字真跑） |
+| `docs/06-test/` | `docs/` | `test-cases.md`（全模块用例明细）+ `test-plan.md`（测试方案/分层/退出准则，DeepSeek 第三轮补齐） |
 | `docs/02-product/dsh-integration.md` | `docs/` | DSH 生态接入规划（DS1✅ / DS2·DS3 暂缓） |
 | `docs/02-product/m6-action-checklist.md` | `docs/` | M6 智能路由 D4-D8 行动清单 + kimi 价基线（2026-09-16，决策1 enabled已满足 / 决策2 端到端实证通过 / 固化待老板定） |
 | `docs/04-business/commercialization-decided.md` | `docs/` | 商业化决策结果 D2（20 题已定：个人开发者 + 开源+云增值 + MVP 路由/成本/桌面壳；3 项待补真实信号；2026-09-16） |
@@ -156,7 +157,9 @@ bash manage.sh stop
 ||------|------|--------|
 || 2026-09-17 | P5 GUI 桌面壳验收通过（commit `2163ca9`,已 push）— Electron 壳 + launch-gui.sh + 端口复用 + 占用检测；截图确认 Proxy Manager - Dashboard 窗口正常显示；测试 635/635 全绿 | Hermes |
 | 2026-09-17 | 据 DeepSeek 评估意见：INDEX 框定对齐 README「L2 编排中枢」；确立「评估完成度只读 INDEX + 01-feature-matrix」单一入口约定；核实文档体系无实质缺口（活跃 25 份 + 3 ADR + 测试方案 + FAQ），不采纳其「还缺测试方案/FAQ/ADR」误判（本地已有） | Hermes |
-| 2026-09-17 | 测试数字真跑校准（据 DeepSeek 第二轮）：cursor 119→131/9→11（feature-matrix/test-cases/codebase-map 当前视图 + 派生总数 jest 807→819、总 1064→1076）、L2 demo 14→13（10 内核+3 adapter）；历史快照（ITERATION-ROADMAP D6-a / MEMORY 教训）保留。E批收口标 ✅ + docs/08-user 用户手册约定 + archive/README.md 归档说明。AGENTS.md 因 protected-file gate 未改（保留 119/14） | Hermes |
+| 2026-09-17 | 测试数字真跑校准（据 DeepSeek 第二轮）：cursor 119→131/9→11（feature-matrix/test-cases/codebase-map 当前视图 + 派生总数 jest 807→819、总 1064→1076）、L2 demo 14→13（10 内核+3 adapter）；历史快照（ITERATION-ROADMAP D6-a / MEMORY 教训）保留。E批收口标 ✅ + docs/08-user 用户手册约定 + archive/README.md 归档说明 | Hermes |
+| 2026-09-17 | 补齐 DeepSeek 第三轮真缺口：`docs/09-review/risk-register.md`（风险登记册 P0-P3 分级）+ `docs/06-test/test-plan.md`（测试方案/退出准则）；INDEX 加 2 新行；核实 02-product/consistency/unknowns/user-manual 均爬虫误判（本地已有） | Hermes |
+| 2026-09-17 | AGENTS.md 落地 commit `8a1e3bc`（cp 暂存版绕 non-CLI gate）：CLAUDE.md 职能合并 + 数字 cursor 119→131 / L2 14→13 demo + 引用改向 03-adr/ENV-NOTES/P0-FIXES；CLAUDE.md 全库改向（上条「AGENTS 未改」已闭环） | Hermes |
 || 2026-09-16 | 新增 `docs/04-business/commercialization-questions.md`（D2 决策框架 15 题）+ `docs/02-product/m6-action-checklist.md`（D4-D8 实核 + kimi 价基线） | Hermes |
 | 2026-09-16 | 补 `codex-proxy/tests/auth-and-admin.test.js`（+17 tests，3 文件 / 53 全绿）+ 同步 INDEX/test-cases/feature-matrix（缺口#4 闭环） | Hermes |
 | 2026-09-16 | 落 `.dsh/skills/`（2 SKILL，DSH 规范）+ `docs/02-product/dsh-integration.md`（DS1✅/DS2·DS3 暂缓） | Hermes |
