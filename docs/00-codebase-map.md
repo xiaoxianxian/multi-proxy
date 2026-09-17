@@ -95,7 +95,7 @@ cursor-proxy/
 ├── dist/server/
 │   └── app.js             # 编译产物
 └── tests/
-    └── unit/*.test.ts     # jest，119 tests 全绿
+    └── unit/*.test.ts      # jest，131 tests 全绿（需 NODE_OPTIONS=--experimental-vm-modules）
 ```
 
 ### l2/ 编排内核
