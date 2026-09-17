@@ -75,7 +75,8 @@ bash manage.sh stop
 | `docs/06-test/` | `docs/` | `test-cases.md`（全模块用例明细）+ `test-plan.md`（测试方案/分层/退出准则，DeepSeek 第三轮补齐） |
 | `docs/_templates/` | `docs/` | 文档模板（ADR / PRD / test-cases，规范产出用） |
 | `docs/_evidence/` | `docs/` | 证据存档（测试日志/截图/性能快照；数字可追溯，DeepSeek 第四轮补建） |
-| `docs/02-product/dsh-integration.md` | `docs/` | DSH 生态接入规划（DS1✅ / DS2·DS3 暂缓） |
+| `docs/02-product/dsh-integration.md` | `docs/` | DSH 生态接入规划（DS1/DS2/DS3，2026-09-17） |
+| `docs/02-product/bundle-design.md` | `docs/` | DS2 前置：cordis.patch.yml/dsh.bundle 补丁结构草案 + 官方规范 + 8 条踩坑 + L2 映射（2026-09-18，等 DSH 0.2） |
 | `docs/02-product/m6-action-checklist.md` | `docs/` | M6 智能路由 D4-D8 行动清单 + kimi 价基线（2026-09-16，决策1 enabled已满足 / 决策2 端到端实证通过 / 固化待老板定） |
 | `docs/04-business/commercialization-decided.md` | `docs/04-business/` | 商业化决策结果 D2（20 题已定：个人开发者 + 开源+云增值 + MVP 路由/成本/桌面壳；3 项待补真实信号；2026-09-16） |
 | `docs/04-business/commercialization-questions.md` | `docs/04-business/` | 商业化决策框架 D2（15 题 + 现状锚点 + 怎么逐项回答；2026-09-16） |
@@ -181,4 +182,5 @@ bash manage.sh stop
 | 2026-09-16 | 补建 `AGENTS.md` / `docs/INDEX.md` / `docs/01-feature-matrix.md` / `docs/_templates/` | Hermes |
 | 2026-09-16 之前 | `L2-BLUEPRINT` P3 ✅ / `l2/CASES.md` / `l2/PERF-REPORT.md` / `l2/adapter-protocol.md` / `CLAUDE.md` | Hermes / WorkBuddy |
 | 2026-09-17 | 据 DeepSeek 第四轮（收口/索引校准）：P2 补建 `docs/_evidence/`（证据存档 + README）；INDEX 修位置列瑕疵（`03-adr/`/`04-business/` 位置列填对）+ 加 `_templates/`/`_evidence/` 收录 + 概数 25→33/docs、HEAD a94de96→640e12b + 加「验收入口」小节；核实 DeepSeek 报的「codebase-map/04-business 未收录」为误判（已列）、AGENTS.md 已落地根目录（4836B「已批准」）、feature-matrix 数字已对齐 882/882（14/14 为模块级 demo check）| Hermes |
+| 2026-09-18 | 据 DeepSeek 第五轮（两段）：核实 3 ADR 全在（P0 引用断裂=误判）+ 据 DSH 建议新建 `docs/02-product/bundle-design.md`（cordis.patch.yml/dsh.bundle 前置设计,等 DSH 0.2）+ dsh-integration.md 接引用 + INDEX 登记 | Hermes |
 
