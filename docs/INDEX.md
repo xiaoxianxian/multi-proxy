@@ -2,14 +2,19 @@
 
 > **用途**：所有 agent / 人类读项目的第一个入口。只需读本文件 + `docs/01-feature-matrix.md`
 > 即可掌握项目全貌；不需要翻全仓库。
-| 最后更新：2026-09-17 |
+>
+> **评估完成度 / 项目进度，只读本文件 + `docs/01-feature-matrix.md` 即可**
+> （单一入口约定，2026-09-17 据 DeepSeek 评估意见补入；文档体系已无实质缺口——
+> 活跃 25 份 + 3 ADR + 测试方案 + FAQ，勿据爬虫快照误判"还缺文档"）。
+
+**最后更新：2026-09-17**
 
 ---
 
 ## 项目一句话
 
-multi-proxy（Proxy Rebuild）是一个**多代理统一管理系统**：管理 Codex / Hermes / Cursor 三个
-AI 代理的启停、路由、日志和告警，核心是 L2 编排中枢，
+multi-proxy（Proxy Rebuild）是一个**多 Agent 编排中枢（L2，网关 + 中台）**：管理 Codex / Hermes / Cursor 三个
+AI 代理的启停、路由、日志和告警，核心是 L2 编排中枢（10 内核模块 + 3 非侵入 adapter），
 已按 DeepSeek Harness "一切皆插件" 理念设计，可零改造热插拔新 adapter。
 
 ---
@@ -149,6 +154,7 @@ bash manage.sh stop
 || 日期 | 变更 | 负责人 |
 ||------|------|--------|
 || 2026-09-17 | P5 GUI 桌面壳验收通过（commit `2163ca9`,已 push）— Electron 壳 + launch-gui.sh + 端口复用 + 占用检测；截图确认 Proxy Manager - Dashboard 窗口正常显示；测试 635/635 全绿 | Hermes |
+| 2026-09-17 | 据 DeepSeek 评估意见：INDEX 框定对齐 README「L2 编排中枢」；确立「评估完成度只读 INDEX + 01-feature-matrix」单一入口约定；核实文档体系无实质缺口（活跃 25 份 + 3 ADR + 测试方案 + FAQ），不采纳其「还缺测试方案/FAQ/ADR」误判（本地已有） | Hermes |
 || 2026-09-16 | 新增 `docs/04-business/commercialization-questions.md`（D2 决策框架 15 题）+ `docs/02-product/m6-action-checklist.md`（D4-D8 实核 + kimi 价基线） | Hermes |
 | 2026-09-16 | 补 `codex-proxy/tests/auth-and-admin.test.js`（+17 tests，3 文件 / 53 全绿）+ 同步 INDEX/test-cases/feature-matrix（缺口#4 闭环） | Hermes |
 | 2026-09-16 | 落 `.dsh/skills/`（2 SKILL，DSH 规范）+ `docs/02-product/dsh-integration.md`（DS1✅/DS2·DS3 暂缓） | Hermes |
