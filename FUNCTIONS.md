@@ -295,7 +295,7 @@ proxy-rebuild/
 ├── CLAUDE.md              # 开发规范
 ├── README.md              # 用户文档
 ├── USER-GUIDE.md          # 新用户上手指南
-├── PROJECT-STATUS.md      # 项目状态记录
+├── docs/09-review/archive/PROJECT-STATUS.md  # 项目状态记录（已归档）
 ├── multi-proxy-manager/
 │   ├── server.js          # 后端服务
 │   ├── package.json

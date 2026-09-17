@@ -79,8 +79,8 @@ bash manage.sh stop
 | `l2/CASES.md` | `l2/` | 3 个核心案例 + 复现命令 |
 | `l2/PERF-REPORT.md` | `l2/` | L2 性能报告 |
 | `ITERATION-ROADMAP.md` | 根目录 | 长期路线图 + DSH 接入规划 |
-| `PLUGGABLE-ARCH-ASSESSMENT-2026-08-25.md` | 根目录 | 可插拔架构评估 |
-| `PROJECT-STATUS.md` | 根目录 | 项目状态快照 |
+| `docs/09-review/archive/PLUGGABLE-ARCH-ASSESSMENT-2026-08-25.md` | 根目录→archive | 可插拔架构评估（已归档）|
+| `docs/09-review/archive/PROJECT-STATUS.md` | 根目录→archive | 项目状态快照（已归档）|
 
 ### 运维 / 部署
 
@@ -101,7 +101,7 @@ bash manage.sh stop
 | `MEMORY-2026-09-10/11/12.md` | 当日日志 |
 | `HANDOVER-2026-08-24/25/26/09-10.md` | 交接文档 |
 | `P0-FIXES.md` | P0 安全修复记录 |
-| `review-2026-08-24/00-SUMMARY.md` | 综合评审总结 |
+| `docs/09-review/archive/review-2026-08-24/00-SUMMARY.md` | 综合评审总结 |
 
 ---
 

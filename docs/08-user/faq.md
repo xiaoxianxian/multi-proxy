@@ -126,4 +126,4 @@ codesign -s - node_modules/electron/dist/Electron.app
 - `CLAUDE.md §已知限制/环境问题/NO_PROXY 铁律`
 - `docs/07-ops/runbook.md`
 - `manage.sh`
-- `MEMORY-2026-09-17.md` P5 桌面壳修复记录
+- `docs/09-review/archive/MEMORY-2026-09-17.md` P5 桌面壳修复记录

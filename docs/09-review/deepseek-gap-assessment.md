@@ -15,7 +15,7 @@
 | docs/00-codebase-map.md | ❌ 缺 |
 | docs/02-product/PRD.md | ❌ 缺 |
 | docs/02-product/business-intro.md | ❌ 缺 |
-| docs/03-architecture/architecture.md | ❌ 缺（只有 architecture.html/v2 可视化，无可检索 md）|
+| docs/03-architecture/architecture.md | ❌ 缺（只有 docs/09-review/archive/architecture.html/v2 可视化，无可检索 md）|
 | docs/04-tech/api.md | ❌ 缺 |
 | docs/04-tech/data-model.md | ❌ 缺 |
 | docs/05-design/visual-design.md | ❌ 缺 |
@@ -62,7 +62,7 @@ DeepSeek 的 7 步里有不少和现有文档重叠。按「能复用就复用�
 
 | 项 | 处理 | 复用 / 材料 |
 |---|---|---|
-| 03-architecture/architecture.md | 提炼成可检索 md | architecture.html/v2 + PLUGGABLE-ARCH-ASSESSMENT |
+| 03-architecture/architecture.md | 提炼成可检索 md | docs/09-review/archive/architecture.html/v2 + docs/09-review/archive/PLUGGABLE-ARCH-ASSESSMENT-2026-08-25.md |
 | 02-product/PRD.md | 反向推 | commercialization-decided + 01-feature-matrix |
 | 02-product/business-intro.md | 商业决策已定，可**自动成稿**，不需人写 | commercialization-decided |
 
