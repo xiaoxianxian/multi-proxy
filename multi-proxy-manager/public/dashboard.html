@@ -3,654 +3,378 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proxy Manager - Dashboard</title>
+  <title>Proxy Manager</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./shared-styles.css">
 </head>
 <style>
 /* ============================================
-   Reset & Base
+   Apple HIG Style Overlays
    ============================================ */
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+:root {
+  --hig-card-radius: 16px;
+  --hig-nav-radius: 10px;
+  --hig-glass-bg: rgba(255, 255, 255, 0.72);
+  --hig-glass-border: rgba(255, 255, 255, 0.5);
+  --hig-section-gap: 20px;
 }
 
-html {
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+:root.dark {
+  --hig-glass-bg: rgba(30, 41, 59, 0.72);
+  --hig-glass-border: rgba(255, 255, 255, 0.08);
 }
 
-body {
-  font-family: var(--font-family);
-  background: var(--color-bg-secondary);
-  color: var(--color-text);
-  line-height: 1.6;
-  display: flex;
-  min-height: 100vh;
-  overflow: hidden;
-}
-
-/* ============================================
-   Mobile Menu Button
-   ============================================ */
-.mobile-menu-btn {
-  display: none;
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 200;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
+/* Apple-style card */
+.hig-card {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-md);
-  cursor: pointer;
+  border-radius: var(--hig-card-radius);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  transition: box-shadow var(--transition-normal);
+}
+
+.hig-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.hig-card-header {
+  padding: 20px 24px 0;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 18px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hig-card-title {
+  font-size: 15px;
+  font-weight: 600;
   color: var(--color-text);
+  letter-spacing: -0.2px;
 }
 
-/* ============================================
-   Sidebar Overlay (mobile)
-   ============================================ */
-.sidebar-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 90;
+.hig-card-subtitle {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
 }
 
-/* ============================================
-   Sidebar
-   ============================================ */
-.sidebar {
-  width: var(--sidebar-width);
-  background: var(--color-bg);
-  border-right: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  height: 100vh;
-  position: sticky;
-  top: 0;
-  overflow-y: auto;
-  z-index: 100;
+.hig-card-body {
+  padding: 16px 24px 20px;
 }
 
-/* Sidebar Navigation */
-.sidebar-nav {
-  flex: 1;
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.nav-section-label {
-  padding: 8px 12px 6px;
-  font-size: 10px;
+/* Apple-style section label */
+.hig-section-label {
+  font-size: 11px;
   font-weight: 700;
   color: var(--color-text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.9px;
+  padding: 0 4px 8px;
+  margin-top: 8px;
 }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  transition: all var(--transition-fast);
-  user-select: none;
-  gap: 10px;
-  position: relative;
-  text-decoration: none;
-}
-
-.nav-item:hover {
-  background: var(--color-bg-secondary);
-  color: var(--color-text);
-}
-
-.nav-item.active {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.nav-item .nav-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.nav-item .nav-badge {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 7px;
-  border-radius: 10px;
-  line-height: 1.5;
-}
-
-.nav-badge.running {
-  background: var(--color-success-light);
-  color: var(--color-success);
-}
-
-.nav-badge.stopped {
-  background: var(--color-error-light);
-  color: var(--color-error);
-}
-
-/* Sidebar Footer */
-.sidebar-footer {
-  padding: 16px 12px;
-  border-top: 1px solid var(--color-border);
-}
-
-.sidebar-footer .version-info {
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-  text-align: center;
-  line-height: 1.5;
-}
-
-/* ============================================
-   Main Content
-   ============================================ */
-.main {
-  flex: 1;
-  overflow-y: auto;
-  max-height: 100vh;
-  padding: var(--main-padding);
-  min-width: 0;
-}
-
-/* ============================================
-   Page Header
-   ============================================ */
-.page-header {
-  margin-bottom: 28px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--color-text);
-  letter-spacing: -0.3px;
-  margin-bottom: 4px;
-}
-
-.page-subtitle {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  font-weight: 400;
-}
-
-/* ============================================
-   Banners
-   ============================================ */
-.offline-banner {
-  background: var(--color-warning-light);
-  border: 1px solid var(--color-warning-light);
-  border-radius: var(--radius-sm);
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--color-warning-deep, #92400e);
-  font-weight: 500;
-}
-
-.offline-banner.hidden { display: none; }
-.offline-banner-icon { font-size: 16px; flex-shrink: 0; }
-
-.apikey-banner {
-  background: var(--color-warning-light);
-  border: 1px solid var(--color-warning-light);
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: #92400e;
-  font-weight: 500;
-}
-
-.apikey-banner.hidden { display: none; }
-.apikey-banner-icon { font-size: 16px; flex-shrink: 0; }
-
-.apikey-banner-close {
-  margin-left: auto;
-  background: none;
-  border: none;
-  font-size: 18px;
-  color: #92400e;
-  cursor: pointer;
-  padding: 2px 6px;
-  line-height: 1;
-  border-radius: 4px;
-}
-
-.apikey-banner-close:hover { background: var(--color-warning-light); }
-
-/* ============================================
-   Auto-Refresh Control Panel
-   ============================================ */
-.auto-refresh-panel {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-  padding: 12px 16px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-}
-
-.auto-refresh-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 22px;
-  flex-shrink: 0;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--color-border);
-  border-radius: 11px;
-  transition: all var(--transition-fast);
-}
-
-.toggle-slider::before {
-  content: '';
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: white;
-  border-radius: 50%;
-  transition: all var(--transition-fast);
-}
-
-.toggle-switch input:checked + .toggle-slider {
-  background: var(--color-primary);
-}
-
-.toggle-switch input:checked + .toggle-slider::before {
-  transform: translateX(18px);
-}
-
-.toggle-switch input:focus + .toggle-slider {
-  box-shadow: 0 0 0 3px var(--color-primary-bg);
-}
-
-/* ============================================
-   Stat Cards
-   ============================================ */
-.stat-grid {
+/* Stat cards - Apple style */
+.hig-stat-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
-.stat-card {
+.hig-stat-card {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 22px 24px;
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-normal);
+  border-radius: var(--hig-card-radius);
+  padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   position: relative;
   overflow: hidden;
+  transition: all var(--transition-normal);
 }
 
-.stat-card::before {
+.hig-stat-card::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 3px;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-radius: var(--hig-card-radius) var(--hig-card-radius) 0 0;
 }
 
-.stat-card.accent-blue::before {
-  background: var(--color-primary);
+.hig-stat-card.blue::before { background: var(--color-primary); }
+.hig-stat-card.green::before { background: var(--color-success); }
+.hig-stat-card.orange::before { background: var(--color-warning); }
+.hig-stat-card.red::before { background: var(--color-error); }
+
+.hig-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
-.stat-card.accent-green::before {
-  background: var(--color-success);
-}
-
-.stat-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.stat-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.stat-icon {
-  font-size: 20px;
-  opacity: 0.6;
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -1px;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
-.stat-value.blue { color: var(--color-primary); }
-.stat-value.green { color: var(--color-success); }
-
-.stat-detail {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  font-weight: 400;
-}
-
-/* ============================================
-   Version List
-   ============================================ */
-.version-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.version-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-sm);
-}
-
-.version-item .ver-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-
-.version-item .ver-value {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text);
-  background: var(--color-bg);
-  padding: 3px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-}
-
-/* ============================================
-   Proxy Cards
-   ============================================ */
-.proxy-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.proxy-card {
-  display: flex;
-  align-items: center;
-  padding: 18px 22px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-normal);
-  gap: 16px;
-}
-
-.proxy-card:hover {
-  box-shadow: var(--shadow-md);
-  border-color: var(--color-border);
-}
-
-.proxy-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
+.hig-stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.hig-stat-icon.blue { background: var(--color-primary-light); color: var(--color-primary); }
+.hig-stat-icon.green { background: var(--color-success-light); color: var(--color-success); }
+.hig-stat-icon.orange { background: var(--color-warning-light); color: var(--color-warning); }
+.hig-stat-icon.red { background: var(--color-error-light); color: var(--color-error); }
+
+.hig-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  line-height: 1;
+  margin-bottom: 4px;
+  color: var(--color-text);
+}
+
+.hig-stat-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+}
+
+/* Health table rows */
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.health-row:last-child {
+  border-bottom: none;
+}
+
+.health-row-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.health-provider {
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: 14px;
+  min-width: 120px;
+}
+
+.health-meta {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+/* Alert items */
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: var(--color-bg-secondary);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.alert-item:hover {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+}
+
+.alert-item:last-child {
+  margin-bottom: 0;
+}
+
+.alert-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
-.proxy-icon.codex {
-  background: var(--color-prov-codex-bg);
-  color: var(--color-prov-codex-fg);
-}
+.alert-icon.critical { background: var(--color-error-light); color: var(--color-error); }
+.alert-icon.warning { background: var(--color-warning-light); color: var(--color-warning); }
+.alert-icon.info { background: var(--color-info-light); color: var(--color-info); }
+.alert-icon.success { background: var(--color-success-light); color: var(--color-success); }
 
-.proxy-icon.hermes {
-  background: var(--color-prov-hermes-bg);
-  color: var(--color-prov-hermes-fg);
-}
-
-.proxy-icon.cursor {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-}
-
-.proxy-info {
+.alert-content {
   flex: 1;
   min-width: 0;
 }
 
-.proxy-name-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 3px;
-  flex-wrap: wrap;
-}
-
-.proxy-name {
-  font-size: 14px;
+.alert-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-text);
+  margin-bottom: 2px;
 }
 
-.proxy-port-badge {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+.alert-message {
+  font-size: 12px;
   color: var(--color-text-secondary);
-  background: var(--color-bg-secondary);
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
+  line-height: 1.4;
 }
 
-.proxy-version-badge {
-  font-family: var(--font-mono);
+.alert-time {
   font-size: 11px;
-  font-weight: 500;
-  color: var(--color-primary);
-  background: var(--color-primary-light);
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(37, 99, 235, 0.15);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  font-family: var(--font-mono);
 }
 
-.proxy-meta {
+/* Registry cards */
+.registry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.registry-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--hig-card-radius);
+  padding: 20px;
+  transition: all var(--transition-normal);
+  position: relative;
+}
+
+.registry-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.registry-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.registry-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.2px;
+}
+
+.registry-card-type {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.registry-card-body {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.registry-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.registry-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.registry-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+/* Filter bar */
+.filter-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
+  margin-bottom: 20px;
   flex-wrap: wrap;
 }
 
-.proxy-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+.filter-bar .form-input {
+  flex: 1;
+  min-width: 200px;
 }
 
-/* ============================================
-   Login Required Card
-   ============================================ */
-.login-required-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  padding: 20px;
+/* Page container */
+.page {
+  display: none;
+  animation: page-in 0.25s ease;
 }
 
-.login-required-card {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 40px;
-  width: 380px;
-  box-shadow: var(--shadow-md);
-  text-align: center;
+.page.active {
+  display: block;
 }
 
-.login-required-icon {
-  font-size: 36px;
-  margin-bottom: 16px;
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.login-required-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: var(--color-text);
-}
-
-.login-required-desc {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  margin-bottom: 24px;
-}
-
-.login-required-card .btn {
-  width: 100%;
-}
-
-/* ============================================
-   Responsive
-   ============================================ */
-@media (max-width: 768px) {
-  .mobile-menu-btn {
-    display: flex;
+/* Responsive */
+@media (max-width: 1024px) {
+  .hig-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
+}
 
-  .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    transform: translateX(-100%);
-    transition: transform var(--transition-normal);
-    box-shadow: var(--shadow-lg);
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-  }
-
-  .sidebar-overlay.show {
-    display: block;
-  }
-
-  .main {
-    padding: 72px 20px 20px;
-  }
-
-  .stat-grid {
+@media (max-width: 640px) {
+  .hig-stat-grid {
     grid-template-columns: 1fr;
   }
-
-  .proxy-card {
+  
+  .health-row {
     flex-wrap: wrap;
   }
-
-  .proxy-actions {
+  
+  .health-meta {
     width: 100%;
-    justify-content: flex-end;
-    margin-top: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--color-border);
-  }
-
-  .auto-refresh-panel {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-}
-
-/* ============================================
-   Reduced Motion
-   ============================================ */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    padding-left: 36px;
   }
 }
 </style>
@@ -658,48 +382,56 @@ body {
 
 <!-- Mobile Menu Button -->
 <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-    <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-  </button>
+  <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
 
 <!-- Sidebar Overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-      <div class="logo-icon">P</div>
-      <h1>Proxy Manager</h1>
-    </div>
+  <div class="sidebar-brand">
+    <div class="logo-icon">P</div>
+    <h1>Proxy Manager</h1>
+  </div>
 
   <nav class="sidebar-nav" id="sidebarNav">
-    <div class="nav-section-label">总览</div>
-    <div class="nav-item active" data-page="dashboard" data-tooltip="概览" tabindex="0">
+    <div class="nav-section-label">概览</div>
+    <div class="nav-item active" data-page="dashboard" tabindex="0">
       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
-      概览
+      总览
     </div>
-
-    <div class="nav-section-label" id="proxySectionLabel">代理配置</div>
-    <div id="proxyNavItems"></div>
-
-    <div class="nav-section-label">系统</div>
-    <div class="nav-item" data-page="sessions" data-tooltip="任务" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-      任务
+    <div class="nav-item" data-page="health" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+      健康状态
     </div>
-    <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
+    <div class="nav-item" data-page="alerts" tabindex="0">
       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+      告警中心
+    </div>
+    <div class="nav-item" data-page="registry" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+      Agent 注册表
+    </div>
+
+    <div class="nav-section-label">管理</div>
+    <div class="nav-item" data-page="sessions" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      任务管理
+    </div>
+    <div class="nav-item" data-page="logs" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
       日志
     </div>
   </nav>
 
   <div class="sidebar-footer">
-    <div class="version-info" id="sidebarVersion">
-      v1.0.0
-    </div>
+    <div class="version-info" id="sidebarVersion">v1.0.0</div>
     <button class="btn btn-outline btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
-      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      暗色模式
     </button>
-    <button class="btn btn-outline btn-sm" onclick="handleLogout()" title="退出登录" style="width:100%;margin-top:8px;">登出</button>
+    <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="width:100%;margin-top:6px;">登出</button>
   </div>
 </aside>
 
@@ -719,7 +451,7 @@ body {
     <button class="apikey-banner-close" onclick="dismissApiKeyBanner()" aria-label="关闭横幅">&times;</button>
   </div>
 
-  <!-- Dashboard Page -->
+  <!-- ==================== Dashboard Page ==================== -->
   <div class="page active" id="page-dashboard">
     <div class="page-header">
       <h1 class="page-title">概览</h1>
@@ -744,36 +476,50 @@ body {
     </div>
 
     <!-- Stat Cards Row -->
-    <div class="stat-grid">
-      <div class="stat-card accent-blue">
-        <div class="stat-card-header">
-          <span class="stat-label">代理服务</span>
-          <span class="stat-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
+    <div class="hig-stat-grid">
+      <div class="hig-stat-card blue">
+        <div class="hig-stat-icon blue">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
         </div>
-        <div class="stat-value blue" id="proxyStatusCount">
+        <div class="hig-stat-value" id="proxyStatusCount">
           <span class="loading-spinner"></span>
         </div>
-        <div class="stat-detail" id="proxyStatusDetail">正在检测...</div>
+        <div class="hig-stat-label">代理服务</div>
       </div>
-      <div class="stat-card accent-green">
-        <div class="stat-card-header">
-          <span class="stat-label">已安装代理</span>
-          <span class="stat-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+      <div class="hig-stat-card green">
+        <div class="hig-stat-icon green">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         </div>
-        <div class="stat-value green" id="installedCount">
+        <div class="hig-stat-value" id="installedCount">
           <span class="loading-spinner"></span>
         </div>
-        <div class="stat-detail" id="installedDetail">正在加载...</div>
+        <div class="hig-stat-label">已安装代理</div>
+      </div>
+      <div class="hig-stat-card orange">
+        <div class="hig-stat-icon orange">
+          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="hig-stat-value" id="sessionCount">0</div>
+        <div class="hig-stat-label">运行中任务</div>
+      </div>
+      <div class="hig-stat-card red">
+        <div class="hig-stat-icon red">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="hig-stat-value" id="alertCount">0</div>
+        <div class="hig-stat-label">活跃告警</div>
       </div>
     </div>
 
     <!-- Version Info Card -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">版本信息</div>
-        <div class="card-subtitle">系统版本和组件信息</div>
+    <div class="hig-card" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">版本信息</div>
+          <div class="hig-card-subtitle">系统版本和组件信息</div>
+        </div>
       </div>
-      <div class="card-body">
+      <div class="hig-card-body">
         <div class="version-list" id="versionInfo">
           <div class="version-item">
             <span class="ver-label">管理器版本</span>
@@ -796,12 +542,14 @@ body {
     </div>
 
     <!-- Proxy Status Cards -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">代理状态</div>
-        <div class="card-subtitle">管理各代理服务的运行状态</div>
+    <div class="hig-card" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">代理状态</div>
+          <div class="hig-card-subtitle">管理各代理服务的运行状态</div>
+        </div>
       </div>
-      <div class="card-body">
+      <div class="hig-card-body">
         <div class="proxy-list" id="proxyStatusList">
           <div class="empty-state">
             <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
@@ -812,12 +560,14 @@ body {
     </div>
 
     <!-- Running Sessions Card -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">运行中任务</div>
-        <div class="card-subtitle">L2 编排引擎 Session 状态（自动刷新）</div>
+    <div class="hig-card" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">运行中任务</div>
+          <div class="hig-card-subtitle">L2 编排引擎 Session 状态（自动刷新）</div>
+        </div>
       </div>
-      <div class="card-body">
+      <div class="hig-card-body">
         <div id="sessionsList">
           <div class="empty-state">
             <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
@@ -827,13 +577,15 @@ body {
       </div>
     </div>
 
-    <!-- Provider Health Card (M2 方向二) -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Provider 健康</div>
-        <div class="card-subtitle" id="phSubtitle">故障自动标记与跨 Proxy 感知（observe 模式）</div>
+    <!-- Provider Health Card -->
+    <div class="hig-card">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">Provider 健康</div>
+          <div class="hig-card-subtitle" id="phSubtitle">故障自动标记与跨 Proxy 感知（observe 模式）</div>
+        </div>
       </div>
-      <div class="card-body">
+      <div class="hig-card-body">
         <div id="phList">
           <div class="empty-state">
             <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
@@ -843,10 +595,359 @@ body {
       </div>
     </div>
   </div>
+
+  <!-- ==================== Health Page ==================== -->
+  <div class="page" id="page-health">
+    <div class="page-header">
+      <h1 class="page-title">健康状态</h1>
+      <p class="page-subtitle">代理与服务健康监控 · 归一化契约: ok / degraded / down</p>
+    </div>
+
+    <!-- Health Stats -->
+    <div class="hig-stat-grid">
+      <div class="hig-stat-card green">
+        <div class="hig-stat-icon green">
+          <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="hig-stat-value" id="healthOkCount">-</div>
+        <div class="hig-stat-label">健康</div>
+      </div>
+      <div class="hig-stat-card orange">
+        <div class="hig-stat-icon orange">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="hig-stat-value" id="healthDegradedCount">-</div>
+        <div class="hig-stat-label">降级</div>
+      </div>
+      <div class="hig-stat-card red">
+        <div class="hig-stat-icon red">
+          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <div class="hig-stat-value" id="healthDownCount">-</div>
+        <div class="hig-stat-label">故障</div>
+      </div>
+      <div class="hig-stat-card blue">
+        <div class="hig-stat-icon blue">
+          <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div class="hig-stat-value" id="healthHistoryCount">-</div>
+        <div class="hig-stat-label">历史记录</div>
+      </div>
+    </div>
+
+    <!-- Proxy Health Table -->
+    <div class="hig-card" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">代理健康状态</div>
+          <div class="hig-card-subtitle">实时健康检查 · 归一化状态 (ok / degraded / down)</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadHealthPage()">
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="hig-card-body">
+        <div class="health-row health-row-header">
+          <span class="health-provider">代理</span>
+          <span style="flex:1;font-size:11px;color:var(--color-text-tertiary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">状态</span>
+          <span style="min-width:80px;font-size:11px;color:var(--color-text-tertiary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;text-align:right;">延迟</span>
+          <span style="min-width:100px;font-size:11px;color:var(--color-text-tertiary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;text-align:right;">运行时间</span>
+        </div>
+        <div id="healthProxyList">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+            <div class="empty-text">正在加载健康状态...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Provider Health -->
+    <div class="hig-card" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">Provider 健康</div>
+          <div class="hig-card-subtitle" id="healthPagePhSubtitle">故障自动标记与跨 Proxy 感知</div>
+        </div>
+      </div>
+      <div class="hig-card-body">
+        <div id="healthPagePhList">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+            <div class="empty-text">所有 Provider 健康</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Health History -->
+    <div class="hig-card">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">健康历史</div>
+          <div class="hig-card-subtitle">最近 N 条健康记录回溯</div>
+        </div>
+        <select class="form-select" id="healthHistoryLimit" onchange="loadHealthHistory()">
+          <option value="20">20 条</option>
+          <option value="50" selected>50 条</option>
+          <option value="100">100 条</option>
+        </select>
+      </div>
+      <div class="hig-card-body">
+        <div id="healthHistoryList">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="empty-text">暂无健康历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Alerts Page ==================== -->
+  <div class="page" id="page-alerts">
+    <div class="page-header">
+      <h1 class="page-title">告警中心</h1>
+      <p class="page-subtitle">实时告警事件 · 三路信号源 (provider-health / error-patterns / cost)</p>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <input type="text" class="form-input" id="alertSearch" placeholder="搜索告警..." oninput="filterAlerts()">
+      <select class="form-select" id="alertSeverity" onchange="filterAlerts()">
+        <option value="">全部级别</option>
+        <option value="critical">严重</option>
+        <option value="warning">警告</option>
+        <option value="info">信息</option>
+      </select>
+      <select class="form-select" id="alertSource" onchange="filterAlerts()">
+        <option value="">全部来源</option>
+        <option value="provider-health">Provider 健康</option>
+        <option value="error-patterns">错误模式</option>
+        <option value="cost">成本</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="collectAlerts()">
+        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        立即采集
+      </button>
+      <button class="btn btn-outline btn-sm" onclick="loadAlertsPage()">刷新</button>
+    </div>
+
+    <!-- Alert Stats -->
+    <div class="hig-stat-grid" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="hig-stat-card red">
+        <div class="hig-stat-icon red">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="hig-stat-value" id="alertCriticalCount">0</div>
+        <div class="hig-stat-label">严重</div>
+      </div>
+      <div class="hig-stat-card orange">
+        <div class="hig-stat-icon orange">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="hig-stat-value" id="alertWarningCount">0</div>
+        <div class="hig-stat-label">警告</div>
+      </div>
+      <div class="hig-stat-card blue">
+        <div class="hig-stat-icon blue">
+          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </div>
+        <div class="hig-stat-value" id="alertInfoCount">0</div>
+        <div class="hig-stat-label">信息</div>
+      </div>
+    </div>
+
+    <!-- Alert Events List -->
+    <div class="hig-card">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">告警事件</div>
+          <div class="hig-card-subtitle" id="alertCountSubtitle">共 0 条告警</div>
+        </div>
+        <div id="alertGateStatus" style="font-size:12px;color:var(--color-text-tertiary);">
+          <span class="status-badge offline">门控关闭</span>
+        </div>
+      </div>
+      <div class="hig-card-body">
+        <div id="alertList">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+            <div class="empty-text">暂无告警事件</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Registry Page ==================== -->
+  <div class="page" id="page-registry">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <h1 class="page-title">Agent 注册表</h1>
+        <p class="page-subtitle">管理 Agent Profile · 能力标签注册与查询</p>
+      </div>
+      <button class="btn btn-primary" onclick="showAddAgentModal()">
+        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        新增 Agent
+      </button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <input type="text" class="form-input" id="registrySearch" placeholder="搜索 Agent..." oninput="filterRegistry()">
+      <select class="form-select" id="registryTypeFilter" onchange="filterRegistry()">
+        <option value="">全部类型</option>
+        <option value="codex">Codex</option>
+        <option value="hermes">Hermes</option>
+        <option value="cursor">Cursor</option>
+        <option value="custom">Custom</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="loadRegistryPage()">
+        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        刷新
+      </button>
+    </div>
+
+    <!-- Registry Stats -->
+    <div class="hig-stat-grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="hig-stat-card blue">
+        <div class="hig-stat-icon blue">
+          <svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <div class="hig-stat-value" id="registryTotalCount">0</div>
+        <div class="hig-stat-label">总计 Agent</div>
+      </div>
+      <div class="hig-stat-card green">
+        <div class="hig-stat-icon green">C</div>
+        <div class="hig-stat-value" id="registryCodexCount">0</div>
+        <div class="hig-stat-label">Codex</div>
+      </div>
+      <div class="hig-stat-card orange">
+        <div class="hig-stat-icon orange">H</div>
+        <div class="hig-stat-value" id="registryHermesCount">0</div>
+        <div class="hig-stat-label">Hermes</div>
+      </div>
+      <div class="hig-stat-card red">
+        <div class="hig-stat-icon red">Cu</div>
+        <div class="hig-stat-value" id="registryCursorCount">0</div>
+        <div class="hig-stat-label">Cursor</div>
+      </div>
+    </div>
+
+    <!-- Registry Grid -->
+    <div class="registry-grid" id="registryGrid">
+      <div class="empty-state" style="grid-column:1/-1;">
+        <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+        <div class="empty-text">暂无 Agent · 点击「新增 Agent」创建</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Sessions Page ==================== -->
+  <div class="page" id="page-sessions">
+    <div class="page-header">
+      <h1 class="page-title">任务管理</h1>
+      <p class="page-subtitle">L2 编排引擎 Session 状态</p>
+    </div>
+    <div class="hig-card">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">运行中任务</div>
+          <div class="hig-card-subtitle">自动刷新</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadSessions()">
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="hig-card-body">
+        <div id="sessionsListFull">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="empty-text">暂无运行中任务</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Logs Page ==================== -->
+  <div class="page" id="page-logs">
+    <div class="page-header">
+      <h1 class="page-title">日志</h1>
+      <p class="page-subtitle">系统日志查看</p>
+    </div>
+    <div class="hig-card">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">系统日志</div>
+          <div class="hig-card-subtitle">实时日志流</div>
+        </div>
+      </div>
+      <div class="hig-card-body">
+        <div id="logsContent" style="background:var(--color-bg-secondary);border-radius:12px;padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--color-text-secondary);max-height:500px;overflow-y:auto;">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+            <div class="empty-text">暂无日志</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
 
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- Add/Edit Agent Modal -->
+<div id="agentModal" class="modal-overlay" style="display:none;">
+  <div class="modal">
+    <div class="modal-title" id="agentModalTitle">新增 Agent</div>
+    <div id="agentModalBody">
+      <div class="form-group">
+        <label>Agent ID *</label>
+        <input type="text" id="agentId" placeholder="例如: my-agent">
+        <div class="hint">唯一标识符，创建后不可修改</div>
+      </div>
+      <div class="form-group">
+        <label>Agent 名称 *</label>
+        <input type="text" id="agentName" placeholder="例如: My AI Agent">
+      </div>
+      <div class="form-group">
+        <label>类型 *</label>
+        <select class="form-select" id="agentType" style="width:100%;">
+          <option value="codex">Codex</option>
+          <option value="hermes">Hermes</option>
+          <option value="cursor">Cursor</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>能力标签 (逗号分隔)</label>
+        <input type="text" id="agentTags" placeholder="例如: coding, analysis, research">
+        <div class="hint">用于按能力路由查询</div>
+      </div>
+      <div class="form-group">
+        <label>模型类型</label>
+        <select class="form-select" id="agentModelType" style="width:100%;">
+          <option value="text">Text</option>
+          <option value="multimodal">Multimodal</option>
+          <option value="audio">Audio</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>描述</label>
+        <input type="text" id="agentDesc" placeholder="可选描述">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAgentModal()">取消</button>
+      <button class="btn btn-primary" id="agentModalSave" onclick="saveAgent()">创建</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -881,15 +982,22 @@ body {
   var proxyStatus = {};
   var authToken = sessionStorage.getItem('auth_token');
   var versionCache = {};
+  var alertEvents = [];
+  var registryAgents = [];
+  var editingAgentId = null;
 
-  // ===== Toast System (Rule 5: light backgrounds with colored borders) =====
+  // ===== Toast System =====
   function showToast(message, type, duration) {
     if (duration === undefined) duration = 3000;
     var container = document.getElementById('toastContainer');
     var toast = document.createElement('div');
     toast.className = 'toast ' + (type || 'info');
 
-    var icons = { success: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>', error: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>', info: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' };
+    var icons = {
+      success: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
+      error: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+      info: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+    };
     var iconSpan = document.createElement('span');
     iconSpan.innerHTML = icons[type] || '';
     var msgSpan = document.createElement('span');
@@ -929,12 +1037,17 @@ body {
     if (nav) nav.classList.add('active');
 
     closeMobileSidebar();
+
+    // Load page-specific data
+    if (pageId === 'health') loadHealthPage();
+    else if (pageId === 'alerts') loadAlertsPage();
+    else if (pageId === 'registry') loadRegistryPage();
+    else if (pageId === 'sessions') loadSessions();
   }
 
   document.getElementById('sidebarNav').addEventListener('click', function(e) {
     var navItem = e.target.closest('.nav-item');
     if (!navItem) return;
-    // Handle proxy nav items (anchor elements) — navigate to proxy-config page
     if (navItem.classList.contains('proxy-nav-item')) {
       closeMobileSidebar();
       return;
@@ -963,7 +1076,6 @@ body {
   }
 
   // ===== Escaping Utility =====
-  // 转义 < > & ' "（引号用于属性上下文安全，见 proxy-config.html 同名函数注释）
   function esc(str) {
     if (str === null || str === undefined) return '';
     var d = document.createElement('div');
@@ -973,7 +1085,7 @@ body {
       .replace(/'/g, '&#39;');
   }
 
-  // ===== Loading Bar (P1-4) =====
+  // ===== Loading Bar =====
   function showLoading() {
     var bar = document.getElementById('loadingBar');
     if (bar) bar.classList.add('active');
@@ -986,38 +1098,16 @@ body {
   // ===== Mock Data =====
   function getMockStatus() {
     return {
-      codex: {
-        running: true,
-        port: 18790,
-        pid: 12345,
-        uptime: '2h 34m',
-        health: { status: 'healthy', latency: '45ms' }
-      },
-      hermes: {
-        running: true,
-        port: 18793,
-        pid: 12346,
-        uptime: '2h 34m',
-        health: { status: 'healthy', latency: '62ms' }
-      },
-      cursor: {
-        running: false,
-        port: 18794,
-        pid: null,
-        uptime: null,
-        health: null
-      }
+      codex: { running: true, port: 18790, pid: 12345, uptime: '2h 34m', health: { status: 'ok', latency: '45ms' } },
+      hermes: { running: true, port: 18793, pid: 12346, uptime: '2h 34m', health: { status: 'ok', latency: '62ms' } },
+      cursor: { running: false, port: 18794, pid: null, uptime: null, health: null }
     };
   }
 
   function getMockVersion() {
     return {
       version: '1.0.3',
-      proxies: {
-        codex: 'v1.2.0',
-        hermes: 'v0.9.4',
-        cursor: 'v2.1.0'
-      }
+      proxies: { codex: 'v1.2.0', hermes: 'v0.9.4', cursor: 'v2.1.0' }
     };
   }
 
@@ -1027,31 +1117,17 @@ body {
     var running = proxies.filter(function(entry) { return entry[1].running; }).length;
     var total = proxies.length;
 
-    // Stat cards
     var statusEl = document.getElementById('proxyStatusCount');
-    var detailEl = document.getElementById('proxyStatusDetail');
     var installedEl = document.getElementById('installedCount');
-    var installedDetailEl = document.getElementById('installedDetail');
+    var sessionEl = document.getElementById('sessionCount');
+    var alertEl = document.getElementById('alertCount');
 
-    if (statusEl) {
-      statusEl.textContent = total > 0 ? running + '/' + total : '0/0';
-    }
-    if (detailEl) {
-      detailEl.textContent = running > 0
-        ? running + ' 运行中' + (total - running > 0 ? ', ' + (total - running) + ' 已停止' : '')
-        : '暂无代理服务';
-    }
-    if (installedEl) {
-      installedEl.textContent = total;
-    }
-    if (installedDetailEl) {
-      installedDetailEl.textContent = total > 0 ? '已安装代理总数' : '尚未安装任何代理';
-    }
+    if (statusEl) statusEl.textContent = total > 0 ? running + '/' + total : '0/0';
+    if (installedEl) installedEl.textContent = total;
+    if (sessionEl) sessionEl.textContent = document.querySelectorAll('.session-item').length;
+    if (alertEl) alertEl.textContent = alertEvents.filter(function(a) { return a.severity === 'critical' || a.severity === 'warning'; }).length;
 
-    // Render proxy cards
     renderProxyCards(proxies, versionData);
-
-    // Update nav items
     renderProxyNavItems(proxies);
   }
 
@@ -1060,18 +1136,14 @@ body {
     if (!container) return;
 
     if (proxies.length === 0) {
-      container.innerHTML =
-        '<div class="empty-state">' +
-          '<div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>' +
-          '<div class="empty-text">暂无代理，请先安装代理程序</div>' +
-        '</div>';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-text">暂无代理，请先安装代理程序</div></div>';
       return;
     }
 
     container.innerHTML = proxies.map(function(entry) {
       var name = entry[0];
       var status = entry[1];
-      var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>', iconClass: '', port: 0, defaultVersion: '' };
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '', iconClass: '', port: 0, defaultVersion: '' };
       var isRunning = status.running;
       var isFault = !!status.fault;
       var statusClass = isRunning ? 'running' : (isFault ? 'fault' : 'stopped');
@@ -1080,61 +1152,30 @@ body {
       var btnText = isRunning ? '停止' : '启动';
       var btnIcon = isRunning ? '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>' : '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
 
-      // Rule 10: Unified status badges (pill-shaped with dot)
-      var statusBadge = '<span class="status-badge ' + statusClass + '">' +
-        '<span class="dot"></span>' +
-        statusText +
-        '</span>';
-
+      var statusBadge = '<span class="status-badge ' + statusClass + '"><span class="dot"></span>' + statusText + '</span>';
       var healthBadge = '';
       if (status.health) {
-        // M1: 归一化契约 status ∈ {'ok','degraded','down'}，old 'healthy' 已在上游归一化为 'ok'。
         var healthStatus = status.health.status;
-        var healthClass;
-        var healthText;
-        var healthReason = '';
+        var healthClass, healthText, healthReason = '';
         var reasonsArr = Array.isArray(status.health.reasons) ? status.health.reasons : [];
         if (reasonsArr.length > 0) healthReason = reasonsArr[0];
 
-        if (healthStatus === 'ok') {
-          healthClass = 'status-badge online';
-          healthText = '健康';
-        } else if (healthStatus === 'degraded') {
-          healthClass = 'status-badge degraded';
-          healthText = '降级' + (healthReason ? '·' + healthReason : '');
-        } else {
-          // 'down' / 未知 / 拉取失败
-          healthClass = 'status-badge offline';
-          healthText = healthReason || '异常';
-        }
+        if (healthStatus === 'ok') { healthClass = 'status-badge online'; healthText = '健康'; }
+        else if (healthStatus === 'degraded') { healthClass = 'status-badge degraded'; healthText = '降级' + (healthReason ? '·' + healthReason : ''); }
+        else { healthClass = 'status-badge offline'; healthText = healthReason || '异常'; }
         var titleText = (reasonsArr.length > 0 ? reasonsArr.join('；') : healthText);
-        healthBadge = '<span class="' + healthClass + '" title="' + (titleText ? esc(titleText.slice(0, 200)) : '') + '">' +
-           '<span class="dot"></span>' +
-          esc(healthText.slice(0, 60)) +
-           '</span>';
-       } else if (!isRunning) {
-        healthBadge = '<span class="status-badge offline">' +
-           '<span class="dot"></span>' +
-           '未检测' +
-           '</span>';
-       }
+        healthBadge = '<span class="' + healthClass + '" title="' + (titleText ? esc(titleText.slice(0, 200)) : '') + '"><span class="dot"></span>' + esc(healthText.slice(0, 60)) + '</span>';
+      } else if (!isRunning) {
+        healthBadge = '<span class="status-badge offline"><span class="dot"></span>未检测</span>';
+      }
 
       var uptimeText = status.uptime ? '运行 ' + status.uptime : '';
       var latencyText = status.health && status.health.latency ? '延迟 ' + status.health.latency : '';
-
-      // Version from version data or config default
-      var versionValue = '';
-      if (versionData && versionData.proxies && versionData.proxies[name]) {
-        versionValue = versionData.proxies[name];
-      } else if (config.defaultVersion) {
-        versionValue = config.defaultVersion;
-      }
+      var versionValue = versionData && versionData.proxies && versionData.proxies[name] ? versionData.proxies[name] : (config.defaultVersion || '');
       var versionBadge = versionValue ? '<span class="proxy-version-badge">' + esc(versionValue) + '</span>' : '';
 
       return '<div class="proxy-card" id="proxy-card-' + name + '">' +
-        '<div class="proxy-icon ' + config.iconClass + '">' +
-          config.icon +
-        '</div>' +
+        '<div class="proxy-icon ' + config.iconClass + '">' + config.icon + '</div>' +
         '<div class="proxy-info">' +
           '<div class="proxy-name-row">' +
             '<span class="proxy-name">' + config.name + '</span>' +
@@ -1149,12 +1190,8 @@ body {
           '</div>' +
         '</div>' +
         '<div class="proxy-actions">' +
-          '<button class="btn ' + btnClass + ' btn-sm" id="btn-toggle-' + name + '" onclick="toggleProxy(\'' + name + '\')">' +
-            btnIcon + ' ' + btnText +
-          '</button>' +
-          '<button class="btn btn-outline btn-sm" onclick="window.location.href=\'proxy-config.html?proxy=' + name + '\'">' +
-            '配置' +
-          '</button>' +
+          '<button class="btn ' + btnClass + ' btn-sm" id="btn-toggle-' + name + '" onclick="toggleProxy(\'' + name + '\')">' + btnIcon + ' ' + btnText + '</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="window.location.href=\'proxy-config.html?proxy=' + name + '\'">配置</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -1163,14 +1200,12 @@ body {
   function renderProxyNavItems(proxies) {
     var container = document.getElementById('proxyNavItems');
     if (!container) return;
-
     container.innerHTML = proxies.map(function(entry) {
       var name = entry[0];
       var status = entry[1];
-      var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' };
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '' };
       var badgeClass = status.running ? 'running' : 'stopped';
       var badgeText = status.running ? 'ON' : 'OFF';
-
       return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
         '<span class="nav-icon">' + config.icon + '</span>' +
         config.name +
@@ -1186,28 +1221,18 @@ body {
 
     if (container && versionData) {
       var rows = [];
-      if (versionData.version) {
-        rows.push({ label: '管理器版本', value: versionData.version });
-      }
+      if (versionData.version) rows.push({ label: '管理器版本', value: versionData.version });
       if (versionData.proxies) {
         Object.keys(versionData.proxies).forEach(function(key) {
           var ver = versionData.proxies[key];
           var config = PROXY_CONFIGS[key];
-          rows.push({
-            label: config ? config.name : key,
-            value: ver
-          });
+          rows.push({ label: config ? config.name : key, value: ver });
         });
       }
-
       container.innerHTML = rows.map(function(row) {
-        return '<div class="version-item">' +
-          '<span class="ver-label">' + row.label + '</span>' +
-          '<span class="ver-value">' + row.value + '</span>' +
-        '</div>';
+        return '<div class="version-item"><span class="ver-label">' + row.label + '</span><span class="ver-value">' + row.value + '</span></div>';
       }).join('');
     }
-
     if (sidebarVer && versionData && versionData.version) {
       sidebarVer.textContent = 'Manager ' + versionData.version;
     }
@@ -1218,7 +1243,6 @@ body {
     var btn = document.getElementById('btn-toggle-' + name);
     if (!btn || btn.disabled) return;
     btn.disabled = true;
-
     var originalContent = btn.innerHTML;
     btn.innerHTML = '<span class="loading-spinner"></span>';
 
@@ -1229,14 +1253,11 @@ body {
       .then(function(res) { return res.json(); })
       .then(function(data) {
         if (data.success) {
-          var label = PROXY_CONFIGS[name] ? PROXY_CONFIGS[name].name : name;
-          showToast(label + ' 已' + (action === 'start' ? '启动' : '停止'), 'success');
+          showToast((PROXY_CONFIGS[name] ? PROXY_CONFIGS[name].name : name) + ' 已' + (action === 'start' ? '启动' : '停止'), 'success');
           proxyStatus[name] = Object.assign({}, proxyStatus[name], { running: action === 'start' });
           updateDashboardDisplay(versionCache);
         } else if (action === 'start' && data.conflict) {
-          // 冲突：该 agent 的代理被其它工具（如 cc-switch）占用，拒绝开启。
-          // 不切换 running 状态、不动按钮，只报错提示。
-          showToast((data.error || '该代理被其它工具占用，无法开启'), 'error', 6000);
+          showToast(data.error || '该代理被其它工具占用，无法开启', 'error', 6000);
           btn.innerHTML = originalContent;
           btn.disabled = false;
         } else {
@@ -1251,6 +1272,508 @@ body {
         btn.disabled = false;
       });
   };
+
+  // ===== Health Page =====
+  function loadHealthPage() {
+    showLoading();
+    Promise.all([
+      fetch('/api/status').then(function(res) { return res.json(); }).catch(function() { return getMockStatus(); }),
+      fetch('/api/provider-health').then(function(res) { return res.json(); }).catch(function() { return { isolated: [], isolateEnabled: false, threshold: 3 }; }),
+      fetch('/api/health-history?limit=50').then(function(res) { return res.json(); }).catch(function() { return { history: [] }; })
+    ]).then(function(results) {
+      proxyStatus = results[0] || {};
+      var phData = results[1] || { isolated: [] };
+      var historyData = results[2] || { history: [] };
+
+      // Update stats
+      var okCount = 0, degradedCount = 0, downCount = 0;
+      Object.values(proxyStatus).forEach(function(s) {
+        if (s.health) {
+          if (s.health.status === 'ok') okCount++;
+          else if (s.health.status === 'degraded') degradedCount++;
+          else downCount++;
+        } else if (!s.running) downCount++;
+      });
+
+      var el = function(id) { return document.getElementById(id); };
+      if (el('healthOkCount')) el('healthOkCount').textContent = okCount;
+      if (el('healthDegradedCount')) el('healthDegradedCount').textContent = degradedCount;
+      if (el('healthDownCount')) el('healthDownCount').textContent = downCount;
+      if (el('healthHistoryCount')) el('healthHistoryCount').textContent = (historyData.history || []).length;
+
+      // Render proxy health list
+      var healthList = el('healthProxyList');
+      if (healthList) {
+        var entries = Object.entries(proxyStatus);
+        if (entries.length === 0) {
+          healthList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">暂无代理数据</div></div>';
+        } else {
+          healthList.innerHTML = entries.map(function(entry) {
+            var name = entry[0], status = entry[1];
+            var config = PROXY_CONFIGS[name] || { name: name, iconClass: '' };
+            var health = status.health;
+            var statusClass = status.running ? 'running' : 'stopped';
+            var statusText = status.running ? '运行中' : '未运行';
+            var hClass = health ? (health.status === 'ok' ? 'status-badge online' : health.status === 'degraded' ? 'status-badge degraded' : 'status-badge offline') : 'status-badge offline';
+            var hText = health ? (health.status === 'ok' ? '健康' : health.status === 'degraded' ? '降级' : '故障') : '未检测';
+            var latency = health && health.latency ? health.latency : '-';
+            var uptime = status.uptime || '-';
+
+            return '<div class="health-row">' +
+              '<span class="health-provider"><span class="proxy-icon ' + config.iconClass + '" style="width:28px;height:28px;font-size:14px;">' + (config.icon || '') + '</span> ' + config.name + '</span>' +
+              '<span><span class="status-badge ' + statusClass + '"><span class="dot"></span>' + statusText + '</span> <span class="' + hClass + '"><span class="dot"></span>' + hText + '</span></span>' +
+              '<span style="min-width:80px;text-align:right;font-family:var(--font-mono);font-size:13px;color:var(--color-text-secondary);">' + esc(latency) + '</span>' +
+              '<span style="min-width:100px;text-align:right;font-size:13px;color:var(--color-text-tertiary);">' + esc(uptime) + '</span>' +
+            '</div>';
+          }).join('');
+        }
+      }
+
+      // Render provider health
+      var phList = el('healthPagePhList');
+      var phSub = el('healthPagePhSubtitle');
+      if (phList) {
+        if (phSub) phSub.textContent = (phData.isolateEnabled ? '自动隔离已开启（live）' : 'observe 模式');
+        var list = phData.isolated || [];
+        if (list.length === 0) {
+          phList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">所有 Provider 健康</div></div>';
+        } else {
+          phList.innerHTML = list.map(function(p) {
+            var remainMs = (p.unhealthyUntil || 0) - Date.now();
+            var remainMin = Math.max(0, Math.round(remainMs / 60000));
+            var corr = p.correlation || {};
+            var verdictText = corr.verdict === 'network-wide' ? '全网故障' : '单 Proxy 抖动';
+            var verdictClass = corr.verdict === 'network-wide' ? 'badge-error' : 'badge-warning';
+            var sources = (corr.sources || []).join(', ') || '—';
+            return '<div class="session-item">' +
+              '<div class="session-header">' +
+                '<span class="session-proxy-badge badge-' + esc(p.providerId) + '">' + esc(p.providerId) + '</span>' +
+                '<span class="' + verdictClass + '">' + verdictText + '</span>' +
+                '<span class="session-age">⏱ ' + remainMin + 'min 后恢复</span>' +
+              '</div>' +
+              '<div class="session-id">连续失败 ' + (p.consecutiveFailures || 0) + ' 次 · 来源：' + esc(sources) + '</div>' +
+            '</div>';
+          }).join('');
+        }
+      }
+
+      // Render health history
+      var historyList = el('healthHistoryList');
+      if (historyList) {
+        var history = historyData.history || [];
+        if (history.length === 0) {
+          historyList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="empty-text">暂无健康历史</div></div>';
+        } else {
+          historyList.innerHTML = history.slice(0, 50).map(function(h) {
+            var hClass = h.status === 'ok' ? 'status-badge online' : h.status === 'degraded' ? 'status-badge degraded' : 'status-badge offline';
+            var hText = h.status === 'ok' ? '健康' : h.status === 'degraded' ? '降级' : '故障';
+            var time = h.timestamp ? new Date(h.timestamp).toLocaleString('zh-CN') : '-';
+            return '<div class="health-row">' +
+              '<span class="health-provider">' + esc(h.proxy || h.name || 'unknown') + '</span>' +
+              '<span><span class="' + hClass + '"><span class="dot"></span>' + hText + '</span></span>' +
+              '<span style="flex:1;font-size:12px;color:var(--color-text-tertiary);">' + esc(h.reason || '-') + '</span>' +
+              '<span style="font-size:11px;color:var(--color-text-tertiary);font-family:var(--font-mono);">' + esc(time) + '</span>' +
+            '</div>';
+          }).join('');
+        }
+      }
+
+      hideOfflineBanner();
+      hideLoading();
+    }).catch(function() {
+      hideLoading();
+    });
+  }
+
+  // ===== Alerts Page =====
+  function loadAlertsPage() {
+    showLoading();
+    var gateOpen = false;
+
+    Promise.all([
+      fetch('/api/alert').then(function(res) { gateOpen = true; return res.json(); }).catch(function() { return { events: [], count: 0, ok: false }; }),
+      fetch('/api/alert/config').then(function(res) { gateOpen = true; return res.json(); }).catch(function() { return { gateOpen: false }; })
+    ]).then(function(results) {
+      var alertData = results[0] || { events: [], count: 0 };
+      var configData = results[1] || { gateOpen: false };
+
+      alertEvents = alertData.events || [];
+
+      // Update gate status
+      var gateEl = document.getElementById('alertGateStatus');
+      if (gateEl) {
+        var gateClass = configData.gateOpen ? 'status-badge online' : 'status-badge offline';
+        var gateText = configData.gateOpen ? '门控开启' : '门控关闭';
+        gateEl.innerHTML = '<span class="' + gateClass + '"><span class="dot"></span>' + gateText + '</span>';
+      }
+
+      // Update stats
+      var critical = alertEvents.filter(function(a) { return a.severity === 'critical'; }).length;
+      var warning = alertEvents.filter(function(a) { return a.severity === 'warning'; }).length;
+      var info = alertEvents.filter(function(a) { return a.severity === 'info'; }).length;
+
+      var el = function(id) { return document.getElementById(id); };
+      if (el('alertCriticalCount')) el('alertCriticalCount').textContent = critical;
+      if (el('alertWarningCount')) el('alertWarningCount').textContent = warning;
+      if (el('alertInfoCount')) el('alertInfoCount').textContent = info;
+      if (el('alertCountSubtitle')) el('alertCountSubtitle').textContent = '共 ' + alertEvents.length + ' 条告警';
+
+      // Render alert list
+      renderAlertList(alertEvents);
+      hideOfflineBanner();
+      hideLoading();
+    }).catch(function() {
+      renderAlertList([]);
+      hideLoading();
+    });
+  }
+
+  function renderAlertList(events) {
+    var container = document.getElementById('alertList');
+    if (!container) return;
+
+    if (!events || events.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div><div class="empty-text">暂无告警事件</div></div>';
+      return;
+    }
+
+    var sorted = events.slice().sort(function(a, b) {
+      return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+    });
+
+    container.innerHTML = sorted.map(function(a) {
+      var iconClass = a.severity === 'critical' ? 'critical' : a.severity === 'warning' ? 'warning' : 'info';
+      var icon = a.severity === 'critical' ? '🔴' : a.severity === 'warning' ? '🟡' : '🔵';
+      var time = a.timestamp ? new Date(a.timestamp).toLocaleString('zh-CN') : '-';
+      var title = a.rule || a.message || '告警';
+      var message = a.message || a.detail || '';
+
+      return '<div class="alert-item">' +
+        '<div class="alert-icon ' + iconClass + '">' + icon + '</div>' +
+        '<div class="alert-content">' +
+          '<div class="alert-title">' + esc(title) + '</div>' +
+          '<div class="alert-message">' + esc(message) + '</div>' +
+        '</div>' +
+        '<div class="alert-time">' + esc(time) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function filterAlerts() {
+    var search = (document.getElementById('alertSearch') || {}).value || '';
+    var severity = (document.getElementById('alertSeverity') || {}).value || '';
+    var source = (document.getElementById('alertSource') || {}).value || '';
+
+    var filtered = alertEvents.filter(function(a) {
+      if (severity && a.severity !== severity) return false;
+      if (source && a.source !== source) return false;
+      if (search) {
+        var hay = (a.message + ' ' + a.rule + ' ' + a.providerId).toLowerCase();
+        if (hay.indexOf(search.toLowerCase()) === -1) return false;
+      }
+      return true;
+    });
+
+    renderAlertList(filtered);
+  }
+
+  window.collectAlerts = function() {
+    showToast('正在采集告警信号...', 'info');
+    fetch('/api/alert/collect', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' } })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          showToast('采集完成，新产生 ' + data.collected + ' 条告警', 'success');
+          loadAlertsPage();
+        }
+      })
+      .catch(function() {
+        showToast('采集失败', 'error');
+      });
+  };
+
+  // ===== Registry Page =====
+  function loadRegistryPage() {
+    showLoading();
+    fetch('/api/registry/agents')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        registryAgents = data.agents || [];
+        renderRegistryGrid(registryAgents);
+        updateRegistryStats(registryAgents);
+        hideOfflineBanner();
+        hideLoading();
+      })
+      .catch(function() {
+        registryAgents = [];
+        renderRegistryGrid([]);
+        updateRegistryStats([]);
+        hideLoading();
+      });
+  }
+
+  function renderRegistryGrid(agents) {
+    var grid = document.getElementById('registryGrid');
+    if (!grid) return;
+
+    if (agents.length === 0) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div><div class="empty-text">暂无 Agent · 点击「新增 Agent」创建</div></div>';
+      return;
+    }
+
+    grid.innerHTML = agents.map(function(a) {
+      var tags = (a.capabilityTags || []).map(function(t) { return '<span class="registry-tag">' + esc(t) + '</span>'; }).join('');
+      var created = a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : '-';
+      var updated = a.updatedAt ? new Date(a.updatedAt).toLocaleDateString('zh-CN') : '-';
+
+      return '<div class="registry-card" id="registry-card-' + esc(a.id) + '">' +
+        '<div class="registry-card-header">' +
+          '<div class="registry-card-title">' + esc(a.name) + '</div>' +
+          '<span class="registry-card-type">' + esc(a.type) + '</span>' +
+        '</div>' +
+        '<div class="registry-card-body">' +
+          '<div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:8px;"><strong>ID:</strong> ' + esc(a.id) + '</div>' +
+          (a.description ? '<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;">' + esc(a.description) + '</div>' : '') +
+          '<div style="font-size:11px;color:var(--color-text-tertiary);">创建: ' + esc(created) + ' · 更新: ' + esc(updated) + '</div>' +
+        '</div>' +
+        '<div class="registry-card-tags">' + tags + '</div>' +
+        '<div class="registry-card-actions">' +
+          '<button class="btn btn-outline btn-sm" onclick="editAgent(\'' + esc(a.id) + '\')">编辑</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="deleteAgent(\'' + esc(a.id) + '\')">删除</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function updateRegistryStats(agents) {
+    var el = function(id) { return document.getElementById(id); };
+    if (el('registryTotalCount')) el('registryTotalCount').textContent = agents.length;
+    if (el('registryCodexCount')) el('registryCodexCount').textContent = agents.filter(function(a) { return a.type === 'codex'; }).length;
+    if (el('registryHermesCount')) el('registryHermesCount').textContent = agents.filter(function(a) { return a.type === 'hermes'; }).length;
+    if (el('registryCursorCount')) el('registryCursorCount').textContent = agents.filter(function(a) { return a.type === 'cursor'; }).length;
+  }
+
+  function filterRegistry() {
+    var search = (document.getElementById('registrySearch') || {}).value || '';
+    var typeFilter = (document.getElementById('registryTypeFilter') || {}).value || '';
+
+    var filtered = registryAgents.filter(function(a) {
+      if (typeFilter && a.type !== typeFilter) return false;
+      if (search) {
+        var hay = (a.name + ' ' + a.id + ' ' + (a.capabilityTags || []).join(' ')).toLowerCase();
+        if (hay.indexOf(search.toLowerCase()) === -1) return false;
+      }
+      return true;
+    });
+
+    renderRegistryGrid(filtered);
+  }
+
+  window.showAddAgentModal = function() {
+    editingAgentId = null;
+    document.getElementById('agentModalTitle').textContent = '新增 Agent';
+    document.getElementById('agentModalSave').textContent = '创建';
+    document.getElementById('agentId').value = '';
+    document.getElementById('agentId').disabled = false;
+    document.getElementById('agentName').value = '';
+    document.getElementById('agentType').value = 'custom';
+    document.getElementById('agentTags').value = '';
+    document.getElementById('agentModelType').value = 'text';
+    document.getElementById('agentDesc').value = '';
+    document.getElementById('agentModal').style.display = 'flex';
+  };
+
+  window.editAgent = function(id) {
+    var agent = registryAgents.find(function(a) { return a.id === id; });
+    if (!agent) return;
+
+    editingAgentId = id;
+    document.getElementById('agentModalTitle').textContent = '编辑 Agent';
+    document.getElementById('agentModalSave').textContent = '保存';
+    document.getElementById('agentId').value = agent.id;
+    document.getElementById('agentId').disabled = true;
+    document.getElementById('agentName').value = agent.name || '';
+    document.getElementById('agentType').value = agent.type || 'custom';
+    document.getElementById('agentTags').value = (agent.capabilityTags || []).join(', ');
+    document.getElementById('agentModelType').value = agent.modelType || 'text';
+    document.getElementById('agentDesc').value = agent.description || '';
+    document.getElementById('agentModal').style.display = 'flex';
+  };
+
+  window.closeAgentModal = function() {
+    document.getElementById('agentModal').style.display = 'none';
+  };
+
+  window.saveAgent = function() {
+    var id = document.getElementById('agentId').value.trim();
+    var name = document.getElementById('agentName').value.trim();
+    var type = document.getElementById('agentType').value;
+    var tagsStr = document.getElementById('agentTags').value.trim();
+    var modelType = document.getElementById('agentModelType').value;
+    var description = document.getElementById('agentDesc').value.trim();
+
+    if (!id || !name) {
+      showToast('ID 和名称为必填项', 'error');
+      return;
+    }
+
+    var tags = tagsStr ? tagsStr.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+
+    var payload = {
+      id: id,
+      name: name,
+      type: type,
+      capabilityTags: tags,
+      modelType: modelType,
+      description: description
+    };
+
+    var url = '/api/registry/agents' + (editingAgentId ? '/' + encodeURIComponent(editingAgentId) : '');
+    var method = editingAgentId ? 'PUT' : 'POST';
+
+    fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' },
+      body: JSON.stringify(payload)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.id || data.success) {
+        showToast(editingAgentId ? 'Agent 已更新' : 'Agent 已创建', 'success');
+        closeAgentModal();
+        loadRegistryPage();
+      } else {
+        showToast(data.error || '操作失败', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('操作失败: ' + err.message, 'error');
+    });
+  };
+
+  window.deleteAgent = function(id) {
+    if (!confirm('确认删除 Agent "' + id + '"？')) return;
+    fetch('/api/registry/agents/' + encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: { 'x-auth-token': authToken || '' }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success) {
+        showToast('Agent 已删除', 'success');
+        loadRegistryPage();
+      } else {
+        showToast(data.error || '删除失败', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('删除失败: ' + err.message, 'error');
+    });
+  };
+
+  // ===== Sessions Loading =====
+  function loadSessions() {
+    fetch('/api/sessions/running', { headers: { 'x-auth-token': authToken || '' } })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var sessions = data.sessions || [];
+        renderSessionsList(sessions, 'sessionsList');
+        renderSessionsList(sessions, 'sessionsListFull');
+      })
+      .catch(function() { /* 静默失败 */ });
+  }
+
+  function renderSessionsList(sessions, containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!sessions || sessions.length === 0) {
+      var emptyText = containerId === 'sessionsListFull' ? '暂无运行中任务' : '暂无运行中任务';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="empty-text">' + emptyText + '</div></div>';
+      return;
+    }
+
+    container.innerHTML = sessions.map(function(s) {
+      var ageMs = Date.now() - new Date(s.createdAt).getTime();
+      var ageMin = Math.floor(ageMs / 60000);
+      var ageSec = Math.floor((ageMs % 60000) / 1000);
+      var ageStr = ageMin > 0 ? ageMin + 'm' + ageSec + 's' : ageSec + 's';
+      var statusBadge = s.status === 'running' ? 'badge-success' : 'badge-warning';
+      var statusText = s.status === 'running' ? '运行中' : '待处理';
+      var stepsHtml = (s.steps || []).length > 0 ? '<div class="session-steps"><svg class="icon-svg icon-svg-xs" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/></svg> ' + s.steps.length + ' 步</div>' : '';
+      var abortBtn = '<button class="btn btn-danger btn-sm" onclick="abortSessionFromDashboard(\'' + esc(s.sessionId) + '\')">中止</button>';
+      return '<div class="session-item">' +
+        '<div class="session-header">' +
+          '<span class="session-proxy-badge badge-' + esc(s.proxy) + '">' + esc(s.proxy) + '</span>' +
+          '<span class="' + statusBadge + '">' + statusText + '</span>' +
+          '<span class="session-age">⏱ ' + ageStr + '</span>' +
+          abortBtn +
+        '</div>' +
+        '<div class="session-id">' + esc(s.sessionId) + '</div>' +
+        '<div class="session-task">' + esc((s.task || {}).title || '无标题') + '</div>' +
+        stepsHtml +
+      '</div>';
+    }).join('');
+  }
+
+  window.abortSessionFromDashboard = function(id) {
+    if (!confirm('确认中止此任务？')) return;
+    fetch('/api/sessions/' + id + '/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' },
+      body: JSON.stringify({ by: 'user' })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        showToast('任务已中止', 'success');
+        loadSessions();
+      }
+    })
+    .catch(function() {});
+  };
+
+  // ===== Provider Health Loading =====
+  function loadProviderHealth() {
+    fetch('/api/provider-health', { headers: { 'x-auth-token': authToken || '' } })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var list = data.isolated || [];
+        renderProviderHealth(list, data.isolateEnabled, data.threshold);
+      })
+      .catch(function() { /* 静默失败 */ });
+  }
+
+  function renderProviderHealth(list, isolateEnabled, threshold) {
+    var container = document.getElementById('phList');
+    if (!container) return;
+
+    var sub = document.getElementById('phSubtitle');
+    if (sub) sub.textContent = (isolateEnabled ? '自动隔离已开启（live）' : 'observe 模式（仅建议，不改路由）');
+
+    if (!list || list.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">所有 Provider 健康</div></div>';
+      return;
+    }
+
+    container.innerHTML = list.map(function(p) {
+      var remainMs = (p.unhealthyUntil || 0) - Date.now();
+      var remainMin = Math.max(0, Math.round(remainMs / 60000));
+      var corr = p.correlation || {};
+      var verdictText = corr.verdict === 'network-wide' ? '全网故障' : '单 Proxy 抖动';
+      var verdictClass = corr.verdict === 'network-wide' ? 'badge-error' : 'badge-warning';
+      var sources = (corr.sources || []).join(', ') || '—';
+      var fails = p.consecutiveFailures || 0;
+      return '<div class="session-item">' +
+        '<div class="session-header">' +
+          '<span class="session-proxy-badge badge-' + esc(p.providerId) + '">' + esc(p.providerId) + '</span>' +
+          '<span class="' + verdictClass + '">' + verdictText + '</span>' +
+          '<span class="session-age">⏱ ' + remainMin + 'min 后恢复</span>' +
+        '</div>' +
+        '<div class="session-id">连续失败 ' + fails + ' 次 · 来源：' + esc(sources) + '</div>' +
+      '</div>';
+    }).join('');
+  }
 
   // ===== Data Loading =====
   function loadStatus() {
@@ -1320,41 +1843,29 @@ body {
     var banner = document.getElementById('offlineBanner');
     if (banner) banner.classList.remove('hidden');
   }
-
   function hideOfflineBanner() {
     var banner = document.getElementById('offlineBanner');
     if (banner) banner.classList.add('hidden');
   }
-
-  // ===== Demo Banner =====
   function showDemoBanner() {
     var banner = document.getElementById('demoBanner');
     if (banner) banner.classList.remove('hidden');
   }
-
   function hideDemoBanner() {
     var banner = document.getElementById('demoBanner');
     if (banner) banner.classList.add('hidden');
   }
-
-  function dismissDemoBanner() {
-    hideDemoBanner();
+  function dismissDemoBanner() { hideDemoBanner(); }
+  function dismissApiKeyBanner() {
+    hideApiKeyBanner();
+    try { localStorage.setItem('apiKeyBannerDismissed', String(Date.now())); } catch (e) {}
   }
-
-  // ===== Dynamic Proxy List =====
-  function loadInstalledProxies() {
-    return fetch('/api/installed')
-      .then(function(res) {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then(function(names) {
-        if (names && names.length > 0) return names;
-        throw new Error();
-      })
-      .catch(function() {
-        return Object.keys(PROXY_CONFIGS);
-      });
+  function isApiKeyBannerDismissed() {
+    try {
+      var ts = localStorage.getItem('apiKeyBannerDismissed');
+      if (ts === null) return false;
+      return (Date.now() - parseInt(ts, 10)) < 24 * 60 * 60 * 1000;
+    } catch (e) { return false; }
   }
 
   // ===== API Key Banner =====
@@ -1362,27 +1873,9 @@ body {
     var banner = document.getElementById('apiKeyBanner');
     if (banner) banner.classList.remove('hidden');
   }
-
   function hideApiKeyBanner() {
     var banner = document.getElementById('apiKeyBanner');
     if (banner) banner.classList.add('hidden');
-  }
-
-  function dismissApiKeyBanner() {
-    hideApiKeyBanner();
-    try {
-      localStorage.setItem('apiKeyBannerDismissed', String(Date.now()));
-    } catch (e) { /* ignore */ }
-  }
-
-  function isApiKeyBannerDismissed() {
-    try {
-      var ts = localStorage.getItem('apiKeyBannerDismissed');
-      if (ts === null) return false;
-      return (Date.now() - parseInt(ts, 10)) < 24 * 60 * 60 * 1000;
-    } catch (e) {
-      return false;
-    }
   }
 
   // ===== Auth Check =====
@@ -1416,8 +1909,6 @@ body {
   }
 
   // ===== Intercept fetch for auth token =====
-  // B6: 注入 token + 全局 401 拦截 —— token 过期/无效时跳转登录页，
-  // 避免页面退化为"假数据模式"。auth 端点自身的 401（密码错误）不拦截。
   var _origFetch = window.fetch;
   window.fetch = function(url, options) {
     if (options === undefined) options = {};
@@ -1428,8 +1919,7 @@ body {
       }
     }
     var p = _origFetch(url, options);
-    if (typeof url === 'string' && url.indexOf('/api/') === 0
-        && url.indexOf('/api/auth/') !== 0) {
+    if (typeof url === 'string' && url.indexOf('/api/') === 0 && url.indexOf('/api/auth/') !== 0) {
       p.then(function(res) {
         if (res.status === 401) {
           sessionStorage.removeItem('auth_token');
@@ -1446,11 +1936,9 @@ body {
     if (saved !== null) return parseInt(saved, 10);
     return 10;
   }
-
   function saveRefreshInterval(val) {
     localStorage.setItem('autoRefreshInterval', String(val));
   }
-
   function applyRefreshInterval() {
     var val = parseInt(document.getElementById('autoRefreshInterval').value, 10);
     var toggle = document.getElementById('autoRefreshToggle');
@@ -1475,132 +1963,22 @@ body {
     toggle.checked = true;
   }
 
-  // ===== Sessions Loading =====
-  function loadSessions() {
-    fetch('/api/sessions/running', { headers: { 'x-auth-token': authToken || '' } })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        var sessions = data.sessions || [];
-        renderSessionsList(sessions);
-      })
-      .catch(function() { /* 静默失败 */ });
-  }
-
-  function renderSessionsList(sessions) {
-    var container = document.getElementById('sessionsList');
-    if (!container) return;
-
-    if (!sessions || sessions.length === 0) {
-      container.innerHTML =
-        '<div class="empty-state">' +
-          '<div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>' +
-          '<div class="empty-text">暂无运行中任务</div>' +
-        '</div>';
-      return;
-    }
-
-    container.innerHTML = sessions.map(function(s) {
-      var ageMs = Date.now() - new Date(s.createdAt).getTime();
-      var ageMin = Math.floor(ageMs / 60000);
-      var ageSec = Math.floor((ageMs % 60000) / 1000);
-      var ageStr = ageMin > 0 ? ageMin + 'm' + ageSec + 's' : ageSec + 's';
-      var statusBadge = s.status === 'running' ? 'badge-success' : 'badge-warning';
-      var statusText = s.status === 'running' ? '运行中' : '待处理';
-      var stepsHtml = (s.steps || []).length > 0
-        ? '<div class="session-steps"><svg class="icon-svg icon-svg-xs" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/></svg> ' + s.steps.length + ' 步</div>'
-        : '';
-      var abortBtn = '<button class="btn btn-danger btn-sm" onclick="abortSessionFromDashboard(\'' + esc(s.sessionId) + '\')">中止</button>';
-      return '<div class="session-item">' +
-        '<div class="session-header">' +
-          '<span class="session-proxy-badge badge-' + esc(s.proxy) + '">' + esc(s.proxy) + '</span>' +
-          '<span class="' + statusBadge + '">' + statusText + '</span>' +
-          '<span class="session-age">⏱ ' + ageStr + '</span>' +
-          abortBtn +
-        '</div>' +
-        '<div class="session-id">' + esc(s.sessionId) + '</div>' +
-        '<div class="session-task">' + esc((s.task || {}).title || '无标题') + '</div>' +
-        stepsHtml +
-      '</div>';
-    }).join('');
-  }
-
-  window.abortSessionFromDashboard = function(id) {
-    if (!confirm('确认中止此任务？')) return;
-    fetch('/api/sessions/' + id + '/abort', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' },
-      body: JSON.stringify({ by: 'user' })
-     })
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (data.ok) {
-        showToast('任务已中止', 'success');
-        loadSessions();
-       }
-     })
-    .catch(function() {});
-   };
-
-   // ===== Provider Health Loading (M2 方向二) =====
-  function loadProviderHealth() {
-    fetch('/api/provider-health', { headers: { 'x-auth-token': authToken || '' } })
-       .then(function(res) { return res.json(); })
-       .then(function(data) {
-        var list = data.isolated || [];
-        renderProviderHealth(list, data.isolateEnabled, data.threshold);
-       })
-       .catch(function() { /* 静默失败，不影响其它卡片 */ });
-   }
-
-  function renderProviderHealth(list, isolateEnabled, threshold) {
-    var container = document.getElementById('phList');
-    if (!container) return;
-
-    // 副标题：observe / live 模式文案
-    var sub = document.getElementById('phSubtitle');
-    if (sub) sub.textContent = (isolateEnabled ? '自动隔离已开启（live）' : 'observe 模式（仅建议，不改路由）');
-
-    if (!list || list.length === 0) {
-      container.innerHTML =
-         '<div class="empty-state">' +
-           '<div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>' +
-           '<div class="empty-text">所有 Provider 健康</div>' +
-         '</div>';
-      return;
-     }
-
-    container.innerHTML = list.map(function(p) {
-      // 距下一次自动恢复的时间
-      var remainMs = (p.unhealthyUntil || 0) - Date.now();
-      var remainMin = Math.max(0, Math.round(remainMs / 60000));
-      var corr = p.correlation || {};
-      var verdictText = corr.verdict === 'network-wide' ? '全网故障' : '单 Proxy 抖动';
-      var verdictClass = corr.verdict === 'network-wide' ? 'badge-error' : 'badge-warning';
-      var sources = (corr.sources || []).join(', ') || '—';
-      var fails = p.consecutiveFailures || 0;
-      return '<div class="session-item">' +
-         '<div class="session-header">' +
-           '<span class="session-proxy-badge badge-' + esc(p.providerId) + '">' + esc(p.providerId) + '</span>' +
-           '<span class="' + verdictClass + '">' + verdictText + '</span>' +
-           '<span class="session-age">⏱ ' + remainMin + 'min 后恢复</span>' +
-         '</div>' +
-         '<div class="session-id">连续失败 ' + fails + ' 次 · 来源：' + esc(sources) + '</div>' +
-        '</div>';
-     }).join('');
-   }
-
-  // ===== Cross-tab status sync via BroadcastChannel =====
-  try {
-    window.__statusChannel = new BroadcastChannel('proxy-status');
-    window.__statusChannel.onmessage = function(e) {
-      if (e.data && e.data.type === 'proxy-status-changed') {
-        loadStatus();
-        loadSessions();
-      }
-    };
-  } catch {}
-
   // ===== Dynamic Proxy Nav =====
+  function loadInstalledProxies() {
+    return fetch('/api/installed')
+      .then(function(res) {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(function(names) {
+        if (names && names.length > 0) return names;
+        throw new Error();
+      })
+      .catch(function() {
+        return Object.keys(PROXY_CONFIGS);
+      });
+  }
+
   function renderDynamicProxyNav(proxyNames) {
     var container = document.getElementById('proxyNavItems');
     if (!container) return;
@@ -1613,7 +1991,7 @@ body {
     }
 
     container.innerHTML = proxyNames.map(function(name) {
-      var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>', iconClass: '' };
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '' };
       var status = proxyStatus[name];
       var badgeClass = status && status.running ? 'running' : 'stopped';
       var badgeText = status && status.running ? 'ON' : 'OFF';
@@ -1624,6 +2002,17 @@ body {
         '</a>';
     }).join('');
   }
+
+  // ===== Cross-tab status sync via BroadcastChannel =====
+  try {
+    window.__statusChannel = new BroadcastChannel('proxy-status');
+    window.__statusChannel.onmessage = function(e) {
+      if (e.data && e.data.type === 'proxy-status-changed') {
+        loadStatus();
+        loadSessions();
+      }
+    };
+  } catch {}
 
   // ===== Logout =====
   window.handleLogout = function() {
@@ -1693,7 +2082,7 @@ body {
           })
           .catch(function() { /* skip */ });
 
-        // 打开应用时全局检测：是否有 agent 的代理被其它工具（cc-switch 等）占用。
+        // Check proxy conflicts
         checkProxyConflicts();
       });
 

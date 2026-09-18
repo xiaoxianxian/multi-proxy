@@ -44,7 +44,7 @@ describe('RouteEngine', () => {
 
     test('route video task → h3web', () => {
         const decision = engine.route({ id: 't1', type: 'video', prompt: 'cat' });
-        expect(decision.chosen).toEqual({ adapterId: 'h3web', source: 'registry', confidence: 1 });
+        expect(decision.chosen).toMatchObject({ adapterId: 'h3web', source: 'registry', confidence: 1 });
         expect(decision.shadowMode).toBe(true);
         expect(decision.action).toBe('log-only');
         expect(decision.candidates.length).toBe(2); // h3web + test-plugin
@@ -108,5 +108,7 @@ describe('RouteEngine', () => {
         const decision = engine.route({ id: 't6', type: 'video', prompt: 'x' });
         // h3web has confidence 1, test-plugin has confidence 0
         expect(decision.candidates[0].confidence).toBeGreaterThanOrEqual(decision.candidates[1].confidence);
+        // also verify modelTypeMatch field exists
+        expect(decision.candidates[0]).toHaveProperty('modelTypeMatch');
     });
 });
