@@ -70,7 +70,8 @@ app.use('/api/sessions', sessionsRoutes);
 // M2 Provider Health：只读展示层，挂在代理 wildcard 之前（与 registry/sessions 同模式）
 app.use('/api/provider-health', require('./routes/provider-health'));
 // L2 P2 告警生产接线：/api/alert 把 alert.js 内核接上真实信号源（门控 PROXY_HEALTH_ALERT 默认关）
-app.use('/api/alert', require('./routes/alert'));
+const alertRoutes = require('./routes/alert');
+app.use('/api/alert', alertRoutes);
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
@@ -105,15 +106,28 @@ app.use((req, res, next) => {
   next();
 });
 
+// L2 P2 cost 启动期接线（全非侵入，门控默认关 = 零副作用）：
+//   1. loadPricingFromEnv：读 PROXY_PRICING_<proxy> env 注入 cost-track 单价
+//      （无此 env 时 no-op；仅 PROXY_PRICING_* 存在时才建 state）。
+//   2. alertRoutes.startCostScheduler：PROXY_COST_SCHEDULE 门控（默认关 → 返回 null 不建 timer）；
+//     开 = 定时跑 runAllCollects（3 路：provider-health + error-patterns + cost × 预算）。
+//     unref 不阻塞进程退出；单次 tick 崩 best-effort 不影响后续。
+const costTrack = require('./lib/cost-track');
+
 // 启动服务（跳过测试环境）
 if (process.env.NODE_ENV !== "test") {
+  costTrack.loadPricingFromEnv();
+  const costScheduler = alertRoutes.startCostScheduler();
   app.listen(PORT, () => {
     console.log('\n========================================');
     console.log('  Multi-Proxy Manager Shell');
     console.log(`  Access: http://localhost:${PORT}`);
     console.log(`  Managed proxies: ${Object.keys(pm.getProxyConfigs()).join(', ') || 'none'}`);
     console.log('========================================\n');
-});
+    if (costScheduler) {
+      console.log(`[cost] alert scheduler started every ${costScheduler.intervalMs}ms (PROXY_COST_SCHEDULE=on)`);
+     }
+   });
 }
 
 
