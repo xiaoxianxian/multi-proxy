@@ -381,4 +381,18 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 - **②删两旧仓 ⏸️ 卡权限(待老板手动补 scope)**：`xiaoxianxian` 下 3 仓——`multi-proxy`(public 活跃，**保留**，4 子目录指向它)/`multi-proxy-manager`(private 06-20 停更，旧独立 frontend+managers+scripts 版，**建议删**)/`homebrew-claude-zh`(public 06-19 停更只剩 `claude-zh.rb`，已并入 `multi-proxy/tools/claude-zh`，**建议删**)。内容冗余已核实(`gh api` 拉内容)。阻塞根因：当前 gh token 缺 `delete_repo` scope，`gh auth refresh -h github.com -s delete_repo` 在 headless 触发**交互式 OAuth 卡死 124s**。老板补好 scope 后我跑 `gh repo delete xiaoxianxian/{multi-proxy-manager,homebrew-claude-zh} --yes`。
 - **③三大块未动(新会话逐个执行 + 每项 E2E)**：① GUI 补全(`multi-proxy-manager/public/` 现 5 页 dashboard/logs/proxy-config/sessions/login；后端 routes 有 orchestration/alert/registry/proxy-health 无前端)；② 功能公共化下沉(路由/熔断/限流/流式翻译现只 cursor 有，codex/hermes 零命中，非单模型默认关)；③ DeepSeek P0/P1 文档缺口(数据流图/tech-design/负面测试等，**逐条核实真伪再补——历史 3 轮已多次误判，别盲信**)。每项完成 E2E 铁律(见 §13.7)：主路径+≥1 边界+关键断言，带病不前进。
 - **新陷阱**：`gh auth refresh -s <scope>` headless 不可自动完成(交互 OAuth 卡死)→ 删仓类/需新 scope 的操作必须老板手动补 scope 后再跑。jest 全子集用全路径；aggregate checks 别猜全真跑(jest 828/py 63/bats 11/l2 ~182=~1084)。
-**新会话一句话**：item1 cost 接线 ✅(`6ebb200` 已 push) / item2 删仓 ⏸️(卡 `delete_repo` scope，老板补后我重跑) / item3 三大块(GUI 补全·功能公共化·DeepSeek 文档缺口)未动——逐个做+每项 E2E。HEAD `6ebb200`=origin/main，working tree 仅 MEMORY 文件待 commit。
+**新会话一句话（09-18 第四轮更新，详见下方 §13.14）**：item1 cost ✅ / **item2 删仓⏸️ 卡 gh CLI keyring token 无 delete_repo（用户浏览器授权≠CLI token，需用户 TTY 跑 `gh auth refresh -h github.com -s delete_repo --web` 后告知，scope 就绪才真删两仓）** / item3 Block3 ✅收口(`49b5102`) + Block2 l2-p1 监控三件套已落但需重做 modelType 差异化(`b947f9e`) + Block1 GUI 未做。HEAD `1a3a310` ahead 4 未 push，working tree 干净。续跑读 `MEMORY-2026-09-18.md §十`。
+
+### 13.14 2026-09-18 第四轮 checkpoint（Block 2 l2-p1 + Block 3 doc 收口已落地 · HEAD `1a3a310` ahead 4）
+
+**承接 §13.13，本轮进展（已 commit，详见 `MEMORY-2026-09-18.md §十`）**：
+
+- **①item2 删仓仍 ⏸️**。root cause 已锁死：用户浏览器完成的 GitHub 账号授权 ≠ `gh` CLI 本地 macOS keyring 的 token；`gh auth status` 实测 scope 仍 `'gist','read:org','repo','workflow'`（**无 `delete_repo`**）→ 真跑 `gh repo delete` 报 `HTTP 403 needs "delete_repo" scope`，两仓都在。**解法（老板自身 TTY，非 headless 驱动）**：`gh auth refresh -h github.com -s delete_repo --web` → 浏览器输一次性码 → `gh auth status | grep delete_repo` 确认 → 告知贾维斯 → 贾维斯真跑 `gh repo delete xiaoxianxian/{multi-proxy-manager,homebrew-claude-zh} --yes` + 验证两仓消失。**scope 没就绪前绝不删**（不可逆）。
+- **②item3 Block 2 部分落地（l2-p1 监控三件套公共化下沉）✅ commit `b947f9e`**：`l2/circuit-breaker.js`+`rate-limiter.js`+`health-monitor.js`（纯 JS·零依赖·Node18+·状态机/非侵入/门控默认关）+ 3 demo（CB 5 / RL 6 / HM 6 PASS）+ `codex-proxy/tests/circuit-integration.test.js`。**注意**：上轮 3 监控类被老板判定**做浅**——Block 2 还需**重做完整能力抽象**（公共内核 + 个性层 + **文本/多模态路由差异化**：`route-engine.js` 现仅 `capabilityTags.includes(task.type)` 无 modelType 维度，需补 `l2/CAPABILITY-MODE.md` 设计 + route-engine/agent-registry 加 modelType 字段）。
+- **③item3 Block 3 ✅ 收口 commit `49b5102`**：`docs/09-review/consistency-report.md` 09-18 复核区（jest 635→830 / l2 14→16·196 / 总 ~1089 全真跑）+ `deepseek-gap-assessment.md` 所列 13 份缺口文档全部实存核实（非幽灵缺口）。
+- **④item3 Block 1 GUI 未做**：`dashboard.html` 干净 1725 行（escape-patch 历史损坏已 `git checkout` 还原），需补 page-health/al/registry + Apple HIG 风格重构（老板定风格=苹果设计规范，不照抄控件；**HTML 大段写用 `write_file` 整文件，不 escape patch**）。
+- **⑤本轮 4 个本地 commit 未 push**（`bc8a349`→`b947f9e`→`49b5102`→`1a3a310`），push 待老板授权。
+
+**数字（全真跑，§1.2）**：jest **830**（mpm 644/40 + cursor 131 + codex 55 含 circuit-integration）/ pytest **63** / l2 **16 demo·196 checks** / 总 **~1089**。
+
+**新会话续跑**：读 `MEMORY-2026-09-18.md §十`（完整续跑提示词 + item2 解锁路径）。三件：①item2 等老板 TTY 补 scope 后真删；②Block 2 重做 modelType 差异化；③Block 1 GUI。每项 E2E（jest 830 + l2 196 + py 63 全绿），带病不前进。铁律：显式 `git add --` 不 `-A`；热路径 `forward.js`/`proxy.js` 非授权不动；每步真跑不抄文档数字；不抢老板 Chrome。
