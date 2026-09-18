@@ -2,12 +2,15 @@
 
 > 注（2026-09-17）：`CLAUDE.md` 已归档至 `docs/09-review/archive/`；下文 `CLAUDE.md` 均指归档前版本。铁律现收敛于 `AGENTS.md` / `03-adr/` / `07-ops/ENV-NOTES.md` / `P0-FIXES.md`。
 
-> doc↔code 真核对。生成日期 2026-09-17（HEAD `57c2774`，main）。
+> doc↔code 真核对。历史生成 2026-09-17（HEAD `57c2774`，jest 635，见 §1.1）；复核 2026-09-18（HEAD `b947f9e`，Block 2 后重跑，见 §1.2）。
 > 方法：全文 grep 关键数字/标记，逐项比对实测（jest/l2 demo 实测、端口声明、模块数）。
+> 结论：核心数字全文一致；幽灵路径（C2/B7）是架构设计标注、非代码 bug，已同源标注，不构成 doc↔code 漂移；**Block 3 deepseek-gap 所列 13 份缺口文档（A/B/C/D/E）全部真实存在（已 ls 核实，非幽灵缺口）**。
 
 ---
 
 ## 一、数字一致性核对
+
+### 1.1 2026-09-17（HEAD `57c2774`，历史快照，保留）
 
 | 数字 | 文档声称 | 实测 | 结果 |
 |------|----------|------|------|
@@ -17,7 +20,24 @@
 | L2 模块 / demo / adapter | 10 / 14 / 3 | `l2/*.demo.js` 10+、registry 3 adapter | ✅ 一致 |
 | 幽灵路径 C2/B7 | architecture §七 / test-cases / codebase-map 标注 | `l2/PERF-REPORT §3` 同源 | ✅ 一致（诚实挂账） |
 
-**结论**：核心数字全文一致，无 doc↔code 漂移。
+### 1.2 2026-09-18 复核（Block 2 监控三件套下沉后重跑，HEAD `b947f9e`）
+
+| 数字 | 09-17 旧值 | 2026-09-18 实测 | 结果 |
+|------|-----------|----------------|------|
+| jest 测试 | 635 | **830**（mpm 644 + cursor 131 + codex 55） | ✅ 已重跑更新 |
+| pytest | 63 | 63（`hermes-proxy` pytest 63/63，未动） | ✅ 一致 |
+| L2 demo / checks | 14 / ~182 | **16 / 196**（新增 3 公共监控模块 circuit-breaker/rate-limiter/health-monitor，CB 5 + RL 6 + HM 6 = 17；route-engine 定性 log-only） | ✅ 已重跑更新 |
+| 总 checks | ~1076 | **~1089**（jest 830 + pytest 63 + l2 196；bats 历史 11 未重跑） | ✅ 已重跑更新 |
+| 端口 | 四端口在跑 | 18790/18792/18793/18794 不变 | ✅ 一致 |
+
+**复核方法（全部真跑，非摘录）**：
+- `cd multi-proxy-manager && npx jest --silent` → `644 passed`
+- `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent` → `131 passed`
+- `cd codex-proxy && npx jest --silent` → `55 passed`（含 Block 2 新增 `circuit-integration.test.js` 2 项）
+- `cd hermes-proxy && python3 -m pytest -q` → `63 passed`
+- `l2/*.demo.js` + `l2/adapters/*.demo.js` 逐个 `node` 跑 → **16/16 rc=0**，summed **196 checks**（route-engine 用 "Demo complete" 不印 N，按 log assert 计 3）
+
+**结论**：Block 2 下沉后数字已全文复核，jest 635→830、l2 demo 14→16/196、总 ~1076→~1089，均与实测一致。
 
 ---
 
