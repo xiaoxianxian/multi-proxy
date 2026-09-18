@@ -1,13 +1,13 @@
 'use strict';
 
 // Route Engine — L2 编排引擎核心（P1 增量 1）
-// 职责：按能力标签路由任务到候选 adapter，支持 shadow 模式。
+// 职责：按能力标签 + 模型类型路由任务到候选 adapter，支持 shadow 模式。
 //
 // 设计原则（与 Agent Registry + Plugin Runtime 同构）：
 //   - 非侵入④：只读 Registry + Plugin Runtime，不修改 agent 任何文件。
 //   - Shadow 模式先行：默认不执行真实任务，只记录路由决策日志。
 //   - 可注入：registry/pluginRuntime 可注入，便于测试。
-//   - 能力优先级：按 capabilities 数组顺序排序候选（更具体的 tag 排前）。
+//   - 模型类型优先：multimodal 任务优先匹配 multimodal 代理（避免文本代理误接图像任务）。
 
 const DEFAULT_LOG_CAPACITY = 100;
 
@@ -35,8 +35,11 @@ class RouteEngine {
             action: 'log-only', // log-only | execute
         };
 
+        // 解析期望的模型类型
+        const expectedModelType = task.modelType || this._inferModelType(task.type);
+
         // 查询 Registry 中具备该能力的 agent profile
-        const registryProfiles = this.registry ? this.registry.byCapability(task.type) : [];
+        const allProfiles = this.registry ? this.registry.list() : [];
 
         // 查询 Plugin Runtime 中已启动的插件能力
         const pluginCaps = this.pluginRuntime.listCapabilities();
@@ -44,13 +47,20 @@ class RouteEngine {
         // 合并候选：从 Registry 和 Plugin Runtime 中提取 adapter 信息
         const candidateMap = new Map();
 
-        for (const profile of registryProfiles) {
+        for (const profile of allProfiles) {
             if (profile.adapterId) {
-                candidateMap.set(profile.adapterId, {
-                    adapterId: profile.adapterId,
-                    source: 'registry',
-                    confidence: this._calcConfidence(profile.capabilityTags, task.type),
-                });
+                // 精确匹配：modelType + capabilityTags
+                const modelMatch = profile.modelType === expectedModelType;
+                const tagMatch = Array.isArray(profile.capabilityTags) && profile.capabilityTags.includes(task.type);
+
+                if (tagMatch) {
+                    candidateMap.set(profile.adapterId, {
+                        adapterId: profile.adapterId,
+                        source: 'registry',
+                        confidence: this._calcConfidence(profile.capabilityTags, task.type, profile.modelType, expectedModelType),
+                        modelTypeMatch: modelMatch,
+                    });
+                }
             }
         }
 
@@ -59,12 +69,19 @@ class RouteEngine {
                 candidateMap.set(cap.plugin, {
                     adapterId: cap.plugin,
                     source: 'plugin',
-                    confidence: this._calcConfidence([cap.capability], task.type),
+                    confidence: this._calcConfidence([cap.capability], task.type, null, expectedModelType),
+                    modelTypeMatch: false,
                 });
             }
         }
 
-        decision.candidates = [...candidateMap.values()].sort((a, b) => b.confidence - a.confidence);
+        // 排序：先按 modelTypeMatch（真 > 假），再按 confidence
+        decision.candidates = [...candidateMap.values()].sort((a, b) => {
+            if (a.modelTypeMatch !== b.modelTypeMatch) {
+                return a.modelTypeMatch ? -1 : 1;
+            }
+            return b.confidence - a.confidence;
+        });
         decision.chosen = decision.candidates[0] || null;
 
         // Shadow 模式：只记录，不执行
@@ -99,9 +116,18 @@ class RouteEngine {
 
     // ---- 私有方法 ----
 
-    _calcConfidence(tags, targetType) {
-        if (!Array.isArray(tags)) return 0;
-        return tags.includes(targetType) ? 1 : 0;
+    // 启发式推导任务期望的模型类型
+    _inferModelType(taskType) {
+        if (['vision', 'image', 'video', 'text2video'].includes(taskType)) return 'multimodal';
+        if (['audio', 'tts', 'stt'].includes(taskType)) return 'audio';
+        return 'text';
+    }
+
+    _calcConfidence(tags, targetType, profileModelType, expectedModelType) {
+        let score = 0;
+        if (tags.includes(targetType)) score += 1;
+        if (profileModelType === expectedModelType) score += 1;
+        return score;
     }
 
     _pushLog(decision) {

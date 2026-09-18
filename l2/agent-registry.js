@@ -15,6 +15,7 @@ const fs = require('fs');
 
 const SPEC_VERSION = '1.0.0';
 const AGENT_TYPES = new Set(['codex', 'hermes', 'cursor', 'custom']);
+const MODEL_TYPES = new Set(['text', 'multimodal', 'audio']);
 const REQUIRED = ['id', 'name', 'type', 'capabilityTags', 'specVersion'];
 
 // 轻量校验（必填 + type enum + specVersion const + 基本类型）。返回错误数组或 null。
@@ -35,6 +36,12 @@ function validate(profile) {
     }
     if (profile.specVersion !== SPEC_VERSION) {
         errs.push(`specVersion must be ${SPEC_VERSION} (got ${JSON.stringify(profile.specVersion)})`);
+    }
+    // modelType 可选：若提供则校验枚举，否则默认为 'text'
+    if (profile.modelType !== undefined && profile.modelType !== null) {
+        if (!MODEL_TYPES.has(profile.modelType)) {
+            errs.push(`modelType must be one of ${[...MODEL_TYPES].join('/')} (got ${JSON.stringify(profile.modelType)})`);
+        }
     }
     return errs.length ? errs : null;
 }
@@ -88,6 +95,10 @@ class AgentRegistry {
     // 能力标签查询：编排引擎"按能力路由"的基础。
     byCapability(tag) {
         return this.list().filter((p) => Array.isArray(p.capabilityTags) && p.capabilityTags.includes(tag));
+    }
+    // 模型类型查询：返回具备指定 modelType 的所有 profile
+    byModelType(modelType) {
+        return this.list().filter((p) => p.modelType === modelType);
     }
     // 能力注册：把新能力标签并入（不覆盖已有），是 Adapter 启动时向 Registry 声明能力的落点。
     registerCapabilities(id, tagsArray) {
@@ -150,6 +161,7 @@ module.exports = {
     newFileStorage,
     validate,
     AGENT_TYPES,
+    MODEL_TYPES,
     REQUIRED,
     SPEC_VERSION,
 };

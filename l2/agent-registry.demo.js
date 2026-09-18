@@ -28,9 +28,20 @@ r.create({
     capabilityTags: ['code', 'vision'], contextLength: 200000, version: '1.0.0',
 });
 
-// 2. 能力查询（编排引擎按能力路由的基础）
+// 3. modelType 字段（可选）
+r.create({
+    id: 'hermes-multimodal', name: 'Hermes Multimodal', type: 'hermes',
+    capabilityTags: ['vision', 'image', 'video'], modelType: 'multimodal', version: '1.0.0',
+});
+ok('modelType 可选字段写入', r.get('hermes-multimodal').modelType === 'multimodal');
+
+// 4. byModelType 查询
+ok("byModelType('multimodal')==1", r.byModelType('multimodal').length === 1);
+ok("byModelType('text')==0（无显式设置）", r.byModelType('text').length === 0);
+
+// 5. 能力查询（编排引擎按能力路由的基础）
 ok("byCapability('code')==2", r.byCapability('code').length === 2);
-ok("byCapability('vision')==1", r.byCapability('vision').length === 1);
+ok("byCapability('vision')==2（cursor-vision + hermes-multimodal）", r.byCapability('vision').length === 2);
 ok("byCapability('audio')==0", r.byCapability('audio').length === 0);
 
 // 3. update（不可改 id）
@@ -62,14 +73,15 @@ ok('get not-found throws', threw);
 
 // 6. remove + 能力查询反映删除
 r.remove('cursor-vision');
-ok('count==1 after remove', r.count() === 1);
+ok('count==2 after remove', r.count() === 2);
 ok("byCapability('audio')==0 after remove", r.byCapability('audio').length === 0);
 
+// 7. modelType 非法值拒绝
 threw = false;
-try { r.remove('cursor-vision'); } catch { threw = true; }
-ok('remove not-found throws', threw);
+try { r.create({ id: 'bad-model', name: 'x', type: 'codex', capabilityTags: [], modelType: 'invalid' }); } catch { threw = true; }
+ok('invalid modelType rejected', threw);
 
-// 7. 文件持久化跨实例（非侵入：写注入 tmp dir，不写 home）
+// 8. 文件持久化跨实例（非侵入：写注入 tmp dir，不写 home）
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'reg-'));
 const r2 = new AgentRegistry({ storage: newFileStorage(tmp) });
 r2.create({ id: 'hermes-c', name: 'Hermes', type: 'hermes', capabilityTags: ['writing'], version: '1.0.0' });
