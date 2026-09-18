@@ -63,7 +63,27 @@ async function main() {
     });
     console.log(JSON.stringify(unknownRoute, null, 2));
 
-    console.log('\n[4] 路由日志');
+    console.log('\n[4] complexity 路由：按难度选模型档位（low→small / high→large）');
+    // 注册带 modelTier 的 profile（complexity 路由的落点）
+    const registryWithTier = new AgentRegistry();
+    registryWithTier.create({
+        id: 'agnes-ti', name: 'Agnes small', type: 'custom',
+        adapterId: 'agnes', capabilityTags: ['text'], modelTier: 'small',
+    });
+    registryWithTier.create({
+        id: 'qwen-ti', name: 'Qwen large', type: 'custom',
+        adapterId: 'qwen', capabilityTags: ['text'], modelTier: 'large',
+    });
+    const tierEngine = new RouteEngine({ registry: registryWithTier, pluginRuntime, shadowMode: true });
+    const lowR = tierEngine.route({ id: 'c-low', type: 'text', complexity: 'low', prompt: '简单翻译' });
+    console.log('  low → small:', lowR.chosen ? `${lowR.chosen.adapterId} (tier=${lowR.chosen.modelTier}, match=${lowR.chosen.tierMatch}, conf=${lowR.chosen.confidence})` : 'none');
+    const highR = tierEngine.route({ id: 'c-high', type: 'text', complexity: 'high', prompt: '复杂架构设计' });
+    console.log('  high→ large:', highR.chosen ? `${highR.chosen.adapterId} (tier=${highR.chosen.modelTier}, match=${highR.chosen.tierMatch}, conf=${highR.chosen.confidence})` : 'none');
+    // 向后兼容：旧 profile 无 modelTier，complexity 高也能命中（不降级，仍参与路由）
+    const compatR = tierEngine.route({ id: 'c-compat', type: 'text', complexity: 'high', prompt: '', modelType: 'text' });
+    console.log('  compat high（无 tier profile）:', compatR.chosen ? `${compatR.chosen.adapterId} (tierMatch=${compatR.chosen.tierMatch})` : 'none');
+
+    console.log('\n[5] 路由日志');
     const logs = engine.getLogs(3);
     console.log(`日志数量: ${logs.length}`);
     for (const log of logs) {

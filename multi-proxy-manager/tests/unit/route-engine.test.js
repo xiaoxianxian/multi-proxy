@@ -110,5 +110,50 @@ describe('RouteEngine', () => {
         expect(decision.candidates[0].confidence).toBeGreaterThanOrEqual(decision.candidates[1].confidence);
         // also verify modelTypeMatch field exists
         expect(decision.candidates[0]).toHaveProperty('modelTypeMatch');
-    });
+     });
+
+     // ---- complexity 路由（complexity→modelTier 档位，见 l2/COMPLEXITY-MODE.md）----
+     // 用局部 registry/engine，不污染 beforeEach 的共享 setup（保证上面 10 个 test 不变）
+
+    test('complexity low routes to small tier profile', () => {
+        const reg = new AgentRegistry();
+        reg.create({ id: 'agnes', name: 'Agnes', type: 'custom', adapterId: 'agnes', capabilityTags: ['text'], modelTier: 'small' });
+        reg.create({ id: 'qwen', name: 'Qwen', type: 'custom', adapterId: 'qwen', capabilityTags: ['text'], modelTier: 'large' });
+        const e = new RouteEngine({ registry: reg, pluginRuntime, shadowMode: true });
+        const d = e.route({ id: 'x1', type: 'text', complexity: 'low', prompt: 'translate' });
+        expect(d.chosen).toMatchObject({ adapterId: 'agnes', tierMatch: true, modelTier: 'small' });
+        expect(d.expectedTier).toBe('small');
+     });
+
+    test('complexity high routes to large tier profile (no downgrade)', () => {
+        const reg = new AgentRegistry();
+        reg.create({ id: 'agnes', name: 'Agnes', type: 'custom', adapterId: 'agnes', capabilityTags: ['text'], modelTier: 'small' });
+        reg.create({ id: 'qwen', name: 'Qwen', type: 'custom', adapterId: 'qwen', capabilityTags: ['text'], modelTier: 'large' });
+        const e = new RouteEngine({ registry: reg, pluginRuntime, shadowMode: true });
+        const d = e.route({ id: 'x2', type: 'text', complexity: 'high', prompt: 'arch design' });
+        expect(d.chosen).toMatchObject({ adapterId: 'qwen', tierMatch: true, modelTier: 'large' });
+        expect(d.expectedTier).toBe('large');
+     });
+
+    test('legacy profile without modelTier still routes on complexity (backward compat)', () => {
+        const reg = new AgentRegistry();
+         // 旧 profile：有 capabilityTags、无 modelTier。type 'code' 不被 plugin（text/vision）命中，保证 chosen 唯一
+        reg.create({ id: 'codex-old', name: 'Codex old', type: 'codex', adapterId: 'codex', capabilityTags: ['code'] });
+        const e = new RouteEngine({ registry: reg, pluginRuntime, shadowMode: true });
+        const d = e.route({ id: 'x3', type: 'code', complexity: 'high', prompt: 'x' });
+         // tierMatch=false（旧 profile 无 tier 不参与档位加分），但照样选中（不降级、不漏路由）
+        expect(d.chosen).toMatchObject({ adapterId: 'codex', tierMatch: false });
+        expect(d.chosen.modelTier).toBeNull();
+     });
+
+    test('unknown/absent complexity maps to medium tier (conservative, no downgrade)', () => {
+        const reg = new AgentRegistry();
+        reg.create({ id: 'agnes', name: 'Agnes', type: 'custom', adapterId: 'agnes', capabilityTags: ['text'], modelTier: 'small' });
+        reg.create({ id: 'med', name: 'Med', type: 'custom', adapterId: 'med', capabilityTags: ['text'], modelTier: 'medium' });
+        reg.create({ id: 'qwen', name: 'Qwen', type: 'custom', adapterId: 'qwen', capabilityTags: ['text'], modelTier: 'large' });
+        const e = new RouteEngine({ registry: reg, pluginRuntime, shadowMode: true });
+        const d = e.route({ id: 'x4', type: 'text', prompt: 'no complexity field' });
+        expect(d.expectedTier).toBe('medium');
+        expect(d.chosen).toMatchObject({ adapterId: 'med', tierMatch: true, modelTier: 'medium' });
+     });
 });
