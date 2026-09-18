@@ -50,6 +50,28 @@
 - 配置写入 `insert` 行的 `config:` 层（applies: live，对应门控 gate/cost/alarm）
 - host 半边：注册设置命名空间 + wrap fetch（可逆）；browser 半边：设置卡片（注意白名单限制）
 
+### 4.1 内核模块 → Cordis 插件映射（草案）
+
+映射依据（2026-09-18 `ls l2/*.js` + `multi-proxy-manager/lib` 实测清单）：
+
+| L2 模块 / 落点 | 当前职责 | 候选 Cordis 插件（id） | 半边 | config 映射（门控 env） |
+|---|---|---|---|---|
+| `l2/orchestrator.js` + `decomposer.js` | 任务拆解 → DAG 调度 | `multi-proxy-orchestrator` | host（wrap `llm/stream` waterfall） | — |
+| `l2/agent-registry.js` | agent 能力/模型类型注册 | `multi-proxy-registry` | host | `agent-profile.json` 注入 |
+| `l2/route-engine.js` | modelType/能力路由 | 并入 orchestrator 插件 | host | `PROXY_ROUTE_OVERRIDE`（Q1=A，默认 shadow） |
+| `l2/health-monitor.js` + `circuit-breaker.js` + `rate-limiter.js` | 韧性三件套 | `multi-proxy-resilience`（failover middleware） | host（wrap fetch，可逆） | — |
+| `l2/alert.js` + `multi-proxy-manager/routes/alert.js` + `lib/{provider-health,error-patterns,cost-track}.js` | 告警（三路信号源：健康/错误模式/成本） | `multi-proxy-alert` | host + settings card | `PROXY_HEALTH_ALERT`（默认 off）、`PROXY_COST_SCHEDULE`（默认关） |
+| `l2/cost.js` + `lib/cost-track.js` + `forward.js:168` 埋点 | 成本核算（token×单价） | 并入 alert 插件 `config.cost` 子段 | host | `PROXY_COST_TRACK`（默认关） |
+| `l2/plugin-runtime.js` | 「一切皆插件」运行时 | **插件宿主框架**（其余插件挂在其上） | host | — |
+| `l2/skill-service.js` + `l2/memory-merge.js` | 技能 / 记忆 | 暂不暴露（二期，见 unknowns U5） | — | — |
+
+**封装原则**（与 dsh-plugin-model-proxy 同构）：host 半边 wrap `globalThis.fetch`（`ctx.effect` dispose 可逆）+ 监听 `llm/stream` waterfall；browser 半边 settings card，受 `WEB_SETTINGS_NAMESPACES` 白名单限制（§3.7）。
+
+**待 DSH 0.2 定稿项**（不臆造，落地时核对）：
+- 上述插件 id 命名（`multi-proxy-*`）是否冲突 / 是否符合 DSH 命名规范。
+- 4 个 env 门控映射到 Cordis `config` 的 live-applies 层级（对应 §3「applies: live，改配置无需重启」）。
+- 设置卡片命名空间需白名单放行（§3.7，dsh 官方列为延后）——若 multi-proxy 要暴露卡片，需协调。
+
 ## 5 落地前置（外部依赖，项目无法控制）
 
 - DSH 0.2 稳定（#1496 guardrail 修复：`dsh plugin add` 装错插件可能导致 profile 起不来且无回滚）
