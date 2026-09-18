@@ -432,3 +432,9 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 **数字（全真跑，§1.2）**：jest **830**（mpm 644/40 + cursor 131 + codex 55 含 circuit-integration）/ pytest **63** / l2 **16 demo·196 checks** / 总 **~1089**。
 
 **新会话续跑**：读 `MEMORY-2026-09-18.md §十`（完整续跑提示词 + item2 解锁路径）。三件：①item2 等老板 TTY 补 scope 后真删；②Block 2 重做 modelType 差异化；③Block 1 GUI。每项 E2E（jest 830 + l2 196 + py 63 全绿），带病不前进。铁律：显式 `git add --` 不 `-A`；热路径 `forward.js`/`proxy.js` 非授权不动；每步真跑不抄文档数字；不抢老板 Chrome。
+
+### §13.16 本轮（complexity 路由实施 + option2 解阻塞；HEAD `c5562ef`，已 push）
+- **option1 complexity 路由✅ commit `eaed67e`**：`agent-registry.js` +`MODEL_TIERS`(small/medium/large 可选校验,默认 medium 向后兼容) +`byTier`；`route-engine.js` +`_mapTier`(low→small/high→large/unknown→medium) +`tierMatch` 排序维度。E2E：route-engine.test.js **14/14**(旧10+新4) + agent-registry.demo 27 checks + l2 全13 demo PASS。设计见 `l2/COMPLEXITY-MODE.md`(4 决策点老板定稿:tier抽象/high不降级/静态先行后动态/独立文件)。
+- **⚠️ jest transform cache 坑（重要）**：jest 真 cache 在 `/private/var/folders/.../T/jest_dx/`，**不在 `node_modules/.cache`**——改 `l2/*.js` 后必须 `rm -rf $TMPDIR/jest_dx` 才生效，否则 jest 跑旧版 module（本次一度误判"3 test 卡住"，实际是 cache + 一个 expectedTier 漏写 decision 顶层的真 bug）。
+- **registry.test.js `../server` 失败 = pre-existing**：`git stash` 掉本批改动脉后仍 FAIL（require supertest/jwt/server），与本批 complexity 改动零交集，不背锅、不在范围，未动。
+- **option2 阻塞已解✅ 纳入 `c5562ef`**：`TencentCloud/harness-agent` GitHub 404，但**源码真相在 PyPI wheel**——`orcakit-harness-agent` 1.0.11-py3-none-any.whl（1.45MB/sha256 `9cc849…`/212 个 harness_agent/*.py）真可下载。贾维斯独立复现对照 `model_router.py:19-23`(AgentMiddleware/ModelRequest/ModelResponse) + `ChatModelFactory`(llm/factory.py) + `HarnessAgentConfig`(config/__init__.py frozen dataclass) + `wrap_model_call` 契约，与 WorkBuddy spec `docs/octop-harness-failover-middleware-spec.md`(319行) 逐项一致→非臆造。**option2 可纳入但实现是 Python middleware（与 Node L2 跨语言），待老板发话再实施**；provider 前置(option1延伸)零代码已可用。option3(`_execute` 桩+无 MCP)仍最重放最后。
