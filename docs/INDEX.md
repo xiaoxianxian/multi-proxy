@@ -88,6 +88,8 @@ bash manage.sh stop
 | `l2/README.md` | `l2/` | L2 编排中枢入口 |
 | `l2/adapter-protocol.md` | `l2/` | 开放接入协议（agent 可热插拔）|
 | `l2/CASES.md` | `l2/` | 3 个核心案例 + 复现命令 |
+| `l2/COMPLEXITY-MODE.md` | `l2/` | complexity→模型档位路由设计草案（2026-09-18，待老板定 4 决策点；WorkBuddy option1） |
+| `l2/EXTERNAL-OPTIONS-REGISTER.md` | `l2/` | 外部评估 option2/3 依赖登记（failover middleware / L2→MCP，含依赖链 + 阻塞项） |
 | `l2/PERF-REPORT.md` | `l2/` | L2 性能报告 |
 | `ITERATION-ROADMAP.md` | 根目录 | 长期路线图 + DSH 接入规划 |
 | `docs/09-review/archive/PLUGGABLE-ARCH-ASSESSMENT-2026-08-25.md` | 根目录→archive | 可插拔架构评估（已归档）|
@@ -184,4 +186,5 @@ bash manage.sh stop
 | 2026-09-18 | item3 Block 2 完成：将 cursor-proxy 3 个监控模块（CircuitBreaker/RateLimiter/HealthMonitor）提取为 l2 公共 JS（circuit-breaker.js/rate-limiter.js/health-monitor.js），各附 demo，codex-proxy 接入并补测试 2 项（53→55）。L2 demo 13→16（新增 3 监控模块），总 checks ~1084→~1088 | Hermes |
 | 2026-09-17 | 据 DeepSeek 第四轮（收口/索引校准）：P2 补建 `docs/_evidence/`（证据存档 + README）；INDEX 修位置列瑕疵（`03-adr/`/`04-business/` 位置列填对）+ 加 `_templates/`/`_evidence/` 收录 + 概数 25→33/docs、HEAD a94de96→640e12b + 加「验收入口」小节；核实 DeepSeek 报的「codebase-map/04-business 未收录」为误判（已列）、AGENTS.md 已落地根目录（4836B「已批准」）、feature-matrix 数字已对齐 882/882（14/14 为模块级 demo check）| Hermes |
 | 2026-09-18 | 据 DeepSeek 第五轮（两段）：核实 3 ADR 全在（P0 引用断裂=误判）+ 据 DSH 建议新建 `docs/02-product/bundle-design.md`（cordis.patch.yml/dsh.bundle 前置设计,等 DSH 0.2）+ dsh-integration.md 接引用 + INDEX 登记 | Hermes |
+| 2026-09-18 | 据 WorkBuddy 评估：核实 6 条断言（_execute 桩✅/complexity 未接✅/韧性下沉✅/alert 接线✅/bundle 已存在❌纠偏）+ 商业化待补 4 项（U1/2.3/1.5/5.3）标记贾维斯初步判断 + questions/decided 归档并存清理 + 新建 `l2/COMPLEXITY-MODE.md`（option1 设计草案）+ `l2/EXTERNAL-OPTIONS-REGISTER.md`（option2/3 依赖登记，能全做无互斥，option3 依赖 option1+真实执行+MCP 协议） | 贾维斯 |
 

@@ -343,6 +343,12 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 #### 13.15b Block 1 ✅ Apple HIG GUI（commit `6844ec8`）
 - `dashboard.html` 1724→2113 行，新增 page-health/alerts/registry + Apple HIG 风格（`hig-stat-grid`/`hig-card`/`hig-nav-item`）
 
+#### 13.15d 外部评估（WorkBuddy/DeepSeek）核实 + complexity 设计草案（本轮）
+- 核实 WorkBuddy 6 条断言（对真实代码）：_execute 桩✅ / complexity 未接✅ / 韧性三件套下沉 L2✅ / alert 三路接线默认 off✅ / hermes-proxy·skill-memory 无 HTTP✅ / **bundle-design 已存在❌（纠偏：63 行已进 git 5b58df9，上轮误报"不存在"因只查 l2/ + grep 排除）**。
+- 商业化待补 4 项（U1 市场/付费意愿·U2.3 付费意愿·U1.5 市场大小·U5.3 最大风险）在 `commercialization-decided.md §四` 附贾维斯初步判断（待老板信号定稿，非结论）；`questions.md` 标「已归档，以 decided 为准」清理并存。
+- 新建 `l2/COMPLEXITY-MODE.md`（option1 设计草案：agent-registry +modelTier(small/med/large,映射现有 provider 成本梯度) + route-engine +_mapTier(low→small/med→med/high→large) + complexity 消费；热路径零改动；待老板定 4 决策点）；`l2/EXTERNAL-OPTIONS-REGISTER.md`（option2 failover middleware 阻塞=Octop harness-agent 接口未定·option3 L2→MCP 阻塞=_execute 接真实+MCP 协议；三 option 能全做无互斥，执行序 option1→2→3）。
+- `_execute()` 仍桩（route-engine.js:140 return queued）——WorkBuddy 判断准确，本批未改。
+
 #### 13.15c item2 删仓 ✅ 完成（本轮关键突破）
 - **根因（实测）**：`github.com/login/device/code` 直连 `20.205.243.166:443` **被墙 i/o timeout**；走本地代理 `127.0.0.1:7897` 秒通（`curl -x` 实测 1s 200/404）。`gh auth refresh` 默认直连 → 静默失败 → scope 永不落 keyring。
 - **解法（真有效）**：`export http_proxy/https_proxy/all_proxy=http://127.0.0.1:7897` + `gh auth refresh -h github.com -s delete_repo -c`，**background=true + pty=true 不杀进程**让 code 存活轮询；新 code `6384-2449` 生成（旧 `8B5D-50D7` 是被杀进程残留，故无效）→ 老板浏览器 `github.com/login/device` 输码授权 → `gh auth status` 实测 scope 出现 `delete_repo` → 真删。
