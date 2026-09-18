@@ -331,42 +331,27 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 **教训（本轮·1 条）**：kimi 价查证前未跑 tsc 确认 cursor 测试不破（119），且 kimi 可能 disabled 在 DB，校准是空改——定价决策需老板拍 + DB 真名对齐后再做。
 
-### 13.15 2026-09-18 第五轮 checkpoint（Block 2 + Block 1 落地 · HEAD `6844ec8` ahead 5）
+### 13.15 2026-09-18 第五轮 checkpoint（三件事全清 · item2 删仓完成 · HEAD `0ad43c2` ahead 7）
 
-**承接 §13.14，本轮完成 2 件**：
+**本轮三事全清**：
 
-#### 13.15a Block 2 ✅ 模型类型路由差异化落地
+#### 13.15a Block 2 ✅ 模型类型路由差异化（commit `6844ec8`）
+- `l2/agent-registry.js`：+`MODEL_TYPES`（`text`/`multimodal`/`audio`）、+`modelType` 字段校验（默认 `text`）、+`byModelType()` 查询
+- `l2/route-engine.js`：+`_inferModelType()` 启发式（vision/image/video/text2video→multimodal；audio/tts→audio；其余→text），`route()` 双维过滤（capabilityTags + modelTypeMatch 权重）
+- `l2/CAPABILITY-MODE.md` 设计文档（170 行）；demo 21 checks 绿；jest 10/10
 
-- `l2/agent-registry.js` + `MODEL_TYPES` Set（`text/multimodal/audio`）、+ `modelType` 字段可选校验（默认 `text`）、+ `byModelType()` 查询方法
-- `l2/route-engine.js` + `_inferModelType()` 启发式（vision/image/video/text2video→multimodal；audio/tts→audio；其余→text），`route()` 支持 modelType 双维过滤（capabilityTags + modelTypeMatch 排序权重）
-- `l2/CAPABILITY-MODE.md` 设计文档（170 行）
-- `l2/agent-registry.demo.js` + modelType 测试用例，21 checks 全绿
-- `l2/route-engine.demo.js` 运行正常
-- `multi-proxy-manager/tests/unit/route-engine.test.js` 修复 `decision.chosen` 断言（兼容新增 `modelTypeMatch` 字段）+ candidates 排序断言，10/10 通过
-- commit `6844ec8`（与 Block 1 合并）
+#### 13.15b Block 1 ✅ Apple HIG GUI（commit `6844ec8`）
+- `dashboard.html` 1724→2113 行，新增 page-health/alerts/registry + Apple HIG 风格（`hig-stat-grid`/`hig-card`/`hig-nav-item`）
 
-**数字更新**：jest **837**（+3）/ l2 demo **21**（+5 checks）/ pytest **63** / 总 ~**1092**
+#### 13.15c item2 删仓 ✅ 完成（本轮关键突破）
+- **根因（实测）**：`github.com/login/device/code` 直连 `20.205.243.166:443` **被墙 i/o timeout**；走本地代理 `127.0.0.1:7897` 秒通（`curl -x` 实测 1s 200/404）。`gh auth refresh` 默认直连 → 静默失败 → scope 永不落 keyring。
+- **解法（真有效）**：`export http_proxy/https_proxy/all_proxy=http://127.0.0.1:7897` + `gh auth refresh -h github.com -s delete_repo -c`，**background=true + pty=true 不杀进程**让 code 存活轮询；新 code `6384-2449` 生成（旧 `8B5D-50D7` 是被杀进程残留，故无效）→ 老板浏览器 `github.com/login/device` 输码授权 → `gh auth status` 实测 scope 出现 `delete_repo` → 真删。
+- **删完双验证**：`gh repo delete xiaoxianxian/multi-proxy-manager --yes`（exit 0）+ `gh repo delete xiaoxianxian/homebrew-claude-zh --yes`（exit 0）；`gh repo view` 两仓均 `Could not resolve to a Repository`（已消失）；`multi-proxy`（活跃主仓）保留 untouched。
+- **本轮关键教训**：① 反复 `pkill`/超时杀掉的恰恰是「正在等你浏览器授权」的那一个进程，导致 scope 永不落地——**设备码流必须保留进程存活，且先修网络（代理）再跑**；② `gh auth refresh -c` 在 headless 下 code 不进剪贴板/不进文件（TTY 专属输出），须 `background+pty` 进程靠剪贴板+`curl -x 7897` 验代理连通；③ `--web` 标志 v2.92.0 不存在。
 
-#### 13.15b Block 1 ✅ Apple HIG 风格 GUI 重构
+**数字（全真跑）**：jest **837** / l2 demo **21** / pytest **63** / 总 **~1092**。**三事全清，无阻塞项**。
 
-- `multi-proxy-manager/public/dashboard.html` 1724→2113 行，子代理完成（Apple HIG 风格）
-- 新增 page-health / page-alerts / page-registry 三个页面（JS 加载函数 `loadHealthPage()`/`loadAlertsPage()`/`loadRegistryPage()`）
-- CSS 类：`hig-stat-grid`、`hig-card`、`hig-nav-item` 等 Apple HIG 风格
-- 导航栏完整，支持页面切换
-
-**注意**：子代理报告 API 限流（429），但文件已落盘，验证通过
-
-#### 13.15c item2 删仓 ⏸️ 仍阻塞
-
-- `gh auth status` scope 仍无 `delete_repo`（'gist','read:org','repo','workflow'）
-- 需老板 TTY 跑 `gh auth refresh -h github.com -s delete_repo --web` 后告知
-
-**教训**：
-1. agent-registry 加新字段后 demo count 断言需同步更新（5→2→4→2 多次修正）
-2. route-engine 返回结构变化（新增 modelTypeMatch 字段）需更新 jest 断言
-3. 子代理 API 限流不代表失败——验证文件是否落盘（grep/ls）
-
-**当前 HEAD `6844ec8`，ahead origin/main 5 commit 未 push。working tree 干净。**
+**当前 HEAD `0ad43c2`，ahead origin 7 commit 未 push（等老板授权）。**
 
 ---
 
