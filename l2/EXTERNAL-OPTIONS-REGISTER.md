@@ -6,8 +6,8 @@
 > 结论先讲：**三 option 能全要，无互斥；option3 依赖 option1 + 新协议，依赖解决后再做。**
 > **诚实标注 + 核实（2026-09-18 贾维斯据老板转的 WorkBuddy 内容核实）**：
 > - `orcakit-harness-agent` 在 **PyPI 实测存在**（v1.0.11，MIT，summary「Production-grade Harness Agent built on top of LangChain Deep Agents」）。
-> - 但它指向的 **GitHub 仓库 `TencentCloud/harness-agent` 实测 404**（经代理核实）——包在、仓库不可获取 → WorkBuddy "拉 harness-agent 源码对照" 这条承诺仍无源可对照。
-> - 即：option2「抽 middleware 贡献 harness-agent 内核」的阻塞项从「接口形态未知」精化为「**仓库 404 不可得**，需老板确认真实路径或获取渠道」。
+> - 但它指向的 **GitHub 仓库 `TencentCloud/harness-agent` 实测 404**（经代理核实）——但 **源码不在 GitHub，在 PyPI wheel 里**。
+> - **option2 阻塞已解（2026-09-19 贾维斯独立复现验证）**：`orcakit-harness-agent` wheel（`1.0.11-py3-none-any.whl`，1.45MB，sha256 `9cc849…`）真可下载，解压出 **447 成员 / 212 个 `harness_agent/*.py`**，spec 引用的 `middleware/model_router.py:19-23`（`from langchain.agents.middleware import AgentMiddleware/ModelRequest/ModelResponse`）实测与 WorkBuddy 所写**完全一致**，可复现、非臆造。
 > - **但 provider 前置（option1 延伸）零代码、今天就能用**——WorkBuddy 也确认。
 
 ---
@@ -27,11 +27,14 @@ option1  complexity 路由          （设计草案，本批做）
 
 ---
 
-## Option 1 · complexity → 模型档位路由
+## Option 1 · complexity → 模型档位路由 ✅ 已实施完成（2026-09-19）
 
-- **状态**：设计草案见 `l2/COMPLEXITY-MODE.md`（待老板定 4 个决策点）。
+- **状态**：**已实施完成**。设计见 `l2/COMPLEXITY-MODE.md`（4 决策点老板已定稿：tier 抽象命名 / high 不降级 / 静态先行动态二期 / 独立文件）。
+  - 代码落地：`agent-registry.js` 加 `modelTier`（small/medium/large 可选校验 + `byTier`）+ `route-engine.js` 加 `_mapTier`（low→small / high→large / 默认 medium）+ `tierMatch` 排序维度。
+    修复 1 bug：`expectedTier` 漏写 decision 顶层（只进了 candidate）。
+  - E2E 全绿：route-engine.test.js **14/14**（旧 10 + 新 4 complexity）+ agent-registry/demo 全绿 + l2 全 13 demo PASS。
 - **依赖**：无前置（复用 `decomposer.js` 已产 complexity + Block 2 的 modelType 模式）。
-- **本批处理**：已出设计草案，等老板讨论。
+- **本批处理**：✅ 已实施完成。动态 LLM 复判（二期，更准）留路线，暂未做（用户明确"暂只做静态"）。
 
 ---
 
@@ -44,9 +47,9 @@ option1  complexity 路由          （设计草案，本批做）
     | 依赖 | 状态 | 处置 |
     |------|------|------|
     | resilience 三件套是否「纯 JS、可独立抽」 | ✅ 已验：仅 `node 内置 + circuit-breaker 互依赖`（`health-monitor` 依赖 `circuit-breaker`，其余零外部依赖） | 无阻塞 |
-    | `harness-agent` 形态（Octop 的 middleware 接口） | ❓ **仓库 404 不可得（2026-09-18 经代理核实）**：`orcakit-harness-agent` PyPI 存在（v1.0.11），但 `TencentCloud/harness-agent` 实测 404，源码不可拉 | **阻塞项**：老板确认真实仓库/获取渠道再写内核 middleware；**provider 前置（option1）已可直接用** |
+    | `harness-agent` 形态（Octop 的 middleware 接口） | ✅ **已解（2026-09-19 贾维斯独立复现）**：接口真相在 **PyPI wheel** 不在 GitHub 仓库（`TencentCloud/harness-agent` 404，但 wheel 含全量源码）。WorkBuddy 已据 wheel 实测出 spec `docs/octop-harness-failover-middleware-spec.md`（`model_router.py:19-23` 接口我对照 wheel 原文逐项核实一致，可复现非臆造） | **可纳入**：按 spec 写 middleware（无需碰 harness 内核，只需继承 `AgentMiddleware`、在 `handler` 外包 failover）；DSH 发布仍暂缓 |
     | DSH 0.2（若抽成 Cordis 插件发布） | ⏸ 暂缓（`bundle-design.md §5`） | 不阻塞草案，阻塞发布 |
-- **本批处理**：登记依赖，**不写草案**（仓库 404 不可得，写了=投机）。老板确认真实获取渠道后写内核 middleware；**provider 前置（option1，零代码）已可直接使用**，无需等。
+- **本批处理**：✅ **WorkBuddy 已出实测 spec `docs/octop-harness-failover-middleware-spec.md`（319 行，含 wheel 复现命令 + `AgentMiddleware` 接口 + 官方 `ModelRouterMiddleware` 范例），贾维斯独立复现验证（wheel 下载 + 对照 `model_router.py:19-23` / `ChatModelFactory`(llm/factory.py) / `HarnessAgentConfig`(config/__init__.py, frozen dataclass) / `wrap_model_call` 契约，逐项与 wheel 原文一致）→ option2 阻塞已解、**可纳入**。但 option2 实现是 Python middleware（harness 是 Python 项目），与本批 complexity 路由（Node L2 内核）**跨语言**，建议老板发话后再按 spec 实施；**provider 前置（option1，零代码）已可直接使用**，无需等。
 
 ---
 
@@ -70,8 +73,8 @@ option1  complexity 路由          （设计草案，本批做）
 | 维度 | 结论 |
 |------|------|
 | 三 option 能否全做 | ✅ 能，无互斥 |
-| option1 | 设计草案已出，待老板定 4 决策点 |
-| option2 | 价值有；**阻塞**=Octop `harness-agent` 接口形态未定（待外部确认） |
+| option1 | ✅ **已实施完成**（jest 14/14 + demo 全绿；静态 complexity→tier，动态二期留路线） |
+| option2 | 价值有；**阻塞已解（2026-09-19 贾维斯独立复现 wheel）**=spec 已出 `docs/octop-harness-failover-middleware-spec.md`，可纳入但实现是 Python middleware（跨语言），建议老板发话再实施 |
 | option3 | 价值有（长期）；**阻塞**=`_execute` 接真实 + MCP 协议（最重，放最后） |
 | 是否阻塞交付 | ❌ 都不阻塞（项目已收口，jest 837 / demo 全绿） |
 | 建议执行序 | option1（本批） → option2（拿到 Octop 接口后） → option3（option1 落地后） |
