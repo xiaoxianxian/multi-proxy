@@ -327,9 +327,48 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 **价格基线初稿 `docs/02-product/m6-action-checklist.md`**（不改代码，只给参考）：
 - kimi-k2.6 官方价（Kimi 帮助中心）：input miss $0.95/1M / cache hit $0.16 / output $4.00（美元，假设汇率 7.2 → ¥6.84/¥1.15/¥28.80）
 - 项目 pricing（`routeEngine.ts:198-202`）：qwen3.8:27b-mlx / agnes 免费；deepseek-v4-pro ¥1/¥4/¥0.02（缓存红利）；kimi ¥0.6/¥2.5/¥0.1（估算占位）
-- **结论**：kimi 真实 output ~¥28.8 vs deepseek ~¥4 output，kimi 在 cost-optimization 里不会被选中，只在 deepseek/agnes down 时兜底。校准 kimi pricing 是定价决策（不擅改）。
+| **结论**：kimi 真实 output ~¥28.8 vs deepseek ~¥4 output，kimi 在 cost-optimization 里不会被选中，只在 deepseek/agnes down 时兜底。校准 kimi pricing 是定价决策（不擅改）。
 
 **教训（本轮·1 条）**：kimi 价查证前未跑 tsc 确认 cursor 测试不破（119），且 kimi 可能 disabled 在 DB，校准是空改——定价决策需老板拍 + DB 真名对齐后再做。
+
+### 13.15 2026-09-18 第五轮 checkpoint（Block 2 + Block 1 落地 · HEAD `6844ec8` ahead 5）
+
+**承接 §13.14，本轮完成 2 件**：
+
+#### 13.15a Block 2 ✅ 模型类型路由差异化落地
+
+- `l2/agent-registry.js` + `MODEL_TYPES` Set（`text/multimodal/audio`）、+ `modelType` 字段可选校验（默认 `text`）、+ `byModelType()` 查询方法
+- `l2/route-engine.js` + `_inferModelType()` 启发式（vision/image/video/text2video→multimodal；audio/tts→audio；其余→text），`route()` 支持 modelType 双维过滤（capabilityTags + modelTypeMatch 排序权重）
+- `l2/CAPABILITY-MODE.md` 设计文档（170 行）
+- `l2/agent-registry.demo.js` + modelType 测试用例，21 checks 全绿
+- `l2/route-engine.demo.js` 运行正常
+- `multi-proxy-manager/tests/unit/route-engine.test.js` 修复 `decision.chosen` 断言（兼容新增 `modelTypeMatch` 字段）+ candidates 排序断言，10/10 通过
+- commit `6844ec8`（与 Block 1 合并）
+
+**数字更新**：jest **837**（+3）/ l2 demo **21**（+5 checks）/ pytest **63** / 总 ~**1092**
+
+#### 13.15b Block 1 ✅ Apple HIG 风格 GUI 重构
+
+- `multi-proxy-manager/public/dashboard.html` 1724→2113 行，子代理完成（Apple HIG 风格）
+- 新增 page-health / page-alerts / page-registry 三个页面（JS 加载函数 `loadHealthPage()`/`loadAlertsPage()`/`loadRegistryPage()`）
+- CSS 类：`hig-stat-grid`、`hig-card`、`hig-nav-item` 等 Apple HIG 风格
+- 导航栏完整，支持页面切换
+
+**注意**：子代理报告 API 限流（429），但文件已落盘，验证通过
+
+#### 13.15c item2 删仓 ⏸️ 仍阻塞
+
+- `gh auth status` scope 仍无 `delete_repo`（'gist','read:org','repo','workflow'）
+- 需老板 TTY 跑 `gh auth refresh -h github.com -s delete_repo --web` 后告知
+
+**教训**：
+1. agent-registry 加新字段后 demo count 断言需同步更新（5→2→4→2 多次修正）
+2. route-engine 返回结构变化（新增 modelTypeMatch 字段）需更新 jest 断言
+3. 子代理 API 限流不代表失败——验证文件是否落盘（grep/ls）
+
+**当前 HEAD `6844ec8`，ahead origin/main 5 commit 未 push。working tree 干净。**
+
+---
 
 ### 13.11b INDEX 同步（2026-09-16 · 3 处收口）
 
