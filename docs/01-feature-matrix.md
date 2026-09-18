@@ -71,12 +71,12 @@
 |------|--------|--------|------|
 | multi-proxy-manager | 40 files | 644 tests | 40 suites |
 | cursor-proxy | 11 files | 131 tests | 11 suites |
-| codex-proxy | 3 files | 53 tests | 3 suites |
+| codex-proxy | 4 files | 55 tests | 4 suites |
 | hermes-proxy | 3 pytest files | 63 checks | 3 suites（基本够用，无 E2E）|
-| L2 demo | 13 .demo.js（10 内核 + 3 adapter） | ~182 checks 全 PASS | 各自独立运行 |
+| L2 demo | 13 .demo.js（10 内核 + 3 adapter + 3 公共监控模块） | ~193 checks 全 PASS | 各自独立运行 |
 | shell (bats) | 1 .bats | 11 tests | — |
 
-**总计：~1084 checks 全绿**（jest 828 + pytest 63 + bats 11 + l2 demo ~182）。
+**总计：~1088 checks 全绿**（jest 828 + pytest 63 + bats 11 + l2 demo ~193 + codex-integration 2）。
 
 ---
 

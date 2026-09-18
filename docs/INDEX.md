@@ -134,10 +134,10 @@ bash manage.sh stop
 | 层级 | 数量 | 状态 |
 |------|------|------|
 | 4 个代理模块 | 4/4 运行 | ✅ |
-| 4 个前端页面 | 4/4 上线 | ✅ |
+| 4 个前端页面 | 4/4 上线 + 3 新页面（health/alerts/registry） | ✅ |
 | L2 核心模块 | 10/10 实现 | ✅ |
 | L2 adapter | 3/3 实现 | ✅ |
-| 总测试（全模块） | 635 jest / 63 pytest / ~182 l2 checks / 11 bats | ✅ 全绿 |
+| 总测试（全模块） | 644 jest / 55 codex-jest / 63 pytest / ~193 l2 checks / 11 bats | ✅ 全绿 |
 | P5 GUI 桌面壳 | 已验收（截图确认窗口正常显示，2163ca9 push） | ✅ |
 | 文档缺口 | 无（INDEX / feature-matrix / AGENTS / 模板已补） | ✅ |
 | DSH 生态接入 | DS1 骨架已落（2 SKILL + 规划文档）；DS2/DS3 暂缓（#1496 guardrail 未修） | ✅ |
@@ -181,6 +181,7 @@ bash manage.sh stop
 | 2026-09-16 | 落 `docs/03-adr/`（3 ADR）+ `docs/06-test/test-cases.md`（6 模块测试方案，数字真跑） | Hermes |
 | 2026-09-16 | 补建 `AGENTS.md` / `docs/INDEX.md` / `docs/01-feature-matrix.md` / `docs/_templates/` | Hermes |
 | 2026-09-16 之前 | `L2-BLUEPRINT` P3 ✅ / `l2/CASES.md` / `l2/PERF-REPORT.md` / `l2/adapter-protocol.md` / `CLAUDE.md` | Hermes / WorkBuddy |
+| 2026-09-18 | item3 Block 2 完成：将 cursor-proxy 3 个监控模块（CircuitBreaker/RateLimiter/HealthMonitor）提取为 l2 公共 JS（circuit-breaker.js/rate-limiter.js/health-monitor.js），各附 demo，codex-proxy 接入并补测试 2 项（53→55）。L2 demo 13→16（新增 3 监控模块），总 checks ~1084→~1088 | Hermes |
 | 2026-09-17 | 据 DeepSeek 第四轮（收口/索引校准）：P2 补建 `docs/_evidence/`（证据存档 + README）；INDEX 修位置列瑕疵（`03-adr/`/`04-business/` 位置列填对）+ 加 `_templates/`/`_evidence/` 收录 + 概数 25→33/docs、HEAD a94de96→640e12b + 加「验收入口」小节；核实 DeepSeek 报的「codebase-map/04-business 未收录」为误判（已列）、AGENTS.md 已落地根目录（4836B「已批准」）、feature-matrix 数字已对齐 882/882（14/14 为模块级 demo check）| Hermes |
 | 2026-09-18 | 据 DeepSeek 第五轮（两段）：核实 3 ADR 全在（P0 引用断裂=误判）+ 据 DSH 建议新建 `docs/02-product/bundle-design.md`（cordis.patch.yml/dsh.bundle 前置设计,等 DSH 0.2）+ dsh-integration.md 接引用 + INDEX 登记 | Hermes |
 
