@@ -91,16 +91,16 @@ _mapTier(complexity) {
 
 ---
 
-## 四、待老板讨论的决策点（不擅定）
+## 四、决策点（已定稿 · 2026-09-18 老板确认）
 
-1. **tier 命名 small/medium/large 还是按 provider 名（agnes/deepseek/qwen）？**
-   - 我倾向 small/medium/large（抽象档位，provider 可换）但映射到 provider 成本梯度。
-2. **high complexity 一定走 large，还是允许降级到 medium 省钱？**
-   - 我倾向：high→large（不降级，质量优先）；low→small（省钱）。老板定。
-3. **complexity 由 decomposer 静态标签，还是 route 时动态评估（LLM judge 再判一次难度）？**
-   - 我倾向先用静态标签（decomposer 已产，零成本）；动态评估是二期。
-4. **是否同步更新 `CAPABILITY-MODE.md` 加 complexity 节，还是本文件独立？**
-   - 我倾向本文件独立（modelType 与 complexity 是两个轴，文档分开放更清晰）。
+| # | 决策 | 结论 |
+|---|------|------|
+| 1 | **tier 命名** | ✅ **small/medium/large（抽象档位）**——好换 provider，映射到现有成本梯度 |
+| 2 | **high complexity 是否降级** | ✅ **不降级，质量优先**：high→large，low→small |
+| 3 | **静态 vs 动态 complexity** | **分两期**：①本期=decomposer 静态标签（零成本，过渡）；②二期=route 时 LLM judge 动态复判难度（**更准**）。原则=质量优先，静态是过渡、动态是终态 |
+| 4 | **文档组织** | ✅ 本文件 `COMPLEXITY-MODE.md` 独立（modelType/complexity 两轴分开） |
+
+> **文件粒度通用约定（老板 2026-09-18）**：文档/文件拆分=不拆太碎、不塞成一坨在一个文件里；按「一个主题一份」判断。已记入项目 MEMORY。
 
 ---
 

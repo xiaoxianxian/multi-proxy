@@ -4,8 +4,11 @@
 > 背景：WorkBuddy 给 3 个 option，老板定：option1（complexity 路由）先做设计草案
 > （见 `l2/COMPLEXITY-MODE.md`）；option2 / option3 **评估依赖后留着**，可全都要。
 > 结论先讲：**三 option 能全要，无互斥；option3 依赖 option1 + 新协议，依赖解决后再做。**
-> **诚实标注**：Octop / harness-agent 是 WorkBuddy 引入的外部概念，项目内零记载，
-> 其形态未定 → 依赖项标「待外部确认」，不臆造形态。
+> **诚实标注 + 核实（2026-09-18 贾维斯据老板转的 WorkBuddy 内容核实）**：
+> - `orcakit-harness-agent` 在 **PyPI 实测存在**（v1.0.11，MIT，summary「Production-grade Harness Agent built on top of LangChain Deep Agents」）。
+> - 但它指向的 **GitHub 仓库 `TencentCloud/harness-agent` 实测 404**（经代理核实）——包在、仓库不可获取 → WorkBuddy "拉 harness-agent 源码对照" 这条承诺仍无源可对照。
+> - 即：option2「抽 middleware 贡献 harness-agent 内核」的阻塞项从「接口形态未知」精化为「**仓库 404 不可得**，需老板确认真实路径或获取渠道」。
+> - **但 provider 前置（option1 延伸）零代码、今天就能用**——WorkBuddy 也确认。
 
 ---
 
@@ -41,9 +44,9 @@ option1  complexity 路由          （设计草案，本批做）
     | 依赖 | 状态 | 处置 |
     |------|------|------|
     | resilience 三件套是否「纯 JS、可独立抽」 | ✅ 已验：仅 `node 内置 + circuit-breaker 互依赖`（`health-monitor` 依赖 `circuit-breaker`，其余零外部依赖） | 无阻塞 |
-    | `harness-agent` 形态（Octop 的 middleware 接口） | ❓ **待外部确认**：项目内零记载 `Octop`/`harness-agent`，接口形态未定 | **阻塞项**：拿到 Octop 接口规范再写 |
+    | `harness-agent` 形态（Octop 的 middleware 接口） | ❓ **仓库 404 不可得（2026-09-18 经代理核实）**：`orcakit-harness-agent` PyPI 存在（v1.0.11），但 `TencentCloud/harness-agent` 实测 404，源码不可拉 | **阻塞项**：老板确认真实仓库/获取渠道再写内核 middleware；**provider 前置（option1）已可直接用** |
     | DSH 0.2（若抽成 Cordis 插件发布） | ⏸ 暂缓（`bundle-design.md §5`） | 不阻塞草案，阻塞发布 |
-- **本批处理**：登记依赖，**不写草案**（接口形态未定，写了=投机）。待老板拿到 Octop `harness-agent` 接口后再做。
+- **本批处理**：登记依赖，**不写草案**（仓库 404 不可得，写了=投机）。老板确认真实获取渠道后写内核 middleware；**provider 前置（option1，零代码）已可直接使用**，无需等。
 
 ---
 

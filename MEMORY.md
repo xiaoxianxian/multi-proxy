@@ -349,6 +349,12 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 - 新建 `l2/COMPLEXITY-MODE.md`（option1 设计草案：agent-registry +modelTier(small/med/large,映射现有 provider 成本梯度) + route-engine +_mapTier(low→small/med→med/high→large) + complexity 消费；热路径零改动；待老板定 4 决策点）；`l2/EXTERNAL-OPTIONS-REGISTER.md`（option2 failover middleware 阻塞=Octop harness-agent 接口未定·option3 L2→MCP 阻塞=_execute 接真实+MCP 协议；三 option 能全做无互斥，执行序 option1→2→3）。
 - `_execute()` 仍桩（route-engine.js:140 return queued）——WorkBuddy 判断准确，本批未改。
 
+#### 13.15e 老板定稿 complexity 4 决策点 + 据 WorkBuddy 内容核实 Octop 仓库（本轮）
+- **complexity 路由 4 决策点老板全定稿**（写进 `l2/COMPLEXITY-MODE.md §四`）：① tier 用 small/med/large 抽象命名（好换）② high 不降级、质量优先 ③ **静态先行（decomposer 标签，零成本过渡）+ 二期 LLM judge 动态复判（更准）**，质量优先原则贯穿 ④ 文档 COMPLEXITY-MODE 独立（modelType/complexity 两轴分开）。
+- **文件粒度通用约定**（老板 09-18）：不拆太碎、不塞一坨在一个文件，按「一主题一份」——已为项目惯例，后续 agent 照此组织文档。
+- **据老板转的 WorkBuddy 内容核实 Octop/harness-agent**（实测，非转述）：`orcakit-harness-agent` **PyPI 实测存在**（v1.0.11，MIT，基于 LangChain Deep Agents）；但其指向的 **GitHub `TencentCloud/harness-agent` 实测 404**（经代理 `127.0.0.1:7897` 核实）——包在、仓库不可得。故 option2「内核 failover middleware」阻塞精化为「仓库 404，需老板确认真实获取渠道」；**但 provider 前置（option1 延伸）零代码今天就能用**。诚实标注进 `EXTERNAL-OPTIONS-REGISTER.md`，未臆造接口形态。
+- **本轮无代码改动**（纯设计文档定稿 + 核实），jest 837 / demo 全绿基线不变。
+
 #### 13.15c item2 删仓 ✅ 完成（本轮关键突破）
 - **根因（实测）**：`github.com/login/device/code` 直连 `20.205.243.166:443` **被墙 i/o timeout**；走本地代理 `127.0.0.1:7897` 秒通（`curl -x` 实测 1s 200/404）。`gh auth refresh` 默认直连 → 静默失败 → scope 永不落 keyring。
 - **解法（真有效）**：`export http_proxy/https_proxy/all_proxy=http://127.0.0.1:7897` + `gh auth refresh -h github.com -s delete_repo -c`，**background=true + pty=true 不杀进程**让 code 存活轮询；新 code `6384-2449` 生成（旧 `8B5D-50D7` 是被杀进程残留，故无效）→ 老板浏览器 `github.com/login/device` 输码授权 → `gh auth status` 实测 scope 出现 `delete_repo` → 真删。
