@@ -44,6 +44,23 @@ ok("byCapability('code')==2", r.byCapability('code').length === 2);
 ok("byCapability('vision')==2（cursor-vision + hermes-multimodal）", r.byCapability('vision').length === 2);
 ok("byCapability('audio')==0", r.byCapability('audio').length === 0);
 
+// 6. modelTier 字段（complexity 路由档位，可选校验 + byTier 查询，见 COMPLEXITY-MODE.md）
+r.create({
+    id: 'agnes-small', name: 'Agnes small', type: 'custom',
+    capabilityTags: ['text', 'image'], modelTier: 'small', version: '1.0.0',
+});
+r.create({
+    id: 'deepseek-medium', name: 'DeepSeek medium', type: 'custom',
+    capabilityTags: ['code', 'review'], modelTier: 'medium', version: '1.0.0',
+});
+ok('modelTier 可选字段写入', r.get('agnes-small').modelTier === 'small');
+ok("byTier('small')==1", r.byTier('small').length === 1);
+ok("byTier('medium')==1", r.byTier('medium').length === 1);
+ok("byTier('large')==0", r.byTier('large').length === 0);
+// 向后兼容：旧 profile 无 modelTier → 不参与 byTier，但仍正常路由
+ok("byTier('text')==0（无显式 tier，向后兼容）", r.byTier('text').length === 0);
+ok("byTier('medium') 不含旧 profile codex-worker", !r.byTier('medium').some((p) => p.id === 'codex-worker'));
+
 // 3. update（不可改 id）
 const up = r.update('codex-worker', { maxRounds: 20 });
 ok('update maxRounds 10->20', r.get('codex-worker').maxRounds === 20 && up.createdAt === p.createdAt);
@@ -73,7 +90,8 @@ ok('get not-found throws', threw);
 
 // 6. remove + 能力查询反映删除
 r.remove('cursor-vision');
-ok('count==2 after remove', r.count() === 2);
+// 共 create 5 个（codex-worker/cursor-vision/hermes-multimodal/agnes-small/deepseek-medium），删 1 个剩 4
+ok('count==4 after remove', r.count() === 4);
 ok("byCapability('audio')==0 after remove", r.byCapability('audio').length === 0);
 
 // 7. modelType 非法值拒绝
