@@ -41,6 +41,19 @@ MANAGER_PORT=18792
 # 服务名（用于 launchd）
 LAUNCHD_NAME="com.multi-proxy-manager"
 
+# LaunchAgents 目录：默认 $HOME/Library/LaunchAgents，允许测试注入临时目录（非全局 env 注入，仅脚本内 local 覆盖）
+LAUNCHD_DIR="${LAUNCHD_DIR:-$HOME/Library/LaunchAgents}"
+
+# --uninstall --dry-run：只预览将卸载的 plist，不真删/不真 unload（测试与安全检查用）
+LAUNCHD_DRY_RUN="${LAUNCHD_DRY_RUN:-}"
+
+# 卸载孤儿 plist 白名单（R2 修复，2026-09-19）：
+#   旧项目 codex-multi-model-proxy-deploy 遗留 per-agent plist（com.codex.* / com.xiaoxian.*），
+#   当前 install.sh 只认 com.multi-proxy-manager，卸载时不清它们 → 历史残留自启旧代理。
+#   修复：按 label 子串判定——含 "multi-proxy" 的属本项目家族，可安全清理；
+#   "com.apple." 前缀绝不删（系统）；其余跨家族残留默认只检测报告，--purge 才真删。
+#   注：cc-switch(com.cc-switch.*)、dsh 等第三方 label 不含 multi-proxy，天然不误伤。
+
 # ===================== 工具函数 =====================
 
 is_port_in_use() {
@@ -221,13 +234,72 @@ uninstall_manager() {
   print_info "Multi-Proxy Manager 文件保留（如需完全删除请手动 rm -rf $dir）"
 }
 
+# 提取 plist 的 Label（python3 plistlib，macOS 标配；plutil -extract 在 macOS27 不可靠故回退）
+plist_label() {
+  /usr/bin/python3 - "$1" <<'PY' 2>/dev/null
+import sys, plistlib
+try:
+    d = plistlib.load(open(sys.argv[1], 'rb'))
+    print(d.get('Label', ''))
+except Exception:
+    sys.exit(1)
+PY
+}
+
+# 判定 label 是否属本项目家族（可安全自动清理）：含 "multi-proxy" 且非 com.apple.*
+label_is_orphan() {
+  local label="$1"
+  case "$label" in
+    com.apple.*) return 1 ;;            # 系统 launchd，绝不删
+    *multi-proxy*) return 0 ;;          # 本项目家族（含历史 per-agent 残留）
+    *) return 1 ;;                      # 跨家族：默认不自动删（需 --purge）
+  esac
+}
+
+# 判定 label 是否疑似相关残留（跨家族但含代理关键词，需人工 --purge）：检测但不自动删
+label_is_suspect() {
+  local label="$1"
+  case "$label" in
+    com.apple.*) return 1 ;;
+    *multi-proxy*) return 1 ;;          # 家族内已在 orphan 处理，不算 suspect
+    *codex*|*hermes*|*cursor*|*xiaoxian*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 uninstall_launchd() {
-  local plist="$HOME/Library/LaunchAgents/$LAUNCHD_NAME.plist"
-  if [ -f "$plist" ]; then
-    launchctl unload "$plist" 2>/dev/null || true
-    rm -f "$plist"
-    print_ok "开机自启已移除"
+  # 默认只清家族内 multi-proxy 残留 + 检测跨家族；不自动删跨家族（需人工确认）
+  print_step "卸载 launchd 开机自启..."
+  local dir="$LAUNCHD_DIR"
+  [ -d "$dir" ] || { print_info "LaunchAgents 目录不存在，跳过"; return 0; }
+
+  local cleared=0 detected=0 skipped=0
+  local label plist
+  for plist in "$dir"/*.plist; do
+     [ -f "$plist" ] || continue
+     # || label=""：set -e 下 plist_label 遇坏 plist 返回非零，必须兜底为空（跳过），否则中断整个卸载
+    label="$(plist_label "$plist")" || label=""
+    if [ -z "$label" ]; then print_warn "无法解析 $plist 的 Label，跳过"; skipped=$((skipped+1)); continue; fi
+
+    if label_is_orphan "$label"; then
+      if [ -n "$LAUNCHD_DRY_RUN" ]; then
+        echo "   [dry-run] 将卸载: $label"
+      else
+        launchctl unload "$plist" 2>/dev/null || true
+        rm -f "$plist"
+      fi
+      print_ok "已清理 $label（或 dry-run 预览）"
+      cleared=$((cleared+1))
+    elif label_is_suspect "$label"; then
+      print_warn "检测到疑似相关残留 plist: $label（跨家族，未自动删除；请人工确认后处理）"
+      detected=$((detected+1))
+    fi
+  done
+
+  if [ "$cleared" -eq 0 ] && [ "$detected" -eq 0 ]; then
+    print_info "未发现本机 launchd 开机自启 plist"
   fi
+  print_info "清理 $cleared 个 / 检测 $detected 个疑似 / 跳过 $skipped 个"
 }
 
 # ===================== 启动/停止 =====================
@@ -599,6 +671,12 @@ main() {
       print_bold "============================================"
       echo ""
 
+      # 第二参数 --dry-run：只预览将卸载的 plist，不真删（测试/安全检查）
+      if [ "$2" = "--dry-run" ]; then
+        LAUNCHD_DRY_RUN=1
+        print_warn "DRY-RUN 模式：仅预览，不删除任何 plist"
+      fi
+
       # 先停止服务
       print_step "停止所有服务..."
       $0 --stop 2>/dev/null || true
@@ -617,7 +695,7 @@ main() {
       echo ""
       print_info "所有代理文件保留在目录中，如需完全删除请手动删除整个项目目录。"
       echo ""
-      ;;
+       ;;
     --reinstall)
       print_step "正在卸载..."
       $0 --uninstall
@@ -644,4 +722,7 @@ main() {
   esac
 }
 
-main "$@"
+# 执行守卫：仅在直接执行时跑 main；被测试 source 时只定义函数，不执行
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

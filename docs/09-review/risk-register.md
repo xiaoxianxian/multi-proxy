@@ -3,7 +3,7 @@ title: "风险登记册（risk-register）"
 status: current
 doc_type: risk-register
 confidence: high
-last_updated: 2026-09-17
+last_updated: 2026-09-19
 related_docs:
     - docs/09-review/consistency-report.md
     - docs/09-review/unknowns.md
@@ -24,7 +24,7 @@ related_docs:
 | # | 风险 | 等级 | 状态 | 依据 / 处置 |
 |---|------|------|------|------------|
 | R1 | 裸 `*` 污染全局 NO_PROXY（旧 `codex-multi-model-proxy-deploy` 的 `install.sh`） | P0（历史） | **已规避** | 当前 `proxy-rebuild` 源码无此写法；autostart plist 仅设 `PATH`；修复 `*`→`::1`。见 ADR-0002 / `07-ops/ENV-NOTES.md` |
-| R2 | `install.sh --uninstall` 卸载不完整（只删 manager plist，遗留 `com.codex.*`/`com.xiaoxian.*` LaunchAgents） | P1（当前） | 待修 | 卸载时扫描移除已知 plist 集合，或统一单一命名 |
+| R2 | `install.sh --uninstall` 卸载不完整（只删 manager plist，遗留 `com.codex.*`/`com.xiaoxian.*` LaunchAgents） | P1（当前） | **已修（2026-09-19）** | `install.sh` 新增 `plist_label`/`label_is_orphan`/`label_is_suspect`/`uninstall_launchd` 四函数：按 label 白名单清家族内 plist（含 `multi-proxy` 的自动清，覆盖历史 per-agent 残留）；`com.apple.*` 绝不删；跨家族（含 `codex/hermes/cursor/xiaoxian`）仅检测不自动删；坏 plist 跳过。新增 `--uninstall --dry-run` 预览 + `LAUNCHD_DIR` 注入（便于测试隔离）。回归 `tests/shell/check-uninstall.sh` 25/25 PASS（含家族清/系统留/跨家族检测/坏plist跳/dry-run/空目录/label 判定七类断言）。`set -e` 兜底（L281 `\|\| label=`""`，遇坏 plist 不中断卸载）
 | R3 | 缺「单一所有者」保护（proxy-rebuild 与 cc-switch 可同时把同 agent base_url 指向自己） | P2（设计） | **已缓解** | 已用 `tools/agent-proxy-switch` 提供安全切换；产品级互斥未做（P5 桌面壳方向） |
 
 ---
@@ -74,7 +74,7 @@ related_docs:
 
 | 维度 | 结论 |
 |------|------|
-| 当前 P0 风险 | 仅 R2（卸载不完整），非阻塞交付 |
+| 当前 P0 风险 | 无（R1 已规避 / R2 已修 / R3 已缓解）|
 | P1/P2 | R3 已缓解；测试盲区 P2 不阻塞 |
 | 占位/幽灵 | T1-T4 / G1-G2 全非缺陷，诚实挂账 |
 | **收口** | **无未决 P0/P1 阻塞交付**；所有风险已分级登记 |
