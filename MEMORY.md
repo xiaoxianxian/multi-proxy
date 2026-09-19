@@ -439,8 +439,22 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 - **registry.test.js `../server` 失败 = pre-existing**：`git stash` 掉本批改动脉后仍 FAIL（require supertest/jwt/server），与本批 complexity 改动零交集，不背锅、不在范围，未动。
 - **option2 阻塞已解✅ 纳入 `c5562ef`**：`TencentCloud/harness-agent` GitHub 404，但**源码真相在 PyPI wheel**——`orcakit-harness-agent` 1.0.11-py3-none-any.whl（1.45MB/sha256 `9cc849…`/212 个 harness_agent/*.py）真可下载。贾维斯独立复现对照 `model_router.py:19-23`(AgentMiddleware/ModelRequest/ModelResponse) + `ChatModelFactory`(llm/factory.py) + `HarnessAgentConfig`(config/__init__.py frozen dataclass) + `wrap_model_call` 契约，与 WorkBuddy spec `docs/octop-harness-failover-middleware-spec.md`(319行) 逐项一致→非臆造。**option2 可纳入但实现是 Python middleware（与 Node L2 跨语言），待老板发话再实施**；provider 前置(option1延伸)零代码已可用。option3(`_execute` 桩+无 MCP)仍最重放最后。
 
-### §13.17 option2/option3 实施断点（会话 09-19 checkpoint，新窗口从这里接）
-- **option2 实施清单（Python middleware，spec 已在盘 `docs/octop-harness-failover-middleware-spec.md` 319行/commit c5562ef）**：
+### §13.17 option2 ✅ 完成 + option3 实施断点（会话 09-19 checkpoint）
+- **option2 ✅ 完成（commit `fbfbbce`，ahead 1 未 push，.gitignore 卫生 commit `6e0b54b`）**：
+    落 `l2/python-middleware/`，`ResilientModelMiddleware.py`(239行) + `test_*.py`(300行, **17/17 全绿**)。
+    关键修正（spec 草案有 bug，据真 wheel+真 langchain + 测试纠错）：
+    ① `super().__init__()` + `self._backups` 必填参数；② **attempts 算法**：spec §2 参考实现
+    `if i>0: get_chat_model(ref)` + `candidates=[primary?]+backups` 在 `primary_ref=None` 时 backup
+    占 i=0 slot 永不被 fetch → failover 静默 no-op。正解：**attempt-0 恒用 `request.model`(不取)，
+    k≥1 fetch `backups[k-1]`，总尝试 `min(num_backups+1, max_failover+1)`**。③ 异常判定：
+    `_is_retryable` 看 429/5xx/timeout/quota/connection 等 keyword 或 `exc.response.status_code`，
+    非 retryable(400/401) 直接上抛不切换。④ `get_chat_model` 抛(ValueError=disabled/unknown)→跳过该 backup。
+    sync/async 双入口。中间件零 harness 运行时依赖(仅 TYPE_CHECKING 注解 AgentMiddleware)。
+    测试: fake factory(returns 实例缓存语义) + 真 langchain 数据类(17 case: sync/async/skip-disabled/
+    max-limit/primary_ref-语义)。E2E 实测: `/tmp/harness_repro/lcvenv` python3.12 + langchain>=1.5,
+    `pip install` 经代理 7897, pytest **17 passed in 0.13s**。
+    **未 push — 等老板确认。** `.gitignore` 已补 `__pycache__`/`*.pyc`/`.pytest_cache`。
+- **option2 实施清单（已完成，留作历史）**：
    1. **复现 wheel**：⚠️坑——`pip download orcakit-harness-agent --no-deps -d ./harness_pkg` 在我环境**失败**(`No matching distribution found`，疑 pip 源/代理)，但 **urllib 走 http_proxy=127.0.0.1:7897 下 wheel 成功**（`1.0.11-py3-none-any.whl` 1.45MB）。新窗口 fallback 用 urllib 下载或 spec §0 的 `python -m zipfile -e *.whl ./ext` 法。已验 447 成员/212 py。
    2. **写 `ResilientModelMiddleware(AgentMiddleware[Any,Any])`**（spec §1.1/§1.3，据官方 `ModelRouterMiddleware` 范例 model_router.py:35-92）：`__init__(self, config, factory, *, get_protocol=None)`；`wrap_model_call(request, handler)` 在 `handler(request)` 外包 try/except，抛 retryable 异常 → 把 `request.model` 换备用模型(从 `ChatModelFactory` 取)→ 再调 `handler(request)`；**同步 + 异步**(`awrap_model_call`)都要实现。无需碰 harness 内核(只换 `request.model` 对象)。
    3. 已验接口：`AgentMiddleware`/`ModelRequest`/`ModelResponse`(import 自 langchain.agents.middleware) / `ChatModelFactory`(llm/factory.py, openai/anthropic/bedrock 协议映射) / `HarnessAgentConfig`(config/__init__.py frozen dataclass) / `wrap_model_call`×2。
