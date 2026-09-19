@@ -12,3 +12,8 @@ providers.json
 
 # Hermes agent 运行时产物（plans / 临时状态），非项目源码
 .hermes/
+
+# Python / pytest 产物（option2 l2/python-middleware 实测；防 git add . 夹带缓存）
+__pycache__/
+*.pyc
+.pytest_cache/
