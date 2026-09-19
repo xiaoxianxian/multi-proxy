@@ -71,7 +71,7 @@ bash manage.sh stop
 | `docs/00-codebase-map.md` | `docs/` | 代码库地图 + 模块速查（A档） |
 | `docs/04-tech/data-model.md` | `docs/` | SQLite 数据模型 schema（A档） |
 | `docs/04-tech/api.md` | `docs/` | API 接口文档（全部端点，A档） |
-| `docs/03-adr/` | `docs/03-adr/` | ADR-0001 lsof绝对路径 / 0002 NO_PROXY铁律 / 0003 L2非侵入4铁律 |
+| `docs/03-adr/` | `docs/03-adr/` | ADR-0001 lsof绝对路径 / 0002 NO_PROXY铁律 / 0003 L2非侵入4铁律 / **0004 L2 MCP Bridge（JSON-RPC over stdio，2026-09-19 option3 B2 新增）** |
 | `docs/06-test/` | `docs/` | `test-cases.md`（全模块用例明细）+ `test-plan.md`（测试方案/分层/退出准则，DeepSeek 第三轮补齐） |
 | `docs/_templates/` | `docs/` | 文档模板（ADR / PRD / test-cases，规范产出用） |
 | `docs/_evidence/` | `docs/` | 证据存档（测试日志/截图/性能快照；数字可追溯，DeepSeek 第四轮补建） |
@@ -187,4 +187,5 @@ bash manage.sh stop
 | 2026-09-17 | 据 DeepSeek 第四轮（收口/索引校准）：P2 补建 `docs/_evidence/`（证据存档 + README）；INDEX 修位置列瑕疵（`03-adr/`/`04-business/` 位置列填对）+ 加 `_templates/`/`_evidence/` 收录 + 概数 25→33/docs、HEAD a94de96→640e12b + 加「验收入口」小节；核实 DeepSeek 报的「codebase-map/04-business 未收录」为误判（已列）、AGENTS.md 已落地根目录（4836B「已批准」）、feature-matrix 数字已对齐 882/882（14/14 为模块级 demo check）| Hermes |
 | 2026-09-18 | 据 DeepSeek 第五轮（两段）：核实 3 ADR 全在（P0 引用断裂=误判）+ 据 DSH 建议新建 `docs/02-product/bundle-design.md`（cordis.patch.yml/dsh.bundle 前置设计,等 DSH 0.2）+ dsh-integration.md 接引用 + INDEX 登记 | Hermes |
 | 2026-09-18 | 据 WorkBuddy 评估：核实 6 条断言（_execute 桩✅/complexity 未接✅/韧性下沉✅/alert 接线✅/bundle 已存在❌纠偏）+ 商业化待补 4 项（U1/2.3/1.5/5.3）标记贾维斯初步判断 + questions/decided 归档并存清理 + 新建 `l2/COMPLEXITY-MODE.md`（option1 设计草案）+ `l2/EXTERNAL-OPTIONS-REGISTER.md`（option2/3 依赖登记，能全做无互斥，option3 依赖 option1+真实执行+MCP 协议） | 贾维斯 |
+| 2026-09-19 | option3 三阻塞全解 + MCP manager 接入：B1 `route-engine.js` 加可注入 `executor` 槽（默认 null 零行为变）+ `runDag` 委托 Orchestrator（shadow 避双重执行）；B2 net-new `l2/mcp-server.js`（JSON-RPC 2.0 over stdio，零依赖）+ `docs/03-adr/0004-mcp-bridge.md`（原误放根 `03-adr/ADR-002`，撞 0002 号+位置不规范，09-19 移正重命名 0004）+ demo 11/11 + jest 13/13；B3 `routes/skill-service.js`+`routes/memory-merge.js`（门控 PROXY_L2_SKILL/MEMORY 默认 0）+ `routes/mcp.js`（`/api/mcp` 接 manager，PROXY_L2_MCP 默认 0）+ route test；据 WorkBuddy/DeepSeek 评估修 `routeTask` complexity enum 不一致（收敛 `low/medium/high` 对齐 `_mapTier`/decomposer词表）。真跑：`PROXY_L2_MCP=1` 起 manager curl 探活 health/toolCount3/call shadow/422/rpc 全通。mpm 671/14（pre-existing frontend 2 suite，0 新增回归）。commit 007751e（option3 主体）+6e0b54b（MCP 接 manager）已 push origin/main；enum fix + ADR 0004 移正 + 本行 = 本批（commit 见 git） | 贾维斯 |
 

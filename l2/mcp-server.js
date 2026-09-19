@@ -2,7 +2,7 @@
 'use strict';
 
 // L2 P3 · MCP Bridge（JSON-RPC 2.0 over stdio）
-// ADR-002：把 AgentRegistry 能力 + RouteEngine 路由暴露为标准 MCP 工具。
+// ADR-0004-mcp-bridge：把 AgentRegistry 能力 + RouteEngine 路由暴露为标准 MCP 工具。
 // 零依赖：仅 process.stdin/stdout + JSON，不引第三方 MCP SDK。
 // 门控：PROXY_L2_MCP!=1 时 startStdio() 抛出 'mcp gate closed'。
 
@@ -91,7 +91,10 @@ class McpServer {
           type:   { type: 'string', description: 'Task type: text/code/video/audio/image' },
           prompt: { type: 'string', description: 'Task prompt' },
           agent:  { type: 'string', description: 'Prefer agent (optional)' },
-          complexity: { type: 'string', enum: ['low','medium','high','trivial','complex'] },
+          // 复杂度词表与 l2/COMPLEXITY-MODE.md §2.2 / decomposer.js 对齐：low/medium/high
+          // （_mapTier 只认这三值，high→large / low→small / 其余→medium；不声明无实际语义的 trivial/complex）
+          complexity: { type: 'string', enum: ['low','medium','high'],
+                       description: 'Task complexity, drives model-tier selection: low→small, medium→medium, high→large' },
         },
         required: ['type'],
       },
@@ -110,7 +113,7 @@ class McpServer {
         agent: a.agent,
         complexity: a.complexity,
       };
-      // 非 shadow 时不真执行（ADR-002 铁律：adapter real 须单独授权），仅返回路由决策
+      // 非 shadow 时不真执行（ADR-0004-mcp-bridge 铁律：adapter real 须单独授权），仅返回路由决策
       const decision = this.routeEngine.route(task);
       const chosen = decision && decision.chosen;
       return {
