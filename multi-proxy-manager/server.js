@@ -78,6 +78,10 @@ const skillServiceRoutes = require('./routes/skill-service');
 app.use('/api/skill-service', skillServiceRoutes);
 const memoryMergeRoutes = require('./routes/memory-merge');
 app.use('/api/memory-merge', memoryMergeRoutes);
+// L2 P3 · MCP Bridge 生产接线：/api/mcp 把 l2/mcp-server.js（JSON-RPC 2.0）接上 manager
+// 门控 PROXY_L2_MCP 默认关（非侵入，与 skill/memory 同模式），只暴露只读查询 + 路由决策（shadow）。
+const mcpRoutes = require('./routes/mcp');
+app.use('/api/mcp', mcpRoutes);
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
