@@ -3,16 +3,17 @@ title: "DeepSeek Harness（DSH）生态接入规划"
 status: in-progress
 doc_type: integration-plan
 confidence: high
-last_updated: 2026-09-16
+last_updated: 2026-09-19
 related_code:
     - .dsh/skills/multi-proxy/SKILL.md
     - .dsh/skills/l2-orchestrator/SKILL.md
     - l2/plugin-runtime.js
     - l2/adapter-protocol.md
 related_docs:
-    - docs/INDEX.md
-    - AGENTS.md
-    - AGENTS.md
+     - docs/INDEX.md
+     - AGENTS.md
+     - AGENTS.md
+     - docs/02-product/bundle-design.md
 ---
 
 # DeepSeek Harness（DSH）生态接入规划
@@ -40,6 +41,20 @@ related_docs:
 | **DS1** | 2 个 `SKILL.md`（`multi-proxy` + `l2-orchestrator`）+ `dsh-plugin` GitHub topic 骨架 | 半天 · 零风险 | ✅ 本次完成（见下方"已完成"） |
 | **DS2** | 发 npm bundle（`package.json` 加 `dsh.bundle` 字段，对外发布） | 中风险 · 需 DSH 0.2 稳定 | ⏸ 暂缓 |
 | **DS3** | 用户实际 `dsh plugin add` 运行 | 高风险 · guardrail 未修 | ⏸ 暂缓 |
+
+### option3 收口（2026-09-19）：L2 MCP bridge 落地，DS2 仍为外部阻塞
+
+- **已就绪的消费面**：option3 收口把 L2 编排内核能力经标准 MCP bridge 暴露——
+  `l2/mcp-server.js`（JSON-RPC 2.0 over stdio）+ `multi-proxy-manager/routes/mcp.js`（`/api/mcp` 接线），
+  工具含 `routeTask` / `decompose` / `orchestrate`，并接 complexity→modelTier 三档路由
+  （`agnes=small` / `deepseek=medium` / `qwen=large`，见 `l2/mcp-default-seed.js` + `l2/COMPLEXITY-MODE.md §2.1`）。
+  门控 `PROXY_L2_MCP` 默认 `0`（非侵入，关时全 403/拒消息），开 = 显式 opt-in。
+  这给 DS2 准备了 L2 侧的"可消费能力面"。
+- **DS2 仍是外部阻塞，本期不写 DSH 代码**：DS2（发 npm bundle）的两个前置都未解——
+  ① 等 DSH 0.2 发 npm bundle 稳定；② `dsh plugin add` 的 P0 guardrail（#1496）修复前不发包、
+  不实际 `dsh plugin add` 到任何 profile。故本期仅在此登记阻塞 + 把 L2 MCP 能力作为 DS2 预备，
+  **不写码、不发包、不打 tag**（与 DS1 同纪律）。
+- DS3 维持暂缓：同受 #1496 guardrail 阻塞。
 
 ### DS1 已完成（2026-09-16）
 

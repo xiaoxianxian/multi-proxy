@@ -98,12 +98,53 @@ describe('L2 P3 MCP route (/api/mcp)', () => {
       expect(r.status).toBe(204);
     });
     test('GET /api/mcp (tools) + POST call 使用同一长寿命单例', async () => {
-      // 两次请求应复用同一 server 实例
+       // 两次请求应复用同一 server 实例
       const r1 = await request(app).get('/api/mcp/health');
       expect(r1.body.toolCount).toBeGreaterThan(1);
-       // 路由仍返回同一单例的工具
+        // 路由仍返回同一单例的工具
       const r2 = await request(app).get('/api/mcp');
       expect(r2.body.tools.length).toBe(r1.body.toolCount);
-    });
-  });
+     });
+   });
+
+  // ---- L2 P3 · 经 MCP bridge 的 complexity→modelTier 路由 ----
+  // 生产 seed（l2/mcp-default-seed.js）已带三档 text-tier profile：
+  //   agnes(small) / deepseek(medium,默认档) / qwen(large)，complexity 路由落点（见 COMPLEXITY-MODE.md §2.1）。
+  // 经 routeTask + complexity 维度暴露给外部 MCP 客户端（与 route-engine.test.js 直测互补，此处覆盖 HTTP/JSON-RPC 面）。
+  describe('complexity 三档路由（经 routeTask → routeEngine）', () => {
+    let app;
+    beforeEach(() => {
+      process.env.PROXY_L2_MCP = '1';
+      app = buildApp();
+      });
+    afterEach(() => {
+      delete process.env.PROXY_L2_MCP;
+      });
+
+   // tierMatch / modelTier / expectedTier 在 mcp-server.js 的 route 投影里精简未透传
+   //（对外 MCP 投影只暴露 adapterId/source/confidence，是既有设计），档位元数据断言由
+   // route-engine.test.js 直测覆盖；此处只断言 complexity 落点 adapterId（三档区分即可验证路由）。
+    test('complexity=low → 路由到 small 档（agnes）', async () => {
+      const r = await request(app).post('/api/mcp/call').set('Content-Type','application/json')
+         .send({ name: 'routeTask', arguments: { type: 'text', complexity: 'low', prompt: 'translate a short phrase' } });
+      expect(r.status).toBe(200);
+      expect(r.body.ok).toBe(true);
+      expect(r.body.result.shadow).toBe(true);
+      expect(r.body.result.route.chosen.adapterId).toBe('agnes');
+       });
+
+    test('complexity=high → 路由到 large 档（qwen，不降级）', async () => {
+      const r = await request(app).post('/api/mcp/call').set('Content-Type','application/json')
+         .send({ name: 'routeTask', arguments: { type: 'text', complexity: 'high', prompt: 'design distributed architecture' } });
+      expect(r.status).toBe(200);
+      expect(r.body.result.route.chosen.adapterId).toBe('qwen');
+       });
+
+    test('complexity 缺省 → 默认 medium 档（deepseek，保守不降级）', async () => {
+      const r = await request(app).post('/api/mcp/call').set('Content-Type','application/json')
+         .send({ name: 'routeTask', arguments: { type: 'text', prompt: 'write a few lines' } });
+      expect(r.status).toBe(200);
+      expect(r.body.result.route.chosen.adapterId).toBe('deepseek');
+       });
+   });
 });

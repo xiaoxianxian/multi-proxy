@@ -119,19 +119,133 @@ describe('McpServer · JSON-RPC 2.0 over stdio', () => {
         test('门控关时 handleMessage 抛 gate closed', () => {
             const s = newServer('0');
             expect(() => s.handleMessage({ jsonrpc: '2.0', id: 1, method: 'ping' }))
-                 .toThrow(/gate closed/);
-        });
+                  .toThrow(/gate closed/);
+         });
 
         test('门控关时 startStdio() 抛 gate closed（不开 stdio）', () => {
             const s = newServer('0');
             expect(() => s.startStdio()).toThrow(/gate closed/);
-        });
+         });
 
         test('默认构造器门控关（gate 缺省 0）→ handleMessage 拒绝', () => {
-            // 不传 gate 时走 process.env 默认 0，非侵入
+             // 不传 gate 时走 process.env 默认 0，非侵入
             delete process.env.PROXY_L2_MCP;
             const s = new McpServer();
             expect(s.isGateOpen()).toBe(false);
+         });
+     });
+
+    // ---- L2 编排能力经 MCP bridge 暴露 ----
+    // orchestrate（经 callToolAsync/handleMessageAsync，本质 async：DAG 并发调度，shadow 不真执行）
+    // + decompose（同步：经 templateDecompose 拆 DAG，零 LLM）。
+    // 同步 callTool/handleMessage 仍是纯同步不回归——async 工具仅走 *Async 路径。
+    describe('L2 编排能力（orchestrate / decompose，经 async bridge）', () => {
+        test('tools/list 含 orchestrate + decompose 能力', () => {
+            const s = newServer();
+            const tools = s.listTools();
+            expect(tools.some((t) => t.name === 'orchestrate')).toBe(true);
+            expect(tools.some((t) => t.name === 'decompose')).toBe(true);
+            // orchestrate 是 async 工具，schema 声明 async 语义（input/dag/shadowMode/maxRetries）
+            const orch = tools.find((t) => t.name === 'orchestrate');
+            expect(orch.inputSchema.properties).toHaveProperty('input');
+            expect(orch.inputSchema.properties).toHaveProperty('dag');
+            expect(orch.inputSchema.properties).toHaveProperty('shadowMode');
         });
+
+        test('orchestrate（dag 直供）→ shadow 调度，回 template + subtasks + report', async () => {
+            const s = newServer();
+            const r = await s.handleMessageAsync({
+                jsonrpc: '2.0', id: 11, method: 'tools/call',
+                params: { name: 'orchestrate', arguments: {
+                    dag: {
+                        input: 'e2e', template: 'e2e',
+                        subtasks: [
+                            { id: 'a', type: 'code', complexity: 'low', prompt: 'p', deps: [] },
+                            { id: 'b', type: 'code', complexity: 'medium', prompt: 'q', deps: ['a'] },
+                        ],
+                        edges: [['a', 'b']],
+                    },
+                } },
+            });
+            expect(r.result.content[0].type).toBe('text');
+            const p = JSON.parse(r.result.content[0].text);
+            expect(p.shadow).toBe(true);              // 非侵入铁律：默认 shadow，不真执行 adapter
+            expect(p.template).toBe('e2e');
+            expect(p.subtasks).toEqual([
+                { id: 'a', type: 'code', status: 'done' },
+                { id: 'b', type: 'code', status: 'done' },
+            ]);
+            expect(p.report).toBeTruthy();
+        });
+
+        test('orchestrate（input → 内置模板拆解后跑）→ shadow 产 DAG', async () => {
+            const s = newServer();
+            const r = await s.handleMessageAsync({
+                jsonrpc: '2.0', id: 12, method: 'tools/call',
+                params: { name: 'orchestrate', arguments: { input: '做一个视频短片' } },
+            });
+            const p = JSON.parse(r.result.content[0].text);
+            expect(p.shadow).toBe(true);
+            // '视频' 命中 video-workflow 模板 → 5 个子任务（understand/storyboard/gen-clip-a/gen-clip-b/compose）
+            expect(p.template).toBe('video-workflow');
+            expect(p.subtasks.length).toBe(5);
+            expect(p.subtasks.every((s) => s.status === 'done')).toBe(true);
+        });
+
+        test('decompose → templateDecompose 拆 DAG（确定性、零 LLM）', async () => {
+            const s = newServer();
+            const r = await s.handleMessageAsync({
+                jsonrpc: '2.0', id: 13, method: 'tools/call',
+                params: { name: 'decompose', arguments: { input: '实现 jwt 认证' } },
+            });
+            const p = JSON.parse(r.result.content[0].text);
+            expect(p.shadow).toBe(true);
+            // 'jwt' 命中 fastapi-jwt 模板 → 4 个子任务 + 3 条依赖边（线性）
+            expect(p.template).toBe('fastapi-jwt');
+            expect(p.subtasks).toHaveLength(4);
+            expect(p.edges).toHaveLength(3);
+            expect(p.subtasks[0]).toMatchObject({ id: 'design-api', type: 'code', complexity: 'low' });
+        });
+
+        test('decompose 缺 input → -32602', async () => {
+            const s = newServer();
+            const r = await s.handleMessageAsync({
+                jsonrpc: '2.0', id: 14, method: 'tools/call',
+                params: { name: 'decompose', arguments: {} },
+            });
+            expect(r.error.code).toBe(-32602);
+            expect(r.error.message).toMatch(/decompose: missing input/);
+        });
+
+        test('同步 callTool 仍纯同步不回归（orchestrate 委托到 sync 路径）', () => {
+            const s = newServer();
+            // 同步 callTool 对 orchestrate 不特判 → 落到 adapter/routeTask 分支（行为不变、零 async）
+            const r = s.callTool('routeTask', { type: 'video', prompt: 'x' });
+            expect(r.shadow).toBe(true);
+            expect(r.route.chosen.adapterId).toBeTruthy();
+        });
+    });
+
+    describe('异步门控（async-gate）', () => {
+        test('门控关时 handleMessageAsync 抛 gate closed（与同步一致）', async () => {
+            const s = newServer('0');
+            await expect(s.handleMessageAsync({ jsonrpc: '2.0', id: 1, method: 'ping' }))
+                  .rejects.toThrow(/gate closed/);
+         });
+
+        test('门控关时 startStdioAsync() 抛 gate closed（不开 async stdio）', () => {
+            const s = newServer('0');
+            expect(() => s.startStdioAsync()).toThrow(/gate closed/);
+         });
+
+        test('门控开时 handleMessageAsync 走 async 路径（tools/call orchestrate）', async () => {
+            const s = newServer('1');
+            const r = await s.handleMessageAsync({
+                jsonrpc: '2.0', id: 1, method: 'tools/call',
+                params: { name: 'orchestrate', arguments: { input: 'jwt 认证' } },
+            });
+            expect(r.id).toBe(1);
+            expect(r.result.content[0]).toHaveProperty('type', 'text');
+         });
     });
 });
