@@ -5,7 +5,7 @@ date: 2026-09-19
 title: L2 MCP Bridge 设计（JSON-RPC over stdio）
 ---
 
-# ADR-002 MCP Bridge 设计
+# ADR-0004 MCP Bridge 设计
 
 ## 背景
 adapter-protocol.md §「协议分层」确定：

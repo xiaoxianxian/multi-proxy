@@ -7,9 +7,9 @@
 //   开启 = 显式 opt-in：PROXY_L2_MCP=1 node server.js
 //
 // 非侵入铁律：
-//   - 路由仅暴露 MCP bridge 的「只读查询 + 路由决策」（tools/list + tools/call shadow）。
-//   - 不触 adapter real 执行（shadow 默认，ADR-002 铁律），不写 agent 文件。
-//   - 长寿命单例：模块加载时建一次 McpServer，跨请求复用。
+//    - 路由仅暴露 MCP bridge 的「只读查询 + 路由决策」（tools/list + tools/call shadow）。
+//    - 不触 adapter real 执行（shadow 默认，ADR-0004-mcp-bridge 铁律），不写 agent 文件。
+//    - 长寿命单例：模块加载时建一次 McpServer，跨请求复用。
 //
 // 路由面：
 //   GET  /api/mcp          → 门控状态 + 已注册 MCP 工具列表（能力快照）
