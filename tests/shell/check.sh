@@ -8,8 +8,22 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR/.."
-MANAGE_SH="$PROJECT_ROOT/manage.sh"
+# 定位 manage.sh：中文目录（如 .../AI项目/...）下 "$SCRIPT_DIR/.." 字面拼接会因 locale
+# 字节比较使 test -f 返回 MISSING（历史 bug，见 install.sh a9d898f 同款修复）。
+# 改用 git rev-parse --show-toplevel 取仓库根（无 .. 字符串拼接，CJK-safe），再回退 $PWD。
+if [ -z "$MANAGE_SH" ]; then
+  MANAGE_SH=""
+  if command -v git >/dev/null 2>&1; then
+    _ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$_ROOT" ] && [ -f "$_ROOT/manage.sh" ]; then
+      MANAGE_SH="$_ROOT/manage.sh"
+    fi
+  fi
+  if [ -z "$MANAGE_SH" ] && [ -f "$PWD/manage.sh" ]; then
+    MANAGE_SH="$PWD/manage.sh"
+  fi
+  MANAGE_SH="${MANAGE_SH:-$SCRIPT_DIR/../manage.sh}"
+fi
 
 PASS=0
 FAIL=0
@@ -57,7 +71,6 @@ fi
 
 # 4. Verify port constants
 echo "4. Checking port assignments..."
-declare -A EXPECTED_PORTS=( [CODEx_PORT]=18790 [HERMES_PORT]=18793 [CURSOR_PORT]=18794 [MANAGER_PORT]=18792 )
 for var in CODEx_PORT HERMES_PORT CURSOR_PORT MANAGER_PORT; do
   if grep -q "${var}=" "$MANAGE_SH"; then
     pass "$var is defined"
