@@ -19,13 +19,16 @@ const { MODEL_TIERS, DEFAULT_TIER } = require('./agent-registry');
 const DEFAULT_LOG_CAPACITY = 100;
 
 class RouteEngine {
-    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY } = {}) {
+    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null } = {}) {
         this.registry = registry;
         this.pluginRuntime = pluginRuntime || { listCapabilities: () => [] };
         this.shadowMode = shadowMode;
         this.log = []; // 路由决策日志，最多 logCapacity 条
         this.logCapacity = logCapacity;
-     }
+        // L2 P3 真执行器注入：(adapterId, task, ctx, runOpts) => Promise<value>。
+        // 默认 null = 保持 stub（status:'queued'），零行为变更。
+        this.executor = executor;
+      }
 
      // 按任务类型路由：返回候选 adapter 列表 + 路由决策日志
     route(task) {
@@ -177,10 +180,54 @@ class RouteEngine {
          }
      }
 
-    async _execute(adapterId, task) {
-         // 预留：真实执行逻辑（未来接入 Adapter Runner）
-        return { adapterId, status: 'queued' };
-     }
+    async _execute(adapterId, task, ctx, runOpts) {
+        // L2 P3：executor 注入时代理执行；否则保持 stub（status:'queued'），零行为变更
+     if (typeof this.executor === 'function') {
+            try {
+                const value = await this.executor(adapterId, task, ctx, runOpts);
+                return { adapterId, status: 'done', value };
+             } catch (e) {
+                return { adapterId, status: 'failed', error: e && e.message || String(e) };
+            }
+          }
+     return { adapterId, status: 'queued' };
+      }
+
+     // L2 P3：通过 Orchestrator 跑一个 DAG，每个子任务用本 engine.route 选 adapter，
+     // 路由决策用 shadow 模式（不触发 route 内部的 _execute 执行副作用），
+     // 真正的执行由 orchestrator 通过 bridge executor 调 _execute 完成。
+     // 默认零副作用：dag/orchestrator 都按调用方给；不写盘不联网。
+     runDag(dag, runOpts = {}) {
+       const { Orchestrator } = require('./orchestrator.js');
+       // 路由决策阶段强制 shadow——避免 route() 内部 _execute 造成双重执行。
+       const wasShadow = this.shadowMode;
+       this.setShadowMode(true);
+       try {
+           const bridge = async (st, ctx) => {
+               const task = st;
+               const decision = this.route(task);
+               const chosen = decision && decision.chosen;
+               if (!chosen) return { shadow: true, via: 'unrouted', decision };
+               // 非 shadow 才真执行；恢复后由 orchestrator.run 的 shadowMode 决定
+               const exec = wasShadow
+                    ? { shadow: true, via: chosen.adapterId, decision }
+                    : await this._execute(chosen.adapterId, task, ctx, runOpts);
+               return wasShadow
+                    ? exec
+                    : { ...exec, adapter: chosen.adapterId, via: 'route-engine' };
+            };
+           const orchestrator = new Orchestrator({
+               executor: bridge,
+               routeEngine: this,
+               shadowMode: wasShadow,
+               ...('maxRetries' in runOpts ? { maxRetries: runOpts.maxRetries } : {}),
+               ...('dir' in runOpts ? { dir: runOpts.dir } : {}),
+            });
+           return orchestrator.run(dag, runOpts);
+        } finally {
+           this.setShadowMode(wasShadow);
+        }
+      }
 }
 
 module.exports = { RouteEngine };

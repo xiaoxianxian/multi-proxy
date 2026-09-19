@@ -72,6 +72,12 @@ app.use('/api/provider-health', require('./routes/provider-health'));
 // L2 P2 告警生产接线：/api/alert 把 alert.js 内核接上真实信号源（门控 PROXY_HEALTH_ALERT 默认关）
 const alertRoutes = require('./routes/alert');
 app.use('/api/alert', alertRoutes);
+// L2 P3：skill-service + memory-merge 生产接线（门控 PROXY_L2_SKILL / PROXY_L2_MEMORY 默认关，非侵入）
+// 与 orchestration/sessions/alert 同模式，挂在代理 wildcard（apiRoutes）之前。
+const skillServiceRoutes = require('./routes/skill-service');
+app.use('/api/skill-service', skillServiceRoutes);
+const memoryMergeRoutes = require('./routes/memory-merge');
+app.use('/api/memory-merge', memoryMergeRoutes);
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
