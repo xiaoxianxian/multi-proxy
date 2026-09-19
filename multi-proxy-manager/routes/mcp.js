@@ -27,13 +27,13 @@ function server() {
     const { McpServer } = require('../../l2/mcp-server.js');
     const { AgentRegistry } = require('../../l2/agent-registry.js');
     const { PluginRuntime } = require('../../l2/plugin-runtime.js');
+    const { seedDefaultProfiles } = require('../../l2/mcp-default-seed.js');
     const reg = new AgentRegistry();
-    // seed 本地默认能力，使 tools/call 能路由到真实 adapter（与 mcp-server.js require.main 一致）
-    reg.create({ id: 'h3web',  name: 'H3Web', type: 'custom', adapterId: 'h3web',
-                 capabilityTags: ['video', 'text2video', 'image'], description: 'H3Web 文/图/视频本地引擎' });
-    reg.create({ id: 'codex',  name: 'Codex', type: 'codex', adapterId: 'codex',
-                 capabilityTags: ['code', 'review'],              description: 'Codex 代码 agent' });
-    _server = new McpServer({
+     // seed 本地默认能力（单一来源 l2/mcp-default-seed.js）：real adapter（h3web/codex）+
+    // 三档 text-tier profile（agnes/deepseek/qwen，complexity 路由落点，见 COMPLEXITY-MODE.md §2.1）。
+    // 与 mcp-server.js require.main 共用同一 seed，避免各改其半漂移。
+    seedDefaultProfiles(reg);
+   _server = new McpServer({
       registry: reg,
       pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }),
       gate: String(process.env.PROXY_L2_MCP || '0'),

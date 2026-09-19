@@ -97,7 +97,38 @@ class McpServer {
                        description: 'Task complexity, drives model-tier selection: low→small, medium→medium, high→large' },
         },
         required: ['type'],
-      },
+       },
+    });
+    // L2 编排能力暴露为 MCP 工具（ADR-0004-mcp-bridge：只读查询 + 决策，默认 shadow 不真执行）
+    //   decompose：把一个请求拆解成子任务 DAG（同步、确定性、零 LLM）—— 暴露 decomposer 能力。
+    //   orchestrate：跑一个 DAG（或先拆解再跑）—— 暴露 orchestrator 能力。默认 shadowMode=true，
+    //   只产出调度/路由决策，不触碰真实 adapter（非侵入铁律 + ADR-0004 shadow 默认开）。
+    //   注意：orchestrate 本质 async（DAG 并发调度），故经 callToolAsync/handleMessageAsync 暴露；
+    //   同步 callTool/handleMessage 保持纯同步、不回归（见下）。
+   tools.push({
+      name: 'decompose',
+      description: 'Decompose a request into a subtask DAG (nodes + dependency edges) via L2 Decomposer. Synchronous, deterministic, rule-based; no LLM. Returns {template, subtasks, edges}.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          input:  { type: 'string', description: 'User request to decompose (e.g. "做一个视频短片" / "jwt 认证")' },
+         },
+        required: ['input'],
+       },
+    });
+   tools.push({
+      name: 'orchestrate',
+      description: 'Run a subtask DAG (or decompose a request first) via L2 Orchestrator. Shadow-only: produces scheduling/routing decisions without executing real adapters. Returns {template, subtasks, report}. Async (concurrent DAG schedule).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          input:      { type: 'string',  description: 'Request to decompose+run (omit if dag given)' },
+          dag:        { type: 'object',  description: 'Pre-built DAG {input, template, subtasks, edges} (skips decomposition)' },
+           shadowMode: { type: 'boolean', description: 'Shadow mode (default true; MCP bridge forces shadow for non-invasiveness)' },
+          maxRetries: { type: 'number',  description: 'Retry count per subtask on failure (default 1)' },
+         },
+        required: [],
+       },
     });
     return tools;
   }
@@ -162,9 +193,42 @@ class McpServer {
       capability: adapter,
       note: 'Shadow mode: no real execution. Enable PROXY_ADAPTER_REAL for real run.',
     };
-  }
+   }
 
-  // 主分发：一条 MCP JSON-RPC 消息进，一条响应出
+   // 异步工具分发：orchestrate 本质 async（DAG 并发调度），其余工具委托同步 callTool（行为不变）。
+   // 与 callTool/handleMessage 并存：同步路径纯同步、零回归；本路径只承载 async 工具。
+  async callToolAsync(name, args) {
+    const a = args || {};
+    if (name === 'orchestrate') {
+      const { Orchestrator } = require('./orchestrator.js');
+      const shadowMode = a.shadowMode !== false;   // 非侵入铁律：默认 shadow（MCP 暴露不真执行）
+      const maxRetries = (a.maxRetries != null) ? Number(a.maxRetries) : undefined;
+      const orch = new Orchestrator({ shadowMode });
+      // 有预置 dag → 直供；否则内置模板拆解 input → DAG（零 LLM，确定性）
+      const out = (a.dag && Array.isArray(a.dag.subtasks) && a.dag.subtasks.length > 0)
+        ? await orch.run(a.dag, { maxRetries, ctx: a.ctx })
+        : await orch.runFromInput(a.input || a.prompt || '', { maxRetries, ctx: a.ctx });
+      return {
+        shadow: true,
+        template: out.history ? out.history.template : null,
+        subtasks: (out.history ? out.history.subtasks : []).map((s) => ({ id: s.id, type: s.type, status: s.status })),
+        report: out.report ? out.report.json : null,
+       };
+    }
+    if (name === 'decompose') {
+      const { templateDecompose } = require('./decomposer.js');
+      const input = a.input || a.prompt || '';
+      if (!String(input).length) {
+        throw rpcError(-32602, 'decompose: missing input',
+          { hint: 'pass arguments.input (the request text to decompose)' });
+       }
+      return { shadow: true, ...templateDecompose(input, { templates: a.templates }) };
+    }
+    // 其余工具（adapter 能力 + routeTask）同步执行路径不变
+    return this.callTool(name, args);
+   }
+
+   // 主分发：一条 MCP JSON-RPC 消息进，一条响应出
   handleMessage(msg) {
     // 门控关闭时拒绝所有消息
     if (!this.isGateOpen()) {
@@ -207,11 +271,50 @@ class McpServer {
 
       default:
         return errResponse(id, -32601, `Method not found: ${method}`);
-    }
-  }
+     }
+   }
 
-  // stdio 入口（生产用）
-  startStdio() {
+    // 异步主分发：与 handleMessage 同构，但 tools/call 走 callToolAsync（承载 orchestrate 等 async 工具）。
+    // 其余方法（initialize/ping/tools/list/notification）与同步路径行为完全一致。
+  async handleMessageAsync(msg) {
+     // 门控关闭时拒绝所有消息（与 handleMessage 同）
+    if (!this.isGateOpen()) {
+      throw new Error('mcp gate closed: set PROXY_L2_MCP=1 to enable');
+     }
+    if (!msg || msg.jsonrpc !== '2.0') {
+      const id = (msg && msg.id) || null;
+      return errResponse(id, -32600, 'Invalid Request: missing jsonrpc=2.0');
+     }
+    const { id, method, params } = msg;
+    if (method === 'notifications/initialized' || method === 'initialized') return null;
+    switch (method) {
+      case 'initialize':
+        return okResponse(id, this.initialize(params));
+      case 'ping':
+        return okResponse(id, null);
+      case 'tools/list':
+        return okResponse(id, { tools: this.listTools() });
+      case 'tools/call': {
+        const name = params && params.name;
+        const args = params && params.arguments;
+        if (!name) return errResponse(id, -32602, 'Missing tool name');
+        try {
+          const result = await this.callToolAsync(name, args);
+          return okResponse(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] });
+         } catch (e) {
+          if (e && typeof e.code === 'number') {
+            return errResponse(id, e.code, e.message, e.data);
+           }
+          return errResponse(id, -32603, 'Tool execution failed: ' + (e && e.message || String(e)));
+         }
+       }
+      default:
+        return errResponse(id, -32601, `Method not found: ${method}`);
+     }
+   }
+
+    // stdio 入口（生产用）
+   startStdio() {
    if (!this.isGateOpen()) {
      throw new Error('mcp gate closed: set PROXY_L2_MCP=1 to enable');
     }
@@ -238,7 +341,37 @@ class McpServer {
     });
    return rl; // 返回接口以便调用方/单测关闭 stdin（避免 main 进程挂起）
    }
-}
+
+   // 异步 stdio 入口：与 startStdio 同构，但每行消息走 handleMessageAsync。
+   // 承载 orchestrate 等 async 工具（initialize/ping/tools/list/notification 行为与同步路径完全一致，
+   // handleMessageAsync 是其超集，故不回归；仅新增 async 工具可用）。
+   startStdioAsync() {
+   if (!this.isGateOpen()) {
+   throw new Error('mcp gate closed: set PROXY_L2_MCP=1 to enable');
+   }
+   const readline = require('readline');
+   const rl = readline.createInterface({ input: process.stdin });
+   rl.on('line', async line => {
+   if (!line.trim()) return;
+   try {
+     const msg = JSON.parse(line);
+     const resp = await this.handleMessageAsync(msg);
+     if (resp !== null) {
+       process.stdout.write(JSON.stringify(resp) + '\n');
+       process.stdout.flush();
+       }
+     } catch (e) {
+      // 解析失败的行输出 -32700 parse error
+    const id = null;
+    try { const m = JSON.parse(line); id = m && m.id; } catch (_) { /* 保持 null */ }
+    process.stdout.write(
+      JSON.stringify(errResponse(id, -32700, 'Parse error: ' + (e && e.message || String(e)))) + '\n'
+     );
+   }
+   });
+   return rl; // 返回接口以便调用方/单测关闭 stdin（避免 main 进程挂起）
+   }
+   }
 
 module.exports = {
   McpServer,
@@ -253,15 +386,14 @@ module.exports = {
 if (require.main === module) {
   const { AgentRegistry } = require('./agent-registry.js');
   const { PluginRuntime } = require('./plugin-runtime.js');
-  // 默认 seed 本地 h3web + codex 能力，使 routeTask / tools/call 能路由到真实 adapter
+  const { seedDefaultProfiles } = require('./mcp-default-seed.js');
+  // 默认 seed 本地 adapter（h3web/codex）+ 三档 text-tier profile（complexity 路由落点），
+  // 与 manager 接线 routes/mcp.js 共用同一 seed（l2/mcp-default-seed.js 单一来源）。
   const reg = new AgentRegistry();
-  reg.create({ id: 'h3web',  name: 'H3Web', type: 'custom', adapterId: 'h3web',
-               capabilityTags: ['video', 'text2video', 'image'], description: 'H3Web 文/图/视频本地引擎' });
-  reg.create({ id: 'codex',  name: 'Codex', type: 'codex',  adapterId: 'codex',
-               capabilityTags: ['code', 'review'],              description: 'Codex 代码 agent' });
+  seedDefaultProfiles(reg);
   const server = new McpServer({ gate: process.env.PROXY_L2_MCP || '0', registry: reg,
       pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }), shadowMode: true });
-  const rl = server.startStdio();
+  const rl = server.startStdioAsync();
   rl.on('close', () => process.exit(0)); // stdin EOF（客户端断开）即退出
   process.stderr.write('[l2-mcp] bridge started on stdio\n');
 }
