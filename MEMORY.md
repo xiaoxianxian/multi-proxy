@@ -530,3 +530,29 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 > **待办**：task3 P5 等 dsh 生态版做完再开发；DSH DS2 等 0.2。**请先读 `MEMORY.md §13.18+§13.19` + 日志 `MEMORY-2026-09-20.md`，然后接 task1 开工 `l2/savings-gateway/`。**
 > 铁律：E2E 真跑不抄数字、显式 `git add --` 不 `-A`、热路径 `forward.js`/`codex-proxy/proxy.js` 非授权不动、push 前问、子代理 self-report 必核验、不抢老板 Chrome。
 
+---
+
+### §13.20 2026-09-21 task1 省钱网关一期落地 ✅（l2/savings-gateway/）
+
+> 五决策拍板→落地，热路径 0 触碰，全 E2E 真跑。
+
+**产物**（4 新文件 + 4 文档同步）：
+- `l2/savings-gateway/gateway.js`（~300 行内核，`createSavingsGateway()` 工厂范式）
+- `l2/savings-gateway/server.js`（thin HTTP，127.0.0.1:18795，门控 `PROXY_SAVINGS_GATEWAY`）
+- `l2/savings-gateway/savings-gateway.demo.js`（24/24 确定性 demo）
+- `multi-proxy-manager/tests/unit/savings-gateway.test.js`（18 例，含 live HTTP）
+- 文档：`l2/README.md` + `docs/INDEX.md` + `docs/01-feature-matrix.md` + `docs/04-tech/savings-gateway-design.md §七` 全部同步
+
+**真跑数字（本轮，非引用）**：
+- demo **24/24 PASS**（鉴权 401×2 / 难度路由 3 档 / 模拟 delta / token 估算 / 省钱报告 / cost 信号端到端喂 alert.js / 非侵入断言）
+- jest `savings-gateway.test.js` **18/18**
+- 全量 manager jest **719/719（45 suites / 0 fail）**（701 基线 + 18，零回归）
+- live 冒烟：真起 127.0.0.1:18795，门控关 health 200 + POST 403 gate-closed / 门控开 POST 200 low→agnes saved=0.096 shadow=true + bad key 401
+
+**决策③落地说明**：dummy key 前缀实际用 `gw_`（非设计稿脱敏占位 `sk-…`），语义更清晰；内核不持真 key，`opts.dummyKeys` 可注入任意 key 表（可回改）。
+
+**二期/后续（YAGNI 未接）**：真执行（shadow off + executor 真打上游）/ 价格进 route 排序 / 排行榜·落盘 / A 路 token×单价 埋点。
+
+**待办不变**：task3 P5 等 dsh 生态版；DSH DS2 等 0.2。
+**下一步**：push 需老板授权（当前 1 commit 待 push）。
+

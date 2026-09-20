@@ -158,6 +158,17 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **门控**：`PROXY_L2_MCP`（bridge 开/关）+ `PROXY_ADAPTER_REAL`（编排真执行开/关，二级门控，默认关不触下游 adapter）。
 - **真跑**：`node l2/mcp-orchestrate-real.demo.js`（**9 PASS / 0 FAIL**）；jest `tests/unit/mcp-server.test.js` **26/26**（+4 本轮真执行 E2E）+ `tests/unit/mcp-route.test.js` **10/10**。全 manager jest **701/701（44 suites / 0 fail）**。
 
+## savings-gateway/ — 省钱网关内核 + thin server（task1 一期 · P3e · shadow 模拟 delta · 门控非侵入）
+
+- **内核**：`savings-gateway/gateway.js`（~300 行，零 manager 依赖，与 alert.js/cost.js 同构工厂范式 `createSavingsGateway()`）。**OpenAI 兼容省钱路由**：agent 用 dummy key（前缀 `gw_`，默认签发 `gw_default-large`）指向网关 → 复用 `route-engine` 难度路由（complexity low/medium/high → 三档 tier）把请求路由到「最便宜够强」档位 → 产出「省钱账」`x_savings`：planned=照默认 large 大模型打（¥32/¥128 per 1M）会花 X，actual=实际路由档位（small 免费 / medium deepseek ¥1/¥4 / large qwen）花 Y，`saved = max(0, X−Y)`。
+- **五决策拍板**（`docs/04-tech/savings-gateway-design.md §四·§五`，2026-09-21 老板授权）：① 形态 B 独立模块 `l2/savings-gateway/` **不碰热路径**（`forward.js`/`codex-proxy/proxy.js` 零触碰）；② 端口 **18795**；③ dummy key `gw_` 映射真 provider key（内核**不持有**真 key 材料，真 key 由 executor/dispatch 层注入，绝不暴露给 agent）；④ 一期 **shadow** 模拟 delta + 接 `alert.js` cost 信号（排行榜/落盘留二期）；⑤ 先按**难度档位**路由（价格进 route 排序留二期）。
+- **三档 tier 复用**（不新造）：`mcp-default-seed` 的 `agnes`(small 免费)/`deepseek`(medium)/`qwen`(large)；`DEFAULT_PRICING` 模拟 delta 记账基线，large 可经 `opts.pricing` 或 `PROXY_PRICING_LARGE` 覆盖（**估算值非实测，定价决策归老板**）。
+- **非侵入 + 门控（与 alert.js/cost.js 统一）**：`PROXY_SAVINGS_GATEWAY` 默认关 = **observe**（路由决策/省账照常进内存，绝不落盘）；开 = 可服务。**shadow 默认开**：不真调上游，`executor` 注入缝预留（二期切真路由时接真实 dispatch）。内核默认不往 `process.env` 注入任何键。
+- **喂 alert.js（决策④）**：`produceCostSignal({budget?, windowMs?})` → `{source:'cost', providerId:'savings-gateway', cost, budget?}`（`alert.js` `cost-budget-exceeded` 契约，形状与 cost.js 一致）；budget 未设则不带（alert 规则要求 budget 为 number 才触发——不设预算不告警，YAGNI 诚实边界）。
+- **薄 HTTP**：`savings-gateway/server.js`（node 内置 http，零依赖，绑 `127.0.0.1`，可 `SAVE_GATEWAY_BIND_HOST` 覆盖）——`POST /v1/chat/completions`（门控开才服务，关时 403 `gate-closed`）/ `GET /savings/report`（省钱看板，只读）/ `GET /savings/signal`（喂 alert.js）/ `GET /health`。门控关时 `/health`+只读看板放行、`/v1/*` 全 403。
+- **真跑**：`node l2/savings-gateway/savings-gateway.demo.js`（**24 PASS**，全确定性无网络：鉴权 401×2 / 难度路由 3 档 / 模拟 delta 记账 / token 启发式估算 / 省钱报告 / cost 信号端到端喂 alert.js / 非侵入断言）；jest `tests/unit/savings-gateway.test.js`（**18 例**，含 live HTTP 起 server：门控关 403 + 门控开 200 难度路由 + 401 鉴权 + 400 缺 messages + 看板/signal 只读 + 404）。全 manager jest **719/719（45 suites / 0 fail）**。live 冒烟：真起 `127.0.0.1:18795` 门控关 health 200 + POST 403 `gate-closed`，门控开 POST 200 `low→agnes saved=0.096 shadow=true` + bad key 401 `invalid_api_key` + 看板/signal 200。
+- **边界（YAGNI 诚实标注）**：一期止于「难度档位路由 + 模拟 delta 记账 + cost 信号」；**真执行**（shadow off + 注入 executor 真打上游、拿真 key）、**价格进 route 排序**、**省钱排行榜/落盘**、**A 路 token×单价 埋点接 forward.js 热路径** 全部列二期/后续增量，非侵入未接。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；

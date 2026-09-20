@@ -85,4 +85,35 @@
 - 每步 E2E 真跑（demo 实测），不抄数字。
 - 复用 `route-engine` / `cost.js` / 3 个 seed profile，不新造路由/成本内核。
 
-_落盘：2026-09-21 · 作者：贾维斯（Hermes Agent）· 设计稿 · 五决策已拍板 2026-09-21（老板"赞同判断执行"）· 待开工 l2/savings-gateway/ · grounded 到已读代码行 · 缺口诚实标注_
+---
+
+## 七、一期落地验收记录（2026-09-21 · 已开工完成）
+
+> 按 §六 开工边界落地。本段只记**本轮真跑**结果（不抄历史数字）；热路径 `forward.js`/`codex-proxy/proxy.js` **0 触碰**（`git status` 未列）。
+
+**产物**：
+- `l2/savings-gateway/gateway.js`（~300 行，零 manager 依赖，工厂范式 `createSavingsGateway()`，与 `alert.js`/`cost.js` 同构）。
+- `l2/savings-gateway/server.js`（thin HTTP，node 内置 http，零依赖，绑 `127.0.0.1:18795`，`SAVE_GATEWAY_BIND_HOST` 可覆盖）。
+- `l2/savings-gateway/savings-gateway.demo.js`（确定性 demo，全网络隔离）。
+- `multi-proxy-manager/tests/unit/savings-gateway.test.js`（内核 + live HTTP，18 例）。
+
+**决策③落地说明（诚实标注）**：内核 dummy key 前缀定为 `gw_`（gateway 前缀），默认签发 `gw_default-large` → 映射「large 档位意图」；决策③写的是脱敏占位 `sk-…`，**实际落地前缀 = `gw_`**（语义更清晰、区分「网关签发的省钱 key」与 provider 真 key，仍满足「不暴露真 key」核心约束）。**可回改**（`opts.dummyKeys` 可注入任意 key 表）。
+
+**五决策对照**：
+| 决策 | 落地 | 实证 |
+|---|---|---|
+| ① 形态 B | 新起 `l2/savings-gateway/`，热路径 0 触碰 | `git status` 无 `forward.js`/`codex-proxy/proxy.js` |
+| ② 端口 18795 | `server.js` `DEFAULT_PORT=18795` + live 冒烟真起 | `/usr/sbin/lsof` 起停后 `PORT-18795-CLEAN` |
+| ③ dummy key `gw_` | `resolveKey` 校验前缀 + 签发表，内核不持真 key | demo 401×2（invalid/unknown key）+ jest 401 |
+| ④ shadow 模拟 delta + alert.js | `x_savings.planned/actual/saved` + `produceCostSignal` 喂 `cost-budget-exceeded` | demo 端到端触发/不触发/无预算不告警 + jest live `/savings/signal` |
+| ⑤ 先按难度档位 | 复用 `route-engine` complexity→tier（low→small/medium→medium/high→large） | demo 3 档路由落点 + jest 断言 |
+
+**真跑数字（本轮，非引用）**：
+- demo `node l2/savings-gateway/savings-gateway.demo.js` → **24/24 PASS**（鉴权 401×2 / 难度路由 3 档 / 模拟 delta 记账 / token 启发式估算 `estimated` / 省钱报告分档 / cost 信号端到端喂 alert.js / 非侵入断言）。
+- jest `tests/unit/savings-gateway.test.js` → **18/18**（内核 12 + live HTTP 6：门控关 403 / 门控开 200 难度路由 + 401 + 400 / 看板/signal 只读 / 404）。
+- 全量 `multi-proxy-manager` jest → **719/719（45 suites / 0 fail）**，相对 701 基线 **+18 零回归**。
+- live 冒烟：真起 `127.0.0.1:18795` —— 门控关 `health 200` + `POST 403 gate-closed`；门控开 `POST 200 low→agnes saved=0.096 shadow=true` + bad key `401 invalid_api_key` + `/savings/report`·`/savings/signal` `200`。
+
+**二期/后续增量（YAGNI，未接）**：真执行（`setShadowMode(false)` + 注入 executor 真打上游、拿真 key）/ 价格信号进 route 排序 / 省钱排行榜·落盘 / A 路 token×单价 埋点接 `forward.js` 热路径。门控 `PROXY_SAVINGS_GATEWAY` 开 + `PROXY_SAVINGS_SHADOW=0` + 注入 `executor` 即二期切换缝，内核一期不动。
+
+_落盘：2026-09-21 · 作者：贾维斯（Hermes Agent）· 设计稿 · 五决策已拍板 2026-09-21（老板"赞同判断执行"）· 一期已落地（gateway.js + server.js + demo 24/24 + jest 18 + 719/719 零回归 + live 18795 冒烟）· grounded 到已读代码行 · 缺口/二期诚实标注_
