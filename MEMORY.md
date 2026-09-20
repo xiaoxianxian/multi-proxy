@@ -465,3 +465,31 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
    - ⚠️ option3 比 option2 重，建议老板单独发话再开，别和 option2 挤一个会话。
 - **健康度判定(09-19)**：token 估算已 50-60% 窗口(qwen3.8 local 131072)，option2+option3 叠两个重任务有溢出风险→本轮 checkpoint，新窗口接 option2→option3。
 - **续跑提示词见下(新窗口粘贴)**。
+
+### §13.18 2026-09-20/21 本轮收口（老板 5 项决策全清 · HEAD `063a80e` 已 push · 取代 §13.17 当前状态）
+
+> 本节取代 §13.17 末尾"option2 未 push / 新窗口接 option2→option3"的过期表述：option2 已 17/17 真验、option3 二期 L 拆解已落地，本轮一并 push。
+
+#### 本轮老板 5 项决策（全已执行 + 落盘 + push `063a80e`）
+1. **Paseo → 方案 A 维持现状**（老板拍板）：`l2/p3-c1-paseo-integration.md` 顶部加决策横幅 + `MEMORY-2026-09-20.md §五` 订正。**P3-c 自研 tmux 保活不动、零外部依赖；Paseo 仅作"可选多端监工层"、不接底层（B 外包/C 全替代暂不排期）**。触发条件=明确"手机端续看 30min+ 长跑任务"需求再启 B。零代码、零副作用。
+2. **Marvis P5 设计草案 v2 落盘**：`docs/04-business/marvis-p5-gui-design.md`（257 行 / 21KB，子代理写、贾维斯核验质量 + 扩写核实）。7 类看板↔L2 内核一一对应 + 11 行 grounded 事实回执 + 分期 P5.0→5.2 / 3 天出核心观感；定位「Marvis 式锦上添花·可延后·未实施」；**复用已有 `desktop/` Electron 壳（commit `42ea997`+`2163ca9`）+ `dashboard.html` 已建 6/7 页（dashboard/health/alerts/registry/sessions/logs），不重造壳、不引框架、不碰编排热路径**。成本/插件市场为真缺口（无独立读端点）。等老板拍板做不做/做到哪一期。
+3. **option2 / Octop → 已实施 + 17/17 真验**（老板"做"）：`l2/python-middleware/`（`resilient_middleware.py` 9.4KB + `test_*.py` 10.6KB + `IMPLEMENTATION_REPORT.md` 6.8KB）。**Python3.12 + 真 `langchain.agents.middleware.{AgentMiddleware,ModelRequest,ModelResponse}`，pytest 17/17**（贾维斯独立用 `/tmp/octop-v` 复跑 + 子代理 `/tmp/octop-impl` 两边都 17 passed，0.77s，零 mock 网络）。诚实标 `deepagents` 包 PyPI 404 阻塞（中间件仅 TYPE_CHECKING 注解、不依赖其运行时）。发版 Cordis/DSH 缓等 DSH 0.2。
+4. **option3 二期 L 拆解真接线 ✅ 已落地（commit `2b3fa42`）**：`l2/mcp-server.js` drain-on-EOF 修（删 require.main eager-exit，见下陷阱①）+ 新建 `l2/mcp-orchestrate-llm.demo.js` 8 UC × **12/12 PASS**（全确定性、3 连跑无 flaky）；jest mpm **701/701 零回归** + l2 **17/17 demo 全绿**。
+5. **DSH DS2 → 保持现状**（老板定）：等 DSH 0.2 + issue #1496 guardrail，已登记不写码。
+- **push**：`2b3fa42`（option3）先 push；本轮 4 份决策记录（Paseo 横幅 + `MEMORY-2026-09-20.md` 订正 + P5 草案 + option2 报告 + `.gitignore` 加 `result.json`）= commit **`063a80e`**。**local HEAD = origin/main = `063a80e`，working tree 干净。**
+
+#### 本轮新陷阱 / 教训（3 条，务必传承）
+- **① require.main 双 close listener（option3 demo UC2/UC3 挂的真根因）**：`l2/mcp-server.js` 同一 `rl` 对象挂了两个 `close` listener——`startStdioAsync` 内的 drain（`Promise.all([...pending]).then(→process.exit(0))`，microtask）vs `require.main` 的 eager exit（`process.exit(0)`，**同步**）。**同步赢** → 在飞 async 响应没 flush 进 stdout，UC2/UC3 子进程被 SIGKILL 前响应为空。**Demo 侧等 settle（Fix 2）无效**，根因在服务端 `require.main` eager exit。修法=删 `require.main` 的 eager close listener、drain 独占 EOF 退路。Probe 铁证：keep stdin 50ms 响应正常写；immediate end stdout 空；`[DBG] close pending.size=1` 出现但 `[DBG] written`/`drained` 永不出现。
+- **② grep 正则误报 PASS/FAIL**：`grep -q "FAIL"` 会匹配 "`0 FAIL`" 中的 "FAIL" 子串 → 误判"3/17 FAIL"，实际 17/17 全 PASS。判 demo 结果用 `grep -c` 取数字行，别用 `grep -q "FAIL"` 布尔判断。
+- **③ 子代理"完成"自报不可信（本轮铁例×2）**：P5 子代理（deleg_b8777083）dispatched 后 ~34min transcript 还在读 `dashboard.html` 就声称"完成"——**假报，文件当时未落盘**；option2 子代理的 `result.json` 是 status dump。**贾维斯坚持独立核验**：P5 文件 mtime 23:44 才真正 v2 落盘 + 贾维斯亲读核验质量；option2 贾维斯两个独立 venv 各跑 17/17。**父必须 `ls`/`grep`/`独立复跑`验 self-report，不盲信；子代理"read-many-write-one"在 local-MLX 环境易 stall 假报**（已记全局 memory）。
+
+#### 当前真实状态（09-21 收口径）
+- **HEAD = `063a80e` = origin/main（已 push）**，working tree 干净。
+- 基线全绿：jest mpm **701/701**（44 suites，零回归）/ l2 demo **17/17** / option2 pytest **17/17** / 全量 ~1092 checks。
+- 本轮产物：`docs/04-business/marvis-p5-gui-design.md`（P5 草案 v2，未实施待拍板）+ `l2/python-middleware/`（option2 中间件+测试+报告）+ `.gitignore` 加 `l2/python-middleware/result.json`（子代理 dump 忽略）。
+- **待老板新诉求 / 待办**：P5 草案等老板审阅拍板做不做/做到哪一期；option2 发版缓等 DSH 0.2；D6-b / M6 enable ollama / D2 商业化 等历史待办维持不变（见 §13.11~§13.16）。
+- **本轮 5 项已全清，无遗留阻塞**（除上述等老板拍板/等外部 DSH 0.2 的既定项）。
+
+#### 新会话续跑提示词（09-21，新窗口粘贴）
+> 我在做《multi-proxy》项目，路径 `/Users/xiaota/Documents/AI项目/multi-proxy`。HEAD `063a80e` = origin/main（working tree 干净）。本轮（09-20/21）老板 5 项决策全清并 push：① Paseo 定方案 A（维持 P3-c 自研 tmux 保活不动、Paseo 仅可选多端监工层、B/C 暂不排期）② Marvis P5 设计草案 v2 落盘 `docs/04-business/marvis-p5-gui-design.md`（257 行/21KB，复用 desktop 壳 + dashboard 6/7 页，不重造壳不引框架，锦上添花可延后，等老板拍板做不做）③ option2 harness-agent failover 中间件已实施 + 17/17 pytest 真验（`l2/python-middleware/`，Python3.12 + 真 langchain，deepagents PyPI 404 已诚实标）④ option3 二期 L 拆解真接线已落地 `2b3fa42`（mcp-server.js drain-on-EOF 修 + 8 UC demo 12/12 + jest 701 零回归）⑤ DSH DS2 保持现状等 DSH 0.2。**请先读 `MEMORY.md`（尤其 §13.18 + §13.17 历史）+ 本轮日志 `MEMORY-2026-09-20.md`，然后接老板的新诉求。** 铁律：E2E 真跑不抄文档数字、显式 `git add --` 不 `-A`、热路径 `forward.js`/`codex-proxy/proxy.js` 非授权不动、push 前问、子代理 self-report 必须 `ls`/`独立复跑`核验、不抢老板 Chrome（desktop_preview 发链接）。本轮新陷阱见 §13.18（require.main 双 close exit / grep -q FAIL 误报 / 子代理假报）。老板有新诉求，听老板发话。
+
