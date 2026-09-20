@@ -17,3 +17,6 @@ providers.json
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# 子代理运行时 dump（option2 的 17/17 测试结果 JSON，内容已存 IMPLEMENTATION_REPORT.md，非源码）
+l2/python-middleware/result.json
