@@ -250,7 +250,7 @@ describe('Design System', () => {
 
     it('should define .sidebar-class in dashboard styles', () => {
       // Dashboard has inline .sidebar styles
-      expect(dashboardHtml).toContain('.sidebar {');
+      expect(sharedCss).toContain('.sidebar {');
     });
 
     it('should define .sidebar-brand in dashboard styles', () => {
@@ -259,7 +259,7 @@ describe('Design System', () => {
     });
 
     it('should define .sidebar-nav in dashboard styles', () => {
-      expect(dashboardHtml).toContain('.sidebar-nav');
+      expect(sharedCss).toContain('.sidebar-nav');
     });
 
     it('should define .nav-item in dashboard styles', () => {
@@ -267,27 +267,27 @@ describe('Design System', () => {
     });
 
     it('should define .nav-item:hover state', () => {
-      expect(dashboardHtml).toContain('.nav-item:hover');
+      expect(sharedCss).toContain('.nav-item:hover');
     });
 
     it('should define .nav-item.active state', () => {
-      expect(dashboardHtml).toContain('.nav-item.active');
+      expect(sharedCss).toContain('.nav-item.active');
     });
 
     it('should define .nav-section-label', () => {
-      expect(dashboardHtml).toContain('.nav-section-label');
+      expect(sharedCss).toContain('.nav-section-label');
     });
 
     it('should define .sidebar-footer in dashboard styles', () => {
-      expect(dashboardHtml).toContain('.sidebar-footer');
+      expect(sharedCss).toContain('.sidebar-footer');
     });
 
     it('should define .mobile-menu-btn for responsive sidebar', () => {
-      expect(dashboardHtml).toContain('.mobile-menu-btn');
+      expect(sharedCss).toContain('.mobile-menu-btn');
     });
 
     it('should define .sidebar-overlay for mobile sidebar', () => {
-      expect(dashboardHtml).toContain('.sidebar-overlay');
+      expect(sharedCss).toContain('.sidebar-overlay');
     });
   });
 
@@ -338,6 +338,7 @@ describe('Design System', () => {
   });
 
   describe('Responsive Design', () => {
+    let sharedCss;
     let dashboardHtml;
     let logsHtml;
     beforeAll(() => {
@@ -345,6 +346,7 @@ describe('Design System', () => {
         path.join(CSS_DIR, 'dashboard.html'),
         'utf8'
       );
+      sharedCss = readCss('shared-styles.css');
       logsHtml = fs.readFileSync(
         path.join(CSS_DIR, 'logs.html'),
         'utf8'
@@ -352,12 +354,12 @@ describe('Design System', () => {
     });
 
     it('should have @media query for max-width 768px in dashboard', () => {
-      expect(dashboardHtml).toContain('@media (max-width: 768px)');
+      expect(sharedCss).toContain('@media (max-width: 768px)');
     });
 
     it('should hide sidebar and make it fixed on mobile in dashboard', () => {
-      expect(dashboardHtml).toContain('position: fixed');
-      expect(dashboardHtml).toContain('translateX(-100%)');
+      expect(sharedCss).toContain('position: fixed');
+      expect(sharedCss).toContain('translateX(-100%)');
     });
 
     it('should show mobile menu button on small screens in dashboard', () => {
