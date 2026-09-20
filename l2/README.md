@@ -152,6 +152,12 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **教训（本轮·2 条）**：① `setPricing` 幂等——原实现「`_state[name] = {…new}`」会清掉已累 tokens/cost，启动注入 pricing 后成本归零（"修好实际没改"坑）→ 改「existing ? `{...existing, 换 pricing}` : 新建」。② `getCost()` 对外快照剥离内部 `lastTs`（时间戳让确定性 `toEqual` 抖动）→ 暴露纯累计量 + 花费。
 - **真跑**：jest `tests/unit/cost-track.test.js` **15/15**；全量 manager jest **635/635（40 suites，+15 cost-track 零回归，含前序 +8 alert-route）**；live 冒烟：门控关 `getAll()={}`（非侵入）/ 门控开 3×(1000×10/1M+500×20/1M)=0.06 / Anthropic cacheHit 折扣 (1M−0.4M)×25/1M+0.1M×125/1M+0.4M×3/1M=28.7。
 
+## mcp-orchestrate-real — MCP 编排真执行 E2E demo（P3c/P3d · PROXY_ADAPTER_REAL 门控）
+
+- **内核**：`l2/mcp-orchestrate-real.demo.js`（9 PASS E2E）—— MCP `orchestrate` 工具门控真执行路径，`PROXY_ADAPTER_REAL` 默认关 = shadow（非侵入）；门控开 = 真执行（`_realExecutor` 经 `routeEngine.route` 路由选中 adapter → 委托注入 executor 或退化「仅路由」记录 `routedAdapterId`）。
+- **门控**：`PROXY_L2_MCP`（bridge 开/关）+ `PROXY_ADAPTER_REAL`（编排真执行开/关，二级门控，默认关不触下游 adapter）。
+- **真跑**：`node l2/mcp-orchestrate-real.demo.js`（**9 PASS / 0 FAIL**）；jest `tests/unit/mcp-server.test.js` **26/26**（+4 本轮真执行 E2E）+ `tests/unit/mcp-route.test.js` **10/10**。全 manager jest **701/701（44 suites / 0 fail）**。
+
 ## 铁律（落地前必读）
 
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；
