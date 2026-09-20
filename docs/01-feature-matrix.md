@@ -51,6 +51,7 @@
 | `route-engine.js` | `l2/route-engine.js` | 1 demo PASS | 按任务类型路由 |
 | `memory-merge.js` | `l2/memory-merge.js` | 11/11 demo PASS | 跨 agent 记忆合并 |
 | `skill-service.js` | `l2/skill-service.js` | 13/13 demo PASS | 技能服务注册与调用 |
+| `savings-gateway/` | `l2/savings-gateway/gateway.js` + `server.js` | 24/24 demo PASS + jest 18 例 | 省钱网关（task1 一期·shadow 模拟 delta）：难度档位路由 + 模拟省账（planned large 基线 − actual 档位）+ `produceCostSignal` 喂 alert.js；门控 `PROXY_SAVINGS_GATEWAY` 默认关 observe + shadow 默认开，127.0.0.1:18795，dummy key `gw_` 映射（内核不持真 key）；不碰热路径 |
 
 ---
 
@@ -77,6 +78,8 @@
 | shell (bats) | 1 .bats | 11 tests | — |
 
 **总计：~1088 checks 全绿**（jest 828 + pytest 63 + bats 11 + l2 demo ~193 + codex-integration 2）。
+
+> **2026-09-21 task1 增量（本轮真跑，非引用）**：`savings-gateway` 落地 → `multi-proxy-manager` 全量 jest `719/719`（45 suites / 0 fail，相对 09-18 快照 +18 = 本轮 `savings-gateway.test.js`）；`l2/savings-gateway/savings-gateway.demo.js` 24/24 PASS；l2 demo 当前实存 21 个 `.demo.js`（10 内核 + 3 adapter + 3 公共监控 + mcp 编排 2 + 省钱网关 1 + route-engine-orchestrator）。09-18 上表为历史快照保留，下表为当前视图。
 
 ---
 
