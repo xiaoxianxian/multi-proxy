@@ -128,10 +128,13 @@ const costTrack = require('./lib/cost-track');
 if (process.env.NODE_ENV !== "test") {
   costTrack.loadPricingFromEnv();
   const costScheduler = alertRoutes.startCostScheduler();
-  app.listen(PORT, () => {
+  // 管理面板默认只绑本回环 127.0.0.1（安全收紧：面板带 JWT 但不应全网卡可达）；
+  // Docker/跨机部署显式设 BIND_HOST=0.0.0.0，沿用 hermes-proxy 的 BIND_HOST 惯例。
+  const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
+  app.listen(PORT, BIND_HOST, () => {
     console.log('\n========================================');
     console.log('  Multi-Proxy Manager Shell');
-    console.log(`  Access: http://localhost:${PORT}`);
+    console.log(`  Access: http://${BIND_HOST}:${PORT}`);
     console.log(`  Managed proxies: ${Object.keys(pm.getProxyConfigs()).join(', ') || 'none'}`);
     console.log('========================================\n');
     if (costScheduler) {

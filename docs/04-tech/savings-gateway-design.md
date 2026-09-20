@@ -51,29 +51,30 @@
 
 ---
 
-## 四、形态三选（待老板拍板，明早定）
+## 四、形态三选（✅ 已拍板 2026-09-21 老板授权"赞同你的判断，执行"）
 
 | 方案 | 描述 | 优点 | 风险 |
 |---|---|---|---|
-| **A 复用 codex-proxy** | 在 `codex-proxy/proxy.js` 加 OpenAI 兼容路由层 + 接 route-engine | 复用已有代理、端口 18790 | **codex-proxy/proxy.js 是热路径**（铁律非授权不动）→ 需老板授权 |
-| **B 新起 thin gateway 模块** | 新模块 `l2/savings-gateway/`，复用 route-engine/cost.js，独立端口 | 不碰热路径、隔离、可单测 | 多一个进程/端口 |
-| **C 在 manager 加路由** | `multi-proxy-manager` 加 `/v1/chat/completions` 路由 | 复用 manager 安全/JWT | manager 变胖、职责混 |
+| A 复用 codex-proxy | 在 `codex-proxy/proxy.js` 加 OpenAI 兼容路由层 + 接 route-engine | 复用已有代理、端口 18790 | **codex-proxy/proxy.js 是热路径**（铁律非授权不动）→ 需老板授权 |
+| **B 新起 thin gateway 模块 ✅** | 新模块 `l2/savings-gateway/`，复用 route-engine/cost.js，独立端口 | 不碰热路径、隔离、可单测 | 多一个进程/端口 |
+| C 在 manager 加路由 | `multi-proxy-manager` 加 `/v1/chat/completions` 路由 | 复用 manager 安全/JWT | manager 变胖、职责混 |
 
-> 推荐 **B**（不碰热路径、隔离、符合"门控默认关/shadow 默认开"非侵入铁律），**A 因热路径需单独授权**。
+> **✅ 定 B**（老板 2026-09-21 授权）：不碰热路径、隔离、可单测、符合"门控默认关/shadow 默认开"非侵入铁律。A 因热路径维持不授权、C manager 变胖否决。
 
 ---
 
-## 五、明早待老板拍板的 5 个决策点（攒齐，统一回应）
+## 五、5 个决策点（✅ 已拍板 2026-09-21 老板授权"赞同你的判断，执行"）
 
-| # | 决策点 | 选项 | 倾向（待老板定） |
+| # | 决策点 | 选项 | 拍板结论 |
 |---|---|---|---|
-| 1 | **形态** | A 复用 codex-proxy / B 新起 thin gateway / C 在 manager | **B**（不碰热路径） |
-| 2 | **端口** | 18795 / 18796 / 18770（均空闲，避开 18790-18794） | **18795**（顺延 18794 后） |
-| 3 | **dummy token 机制** | DSH 用 dummy OpenAI key 指向网关；网关校验 dummy→映射到真 provider key（从 manager `.env`/注入） | 待定（dummy key 怎么发/校验/映射） |
-| 4 | **省钱口径** | shadow 阶段算"模拟 delta" vs 切换后算"真省"；是否出"省钱排行榜"+接 `alert.js` cost 信号 | 待定 |
-| 5 | **成本是否进 route** | 仅按难度档位选（不依赖价格）vs 把价格信号接进 route 排序（需动 route-engine，扩 §五缺口） | 倾向先"按档位"，价格信号留二期 |
+| 1 | **形态** | A 复用 codex-proxy / B 新起 thin gateway / C 在 manager | **✅ B**（不碰热路径，`l2/savings-gateway/`） |
+| 2 | **端口** | 18795 / 18796 / 18770（均空闲，避开 18790-18794） | **✅ 18795**（顺延 18794 后） |
+| 3 | **dummy token 机制** | "dummy key 怎么发/校验/映射" | **✅ 贾维斯默认（可回改）**：dummy key 形 `sk-dsh-savings-*`（网关签发/校验），命中即映射到 manager `.env`/注入的真 provider key（非暴露真 key 给 agent）。对标 agentgateway/dsh-proxy 通用做法 |
+| 4 | **省钱口径** | shadow 算"模拟 delta" vs 切换后算"真省"；是否出排行 | **✅ 贾维斯默认（可回改）**：一期 shadow 算"模拟 delta"（若照大模型打 vs 实际路由省），接 `alert.js` cost 信号；"省钱排行榜"留二期 |
+| 5 | **成本是否进 route** | 仅按难度档位 vs 价格信号进 route 排序 | **✅ 先按难度档位**（不依赖价格），价格信号接 route 留二期 |
 
-> 全部是**文档/形态决策，非热路径代码**。老板拍板后我才按 B 形态 + 18795 端口开工写 `l2/savings-gateway/`。
+> 决策 1/2/5 = 老板确认贾维斯倾向；决策 3/4 = 老板授权贾维斯按倾向定默认、**可回改**。新会话接 `l2/savings-gateway/` 开工即按此五拍。
+> 全部是**文档/形态决策，非热路径代码**：新模块隔离、不碰 `forward.js`/`codex-proxy/proxy.js`。
 
 ---
 
@@ -84,4 +85,4 @@
 - 每步 E2E 真跑（demo 实测），不抄数字。
 - 复用 `route-engine` / `cost.js` / 3 个 seed profile，不新造路由/成本内核。
 
-_落盘：2026-09-21 · 作者：贾维斯（Hermes Agent）· 设计草案，未写码 · grounded 到已读代码行 · 缺口诚实标注_
+_落盘：2026-09-21 · 作者：贾维斯（Hermes Agent）· 设计稿 · 五决策已拍板 2026-09-21（老板"赞同判断执行"）· 待开工 l2/savings-gateway/ · grounded 到已读代码行 · 缺口诚实标注_

@@ -507,20 +507,26 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 - **5 个待老板拍板决策点**（攒齐明早统一回应）：①形态(倾向 B 新起 `l2/savings-gateway/` 不碰热路径) ②端口(倾向 18795,空闲,避 18790-18794) ③dummy token 机制 ④省钱口径 ⑤成本是否进 route(倾向二期)。
 - 关键认知（已写入 strategy-review）：**「抢占 DSH 生态」≠「发 DSH plugin 包」**——agentgateway 形态(OpenAI 兼容)不卡 0.2，今天可动；DS2/DS3 才卡 DSH 0.2/#1496。
 
-#### 本地 git 状态（实跑核实，**3 commit 未 push，等老板授权**）
-- ahead origin/main(`063a80e`) 3 个：`4593bd1`(§13.18 落盘) / `8496125`(strategy-review) / `de457d1`(透明化三件套)。
-- **本会话待 commit**：`savings-gateway-design.md` + 本节 §13.19（随本轮 commit 落，仍不 push）。
-- 热路径 `forward.js` / `codex-proxy/proxy.js` 全程 **0 触碰**（纯文档）。
+#### 收口进度（本轮 09-21 下午老板回应，全部执行 + 落地）
+- **老板 4 项决策全部回应 ✅**：①五决策拍板（回写 `savings-gateway-design.md §四·§五`）②task3 P5 定「dsh 生态版做完再开发」③push ④manager 收 127.0.0.1。
+- **task1 五决策（已拍板，回写设计稿 §四·§五）**：1 形态 **B**（`l2/savings-gateway/` 不碰热路径）/ 2 端口 **18795** / 3 dummy key `sk-dsh-savings-*`→映射真 provider key（不暴露真 key）/ 4 一期 shadow 模拟 delta + 接 alert.js cost（排行留二期）/ 5 先按难度档位（价格进 route 留二期）。1/2/5=老板确认我倾向；3/4=老板授权我定默认可回改。
+- **git push ✅**：`4593bd1`/`8496125`/`de457d1`/`765434e` 4 本地 commit 已 push origin/main（`063a80e→765434e`，老板授权）。
+- **server.js 绑定 127.0.0.1 ✅（已改 + 后台监听实证 PASS）**：`server.js:131-137` `BIND_HOST` 默认 `127.0.0.1`（Docker/跨机设 `0.0.0.0`，沿用 hermes-proxy 惯例）+ 日志打印 host。实证：起服务→`lsof` `127.0.0.1:18792 (LISTEN)`（非 0.0.0.0）+ `/health` ok→kill；jest 701 零回归。
+- **本轮新 commit（binding+设计稿+§13.19，待老板授权 push）**：见下。
+- **task3 P5**：老板定「dsh 生态版做完再开发」→ 维持 `marvis-p5-gui-design.md` 待办（排 task1 后）。
+- **DSH DS2 等 0.2** 持续；**option2 发版待 DSH 0.2** 持续。
 
-#### 测试基线
-- **维持 §13.18 基线**（jest 701 / l2 17 / option2 pytest 17 / 全量 ~1092）——**本压缩会话未重跑**，仅引用，不抄数字。
+#### 测试基线（本轮真跑，非引用）
+- jest **701/701**（44 suites / 5.18s / 0 fail）
+- l2 demo `mcp-orchestrate-llm` **12/12**
+- option2 pytest **17/17**
+- 与 §13.18 基线一致；绑定改动 jest 701 零回归。
 
-#### 明早老板待回应清单（保留到最后）
-1. task1 五决策点（§savings-gateway-design §五）——形态/端口/dummy token/省钱口径/成本进 route。
-2. task3 Marvis P5 做不做、做到哪一期（`marvis-p5-gui-design.md` 已落盘待拍）。
-3. 是否 `git push` 这 3+1 个本地 commit 到 origin（铁律 push 前问）。
-4. `multi-proxy-manager` 是否收 127.0.0.1 绑定（现 0.0.0.0 靠 JWT 兜底，security-whitepaper 已标）。
-
-#### 续跑提示词（新窗口粘贴）
-> 我在做《multi-proxy》，路径 `/Users/xiaota/Documents/AI项目/multi-proxy`。HEAD 本地 ahead origin/main 3 个未 push commit（`4593bd1`/`8496125`/`de457d1`）+ 新增 `savings-gateway-design.md` 待 commit + §13.19。task2 透明化三件套已落盘；task1 省钱网关只有设计稿、**5 个决策点待老板拍**（形态倾向 B 新起 l2/savings-gateway/ 不碰热路径、端口 18795、dummy token、省钱口径、成本进 route）；task3 P5 待拍做不做；DSH DS2 等 0.2。**请先读 MEMORY.md §13.18+§13.19 + 日志 `MEMORY-2026-09-20.md`，然后接老板明早的拍板回应。铁律：E2E 真跑不抄数字、`git add --` 不 -A、热路径非授权不动、push 前问、子代理 self-report 必核验、不抢 Chrome。**
+#### 续跑提示词（新窗口粘贴，接 task1 开工 `l2/savings-gateway/`）
+> 我在做《multi-proxy》，路径 `/Users/xiaota/Documents/AI项目/multi-proxy`。
+> **task1 省钱网关五决策已拍板**：形态 B（新起 `l2/savings-gateway/`，不碰热路径）/ 端口 18795 / dummy key `sk-dsh-savings-*` 映射真 provider key（不暴露真 key）/ 一期 shadow 算「模拟 delta」+ 接 alert.js cost / 先按难度档位（价格进 route 留二期）。
+> **设计稿**：`docs/04-tech/savings-gateway-design.md`（五决策已回写「✅ 已拍板」）。
+> **收口完成（已 push 765434e）**：manager 127.0.0.1 绑定（`server.js:131-137`，`BIND_HOST` 默认 127.0.0.1，实证 PASS）+ jest 701 零回归。
+> **待办**：task3 P5 等 dsh 生态版做完再开发；DSH DS2 等 0.2。**请先读 `MEMORY.md §13.18+§13.19` + 日志 `MEMORY-2026-09-20.md`，然后接 task1 开工 `l2/savings-gateway/`。**
+> 铁律：E2E 真跑不抄数字、显式 `git add --` 不 `-A`、热路径 `forward.js`/`codex-proxy/proxy.js` 非授权不动、push 前问、子代理 self-report 必核验、不抢老板 Chrome。
 
