@@ -47,17 +47,23 @@ function toMcpTool(adapter, registry) {
 class McpServer {
   // 门控默认关（非侵入铁律）：gate 缺省时读 PROXY_L2_MCP，再缺省 '0'（关）。
   // 只有显式 gate='1' 或 env=1 才开；构造器不再默认 '1'。
-  constructor({ registry, routeEngine, gate } = {}) {
+  constructor({ registry, routeEngine, gate, executor = null, realGate } = {}) {
     this.registry = registry || new AgentRegistry();
     this.routeEngine = routeEngine || new RouteEngine({
       registry: this.registry,
       pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }),
       shadowMode: true,
-     });
+      });
     this.gate = (gate !== undefined) ? gate : String(process.env.PROXY_L2_MCP || '0');
+    // 二级门控 PROXY_ADAPTER_REAL（默认 0=关）：orchestrate 真执行（真调 adapter / 注入 executor）须显式开。
+    // 非侵入铁律：缺省保持 shadow（不触碰下游 adapter），与 PROXY_L2_MCP（bridge 开/关）解耦。
+    this.realGate = (realGate !== undefined) ? realGate : String(process.env.PROXY_ADAPTER_REAL || '0');
+    // 真执行器（注入缝）：(subtask, ctx) => 结果。缺省 null → orchestrate 始终 shadow（零行为变更）；
+    // 生产/standalone 由 require.main 按 PROXY_ADAPTER_REAL 用 _realExecutor 注入（路由选中 adapter）。
+    this.executor = (typeof executor === 'function') ? executor : null;
     this.protocolVersion = PROTOCOL_VERSION;
     this.initialized = false;
-  }
+   }
 
   // 门控检查
   isGateOpen() {
@@ -124,7 +130,7 @@ class McpServer {
         properties: {
           input:      { type: 'string',  description: 'Request to decompose+run (omit if dag given)' },
           dag:        { type: 'object',  description: 'Pre-built DAG {input, template, subtasks, edges} (skips decomposition)' },
-           shadowMode: { type: 'boolean', description: 'Shadow mode (default true; MCP bridge forces shadow for non-invasiveness)' },
+           shadowMode: { type: 'boolean', description: 'Shadow mode. Default true unless PROXY_ADAPTER_REAL gate is enabled; can be forced per-call.' },
           maxRetries: { type: 'number',  description: 'Retry count per subtask on failure (default 1)' },
          },
         required: [],
@@ -169,29 +175,55 @@ class McpServer {
       };
     }
     // 其他 tool：返回 adapter 能力快照（不真执行）。
-    // registry.get 对未知 key 会抛，需兜住转 -32602（带 available 列表）。
-    let adapter;
-    try {
-     adapter = this.registry.get(name);
-    } catch (_) {
-     throw rpcError(
-        -32602,
-        `Tool not found: ${name}`,
-        { available: this.registry.list().map(a => a.adapterId) }
-      );
-    }
-    if (!adapter) {
-     throw rpcError(
-        -32602,
-        `Tool not found: ${name}`,
-        { available: this.registry.list().map(a => a.adapterId) }
-      );
-    }
-    return {
-      adapter: name,
-      shadow: true,
-      capability: adapter,
-      note: 'Shadow mode: no real execution. Enable PROXY_ADAPTER_REAL for real run.',
+     // registry.get 对未知 key 会抛，需兜住转 -32602（带 available 列表）。
+     let adapter;
+     try {
+      adapter = this.registry.get(name);
+      } catch (_) {
+      throw rpcError(
+          -32602,
+          `Tool not found: ${name}`,
+          { available: this.registry.list().map(a => a.adapterId) }
+        );
+      }
+     if (!adapter) {
+      throw rpcError(
+          -32602,
+          `Tool not found: ${name}`,
+          { available: this.registry.list().map(a => a.adapterId) }
+        );
+      }
+     const real = this.realGate === '1';
+     return {
+       adapter: name,
+       shadow: !real,
+       capability: adapter,
+       // 二级门控 PROXY_ADAPTER_REAL 开启时，真执行器经 _realExecutor 路由选中 adapter（非侵入：只算「该谁来跑」，不触下游）；
+       // 缺省关 → 仅路由决策、不触下游。
+       note: real
+         ? 'Real execution enabled (PROXY_ADAPTER_REAL=1): subtask routed to an adapter via the gate.'
+         : 'Shadow mode: no real execution. Enable PROXY_ADAPTER_REAL for real run.',
+      };
+     }
+
+   // 真执行器（注入缝）：非侵入——经 routeEngine.route 路由选中该子任务的 adapter 后，
+    // 委托 this.executor 执行；无 executor 时退化为「仅路由、记录选中 adapter」（不触下游）。
+    // 由 require.main 在 PROXY_ADAPTER_REAL 开启时注入；测试可注入任意 executor 做 E2E。
+   _realExecutor() {
+   const self = this;
+   return async function (subtask, ctx) {
+     const decision = self.routeEngine.route({ ...subtask });
+     const chosen = decision && decision.chosen;
+     const base = { subtaskId: subtask.id, routedAdapterId: chosen ? chosen.adapterId : null };
+     if (typeof self.executor === 'function') {
+       try {
+         const value = await self.executor(chosen ? chosen.adapterId : null, subtask, ctx);
+         return Object.assign(base, { status: 'executed', value });
+        } catch (e) {
+         return Object.assign(base, { status: 'failed', error: e && e.message || String(e) });
+        }
+      }
+      return Object.assign(base, { status: 'routed' });
     };
    }
 
@@ -201,20 +233,29 @@ class McpServer {
     const a = args || {};
     if (name === 'orchestrate') {
       const { Orchestrator } = require('./orchestrator.js');
-      const shadowMode = a.shadowMode !== false;   // 非侵入铁律：默认 shadow（MCP 暴露不真执行）
-      const maxRetries = (a.maxRetries != null) ? Number(a.maxRetries) : undefined;
-      const orch = new Orchestrator({ shadowMode });
+      // 二级门控 PROXY_ADAPTER_REAL（默认关，非侵入）是真执行的唯一权威：
+      //   门控关 → 恒 shadow（不触下游 adapter；per-call shadowMode 不可绕过门控）。
+      //   门控开 → 缺省真执行（缺省 shadowMode=false），per-call shadowMode:true 可强制回 shadow。
+      const gateOn = this.realGate === '1';
+      const shadowMode = gateOn
+        ? (a.shadowMode !== undefined ? (a.shadowMode === true) : false)
+        : true;
+      const orch = new Orchestrator({
+      shadowMode,
+      executor: shadowMode ? undefined : this._realExecutor(),
+       });
       // 有预置 dag → 直供；否则内置模板拆解 input → DAG（零 LLM，确定性）
+      const maxRetries = (a.maxRetries != null) ? Number(a.maxRetries) : undefined;
       const out = (a.dag && Array.isArray(a.dag.subtasks) && a.dag.subtasks.length > 0)
         ? await orch.run(a.dag, { maxRetries, ctx: a.ctx })
         : await orch.runFromInput(a.input || a.prompt || '', { maxRetries, ctx: a.ctx });
       return {
-        shadow: true,
+        shadow: shadowMode,
         template: out.history ? out.history.template : null,
         subtasks: (out.history ? out.history.subtasks : []).map((s) => ({ id: s.id, type: s.type, status: s.status })),
         report: out.report ? out.report.json : null,
-       };
-    }
+        };
+     }
     if (name === 'decompose') {
       const { templateDecompose } = require('./decomposer.js');
       const input = a.input || a.prompt || '';
@@ -393,6 +434,13 @@ if (require.main === module) {
   seedDefaultProfiles(reg);
   const server = new McpServer({ gate: process.env.PROXY_L2_MCP || '0', registry: reg,
       pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }), shadowMode: true });
+  // 二级门控 PROXY_ADAPTER_REAL：开启时编排真执行——非侵入的 _realExecutor 经 routeEngine 路由选中
+  // adapter（无注入下游 executor 时退化为「仅路由记录选中 adapter」，绝不触下游/不写 agent 文件）。
+  // 缺省关 → orchestrate 保持 shadow。
+  if (String(process.env.PROXY_ADAPTER_REAL || '0') === '1') {
+    server.executor = undefined;       // 真路由但无下游 executor → _realExecutor 走「仅路由」退化分支
+    server.realGate = '1';
+  }
   const rl = server.startStdioAsync();
   rl.on('close', () => process.exit(0)); // stdin EOF（客户端断开）即退出
   process.stderr.write('[l2-mcp] bridge started on stdio\n');

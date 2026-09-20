@@ -243,9 +243,81 @@ describe('McpServer · JSON-RPC 2.0 over stdio', () => {
             const r = await s.handleMessageAsync({
                 jsonrpc: '2.0', id: 1, method: 'tools/call',
                 params: { name: 'orchestrate', arguments: { input: 'jwt 认证' } },
-            });
+             });
             expect(r.id).toBe(1);
             expect(r.result.content[0]).toHaveProperty('type', 'text');
-         });
+          });
+       });
+
+    // ---- L2 P3 · 编排「真执行」二级门控（PROXY_ADAPTER_REAL）----
+    // 非侵入铁律：门控关（默认）→ orchestrate 恒 shadow（不触下游 adapter）；门控开 → 真执行
+    // （经 _realExecutor 路由选中 adapter；无注入 executor 时退化为「仅路由」）。
+    describe('编排真执行（PROXY_ADAPTER_REAL 二级门控）', () => {
+       // 门控开 + 注入 executor → 真执行：shadow=false，executor 真跑，value 含路由选中 adapter
+       test('门控开 + 注入 executor → 真执行 shadow=false + executor 被调用', async () => {
+           let calls = 0;
+           const s = newServer('1');
+           s.realGate = '1';
+           s.executor = async (adapterId, subtask) => { calls++; return `real-${adapterId}-${subtask.id}`; };
+           const r = await s.handleMessageAsync({
+               jsonrpc: '2.0', id: 70, method: 'tools/call',
+               params: { name: 'orchestrate', arguments: { input: 'jwt fastapi 认证' } },
+             });
+           const p = JSON.parse(r.result.content[0].text);
+           expect(p.shadow).toBe(false);             // 真执行（非 shadow）
+           expect(p.subtasks).toHaveLength(4);        // fastapi-jwt 模板 4 节点
+           expect(p.subtasks.every((s) => s.status === 'done')).toBe(true);
+           // value 经 _realExecutor：status executed + 路由选中的 adapter
+           const values = p.report.subtasks.map((s) => s.value);
+           expect(values.some((v) => v && v.status === 'executed' && v.routedAdapterId)).toBe(true);
+           expect(calls).toBe(4);                     // executor 真被调用（DAG 4 子任务）
+          });
+
+        // 门控开但无注入 executor → 退化「仅路由」：所有子任务 status='routed'；
+        // 有注册 adapter 的类型带 routedAdapterId（快类型如 test 无 adapter → null，是正确退化，非缺陷）
+        test('门控开 + 无 executor → 退化仅路由（routed，不触下游）', async () => {
+          const s = newServer('1');
+          s.realGate = '1';                           // 模拟 require.main：PROXY_ADAPTER_REAL=1 时 realGate 开、executor 仍 undefined
+          const r = await s.handleMessageAsync({
+              jsonrpc: '2.0', id: 71, method: 'tools/call',
+              params: { name: 'orchestrate', arguments: { input: 'jwt fastapi 认证' } },
+            });
+          const p = JSON.parse(r.result.content[0].text);
+          expect(p.shadow).toBe(false);
+          const values = p.report.subtasks.map((s) => s.value);
+           // 全部子任务退化「仅路由」（无 executor → 不触下游 adapter）
+          expect(values.every((v) => v && v.status === 'routed')).toBe(true);
+           // 有注册 adapter 的类型（code→codex）带 routedAdapterId；test 无注册 adapter → null（正确退化）
+          expect(values.some((v) => v.routedAdapterId)).toBe(true);
+          expect(values.some((v) => v.routedAdapterId === 'codex')).toBe(true);
+          });
+
+        // 门控关（默认）→ 恒 shadow：即便 per-call 传 shadowMode:false 也无法绕过门控（非侵入）
+       test('门控关 → 恒 shadow（per-call shadowMode:false 不可绕过门控）', async () => {
+           let calls = 0;
+           const s = newServer('1');
+           s.realGate = '0';
+           s.executor = async (a, st) => { calls++; return `v-${st.id}`; };  // 即便注入也应在门控关时不被调用
+           const r = await s.handleMessageAsync({
+               jsonrpc: '2.0', id: 72, method: 'tools/call',
+               params: { name: 'orchestrate', arguments: { input: 'jwt fastapi 认证', shadowMode: false } },
+            });
+           const p = JSON.parse(r.result.content[0].text);
+           expect(p.shadow).toBe(true);               // 门控关恒 shadow（per-call 不能绕过）
+           expect(calls).toBe(0);                    // executor 不被调用（零副作用）
+          });
+
+        // 默认（realGate 缺省 0）orchestrate 仍 shadow=true（向后兼容既有 22 例的行为，零回归断言）
+       test('默认门控关 → orchestrate shadow=true（既有行为零回归）', async () => {
+           const s = newServer('1');
+           const r = await s.handleMessageAsync({
+               jsonrpc: '2.0', id: 73, method: 'tools/call',
+               params: { name: 'orchestrate', arguments: { input: '做一个视频短片' } },
+            });
+           const p = JSON.parse(r.result.content[0].text);
+           expect(p.shadow).toBe(true);
+           expect(p.template).toBe('video-workflow');
+           expect(p.subtasks.every((s) => s.status === 'done')).toBe(true);
+          });
+       });
     });
-});
