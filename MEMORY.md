@@ -493,3 +493,34 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 #### 新会话续跑提示词（09-21，新窗口粘贴）
 > 我在做《multi-proxy》项目，路径 `/Users/xiaota/Documents/AI项目/multi-proxy`。HEAD `063a80e` = origin/main（working tree 干净）。本轮（09-20/21）老板 5 项决策全清并 push：① Paseo 定方案 A（维持 P3-c 自研 tmux 保活不动、Paseo 仅可选多端监工层、B/C 暂不排期）② Marvis P5 设计草案 v2 落盘 `docs/04-business/marvis-p5-gui-design.md`（257 行/21KB，复用 desktop 壳 + dashboard 6/7 页，不重造壳不引框架，锦上添花可延后，等老板拍板做不做）③ option2 harness-agent failover 中间件已实施 + 17/17 pytest 真验（`l2/python-middleware/`，Python3.12 + 真 langchain，deepagents PyPI 404 已诚实标）④ option3 二期 L 拆解真接线已落地 `2b3fa42`（mcp-server.js drain-on-EOF 修 + 8 UC demo 12/12 + jest 701 零回归）⑤ DSH DS2 保持现状等 DSH 0.2。**请先读 `MEMORY.md`（尤其 §13.18 + §13.17 历史）+ 本轮日志 `MEMORY-2026-09-20.md`，然后接老板的新诉求。** 铁律：E2E 真跑不抄文档数字、显式 `git add --` 不 `-A`、热路径 `forward.js`/`codex-proxy/proxy.js` 非授权不动、push 前问、子代理 self-report 必须 `ls`/`独立复跑`核验、不抢老板 Chrome（desktop_preview 发链接）。本轮新陷阱见 §13.18（require.main 双 close exit / grep -q FAIL 误报 / 子代理假报）。老板有新诉求，听老板发话。
 
+### §13.19 2026-09-21 续（压缩后新会话）— task2 透明化 + task1 设计稿 + 3 未 push commit + 明早决策点
+
+> 触发：上一条会话压缩=红色区，本轮只做「收稿 + checkpoint」，不堆重活。纯文档，**热路径 0 触碰**。
+
+#### 本轮新增产物（commit `de457d1` 已落，未 push）
+- `docs/04-tech/route-engine-spec.md` — 路由策略透明化（3 +1 信号 + 三级排序 + _mapTier + shadow，缺口诚实标注）。
+- `docs/04-tech/non-intrusion.md` — 非侵入边界（单一所有者 + 四铁律 + `agent-proxy-switch` 活证据）。
+- `docs/04-tech/security-whitepaper.md` — 安全白皮书（JWT/CSP/.env+0o600；**现状缺口：manager `app.listen` 0.0.0.0、无 log_redaction、无 routing_overrides**，诚实标注待拍板）。
+
+#### task1 省钱网关设计草案（未写码，明早拍板）
+- `docs/04-tech/savings-gateway-design.md`：OpenAI 兼容网关 + 省钱看板，复用 route-engine/cost.js/3 seed，不碰热路径。
+- **5 个待老板拍板决策点**（攒齐明早统一回应）：①形态(倾向 B 新起 `l2/savings-gateway/` 不碰热路径) ②端口(倾向 18795,空闲,避 18790-18794) ③dummy token 机制 ④省钱口径 ⑤成本是否进 route(倾向二期)。
+- 关键认知（已写入 strategy-review）：**「抢占 DSH 生态」≠「发 DSH plugin 包」**——agentgateway 形态(OpenAI 兼容)不卡 0.2，今天可动；DS2/DS3 才卡 DSH 0.2/#1496。
+
+#### 本地 git 状态（实跑核实，**3 commit 未 push，等老板授权**）
+- ahead origin/main(`063a80e`) 3 个：`4593bd1`(§13.18 落盘) / `8496125`(strategy-review) / `de457d1`(透明化三件套)。
+- **本会话待 commit**：`savings-gateway-design.md` + 本节 §13.19（随本轮 commit 落，仍不 push）。
+- 热路径 `forward.js` / `codex-proxy/proxy.js` 全程 **0 触碰**（纯文档）。
+
+#### 测试基线
+- **维持 §13.18 基线**（jest 701 / l2 17 / option2 pytest 17 / 全量 ~1092）——**本压缩会话未重跑**，仅引用，不抄数字。
+
+#### 明早老板待回应清单（保留到最后）
+1. task1 五决策点（§savings-gateway-design §五）——形态/端口/dummy token/省钱口径/成本进 route。
+2. task3 Marvis P5 做不做、做到哪一期（`marvis-p5-gui-design.md` 已落盘待拍）。
+3. 是否 `git push` 这 3+1 个本地 commit 到 origin（铁律 push 前问）。
+4. `multi-proxy-manager` 是否收 127.0.0.1 绑定（现 0.0.0.0 靠 JWT 兜底，security-whitepaper 已标）。
+
+#### 续跑提示词（新窗口粘贴）
+> 我在做《multi-proxy》，路径 `/Users/xiaota/Documents/AI项目/multi-proxy`。HEAD 本地 ahead origin/main 3 个未 push commit（`4593bd1`/`8496125`/`de457d1`）+ 新增 `savings-gateway-design.md` 待 commit + §13.19。task2 透明化三件套已落盘；task1 省钱网关只有设计稿、**5 个决策点待老板拍**（形态倾向 B 新起 l2/savings-gateway/ 不碰热路径、端口 18795、dummy token、省钱口径、成本进 route）；task3 P5 待拍做不做；DSH DS2 等 0.2。**请先读 MEMORY.md §13.18+§13.19 + 日志 `MEMORY-2026-09-20.md`，然后接老板明早的拍板回应。铁律：E2E 真跑不抄数字、`git add --` 不 -A、热路径非授权不动、push 前问、子代理 self-report 必核验、不抢 Chrome。**
+
