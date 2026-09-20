@@ -97,15 +97,20 @@ describe('Dashboard Page', () => {
     beforeAll(() => { html = readHtml('dashboard.html'); });
 
     it('should have proxy status stat card', () => {
+      // block1 HIG 重构:代理统计卡从 .stat-card accent-blue 改为 .hig-stat-card blue,
+      // 旧 proxyStatusDetail 元素按新设计删除(统计行已并入 .hig-card 列表)。
+      // count/label 能力仍在,断言跟到新真源(见 dashboard.html .hig-stat-card blue block)。
       expect(html).toContain('id="proxyStatusCount"');
-      expect(html).toContain('proxyStatusDetail');
-      expect(html).toContain('class="stat-card accent-blue"');
+      expect(html).toContain('class="hig-stat-card blue"');
+      expect(html).toContain('class="hig-stat-value"');
     });
 
     it('should have installed count stat card', () => {
+      // block1 HIG:已安装卡从 .stat-card accent-green 改为 .hig-stat-card green,
+      // 旧 installedDetail 元素按新设计删除。count 能力仍在(见 .hig-stat-card green block)。
       expect(html).toContain('id="installedCount"');
-      expect(html).toContain('installedDetail');
-      expect(html).toContain('class="stat-card accent-green"');
+      expect(html).toContain('class="hig-stat-card green"');
+      expect(html).toContain('class="hig-stat-value"');
     });
 
     it('should have version info card', () => {
