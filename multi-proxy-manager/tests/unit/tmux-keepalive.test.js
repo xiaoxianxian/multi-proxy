@@ -1,38 +1,37 @@
 'use strict';
 
 // jest test for TmuxKeepalive（M7 方向六 P3-b：长任务tmux 保活原语）
-// 真 tmux（3.7c 已装）往返验证 + 注入假 tmux 覆盖"未装降级"路径。
+// hermetic 化：start/attach/stop/list/幂等 等需要 daemon 状态往返的用例走 fake-tmux（per-worker 隔离，
+// 不碰系统 tmux daemon），根治「多 worker 并发踩同一 tmux daemon」的 flaky。
+// 真 tmux 仍由两类用例覆盖：① 可用性探测 tmuxAvailable()（本机 3.7c 已装）；
+// ② 注入不存在命令 → 全接口回 tmux not found（与 daemon 状态无关，不受并发影响）。
 const { TmuxKeepalive, tmuxAvailable, _resetTmuxProbe } = require('../../lib/tmux-keepalive');
-const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-describe('TmuxKeepalive（P3-b 长任务保活原语）', () => {
-    const S = (i) => `test-${i}`;       // 原始 sessionId（白名单内）；前缀由 sessName() 统一加
+const FAKE_TMUX = path.join(__dirname, 'helpers', 'fake-tmux.js');
+// fake 的 per-worker 隔离 state：WID 让多 worker 各用各的 state（互不串味），同 worker 内靠 beforeEach 清。
+const FAKE_STATE = path.join(os.tmpdir(), 'fakemux-wid-' + (process.env.JEST_WORKER_ID || '0') + '-state.json');
+
+describe('TmuxKeepalive（P3-b 长任务保活原语 · hermetic fake tmux）', () => {
+    const S = (i) => `test-${i}`;        // 原始 sessionId（白名单内）；前缀由 sessName() 统一加
     let tm;
     let tmpCwd;
-    let fakeExec;
 
     beforeEach(() => {
-        tm = new TmuxKeepalive();
+        // 清本 worker 的 fake state（同 worker 内各用例隔离）+ 建 tmp cwd
+        try { fs.rmSync(FAKE_STATE, { force: true }); } catch { /* ignore */ }
+        tm = new TmuxKeepalive({ tmux: FAKE_TMUX });   // 默认用例走 fake，不碰真 daemon
         tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'm7-tk-'));
-    });
+      });
     afterEach(() => {
         _resetTmuxProbe();
-        // 清理本测试可能留下的真 session（名字带 m7- 前缀）
-        for (const id of ['test-a', 'test-b', 'test-c']) {
-            spawnSync('tmux', ['kill-session', '-t', 'm7-' + id], { stdio: 'ignore' });
-        }
+        try { fs.rmSync(FAKE_STATE, { force: true }); } catch { /* ignore */ }
         try {
             fs.rmSync(tmpCwd, { recursive: true, force: true });
-        } catch { /* ignore */ }
-        try {
-            if (fakeExec && fs.existsSync(fakeExec)) {
-                fs.rmSync(path.dirname(fakeExec), { recursive: true, force: true });
-            }
-        } catch { /* ignore */ }
-    });
+         } catch { /* ignore */ }
+     });
 
     it('tmux 可用(3.7c 已装)', () => {
         expect(tmuxAvailable()).toBe(true);
