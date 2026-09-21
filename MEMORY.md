@@ -554,5 +554,27 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 **二期/后续（YAGNI 未接）**：真执行（shadow off + executor 真打上游）/ 价格进 route 排序 / 排行榜·落盘 / A 路 token×单价 埋点。
 
 **待办不变**：task3 P5 等 dsh 生态版；DSH DS2 等 0.2。
-**下一步**：push 需老板授权（当前 1 commit 待 push）。
+
+---
+
+### §13.21 2026-09-21 根治 pre-existing flaky ✅（commit `39f57bb`，已 push）
+
+> 全量 `npx jest` 偶发 1 挂（~10% 频率），定位并 hermetic 修完。属 M7 存量 P3-c/P3-d 测试基建，独立于 task1。
+
+**产物**：
+- `tests/unit/helpers/fake-tmux.js`（~100 行）：纯 node 假 tmux binary，实现 `new/has/kill/list/attach` 子命令语义，state 落 `JEST_WORKER_ID` 命名的 per-worker 文件（`fakemux-wid-<WID>-state.json`）。
+- `session-keepalive.test.js` / `tmux-keepalive.test.js` / `p3d-crash-recovery.test.js` 三套测试注入 `TmuxKeepalive({tmux: FAKE_TMUX})` + 每 `beforeEach` 清 fake state；真 tmux 仅保留「可用性探测 `tmuxAvailable()`」+「注入不存在命令降级」两类与 daemon 无关用例。
+
+**根因（已实证，非臆测）**：
+- flaky 只在**全量并发多 worker** 出现，3 文件单独 `--runInBand` 各 30 次全绿。
+- jest worker 内**运行时改的 `process.env` 不传给 `spawn` 子进程**（实测 `spawnSync` 子进程 `PROBE_X=UNSET`），但 `JEST_WORKER_ID` 是 OS 级 env，能传给 spawn 子进程且 worker 内稳定唯一（实测 `CHILD_SEES=1`）→ 用它做 per-worker state 命名空间，根治多 worker 并发踩同一 tmux daemon + 单一 state 文件跨 worker 串味。
+
+**真跑数字（本轮）**：
+- 3 文件单独 `--runInBand` 各 30 次全绿
+- 全量并发 13/13 + 15/15 + 干净态 5/5 = **719/719 零回归，0 fail**
+- 全量单次确认 719/719（45 suites / 0 fail）
+
+**push**：`bfb57f0..39f57bb` ✅ origin 平齐。工作区 `git status` 干净。
+
+**残余观察（非阻塞）**：`sessions-api.test.js › GET /api/sessions returns empty list` 在**并发全量**约 1~2/15 偶挂（单跑 20/20 全绿），是 module-level `mockStore` 的 jest worker 复用噪声，与本 flaky 无关、与 tmux 无关；属独立 pre-existing，可单独排期（jest testIsolation / 改 `jest.mock` factory 缓存），本轮不扩大战场。
 
