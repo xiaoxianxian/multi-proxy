@@ -39,8 +39,8 @@ related_docs:
 | 层 | 内容 | 成本/风险 | 状态 |
 |----|------|-----------|------|
 | **DS1** | 2 个 `SKILL.md`（`multi-proxy` + `l2-orchestrator`）+ `dsh-plugin` GitHub topic 骨架 | 半天 · 零风险 | ✅ 本次完成（见下方"已完成"） |
-| **DS2** | 发 npm bundle（`package.json` 加 `dsh.bundle` 字段，对外发布） | 中风险 · 需 DSH 0.2 稳定 | ⏸ 暂缓 |
-| **DS3** | 用户实际 `dsh plugin add` 运行 | 高风险 · guardrail 未修 | ⏸ 暂缓 |
+| **DS2** | 发 npm bundle（`package.json` 加 `dsh.bundle` 字段，对外发布） | 中风险 · 需 DSH 0.2 稳定 | ⏸ 暂缓（09-21 实测：DSH 最新 `v0.1.6-alpha.2`，0.2 未发） |
+| **DS3** | 用户实际 `dsh plugin add` 运行 | 高风险 · install guardrail 未修 | ⏸ 暂缓（见风险节，09-21 实核 #1496 来源存疑） |
 
 ### option3 收口（2026-09-19）：L2 MCP bridge 落地，DS2 仍为外部阻塞
 
@@ -75,14 +75,13 @@ related_docs:
 
 ### 风险：DSH 安装 guardrail 未修
 
-- GitHub 讨论 #1496：`dsh plugin add` 装错插件可能导致整个 profile 起不来，
-  无自动诊断 / 回滚，社区正在修 P0 guardrail。
+- GitHub 讨论 #1496：`dsh plugin add` 装错插件可能导致整个 profile 起不来，无自动诊断 / 回滚。**2026-09-21 gh 实核**：`deepseek-ai/deepseek-harness` 已 `repository has disabled issues`，#1496 已无法定位（疑似过时/重编号，原文据 09-16 记录），社区侧 P0 guardrail 状态待官方重新发布确认。
 - **对策**：DS3（实际运行）等 guardrail 修复后再做；DS1/DS2 仅"产出骨架"，不实际安装到任何 profile。
 
 ### 暂缓项
 
-- DS2 npm bundle 发布：等 DSH 0.2 稳定 + 包规范确认。
-- DS3 用户实跑：等 #1496 guardrail 修复。
+- DS2 npm bundle 发布：等 DSH 0.2 稳定 + 包规范确认。**（09-21 实测：DSH 最新 `v0.1.6-alpha.2`，0.2 仍未发）**
+- DS3 用户实跑：等 guardrail 修复。**（09-21 实测：#1496 在官方仓库已无法核实，需 DSH 侧重新确证）**
 - 实际打 GitHub topic：等 DSH 0.2 稳定（避免在预览版上留噪音）。
 
 ## 五、验收标准（DS1）
