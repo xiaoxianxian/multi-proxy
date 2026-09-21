@@ -18,6 +18,11 @@ const { MODEL_TIERS, DEFAULT_TIER } = require('./agent-registry');
 
 const DEFAULT_LOG_CAPACITY = 100;
 
+// log_redaction 三档：默认 'full' = 现状（taskPrompt 截前 50 字，不改变行为）。
+// 'metadata_only' = 日志不记任务正文（仅元数据长度，供审计不含内容）；'off' = 完全不记 taskPrompt。
+// 门控默认 full：符合「门控默认关 / 不改变现有行为」非侵入铁律——脱敏是可选增强，默认零变化。
+const DEFAULT_LOG_REDACTION = 'full';
+
 class RouteEngine {
     constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null } = {}) {
         this.registry = registry;
@@ -25,6 +30,8 @@ class RouteEngine {
         this.shadowMode = shadowMode;
         this.log = []; // 路由决策日志，最多 logCapacity 条
         this.logCapacity = logCapacity;
+        // log_redaction：控制 decision.taskPrompt 脱敏。默认 'full'（现状不变），见上方注释。
+        this.logRedaction = DEFAULT_LOG_REDACTION;
         // L2 P3 真执行器注入：(adapterId, task, ctx, runOpts) => Promise<value>。
         // 默认 null = 保持 stub（status:'queued'），零行为变更。
         this.executor = executor;
@@ -38,7 +45,7 @@ class RouteEngine {
             timestamp: new Date().toISOString(),
             taskId: task.id || null,
             taskType: task.type,
-            taskPrompt: task.prompt ? (typeof task.prompt === 'string' ? task.prompt.slice(0, 50) : '...') : null,
+            taskPrompt: this._redact(task.prompt), // taskPrompt 按 log_redaction 门控脱敏
             candidates: [],
             chosen: null,
             shadowMode: this.shadowMode,
@@ -137,8 +144,14 @@ class RouteEngine {
      }
 
      // 清空调用
-    clearLogs() {
-        this.log = [];
+     clearLogs() {
+       this.log = [];
+     }
+
+     // 设置 log_redaction 档：'full'(默认)/'metadata_only'/'off'。
+     setLogRedaction(level) {
+       if (['full', 'metadata_only', 'off'].includes(level)) this.logRedaction = level;
+       // 未知值保持原档不变
      }
 
      // ---- 私有方法 ----
@@ -174,10 +187,23 @@ class RouteEngine {
      }
 
      _pushLog(decision) {
-        this.log.push(decision);
-        if (this.log.length > this.logCapacity) {
-            this.log = this.log.slice(-this.logCapacity);
+         this.log.push(decision);
+         if (this.log.length > this.logCapacity) {
+             this.log = this.log.slice(-this.logCapacity);
          }
+     }
+
+     // taskPrompt 脱敏（按 this.logRedaction 档）。
+     // 'full'：现状——字符串截前 50 字，非字符串记 '...'，无 prompt 记 null（零行为变更）。
+     // 'metadata_only'：有 prompt 只记元数据 { hasPrompt, length }，不留正文。
+     // 'off'：不记（null）。
+     _redact(prompt) {
+         if (this.logRedaction === 'off') return null;
+         if (this.logRedaction === 'metadata_only') {
+             return prompt != null ? { hasPrompt: true, length: (typeof prompt === 'string' ? prompt.length : 0) } : null;
+         }
+         // 'full'（默认）：维持现状
+         return prompt ? (typeof prompt === 'string' ? prompt.slice(0, 50) : '...') : null;
      }
 
     async _execute(adapterId, task, ctx, runOpts) {

@@ -578,3 +578,30 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 **残余观察（非阻塞）**：`sessions-api.test.js › GET /api/sessions returns empty list` 在**并发全量**约 1~2/15 偶挂（单跑 20/20 全绿），是 module-level `mockStore` 的 jest worker 复用噪声，与本 flaky 无关、与 tmux 无关；属独立 pre-existing，可单独排期（jest testIsolation / 改 `jest.mock` factory 缓存），本轮不扩大战场。
 
+---
+
+### §13.22 2026-09-21 7 残余项逐项拍板收口（老板回「按建议」采纳 1–5 倾向 · 纯文档落盘 · 热路径 0 触碰）
+
+> 老板让我把 7 残余项「逐项拍板点+后果+建议」讲清后回「按建议」：采纳 1–5 项我的建议倾向；6/7 是外部依赖、无本地决策点。本节落盘 5 决策 + 4 实核纠正，供后续会话别再重查/别再误判。
+
+**5 项采纳决策（老板「按建议」）**：
+1. **D6-b / D5 → 维持 shadow 稳态**：override 终局不翻 1；**D5 不写真实 DB**（`findProviderByType` 已解引擎名→type，4 provider 全 enabled，写 DB 是多余动作）。真要翻 1 的路径：先 `np build dist`（dist chatHandler.js 9/11 未编译 `PROXY_ROUTE_OVERRIDE`，不 build 翻了是空操作）→ 隔离端口 18800 发 coding 请求验证真接管（不碰生产 18794）→ 再定写不写进 `manage.sh start_cursor`。**后果**：误禁用 provider 会重排全局路由、退化单点；注入只走子进程 env + 重启，绝不 `launchctl setenv`。
+2. **M2 自动隔离（PROXY_HEALTH_ISOLATE）→ 维持 observe**：不 flip `enabled=false`、不跳 RR、不定时 probe 真打上游；alert.js（`PROXY_HEALTH_ALERT`）同步维持 observe。**后果**：翻执行态=误隔离重排全局路由 + 定时 probe 产生真实流量/扣费，需独立 sign-off + live 回归，贾维斯不自动做。
+3. **安全缺口 → 只补 log_redaction**（隐私优先：新增模块 + 门控默认关 + 不碰热路径；`route-engine.js` 决策日志现记 `taskPrompt` 前 50 字无三档）；**routing_overrides**（`force_provider`/按 task_type 锁强模型，全仓 0 命中、DeepSeek 建议的配置形）**留二期**。
+4. **token×单价 埋点 → 启用**：注入各 `PROXY_PRICING_<proxy>` + 开 `PROXY_COST_TRACK=1`（observe 累计进内存、不写盘）。**热路径已就位，无需再改**。
+5. **sessions-api 残余 flaky → 单独排期修**（jest `testIsolation` / 改 `jest.mock` factory 缓存；低成本、提升 CI 稳定性、不阻塞）。
+
+**4 条实核纠正（防后续会话重查 / 别误判）**：
+- **① token×单价埋点热路径已落地（非待做）**：`multi-proxy-manager/lib/forward.js:166-168` 已 `require('./cost-track').accumulate(proxyName, response.data.usage)`（门控 `PROXY_COST_TRACK` 关=只读 usage 提取、<1μs 零开销）+ `server.js:125/129` 已 `costTrack.loadPricingFromEnv()` 注入。老板原列「需 model→pricing 映射 + 改热路径授权」是**过时认知**；真缺口=「未启用 + 未注入 pricing」（`.env` 0 命中 `PROXY_COST_TRACK`/`PROXY_PRICING`），非「未接线」。
+- **② D5 无需写真实 DB**：`docs/02-product/m6-action-checklist.md` 决策 1 结论——`findProviderByType` 不写 DB、`DEFAULT_ROUTE_CONFIG` 真名对齐、4 provider 全 `enabled=1`，决策 1（DB enable qwen3.8:27b-mlx ollama）已满足。实核本仓 `*.db` 候选为空（cursor 侧 DB 在 home 目录、非 repo 跟踪）。
+- **③ sessions-api flaky 已隔离定性**（§13.21 实测）：并发全量 1~2/15 偶挂 / 单跑 20/20 全绿，根因 module-level `mockStore` 的 jest worker 复用噪声，与 tmux flaky（已根治 `39f57bb`）无关、与功能无关；本轮定「单独排期」，与 tmux 根治分两批。
+- **④ P5 / DSH 纯外部依赖、无本地决策点**：P5 设计稿 v2 已就绪（`docs/04-business/marvis-p5-gui-design.md`，257 行/21KB，复用 desktop 壳 + dashboard 6/7 页），老板定「dsh 生态版做完再开发」维持待办；option2 已 17/17 pytest 真验（`l2/python-middleware/`），DS2/DS3/发版卡 DSH 0.2 + issue #1496，外部进度需 gh/API 核实、非凭文档断言。
+
+**下一步行动项（老板发话后开，本轮仅落盘不动手）**：
+- 省钱看板出数：注入各 `PROXY_PRICING_<proxy>` + 开 `PROXY_COST_TRACK=1` → live 跑确认 `cost-track.getCost()` 累计（热路径已就位）。
+- log_redaction 新增模块 + 门控默认关（独立任务，不碰热路径）。
+- sessions-api flaky 单独排期修（testIsolation / jest.mock factory 缓存）。
+- D6-b/D5 维持 shadow 不动；M2 维持 observe 不动；routing_overrides / P5 / DSH 维持待办等外部。
+
+**本轮基线（承接 §13.20/§13.21，未重跑——纯文档落盘）**：jest **719/719** / l2 demo **17/17** / option2 pytest **17/17**。工作区：MEMORY.md 本次 `§13.22` 落盘后变 dirty（未 commit / 未 push，遵「push 前问」）。
+

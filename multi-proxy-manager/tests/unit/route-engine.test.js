@@ -156,4 +156,43 @@ describe('RouteEngine', () => {
         expect(d.expectedTier).toBe('medium');
         expect(d.chosen).toMatchObject({ adapterId: 'med', tierMatch: true, modelTier: 'medium' });
      });
+
+     // ---- log_redaction 三档（默认 full = 现状，门控默认关不改变行为）----
+     // 局部 engine，不污染共享 setup
+
+    test('log_redaction default is full (status quo: 50-char truncation, zero behavior change)', () => {
+        const reg = new AgentRegistry();
+        reg.create({ id: 'h', name: 'H', type: 'custom', adapterId: 'h', capabilityTags: ['text'] });
+        const e = new RouteEngine({ registry: reg, pluginRuntime, shadowMode: true });
+        // 默认档 = full：长 prompt 截前 50 字
+        const d = e.route({ id: 'r1', type: 'text', prompt: 'x'.repeat(200) });
+        expect(d.taskPrompt).toHaveLength(50);
+        // 非字符串 prompt → '...'（现状不变）
+        const d2 = e.route({ id: 'r2', type: 'text', prompt: 12345 });
+        expect(d2.taskPrompt).toBe('...');
+        // 无 prompt → null（现状不变）
+        const d3 = e.route({ id: 'r3', type: 'text' });
+        expect(d3.taskPrompt).toBeNull();
+     });
+
+    test('log_redaction metadata_only: 不记正文，只留元数据', () => {
+        const reg = new AgentRegistry();
+        reg.create({ id: 'h', name: 'H', type: 'custom', adapterId: 'h', capabilityTags: ['text'] });
+        const e = new RouteEngine({ registry: reg, pluginRuntime, shadowMode: true });
+        e.setLogRedaction('metadata_only');
+        const d = e.route({ id: 'r4', type: 'text', prompt: 'secret content here' });
+        expect(typeof d.taskPrompt).toBe('object');
+        expect(d.taskPrompt.hasPrompt).toBe(true);
+        expect(d.taskPrompt.length).toBe('secret content here'.length);
+        expect(JSON.stringify(d.taskPrompt)).not.toContain('secret'); // 正文不进日志
+     });
+
+    test('log_redaction off: taskPrompt 完全不记', () => {
+        const reg = new AgentRegistry();
+        reg.create({ id: 'h', name: 'H', type: 'custom', adapterId: 'h', capabilityTags: ['text'] });
+        const e = new RouteEngine({ registry: reg, pluginRuntime, shadowMode: true });
+        e.setLogRedaction('off');
+        const d = e.route({ id: 'r5', type: 'text', prompt: 'secret content here' });
+        expect(d.taskPrompt).toBeNull();
+     });
 });
