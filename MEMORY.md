@@ -626,3 +626,15 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 **本轮基线（实跑）**：cost-watchdog 34/34 + 一期 24/24 + 全 22 l2 demo exit 0；codex-proxy **59/59** / hermes-proxy **77/77** / cursor-proxy **131/131**（带 env）/ manager jest **722/722**（45 suites，0 回归）；option2 pytest 17/17 承接。热路径 `forward.js`/`codex-proxy/proxy.js`/`chatHandler.ts` **0 改动**（git status 仅 7 新增 + `risk-register.md` 1 modified）。B1/B2/C1 留老板 confirm；C4 定商务；C5 等 DSH。
 
+### §13.24 B1 路由塌缩已修复（2026-09-22）—— 补 cursor-proxy models 6 行 + 18800 闭环验证
+
+**老板 confirm「补吧」→ 执行完成**。读 `chatHandler.ts:370-437` 后**精确真因**（比 §13.23"全 fallback kimi"更准）：第 377 行 `findProviderConfig(model)` 每请求先用**原 model 名**解析一次——非 round-robin + models 0 行 → fallback「最新 created_at=kimi」；而 override 块（:398）其实已用 `findProviderByType`（按 type，正确），只有「引擎建议 model==原 model」（:395 `!==` 不成立）时跳过 override、退回 377 的 kimi → 上游不认 → 404。`routing_mode=priority`（非 round-robin）正是走 models 路径 → 6 模型名全 fallback kimi。
+
+**已执行**：① 备份 `data/proxy.db` 到 `/tmp/db-backup-20260922-055208/`（可回滚）；② 补 6 行到 `models` 表（映射来自代码权威常量 `MODEL_NAME_TO_PROVIDER_TYPE` `:219-226`，非臆造；`provider_id` 存 provider **UUID** 由 `INSERT models(provider_id)` 的下游 `find by id` 反查决定，从 DB 自身查、不手抄杜绝错映射→重排路由；幂等 + 事务）：`deepseek-v4-pro`/`deepseek-flash`→DeepSeek-Test（deepseek）/`agnes-2.5-flash`→agnes（generic）/`kimi-k2.6`/`kimi-k3`→kimi（openai）/`qwen3.8:27b-mlx`→qwen（ollama）；③ 固化可重跑脚本 **`cursor-proxy/scripts/seed-models.cjs`**（因 `cursor-proxy/package.json` 含 `"type":"module"`，`.js` 被当 ESM 报错 → 必须 `.cjs`；幂等复跑 0 inserted / 6 skipped 验证通过）。
+
+**18800 闭环铁证**（隔离端口，绝不碰生产 18794）：补前 `model=deepseek-v4-pro, provider=kimi` → `Not found the model` → **404**；补后 `model=deepseek-v4-pro, provider=DeepSeek-Test` → `content="Hi! How can I help you today?"` **成功**。
+
+**非破坏验证**：`providers` 仍 **4/4 enabled**（写 models 不动 providers）、`integrity_check: ok`、`models` 0→6；只让 6 个已知模型名走对上游，未知名仍 fallback kimi（属改善非破坏）。data/ 在 `.gitignore`（`data/*.db`）→ DB 改动本地生效、不进 git（脚本留痕入库）。热路径 `forward.js`/`proxy.js`/`chatHandler.ts` **0 触碰**（B1 只写 `models` 表数据 + 新增 1 脚本）。回滚路径：`/tmp/db-backup-20260922-055208/proxy.db`。
+
+**注意**：§13.22/§13.23 及 INDEX 旧行「B1 不写真实 DB / 留老板 confirm」描述**已被本段推翻**——老板 confirm 后已补 6 行 + 验证成功。
+
