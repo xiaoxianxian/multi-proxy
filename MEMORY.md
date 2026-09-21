@@ -605,3 +605,24 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 **本轮基线（承接 §13.20/§13.21，未重跑——纯文档落盘）**：jest **719/719** / l2 demo **17/17** / option2 pytest **17/17**。工作区：MEMORY.md 本次 `§13.22` 落盘后变 dirty（未 commit / 未 push，遵「push 前问」）。
 
+### §13.23 B/C 逐项执行（2026-09-21 晚）—— override 终局灰度暴露生产红线 + C2/C3 落盘
+
+**触发**：老板「B 类全做 / C 类全做 / 3 commit push」。3 commit（`5fc6544`/`96f4fda`/`526d063`）已 push `96f4fda..526d063 main->main`，本地与 `origin/main` 平齐。
+
+**B1 · override 终局灰度（重大发现，留老板 confirm）**：隔离端口 `18800`（绝不碰生产 `18794`）起 `PROXY_ROUTE_OVERRIDE=1` 实例发 coding 请求 → 日志铁证 `model=deepseek-v4-pro, provider=kimi` → moonshot 回 `Not found the model deepseek-v4-pro` → **404**。根因定位：`models` 表 **0 行** → `findProviderConfig`（`chatHandler.ts:165-186`）对任意 model fallback 到「最新 `created_at` 的 provider = kimi」→ 4 provider **100% 塌缩到 kimi（moonshot 不认 deepseek 模型名）**。`findProviderByType`（`:228`）逻辑本身正确（`deepseek-v4-pro→deepseek type`），问题在 `findProviderConfig` 的 fallback 路径。**结论：override 终局翻 `PROXY_ROUTE_OVERRIDE=1` 接管生产 18794 当前不可行——会 100% 404 + 重排全局路由（红线）**。D5 文档 09-13 警告的「路由塌缩」灰度真跑复现了。DB `integrity_check: ok` / `providers 4/4` / `models 0` 无损坏。**推进需往 `models` 表补 4 条真实映射（`deepseek-v4-pro→DeepSeek-Test` 等），属写 DB 动作，留老板拍**。
+
+**B2 · M2 执行态 verify（代码层不存在执行动作）**：读 `provider-health.js` 全文 + grep 上层接线——模块三处明注「绝不 flip enabled / 不改路由 / observe 下只是建议清单」，`PROXY_HEALTH_ISOLATE` 仅控 `isolateEnabled()` 布尔，**无任何上层把它接到写 DB / 重排路由**。M2「执行态」是**未实现设计**，非可灰度开关；翻执行态需新开发执行层 + 独立 sign-off + live 回归（P 级，不投机全做）。
+
+**B3 · D5 写 DB 收口**：DB 实查 4 provider **全 `enabled=1`** + `findProviderByType` 代码层已解「引擎名→provider」→ **不写 DB**（09-13「enable qwen ollama」待办现状已满足，写多余）。
+
+**C1 · routing_overrides**：全仓 greenfield。鉴于 B1 塌缩根因，正确实现须**显式指定 provider（绕过 `findProviderConfig` fallback 塌缩）**，列 scope 不投机实现（P5 + YAGNI）。
+
+**C2 · 省钱二期（子代理 `sa-0-f79ceaf4`，已落地验证）**：选「成本预警 + 自动降级」合一做透 → `l2/savings-gateway/cost-watchdog.js`（304 行，两档阈值 warn/critical + `cheaperTier` 降级 small<medium<large + cooldown 去重 + `produceAlertSignal` 喂 `alert.js`，门控 `PROXY_COST_WATCH` 默认关 observe，零第三方依赖）+ `cost-watchdog.demo.js`（152 行 **34/34 PASS**）+ `PHASE2-SPEC.md`。一期 `savings-gateway.demo.js 24/24` 零回退，全 22 个 l2 demo exit 0。降级 actionable：`gateway high→large(qwen)` → 降级 `medium→deepseek` 省钱（demo [10]）。
+
+**C3 · 测试盲区（子代理 `sa-1-3c144ad9`，已落地验证）**：① hermes-proxy 无 chat 端点 → 改 Flask test client E2E，新增 `tests/test_e2e_hermes.py` **14/14 PASS**（基线 63→**77**）；② codex-proxy 流式 pipeTo 是**确定性架构 bug B6**（Express `ServerResponse` 非 WHATWG WritableStream，`response.body.pipeTo(res)` 运行时抛 TypeError 被 catch 成 504，非 flaky）→ 新增 `tests/stream-bypass.test.js` **4/4 PASS**（含 1 项断言 B6 bug 存在，基线 55→**59**）；B6 修复建议（未应用，需独立 PR + live）：`pipeTo(res)` 改 `Readable.fromWeb(response.body).pipe(res)`，参照 `cursor-proxy/chatHandler.ts:333` 正确实现。③ cursor-proxy「11 suites 全 FAIL」是子代理**漏 `NODE_OPTIONS=--experimental-vm-modules`**——带该 env 即 **131/131 PASS**（虚惊，非回归）。
+
+**C4 · kimi 价格**：`routeEngine.ts:202` `{0.6/2.5/0.1}` 估算占位，`m6-action-checklist.md` 明注「定价是老板商务决策」→ **不动价**，基线摆出待老板定。
+**C5 · GitHub topic / npm 包**：DSH 停 `v0.1.6-alpha.2`（0.2 未发）+ #1496 官方仓库无法核实 → 维持观察，本批无本地可做。
+
+**本轮基线（实跑）**：cost-watchdog 34/34 + 一期 24/24 + 全 22 l2 demo exit 0；codex-proxy **59/59** / hermes-proxy **77/77** / cursor-proxy **131/131**（带 env）/ manager jest **722/722**（45 suites，0 回归）；option2 pytest 17/17 承接。热路径 `forward.js`/`codex-proxy/proxy.js`/`chatHandler.ts` **0 改动**（git status 仅 7 新增 + `risk-register.md` 1 modified）。B1/B2/C1 留老板 confirm；C4 定商务；C5 等 DSH。
+

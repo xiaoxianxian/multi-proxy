@@ -64,8 +64,8 @@ related_docs:
 
 | 盲区 | 等级 | 处置 |
 |------|------|------|
-| hermes-proxy 无 E2E（3 文件 / 63 pytest，覆盖基本够用） | P2 | 后续 P? 补 E2E |
-| codex-proxy 超时/流式断流真实 pipeTo 路径未覆盖（需 mock upstream 流） | P2 | 非当前范围 |
+|| hermes-proxy 无 E2E（3 文件 / 63 pytest，覆盖基本够用） | P2 | **已补** 2026-09-21：新增 `tests/test_e2e_hermes.py`（14 项测试），覆盖 /health、/v1/models、/api/routing-mode、/api/switch-model、/api/providers CRUD、/api/history 等全链路，全部通过。hermes-proxy 无 `/v1/chat/completions` 端点，E2E 止于 HTTP 管道验证。 |
+|| codex-proxy 超时/流式断流真实 pipeTo 路径未覆盖（需 mock upstream 流） | P1（已确认为 B6 bug） | **已确认+记录** 2026-09-21：通过 `tests/stream-bypass.test.js`（4 项新测试）利用 `jest.spyOn(fetch)` mock upstream ReadableStream，证实 `response.body.pipeTo(res)` 因 Express Response 非 WHATWG WritableStream 而失败，返回 504 而非 SSE。热路径未动，测试结果诚实挂账。 |
 | `tests/shell/` 仅 11 bats，覆盖 manage.sh 启停 | P3 | 够用 |
 
 ---
