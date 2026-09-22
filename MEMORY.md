@@ -638,3 +638,17 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 **注意**：§13.22/§13.23 及 INDEX 旧行「B1 不写真实 DB / 留老板 confirm」描述**已被本段推翻**——老板 confirm 后已补 6 行 + 验证成功。
 
+### §13.25 M2 执行层已开发(待接热路径) + Q1 双计费 + Q3 卸载 + B6 修复(2026-09-22)
+
+**M2 · 执行层(子代理 `sa-0-190e2c8b`，老板拍板「开发」)**：新建 `multi-proxy-manager/lib/provider-isolation-executor.js`(424行)+ test(370)+ demo + `docs/02-product/m2-execution-signoff.md`。消费 `provider-health.listIsolated()` 判定→执行(内置 writeMarkers 写 sidecar `provider-isolation.json`，**绝不 flip providers.json enabled**)。门控 `PROXY_HEALTH_ISOLATE`(关=observe：只产建议、不写盘、不改路由；开=真执行写 sidecar)。**manager jest 746/746**(722基线+24新，0回归)。热路径零改动(session-store.js 0 diff，M2 仅 `import provider-health` 消费其现成数据)。**老板拍板：初期 observe(门控关)，先观察 1-2 周**。
+
+**⚠️ M2 接热路径提醒(老板要求记录防不了了之)**：M2 执行层已开发并验证但**尚未接线**(不接热路径/cron/管理台按钮，待 sign-off 决策)。后续需接：① cron(定时调用 `run()` 消费 provider-health 隔离子)；② 管理台按钮(flip-enabled 开关 + 审批 UI)；③ `notify` 缝(隔离事件推送，注入缝，需 sign-off)。**触发提醒时机：观察 1-2 周(约 2026-10-06)后提醒老板决定 M2 是否接热路径 + 接哪几项 + flip-enabled/notify 是否开放**。`PROXY_HEALTH_ISOLATE` 默认关，flip-enabled 硬默认 false(红线)。
+
+**B6 · 流式断流修复(子代理 `sa-1-3c144ad9`，老板拍板「修」)**：`codex-proxy/proxy.js:617-645` `response.body.pipeTo(res)` → `Readable.fromWeb(response.body).pipe(res)`(参照 cursor `chatHandler.ts` 正确写法)，修「Express ServerResponse 非 WHATWG WritableStream → 504」；保留 504 回退 + `await Promise` 等 pipe 完。codex-proxy **59/59** + 独立 Node 脚本 live 证 200(202 SSE 字节完整, 不 504)。**父核验**: 代码质量规范, 热路径仅触流式分支(±3行)。**未 commit**(git 被 Xcode 锁, 见 Q3 Xcode 问题)。
+
+**Q1 · kimi 双计费(老板拍板「两个都做，门控默认关」)**：API token 计费 + coding plan 订阅计费，分开算；glm/codex 占位不编造。**3 文件**(routeEngine.ts 价表 + ruleEvaluator.ts 双计费维度 + 新增 routing-billing.test.ts 185 行)。**父独立核验**: 双门控 jest 各 **143/143**(gate 关=现状行为不变, 11 旧测试 0 退化; gate 开=订阅维度行使, kimi-sub 月费均摊趋 0)；代码质量规范(字段全可选向后兼容, 门控默认关, 分母缺失安全退化, 大小写/空格不敏感)。**lookup key 核实一致**(DB `models.name`='kimi-k2.6' 即 live key, 无 B1 错位)。**未 commit**(git 被 Xcode 锁)。
+
+**Q3 · 卸载残留(老板授权「删掉」)**：`~/.multi-proxy-manager/` 2.4M(2.2M append 日志 + 20K config)→**全目录已删**(0 进程持有/0 manager 进程，删前确认；全量备份 `/tmp/multi-proxy-manager-backup-20260922-133014` 可恢复)；password(manager 登录凭据)已删——未交付、可重置，不影响项目/日常(代理读 `cursor-proxy/data/proxy.db`，不碰此目录)；manager 下次启动自动重建(session-store ENOENT 安全处理)。**manager 未运行故无残留风险**。
+
+**未 commit/push(等老板授权)**：B6(codex-proxy/proxy.js + stream-bypass.test.js)+ M2(4 文件)+ Q1(双计费)。全部 git add -- 显式列文件，绝不 add -A。
+
