@@ -7,6 +7,7 @@
  */
 
 const express = require('express');
+const { Readable } = require('stream');
 
 // ===== Inline UPSTREAM_MODELS (same as proxy.js) =====
 const UPSTREAM_MODELS = [
@@ -74,14 +75,29 @@ function buildTestApp() {
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         try {
-          await response.body.pipeTo(res);
+          // B6 fix (mirrors proxy.js): Web ReadableStream → Node .pipe(res)
+          const readable = Readable.fromWeb(response.body);
+          readable.on('error', (err) => {
+            console.error(`[Stream] Upstream read error: ${err.message}`);
+            if (!res.headersSent) {
+              res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
+            } else {
+              res.end();
+            }
+          });
+          await new Promise((resolve, reject) => {
+            readable.pipe(res);
+            res.on('close', resolve);
+            res.on('finish', resolve);
+            res.on('error', reject);
+          });
         } catch (err) {
           console.error(`[Stream] Pipe error: ${err.message}`);
           if (!res.headersSent) {
             res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
           }
         }
-      } else {
+       } else {
         const data = await response.json();
         res.json(data);
       }
@@ -128,45 +144,52 @@ describe('Codex Proxy — /v1/chat/completions stream bypass test', () => {
     expect(fetchSpy.mock.calls[0][0]).toContain('deepseek.com');
   });
 
-  // ─── Stream path: B6 bug assertion ───
-  it('B6 BUG CONFIRMED: stream request returns 504 because pipeTo(res) fails on Express Response', async () => {
-    // Build a WHATWG ReadableStream with SSE chunks
-    const chunks = [
+  // ─── Stream path: B6 fix verified (was: B6 bug assertion) ───
+  it('B6 FIXED: stream request returns 200 and forwards full SSE (Hel+lo+finish stop)', async () => {
+    // Build a WHATWG ReadableStream with SSE chunks (same shape as a real
+    // upstream streaming response body from global fetch).
+   const chunks = [
       `id: 1\ndata: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', choices: [{ delta: { content: 'Hel' }, index: 0 }] })}\n\n`,
       `id: 2\ndata: ${JSON.stringify({ id: '2', object: 'chat.completion.chunk', choices: [{ delta: { content: 'lo' }, index: 1 }] })}\n\n`,
       `id: 3\ndata: ${JSON.stringify({ id: '3', object: 'chat.completion.chunk', choices: [{ delta: {}, finish_reason: 'stop', index: 2 }] })}\n\n`,
     ];
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(chunk));
+   const encoder = new TextEncoder();
+   const stream = new ReadableStream({
+     start(controller) {
+       for (const chunk of chunks) {
+         controller.enqueue(encoder.encode(chunk));
         }
-        controller.close();
+       controller.close();
       },
     });
 
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      body: stream,
-      headers: new Headers({ 'content-type': 'text/event-stream' }),
+   fetchSpy.mockResolvedValueOnce({
+     ok: true,
+     status: 200,
+     body: stream,
+     headers: new Headers({ 'content-type': 'text/event-stream' }),
     });
 
-    const res = await require('supertest')(app)
+   const res = await require('supertest')(app)
       .post('/v1/chat/completions')
       .set('Accept', 'text/event-stream')
       .send({ model: 'deepseek-v4-pro', messages: [{ role: 'user', content: 'hi' }], stream: true });
 
-    // CONFIRMED BUG: pipeTo fails because Express res is NOT a WHATWG WritableStream
-    // This returns 504 (STREAM_TIMEOUT) instead of streaming SSE data
-    expect(res.status).toBe(504);
-    // Response may be partially parsed by supertest due to stream error;
-    // fall back to raw text to capture the body.
-    const body = res.body || {};
-    const rawBody = typeof res.text === 'string' ? JSON.parse(res.text || '{}') : {};
-    expect(body.code || rawBody.code).toBe('STREAM_TIMEOUT');
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // FIXED: Readable.fromWeb(response.body).pipe(res) bridges the Web
+    // ReadableStream to the Node/Express res, so the full SSE stream forwards.
+   expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.headers['cache-control']).toBe('no-cache');
+
+    // supertest exposes the streamed body as res.text (and may also parse it
+    // into res.body — fall back to raw text to capture the full SSE payload).
+   const rawBody = typeof res.text === 'string' ? res.text : JSON.stringify(res.body || '');
+   expect(rawBody).toContain('Hel');
+   expect(rawBody).toContain('lo');
+   expect(rawBody).toContain('finish_reason');
+   expect(rawBody).toContain('stop');
+   expect(rawBody).not.toContain('STREAM_TIMEOUT');
+   expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   // ─── Upstream error path ───

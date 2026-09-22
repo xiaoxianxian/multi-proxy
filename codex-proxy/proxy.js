@@ -1,4 +1,5 @@
 const express = require('express');
+const { Readable } = require('stream');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -617,7 +618,25 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       try {
-        await response.body.pipeTo(res);
+        // B6 fix: response.body is a Web ReadableStream (global fetch) but Express
+        // res is a Node stream, NOT a WHATWG WritableStream — pipeTo(res) throws
+        // TypeError → 504. Use Node's Readable.fromWeb bridge (Node 17+) to pipe
+        // raw bytes to res, matching cursor-proxy chatHandler raw-byte passthrough.
+        const readable = Readable.fromWeb(response.body);
+        readable.on('error', (err) => {
+          console.error(`[Stream] Upstream read error: ${err.message}`);
+          if (!res.headersSent) {
+            res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
+          } else {
+            res.end();
+          }
+        });
+        await new Promise((resolve, reject) => {
+          readable.pipe(res);
+          res.on('close', resolve);
+          res.on('finish', resolve);
+          res.on('error', reject);
+        });
       } catch (err) {
         console.error(`[Stream] Pipe error: ${err.message}`);
         if (!res.headersSent) {
