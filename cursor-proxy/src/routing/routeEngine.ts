@@ -195,12 +195,37 @@ export const DEFAULT_ROUTE_CONFIG: RouteConfig = {
   ],
   maxRetries: 3,
   strategy: 'cost-optimization',
+  // 价表：双计费维度（老板 2026-09-22 拍板）——API 按 token 计费 + coding plan 订阅计费，分开算。
+   //  门控 PROXY_BILLING_MODE 默认为关（token 模式）；开（'subscription'）时声明 subscription
+   //  的条目按月费均摊，边际成本≈0。门控关 → 全部走 token 计价（现状，逐字节向后兼容）。
+   //  真实价回源 kimi-k2.com（kimi 系 ¥/1M tokens），deepseek 为真实价；qwen/agnes 本地免费。
+   //  Q1 价表扩展(§3.1/§3.7): 加 currency(默认 CNY)/source 标注。estimateCost 忽略这两个字段
+   //  → 路由选择逐字节不变(仅扩展字段)。deepseek F1 回官方 0.5/3/0.02(旧 1/4/0.02 偏高 ~2×):
+   //  相对序不变(qwen/agnes=0 < deepseek=0.5/3 < kimi=6.5/27), 路由选择不变。
   pricing: {
-    'qwen3.8:27b-mlx':      { input: 0,    output: 0,   cacheHit: 0 },   // 本地 ollama, 免费
-    'deepseek-v4-pro':      { input: 1,    output: 4,   cacheHit: 0.02 },
-    'agnes-2.5-flash':      { input: 0,    output: 0,   cacheHit: 0 },   // agnes 标免费
-    'kimi-k2.6':            { input: 0.6,  output: 2.5, cacheHit: 0.1 },  // 估算占位, 后续校准
-   },
+     // 本地 ollama / agnes 标免费——0 价，cost-optimization 永远先选它们。
+     'qwen3.8:27b-mlx':        { input: 0,    output: 0,   cacheHit: 0,    currency: 'CNY', source: 'ollama/2026-09(本地免费·路由内最省)' },
+     // deepseek 真实价(¥/1M tokens)。F1 回源修正 1/4/0.02 → 0.5/3/0.02。
+     'deepseek-v4-pro':        { input: 0.5,  output: 3,   cacheHit: 0.02, currency: 'CNY', source: 'OpenRouter/官方·2025-11(F1·路由内主)' },
+     'agnes-2.5-flash':        { input: 0,    output: 0,   cacheHit: 0,    currency: 'CNY', source: 'agnes-ai/免费·路由内最省' },
+     // kimi 真实价(¥/1M tokens，回源 kimi-k2.com kimi-k2.7-code 档；k2.6 为旧虚名占位，
+     //   现以真实 k2.7-code 价回填——DB models.name='kimi-k2.6' 即此 live key，不另改 key，
+     //   避免 B1 式「pricing key ≠ DB model 名」失效）。k2.6 旧 key 弃用，由 k2.7-code 真实价取代。
+     'kimi-k2.6':              { input: 6.5,  output: 27,  cacheHit: 1.3,  currency: 'CNY', source: 'kimi-k2/2026-09·路由内天花板' },
+     // kimi 真实模型名（k2.7-code 标准 / 高速 2x）——API model id；尚未进 fallbackChain
+     //   （DB 暂无对应 model 行），作为真实价参考。coding plan 订阅维度示范于此条目。
+     //   monthlyCny 取 coding plan Allegretto 档真实月费 199；monthlyQuotaTokens 待老板补
+     //   （每周配额 token 数），缺失时安全退化 token 计价（不产假成本）。
+     'kimi-k2.7-code':        { input: 6.5,  output: 27,  cacheHit: 1.3,
+                                billingMode: 'subscription', monthlyCny: 199 },
+     'kimi-k2.7-code-highspeed': { input: 13, output: 54, cacheHit: 2.6,
+                                billingMode: 'subscription', monthlyCny: 199 },
+     // glm / codex：尚无可靠真实价源，留占位 + 显式标注 TODO，不编造。
+     //   0/0/0 仅为占位（切勿据此计费）；未列入 fallbackChain，不参与比价/路由。
+     //   TODO 待老板补真实价（API token 价 + coding plan 订阅月费/配额）。
+     'glm-4.5':               { input: 0, output: 0, cacheHit: 0 },  // TODO 待老板补真实价
+     'codex':                 { input: 0, output: 0, cacheHit: 0 },  // TODO 待老板补真实价
+    },
 };
 
 // re-export 以便调用方从单一 M6 入口拿 classifyTask / estimateCost。
