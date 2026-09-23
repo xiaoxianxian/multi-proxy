@@ -2,7 +2,10 @@ node_modules/
 *.log
 *.db-wal
 *.db-shm
+cursor-proxy/data/proxy.db
+cursor-proxy/data/pricing-cache.json
 .DS_Store
+.multi-proxy-manager/
 .env
 multi-proxy-manager/public/*.png
 multi-proxy-manager/check-*.mjs
