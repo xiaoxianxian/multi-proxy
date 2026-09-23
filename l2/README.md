@@ -171,6 +171,7 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 
 ## 铁律（落地前必读）
 
+- **MCP 消费入口**：想经 MCP 消费 L2 编排能力（routeTask/decompose/orchestrate），见 **`l2/MCP-integration-guide.md`**（DS2 之前唯一可消费面，门控 `PROXY_L2_MCP` 默认关）。
 - **④ 非侵入**：绝不写 agent 自身文件（`~/.codex` / `~/.hermes` / `~/.cursor`）；
   只读 + 环境变量注入。adapter 对 h3web 也只读、端口动态探测，不改其任何文件/配置。
 - **shadow 优先**：shadow 模式永不改真实路由。
