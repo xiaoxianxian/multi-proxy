@@ -30,12 +30,14 @@ export const OFFICIAL_PRICING: Record<string, Pricing> = {
     currency: 'CNY', source: 'official-deepseek', _userSet: false, updatedAt: '2025',
   },
   'kimi-k2.6': {
-    input: 6.5, output: 27, cacheHit: 0.02,
-    currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09',
+   // 官方 platform.moonshot.cn 国内站实核值（CNY，2026-09-23；C4 纠正：旧 6.5/27/0.02 中 cacheHit 应为 1.10）
+   input: 6.5, output: 27, cacheHit: 1.1,
+   currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09-23',
   },
   'kimi-k3': {
-    input: 6.5, output: 27, cacheHit: 0.02,
-    currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09',
+   // 官方 platform.moonshot.cn 国内站实核值（CNY，2026-09-23；C4 纠正：旧 6.5/27/0.02 系误抄 k2.6，k3 实为 20/100/2.0，1M 上下文旗舰）
+   input: 20, output: 100, cacheHit: 2.0,
+   currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09-23',
   },
   'agnes-2.5-flash': {
     input: 0, output: 0, cacheHit: 0,
