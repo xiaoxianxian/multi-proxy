@@ -32,8 +32,8 @@ const fs = require('fs');
 const OFFICIAL_PRICING = {
   'deepseek-v4-pro': { input: 0.5, output: 3, cacheHit: 0.02, currency: 'CNY', source: 'official-deepseek', _userSet: false, updatedAt: '2025' },
   'deepseek-flash': { input: 0.2, output: 1.6, cacheHit: 0.02, currency: 'CNY', source: 'official-deepseek', _userSet: false, updatedAt: '2025' },
-  'kimi-k2.6': { input: 6.5, output: 27, cacheHit: 0.02, currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09' },
-  'kimi-k3': { input: 6.5, output: 27, cacheHit: 0.02, currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09' },
+  'kimi-k2.6': { input: 6.5, output: 27, cacheHit: 1.1, currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09-23' },
+  'kimi-k3': { input: 20, output: 100, cacheHit: 2.0, currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09-23' },
   'agnes-2.5-flash': { input: 0, output: 0, cacheHit: 0, currency: 'CNY', source: 'official-agnes', _userSet: false, updatedAt: '2026-09' },
   'qwen3.8:27b-mlx': { input: 0, output: 0, cacheHit: 0, currency: 'CNY', source: 'local-qwen', _userSet: false, updatedAt: '2026-09' },
   'gpt-5.6-codex': { input: 12.5, output: 37.5, currency: 'USD', source: 'official-openai', _userSet: false, subscriptionId: 'openai-pro' },

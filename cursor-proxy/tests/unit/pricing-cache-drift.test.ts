@@ -19,7 +19,7 @@ const EXPECTED: Record<string, { input: number; output: number; cacheHit?: numbe
   'deepseek-v4-pro': { input: 0.5, output: 3, cacheHit: 0.02, currency: 'CNY' },
   'deepseek-flash': { input: 0.2, output: 1.6, cacheHit: 0.02, currency: 'CNY' },
   'kimi-k2.6': { input: 6.5, output: 27, currency: 'CNY' },
-  'kimi-k3': { input: 6.5, output: 27, currency: 'CNY' },
+  'kimi-k3': { input: 20, output: 100, currency: 'CNY' },
   'agnes-2.5-flash': { input: 0, output: 0, cacheHit: 0, currency: 'CNY' },
   'qwen3.8:27b-mlx': { input: 0, output: 0, cacheHit: 0, currency: 'CNY' },
   'gpt-5.6-codex': { input: 12.5, output: 37.5, currency: 'USD' },
