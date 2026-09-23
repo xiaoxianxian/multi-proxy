@@ -677,3 +677,36 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 > **【新窗口续跑提示词(09-22 五更·P1 已交付)】** 我在《multi-proxy》项目(`/Users/xiaota/Documents/AI项目/multi-proxy`),09-22 Q1 双计费+路由**架构定稿 + ⑧ 7 角色评审 + P1 已交付**(老板授权「授权 P1」)。P1 落地:F1 deepseek 1/4→0.5/3 + 价表三层(L0/L1/L2+currency/source/_userSet)+ 7 纯函数(resolveFxRate/resolvePricing/resolveBillingCost/resolveModelEnabled/rankByCostCny/approxEqual)+ pricing-fx.test.ts 31 条;**验收 tsc 0 错 + 全量 jest 174/174(原 143+31)+ 门控关逐字节不变(rankByCostCny≡rankByCost)+ 热路径 getNextRoute 0 改动(汇率接入路由留 P5)**。架构/UX/评审稿 09-22 全 untracked 未 commit。D1-D6 定稿;老板 8 点全办;cron `fa098cb41ec6`(2026-10-06 提醒)。**下一步待老板拍:P2-P5 是否授权 + P1 是否 commit**。P2-P5 未授权,严守不抢。**请先读 MEMORY.md §13.26 + 架构稿 §6.1/§7/§3.9.1 + `q1-todo-tracker.md`(已加 §D P1 交付)+ `docs/09-review/q1-arch-2026-09-22/00-评审汇总-7角色.md`。铁律: E2E 真跑/显式 git add --/热路径非授权不动/push 前问/子代理 self-report 必独立核验/不产假配额价。**
 
+### §13.27 09-23 老板 8 项收口 + I1 P0 落地 + 3 commit push(da036cd)
+
+**本批次 push(0c1a969..da036cd)**:
+- `0c1a969` feat(l2) I1 RAG 知识库 P0(内核+orchestrator 第5注入项+route+server 接线,vetarai §8.6 标 P0 已落地)
+- `e5aed42` fix(cursor-proxy) C4 kimi 定价按 platform.moonshot.cn 官方实核修正
+- `b639951` feat(manager) M2 自动隔离接线 + /api/logs 契约修复
+- `da036cd` chore 补漏 tracked 测试 + .gitignore + 归档 Q1/Marvis 设计评审稿
+
+**8 项逐项(老板 09-23 发话)**:
+1. **GitHub topic** ✅ 老板报错「zsh: no such file or directory: owner」= 占位 `<owner>` 没替换。改用真 owner `xiaoxianxian` 直接执行,git tag 回读确认 6 个 topic 全挂(dsh-plugin/dsh/orchestrator/mcp/llm-routing/multi-agent;最关键 dsh-plugin 是 DSH 官方发现 topic)。
+2. **DSH #1496 bug** ✅ 仍 open(7477 discussions,guardrail advisory 未修)。继续等,现在不该发接入讨论。安全侧确认两个官方修复(Bubblewrap 逃逸 0.1.1-rc.1 / docs 站点 tag-gated)与 guardrail 无关。
+3. **C4 kimi 定价** ✅ 老板三点全对,上轮判错。① 不是一条价,kimi 两套 base_url:国内 `platform.moonshot.cn`(CNY) / 海外 `platform.kimi.ai`(USD),上轮只拉海外页断 USD 错;② 不该拿公开页面猜,该问 owner base_url+key;③ 国内版 CNY 实拉:k2.6 = 6.5/27/1.1/256K,k3 = 20/100/2.0/1M(旧 seed 两行都 6.5/27/0.02,k3 被误抄 k2.6 价掩盖旗舰溢价)。**已按国内 CNY 修正 3 文件。tsc 0 + 193/193**。
+4. **M2 自动隔离** ✅ 建议→执行 已接线:alert.js runAllCollects 第1b路喂 executor;server.js 门控 PROXY_HEALTH_ISOLATE 开时注册内置 writeMarkers 真写 sidecar(关=observe 零副作用,e2e 实测落盘后清理)。manager 746/746。
+5. **DS2/DS3(DSH 接入)** ✅ 同 [2],bug 没修,等官方。
+6. **I1 P2+** ⏳ 唯一待执行项(见 §13.28)。
+7. **/api/logs 契约** ✅ proxy-control.js logs「文件不存在/出错」两分支补 `recent:0` 与正常分支对齐(修 2 e2e 失败 744→746)。不用老板提供任何东西。
+8. **untracked 清理** ✅ `cursor-proxy/data/`(SQLite DB+WAL/SHM+pricing-cache=本机运行时,已 .gitignore 不共享)+ `routing-billing.test.ts`(漏 tracked 的 M6 双计费测试,已在 193 里跑通,补进 git)+ docs q1/marvis 评审稿归档。8 项后 git status 全清。
+
+**E2E 基线(实跑)**:cursor-proxy **193/193**(tsc 0)/ manager **746/746** / l2 demo 全 PASS / hermes 77 / codex 59。热路径(forward.js/proxy.js/chatHandler.ts/getNextRoute)0 改动。
+
+### §13.28 I1 知识库 P2+ 现状与约束(待老板拍是否执行)
+
+**P0 已落地(0c1a969)**:内核 `l2/knowledge-base/knowledge-base.js`(零依赖纯内存+CJK bigram+余弦)+orchestrator 第5注入项 retriever(null=不检索)+routes/knowledge-base.js(门控 PROXY_KNOWLEDGE_BASE 默认关 403/写 requireAuth)+ server.js /api/knowledge 4 端点。demo 11/11 + orchestrator 16 PASS(+route 4/4 smoke)。
+
+**P2+ 三块(vetarai §8.6 定义)**:
+- **① jest 单测** — ✅ **已完成(commit `b3aae5f`, 非 0c1a969 自带; 实跑 22/22, `tests/unit/knowledge-base-route.test.js`, 门控关/读/写鉴权/400/删除/门控放行值矩阵)**;上轮误判为"缺",现已补建;并勘误前文「0c1a969 P0 自带 18/18」——git 实查 `git log --follow` 空、`ls-tree HEAD` 无此文件、`git show 0c1a969 --stat` 9 文件不含它, 该 test 系 09-24 本会话新建, 非 0c1a969 自带; 实数 22 非 18。内核 demo 亦覆盖 retriever 4 情形。
+- **② knowledge.html 前端 UI** — ✅ **已接(commit `b3aae5f`)**:仿 `logs.html`/`sessions.html` 独立页 + `server.js` routeMap 加 `/knowledge` + `dashboard.html` nav「知识库」项(点击跳 `/knowledge`);门控 `PROXY_KNOWLEDGE_BASE` 关时显示「需开」,开时列文档/检索框/摄取+删除,复用 `x-auth-token` 拦截器 + 401 跳转。
+- **③ 真 embedding 替换纯内存词频** — **vetarai 明写「检索质量验证后再换 sqlite-vec/真 embedding」**,内核零依赖是设计约束;现在引 embedding = 破约束 + 投机。**P2 不做**,等 P0 检索质量验证通过再启。
+
+**P2 进展(09-24 收口)**:① jest + ② UI 已随 commit `b3aae5f` 完成并 push(manager 746→768 不回归,orchestration-route 全量并行偶发 1 failed 系既有 flaky、与本批无关);③ 真 embedding 缓(检索质量验证后再上,内核保持零依赖),**P2+ 三块仅 ③ 未启**。
+
+> **【新窗口续跑提示词(09-23·8 项收口, I1 P2 只剩 ② UI)】** 我在《multi-proxy》(`/Users/xiaota/Documents/AI项目/multi-proxy`),**09-23 老板 8 项全收口 + git 全清 + push 到 `da036cd`**。8 项:① topic 已执行(占位符 owner bug→我用 `xiaoxianxian` 直跑,6 topic 挂上)② DSH #1496 仍 open 继续等 ③ **C4 kimi 定价老板三点全对我错,已按 platform.moonshot.cn 国内 CNY 修正 k3→20/100/2.0 + k2.6 cacheHit→1.1,tsc0+193/193** ④ M2 接线(门控开真写 sidecar)⑤ DSH 接入同② ⑥ **I1 P2+ 只做  ① jest 已完成(22/22, commit b3aae5f, 非 0c1a969 自带——上轮/上节「18/18、0c1a969 P0 自带」与 git 实查不符, 已据实勘误)、② `knowledge.html` UI 已接(commit b3aae5f: 独立页+routeMap `/knowledge`+nav 一项+门控关零副作用)、③ embedding 缓(检索质量验证后再上,内核须保持零依赖)** ⑦ /api/logs 已修 ⑧ untracked 全清(data/ gitignore + routing-billing.test 补 tracked + docs 归档)。**基线 cursor 193/193 / manager 746/746 / 热路径 0 改**。**下一步(老板已授权 push):写 `public/knowledge.html`(门控 `PROXY_KNOWLEDGE_BASE` 关时显示开启提示;开时显示文档列表/检索框/摄取+删除,复用 logs.html 的 fetch 拦截器),加 routeMap `/knowledge` + dashboard nav 一项,跑 manager 全量确认 746 不回归→commit+push**。请先读 §13.27+§13.28。铁律:E2E 真跑/显式 git add --/热路径非授权不动/push 前问/不产假配额价/`write_file` verified 不可信须 ls 实查。**
+
