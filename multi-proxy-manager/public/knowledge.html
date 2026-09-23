@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Proxy Manager - 知识库</title>
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+   <link rel="stylesheet" href="./colors_and_type.css">
+   <link rel="stylesheet" href="./shared-styles.css">
+</head>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-family); background: var(--color-bg-secondary); color: var(--color-text); display: flex; min-height: 100vh; overflow: hidden; }
+.mobile-menu-btn { display: none; position: fixed; top: 16px; left: 16px; z-index: 200; width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-bg); border: 1px solid var(--color-border); box-shadow: var(--shadow-md); cursor: pointer; align-items: center; justify-content: center; font-size: 18px; color: var(--color-text); }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); z-index: 90; }
+.sidebar { width: var(--sidebar-width); background: var(--color-bg); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; position: sticky; top: 0; overflow-y: auto; z-index: 100; }
+.sidebar-brand { padding: 20px 20px 16px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 12px; }
+.sidebar-brand .logo-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
+.sidebar-brand h1 { font-size: 16px; font-weight: 600; }
+.sidebar-nav { flex: 1; padding: 12px; overflow-y: auto; }
+.nav-section-label { font-size: 11px; font-weight: 600; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; color: var(--color-text-secondary); transition: all 0.15s ease; font-size: 14px; }
+.nav-item:hover { background: var(--color-bg-secondary); color: var(--color-text); }
+.nav-item.active { background: var(--color-primary-alpha); color: var(--color-primary); font-weight: 500; }
+.nav-icon { width: 20px; height: 20px; flex-shrink: 0; }
+.icon-svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--color-border); }
+.version-info { font-size: 12px; color: var(--color-text-tertiary); text-align: center; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.15s ease; text-decoration: none; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-outline { background: transparent; border-color: var(--color-border); color: var(--color-text); }
+.btn-outline:hover { background: var(--color-bg-secondary); }
+.btn-primary { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-danger { background: var(--color-danger); color: white; border-color: var(--color-danger); }
+.btn-danger:hover { opacity: 0.9; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.loading-bar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 9999; pointer-events: none; display: none; }
+.loading-bar.active { display: block; }
+.loading-bar::after { content: ''; position: absolute; top: 0; left: -40%; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, var(--color-primary), transparent); animation: loading-slide 1s ease-in-out infinite; }
+@keyframes loading-slide { from { left: -40%; } to { left: 100%; } }
+.page { flex: 1; overflow-y: auto; padding: 24px; }
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+.page-subtitle { font-size: 13px; color: var(--color-text-tertiary); }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-bar select, .filter-bar input { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font-size: 13px; }
+.filter-bar input { flex: 1; min-width: 150px; }
+.kb-card { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 12px; }
+.kb-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.kb-card-title { font-weight: 600; font-size: 14px; }
+.kb-card-meta { font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; }
+.kb-card-body { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 12px; white-space: pre-wrap; word-break: break-word; }
+.kb-card-footer { display: flex; gap: 8px; justify-content: flex-end; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; }
+.badge-success { background: var(--color-success-alpha); color: var(--color-success); }
+.badge-info { background: var(--color-info-alpha); color: var(--color-info); }
+.gate-closed { text-align: center; padding: 60px 24px; }
+.gate-closed .gate-icon { font-size: 40px; margin-bottom: 16px; color: var(--color-text-tertiary); }
+.gate-closed .gate-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.gate-closed .gate-body { font-size: 13px; color: var(--color-text-tertiary); max-width: 520px; margin: 0 auto 20px; line-height: 1.7; }
+.gate-closed code { background: var(--color-bg-secondary); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+.empty-state { text-align: center; padding: 40px; color: var(--color-text-tertiary); }
+.kb-stat { display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+.kb-stat-item { font-size: 13px; color: var(--color-text-tertiary); }
+.kb-stat-item b { color: var(--color-text); font-size: 16px; font-weight: 600; margin-right: 4px; }
+.retrieval-result { border-left: 3px solid var(--color-primary); padding: 10px 14px; margin: 8px 0; background: var(--color-bg-secondary); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.retrieval-score { font-size: 11px; color: var(--color-text-tertiary); float: right; }
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; box-shadow: var(--shadow-lg); animation: slideIn 0.2s ease; max-width: 320px; }
+.toast-success { background: var(--color-success); color: white; }
+.toast-error { background: var(--color-danger); color: white; }
+.toast-info { background: var(--color-info); color: white; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@media (max-width: 768px) { .mobile-menu-btn { display: flex; } .sidebar { position: fixed; left: -100%; transition: left 0.3s ease; } .sidebar.open { left: 0; } .sidebar-overlay.show { display: block; } }
+</style>
+<body>
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+   <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<aside class="sidebar" id="sidebar">
+   <div class="sidebar-brand">
+     <div class="logo-icon">P</div>
+     <h1>Proxy Manager</h1>
+   </div>
+   <nav class="sidebar-nav" id="sidebarNav">
+     <div class="nav-section-label">总览</div>
+     <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+       概览
+     </div>
+     <div class="nav-item" data-page="knowledge" data-tooltip="知识库" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+       知识库
+     </div>
+     <div class="nav-section-label">系统</div>
+     <div class="nav-item" data-page="sessions" data-tooltip="任务" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+       任务
+     </div>
+     <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+       日志
+     </div>
+   </nav>
+   <div class="sidebar-footer">
+     <div class="version-info" id="sidebarVersion">v1.0.0</div>
+     <button class="btn btn-outline btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+       <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
+     </button>
+     <button class="btn btn-outline btn-sm" onclick="handleLogout()" title="退出登录" style="width:100%;margin-top:8px;">登出</button>
+   </div>
+</aside>
+
+<div class="loading-bar" id="loadingBar"></div>
+<main class="main" id="mainContent">
+   <div class="page active">
+     <div class="page-header">
+       <h1 class="page-title">知识库</h1>
+       <p class="page-subtitle">L2 P0 RAG 知识库（拉模式）— 摄取 / 检索 / 删除，零依赖纯内存 + CJK bigram 词频</p>
+     </div>
+
+     <!-- 门控关时：显示开启提示（routes/knowledge-base.js 门控 PROXY_KNOWLEDGE_BASE 关 → 403） -->
+     <div class="gate-closed hidden" id="gateClosedView">
+       <div class="gate-icon">🔒</div>
+       <div class="gate-title">知识库功能未开启</div>
+       <div class="gate-body">
+         路由 <code>/api/knowledge</code> 由门控 <code>PROXY_KNOWLEDGE_BASE</code> 控制（默认关 = 零副作用，与 skill/memory/mcp 同模式）。<br>
+         开灰度需同时满足两条件：<br>
+         <code>PROXY_KNOWLEDGE_BASE=1</code> 才放行；<code>PROXY_KNOWLEDGE_BASE_DIR</code> 才落盘到 manager 目录（不设则仅内存，重启即失）。<br>
+         启动示例：<code>PROXY_KNOWLEDGE_BASE=1 node server.js</code>
+       </div>
+       <button class="btn btn-outline" onclick="checkGate()">重新检测</button>
+     </div>
+
+     <!-- 门控开时：检索框 + 文档列表 + 摄取 / 删除 -->
+     <div id="knowledgeView" style="display:none;">
+       <div class="kb-stat" id="kbStat"></div>
+
+       <!-- 检索（拉模式：显式触发，不自动注入） -->
+       <div class="kb-card">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">检索</div>
+             <div class="kb-card-meta">按关键词检索已摄取文档（余弦相似度，取 topK）</div>
+           </div>
+         </div>
+         <div class="filter-bar">
+           <input type="text" id="queryInput" placeholder="输入检索关键词，如：NO_PROXY 铁律 / Qwen 本地部署" style="flex:2;">
+           <select id="topKSelect" title="返回结果数">
+             <option value="1">Top 1</option>
+             <option value="3" selected>Top 3</option>
+             <option value="5">Top 5</option>
+             <option value="10">Top 10</option>
+           </select>
+           <select id="scopeFilter" title="检索范围">
+             <option value="">全部 scope</option>
+             <option value="shared">shared</option>
+             <option value="codex">codex</option>
+             <option value="hermes">hermes</option>
+             <option value="cursor">cursor</option>
+           </select>
+           <button class="btn btn-primary" id="retrieveBtn">检索</button>
+         </div>
+         <div id="retrievalResults"><div class="empty-state">暂无检索结果（先摄取文档，或点击「检索」）</div></div>
+       </div>
+
+       <!-- 摄取 -->
+       <div class="kb-card">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">摄取文档</div>
+             <div class="kb-card-meta">写入需鉴权（x-auth-token）；自动按段落切块</div>
+           </div>
+         </div>
+         <div class="filter-bar" style="flex-direction:column;align-items:stretch;gap:10px;">
+           <input type="text" id="ingestId" placeholder="文档 ID（如：no-proxy-rule）">
+           <input type="text" id="ingestTitle" placeholder="标题（如：NO_PROXY 铁律）">
+           <select id="ingestScope" title="scope">
+             <option value="shared" selected>shared</option>
+             <option value="codex">codex</option>
+             <option value="hermes">hermes</option>
+             <option value="cursor">cursor</option>
+           </select>
+           <textarea id="ingestText" placeholder="正文（可多段，空行分隔）" rows="5"
+             style="width:100%;padding:6px 12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-bg);color:var(--color-text);font-size:13px;font-family:var(--font-family);resize:vertical;"></textarea>
+           <input type="text" id="ingestTags" placeholder="标签（逗号分隔，可选）">
+           <div>
+             <button class="btn btn-primary" id="ingestBtn">摄取</button>
+           </div>
+         </div>
+       </div>
+
+       <!-- 文档列表 -->
+       <div class="kb-card">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">已摄取文档</div>
+             <div class="kb-card-meta" id="docsMeta">加载中...</div>
+           </div>
+         </div>
+         <div id="docsList"><div class="empty-state"><div class="loading-spinner" style="margin:0 auto 12px;"></div>加载中...</div></div>
+       </div>
+     </div>
+   </div>
+</main>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+(function() {
+   'use strict';
+
+   var authToken = sessionStorage.getItem('auth_token');
+
+   // ===== 转义（防御性渲染，仿 logs.html esc） =====
+   function esc(str) {
+     if (str === null || str === undefined) return '';
+     var d = document.createElement('div');
+     d.textContent = str;
+     return d.innerHTML
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+   }
+
+   // ===== fetch 拦截器：注入 x-auth-token + 全局 401 跳转（仿 logs.html，写操作鉴权用） =====
+   // 注：token 由拦截器统一注入，下方业务代码不必重复带头
+   (function() {
+     var origFetch = window.fetch;
+     window.fetch = function(url, options) {
+       if (options === undefined) options = {};
+       if (typeof url === 'string' && url.indexOf('/api/') === 0 && authToken) {
+         if (!options.headers) options.headers = {};
+         if (typeof options.headers === 'object') {
+           options.headers['x-auth-token'] = authToken;
+         }
+       }
+       var p = origFetch(url, options);
+       if (typeof url === 'string' && url.indexOf('/api/') === 0
+            && url.indexOf('/api/auth/') !== 0) {
+         p.then(function(res) {
+           if (res.status === 401) {
+             sessionStorage.removeItem('auth_token');
+             window.location.href = 'login.html';
+           }
+         }).catch(function() {});
+       }
+       return p;
+     };
+   })();
+
+   // ===== Toast / Loading =====
+   function showToast(msg, type, duration) {
+     duration = duration || 3000;
+     var container = document.getElementById('toastContainer');
+     var toast = document.createElement('div');
+     toast.className = 'toast toast-' + (type || 'info');
+     toast.textContent = msg;
+     container.appendChild(toast);
+     setTimeout(function() { toast.style.opacity = '0'; setTimeout(function() { toast.remove(); }, 200); }, duration);
+   }
+   function showLoading() { var b = document.getElementById('loadingBar'); if (b) b.classList.add('active'); }
+   function hideLoading() { var b = document.getElementById('loadingBar'); if (b) b.classList.remove('active'); }
+
+   // ===== 门控检测：/api/knowledge/status 403=门控关，200=门控开 =====
+   function setGate(open) {
+     var gateView = document.getElementById('gateClosedView');
+     var kbView = document.getElementById('knowledgeView');
+     if (open) {
+       gateView.classList.add('hidden');
+       kbView.style.display = 'block';
+       loadDocs();
+       loadStat();
+     } else {
+       gateView.classList.remove('hidden');
+       kbView.style.display = 'none';
+     }
+   }
+
+   function checkGate() {
+     showLoading();
+     fetch('/api/knowledge/status')
+        .then(function(res) {
+          if (res.status === 403) {            // 门控关
+            setGate(false);
+          } else if (res.ok) {
+            setGate(true);
+          } else {
+            setGate(false);
+          }
+          hideLoading();
+        })
+        .catch(function() {
+          setGate(false);
+          hideLoading();
+        });
+   }
+
+   // ===== 读端点（不鉴权，拉模式） =====
+   function loadStat() {
+     fetch('/api/knowledge/status')
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(s) {
+          if (!s) return;
+          var el = document.getElementById('kbStat');
+          el.innerHTML =
+             '<div class="kb-stat-item"><b>' + esc(s.docs) + '</b>文档</div>' +
+             '<div class="kb-stat-item"><b>' + esc(s.chunks) + '</b>分块</div>' +
+             '<div class="kb-stat-item"><b>' + (s.persisted ? '是' : '否') + '</b>落盘</div>';
+        })
+        .catch(function() {});
+   }
+
+   function loadDocs() {
+     var box = document.getElementById('docsList');
+     var meta = document.getElementById('docsMeta');
+     meta.textContent = '加载中...';
+     fetch('/api/knowledge/docs')
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(docs) {
+          if (!docs) { box.innerHTML = '<div class="empty-state">加载失败</div>'; meta.textContent = ''; return; }
+          if (docs.length === 0) {
+            box.innerHTML = '<div class="empty-state">暂无文档，请在上方「摄取文档」添加</div>';
+            meta.textContent = '';
+            return;
+           }
+          meta.textContent = docs.length + ' 篇文档';
+          box.innerHTML = docs.map(function(d) {
+            var tagsHtml = (d.tags && d.tags.length)
+               ? d.tags.map(function(t) { return '<span class="badge badge-info">' + esc(t) + '</span>'; }).join(' ')
+               : '';
+            return '<div class="kb-card" data-id="' + esc(d.id) + '">' +
+               '<div class="kb-card-header">' +
+                 '<div>' +
+                   '<div class="kb-card-title">' + esc(d.title || d.id) + '</div>' +
+                   '<div class="kb-card-meta">' + esc(d.id) + ' · ' + esc(d.chunks) + ' 分块 · scope:' + esc(d.scope) +
+                     (tagsHtml ? ' · ' + tagsHtml : '') + '</div>' +
+                 '</div>' +
+               '</div>' +
+               '<div class="kb-card-footer">' +
+                 '<button class="btn btn-danger btn-sm" onclick="deleteDoc(\'' + esc(d.id) + '\')">删除</button>' +
+               '</div>' +
+             '</div>';
+           }).join('');
+        })
+        .catch(function() {
+          box.innerHTML = '<div class="empty-state">加载失败</div>';
+          meta.textContent = '';
+        });
+   }
+
+   // ===== 检索 =====
+   function retrieve() {
+     var query = document.getElementById('queryInput').value.trim();
+     var topK = parseInt(document.getElementById('topKSelect').value, 10) || 3;
+     var scope = document.getElementById('scopeFilter').value || null;
+     var resultsBox = document.getElementById('retrievalResults');
+     if (!query) {
+       showToast('请输入检索关键词', 'error');
+       return;
+     }
+     resultsBox.innerHTML = '<div class="empty-state">检索中...</div>';
+     showLoading();
+     fetch('/api/knowledge/retrieve', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ query: query, topK: topK, scope: scope })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(results) {
+        hideLoading();
+        if (!Array.isArray(results) || results.length === 0) {
+          resultsBox.innerHTML = '<div class="empty-state">无匹配结果（空 query 或空库不检索）</div>';
+          return;
+        }
+        resultsBox.innerHTML = results.map(function(r) {
+          return '<div class="retrieval-result">' +
+             '<span class="retrieval-score">score ' + (typeof r.score === 'number' ? r.score.toFixed(3) : r.score) +
+               ' · ' + esc(r.id) + ' · scope:' + esc(r.scope || '-') + '</span>' +
+             '<div style="font-weight:600;margin-bottom:4px;">' + esc(r.title) + '</div>' +
+             '<div style="font-size:13px;color:var(--color-text-secondary);">' + esc(r.snippet) + '</div>' +
+           '</div>';
+         }).join('');
+        showToast('命中 ' + results.length + ' 条', 'success');
+      })
+      .catch(function(err) {
+        hideLoading();
+        resultsBox.innerHTML = '<div class="empty-state">检索失败: ' + esc(err.message) + '</div>';
+      });
+   }
+
+   // ===== 摄取（写操作，拦截器自动注入 x-auth-token） =====
+   function ingest() {
+     var id = document.getElementById('ingestId').value.trim();
+     var title = document.getElementById('ingestTitle').value.trim();
+     var text = document.getElementById('ingestText').value;
+     var scope = document.getElementById('ingestScope').value || 'shared';
+     var tagsRaw = document.getElementById('ingestTags').value.trim();
+     var tags = tagsRaw ? tagsRaw.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+     if (!id || !text.trim()) {
+       showToast('文档 ID 和正文必填', 'error');
+       return;
+     }
+     showLoading();
+     fetch('/api/knowledge/ingest', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ id: id, title: title || id, text: text, tags: tags, scope: scope })
+      })
+      .then(function(res) { return res.json().then(function(b) { return { status: res.status, body: b }; }); })
+      .then(function(r) {
+        hideLoading();
+        if (r.status === 200) {
+          showToast('已摄取 ' + r.body.ingested + ' 个分块', 'success');
+          document.getElementById('ingestId').value = '';
+          document.getElementById('ingestTitle').value = '';
+          document.getElementById('ingestText').value = '';
+          document.getElementById('ingestTags').value = '';
+          loadDocs();
+          loadStat();
+        } else if (r.status === 401) {
+          showToast('未登录或 token 失效（摄取需鉴权）', 'error');
+        } else {
+          showToast('摄取失败: ' + (r.body.message || r.body.error || ('HTTP ' + r.status)), 'error');
+        }
+      })
+      .catch(function(err) {
+        hideLoading();
+        showToast('摄取失败: ' + err.message, 'error');
+      });
+   }
+
+   // ===== 删除（写操作） =====
+   window.deleteDoc = function(id) {
+     if (!confirm('确认删除文档 ' + id + '？此操作不可恢复。')) return;
+     showLoading();
+     fetch('/api/knowledge/docs/' + encodeURIComponent(id), {
+       method: 'DELETE'
+      })
+      .then(function(res) { return res.json().then(function(b) { return { status: res.status, body: b }; }); })
+      .then(function(r) {
+        hideLoading();
+        if (r.status === 200) {
+          showToast(r.body.removed ? '已删除' : '文档不存在', r.body.removed ? 'success' : 'info');
+          loadDocs();
+          loadStat();
+        } else if (r.status === 401) {
+          showToast('未登录或 token 失效（删除需鉴权）', 'error');
+        } else {
+          showToast('删除失败: HTTP ' + r.status, 'error');
+        }
+      })
+      .catch(function(err) {
+        hideLoading();
+        showToast('删除失败: ' + err.message, 'error');
+      });
+   };
+
+   // ===== 事件绑定 =====
+   document.getElementById('retrieveBtn').addEventListener('click', retrieve);
+   document.getElementById('ingestBtn').addEventListener('click', ingest);
+   window.addEventListener('keydown', function(e) {
+     if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'queryInput') {
+       retrieve();
+     }
+   });
+
+   // ===== Sidebar =====
+   var mobileMenuBtn = document.getElementById('mobileMenuBtn');
+   var sidebar = document.getElementById('sidebar');
+   var sidebarOverlay = document.getElementById('sidebarOverlay');
+
+   mobileMenuBtn.addEventListener('click', function() {
+     sidebar.classList.toggle('open');
+     sidebarOverlay.classList.toggle('show');
+   });
+   sidebarOverlay.addEventListener('click', function() {
+     sidebar.classList.remove('open');
+     sidebarOverlay.classList.remove('show');
+   });
+
+   // nav：本页高亮 knowledge；其余跳转独立页 / dashboard
+   var activeItem = document.querySelector('.nav-item[data-page="knowledge"]');
+   if (activeItem) activeItem.classList.add('active');
+   document.querySelectorAll('.nav-item').forEach(function(item) {
+     item.addEventListener('click', function() {
+       var page = this.dataset.page;
+       if (page === 'knowledge') return; // 本页
+       if (page === 'dashboard') window.location.href = '/';
+       else if (page === 'sessions') window.location.href = '/sessions';
+       else if (page === 'logs') window.location.href = '/logs';
+       else window.location.href = '/';
+       closeMobileSidebar();
+     });
+    });
+   function closeMobileSidebar() {
+     sidebar.classList.remove('open');
+     sidebarOverlay.classList.remove('show');
+   }
+
+   // ===== Logout =====
+   window.handleLogout = function() {
+     sessionStorage.removeItem('auth_token');
+     window.location.href = 'login.html';
+   };
+
+   // ===== Dark Mode =====
+   function initDarkMode() {
+     var toggle = document.getElementById('darkModeToggle');
+     var isDark = localStorage.getItem('darkMode') === 'true';
+     var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+     var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+     if (isDark) {
+       document.documentElement.classList.add('dark');
+       document.documentElement.classList.remove('light');
+       if (toggle) toggle.innerHTML = moonSvg + ' 亮色模式';
+     }
+     if (toggle) {
+       toggle.addEventListener('click', function() {
+         var html = document.documentElement;
+         var isNowDark = html.classList.contains('dark');
+         if (isNowDark) {
+           html.classList.remove('dark');
+           html.classList.add('light');
+           localStorage.setItem('darkMode', 'false');
+           toggle.innerHTML = sunSvg + ' 暗色模式';
+         } else {
+           html.classList.add('dark');
+           html.classList.remove('light');
+           localStorage.setItem('darkMode', 'true');
+           toggle.innerHTML = moonSvg + ' 亮色模式';
+         }
+       });
+     }
+   }
+
+   // ===== Init =====
+   initDarkMode();
+   checkGate();
+})();
+</script>
+</body>
+</html>
