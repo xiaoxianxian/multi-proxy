@@ -3,7 +3,7 @@ title: "DeepSeek Harness（DSH）生态接入规划"
 status: in-progress
 doc_type: integration-plan
 confidence: high
-last_updated: 2026-09-19
+last_updated: 2026-09-23
 related_code:
     - .dsh/skills/multi-proxy/SKILL.md
     - .dsh/skills/l2-orchestrator/SKILL.md

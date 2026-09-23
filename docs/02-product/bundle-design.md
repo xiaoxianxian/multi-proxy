@@ -78,6 +78,89 @@
 - 包规范确认（npm 包名 / 版本 / 构建产物）
 - 满足后：本设计 → DS2 实施（`package.json#dsh.bundle` + `cordis.patch.yml` + 封装 L2 为 Cordis 插件 + 测试）
 
+## 6 `cordis.patch.yml` 完整草稿（可直接复制模板，DSH 0.2 后落地）
+
+> 状态：示例草案。**所有插件 id / 字段名 / 门控映射均为占位，DSH 0.2 落地时必须逐条核对**（§7 待核对清单）。
+> 设计依据：§4.1 模块映射 + §3 八条踩坑。结构镜像 `dsh-plugin-model-proxy@0.1.2`，不臆造 DSH 0.2 规范。
+> **纯文本示例，不写入仓库任何 `cordis.patch.yml` / `package.json`（DS2 实施才写，保持暂缓）**。
+
+### 6.1 `cordis.patch.yml`（profile patch 层）
+
+```yaml
+# multi-proxy L2 → Cordis profile patch 草稿（DSH 0.2 后落地）
+# 顶层必须是 YAML 数组（踩坑①：纯注释/无 - 行会 boot/dump 失败）
+# 注意：字段是 name: 不是 module:（踩坑②）；新行必须嵌 insert: 下（踩坑③）
+- insert:
+    # 编排内核：任务拆解 + DAG 调度（orchestrator + decomposer + route-engine）
+    - id: multi-proxy-orchestrator
+      name: multi-proxy-orchestrator          # 是 name: 不是 module:
+      disabled: false
+      config:
+        gate: "PROXY_ROUTE_OVERRIDE"          # 映射 env 门控（live-applies，对应门控 gate）
+        shadow: true                          # 默认 shadow，不触下游 adapter（非侵入铁律）
+        complexity: { low: small, medium: medium, high: large }   # 与 COMPLEXITY-MODE §2.2 对齐
+    # agent 能力/模型注册
+    - id: multi-proxy-registry
+      name: multi-proxy-registry
+      disabled: false
+      config:
+        profilesFile: "agent-profile.json"    # 注入 agent profile
+    # 韧性三件套（failover middleware）—— 与 option2 spec 同构
+    - id: multi-proxy-resilience
+      name: multi-proxy-resilience
+      disabled: false
+      config:
+        wrap: "globalThis.fetch"              # 可逆：ctx.effect dispose 还原（踩坑④ 封装原则）
+        circuitBreaker: { threshold: 5, windowMs: 60000 }
+        rateLimiter:   { limit: 100, windowMs: 10000 }
+    # 告警（三路信号：健康 / 错误模式 / 成本）+ 成本核算子段
+    - id: multi-proxy-alert
+      name: multi-proxy-alert
+      disabled: false
+      config:
+        healthGate:  "PROXY_HEALTH_ALERT"     # 默认 off
+        costGate:    "PROXY_COST_TRACK"       # 默认关
+        costSchedule: "PROXY_COST_SCHEDULE"   # 默认关
+        # browser 半边设置卡片（受 WEB_SETTINGS_NAMESPACES 白名单限制，§3.7 需协调）
+        settingsCard: true
+```
+
+> **不写 `<name>/client` 行**（踩坑④：browser 半边从 `dsh.client` 自动发现，手写会让浏览器代码在 Node 进程跑）。
+> **有 `package.json#dsh.bundle.patch` 就别再手写 patch 行**（踩坑⑤：`dsh plugin add` 已自动注入，重复 = boot 时同 loader id 冲突）→ 6.2 的 `dsh.bundle` 与 6.1 二选一。
+
+### 6.2 二选一：`package.json#dsh.bundle`（自动注入形态，推荐）
+
+```jsonc
+// 放在 multi-proxy 的 package.json（DS2 实施时；当前 4 个 package.json 均无此字段，保持暂缓）
+{
+  "name": "dsh-multi-proxy-orchestrator",     // 占位名，DSH 0.2 核对命名规范
+  "version": "0.1.0",
+  "dsh": {
+    "bundle": {
+      "patch": [ /* 等价于 6.1 的 insert 数组，此处省略，落地时填 */ ],
+      "client": { "export": "settings/plugin.item" }   // 踩坑⑥：写 Cordis 服务名，不写包名，否则永久 pending
+    }
+  }
+}
+```
+
+### 6.3 门控 env → Cordis config 映射（live-applies）
+
+| Cordis config 键 | 对应 env 门控 | 默认 | 行为 |
+|---|---|---|---|
+| `gate` | `PROXY_ROUTE_OVERRIDE`（Q1=A） | shadow | 路由覆写 |
+| `shadow` | — | `true` | 不触下游 |
+| `healthGate` | `PROXY_HEALTH_ALERT` | off | 健康告警 |
+| `costGate` / `costSchedule` | `PROXY_COST_TRACK` / `PROXY_COST_SCHEDULE` | 关 | 成本 |
+
+## 7 待 DSH 0.2 核对清单（不臆造，落地逐条验证）
+
+- [ ] 插件 id `multi-proxy-*` 是否冲突 / 符合 DSH 命名规范。
+- [ ] `cordis.patch.yml` 顶层字段名（`insert:` / `id` / `name` / `config` / `disabled`）是否与 0.2 一致——rc 阶段可能变。
+- [ ] 门控 env → Cordis `config` 的 live-applies 层级（改配置是否真无需重启）。
+- [ ] 设置卡片命名空间是否需 `WEB_SETTINGS_NAMESPACES` 白名单放行（§3.7，dsh 官方延后）。
+- [ ] `dsh.bundle.client.export` 写 Cordis 服务名 vs 包名（踩坑⑥，确认不写包名）。
+
 ## 来源（外部，待 DSH 0.2 后按当时版本核对）
 
 - 官方：deepseek-ai/deepseek-harness/packages/bundle/base/cordis.patch.yml + /web-app/cordis.patch.yml
