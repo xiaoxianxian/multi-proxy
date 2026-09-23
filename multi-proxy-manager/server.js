@@ -83,7 +83,7 @@ app.use('/api/memory-merge', memoryMergeRoutes);
 const mcpRoutes = require('./routes/mcp');
 app.use('/api/mcp', mcpRoutes);
 // L2 P0 · knowledge-base（RAG 知识库）生产接线：/api/knowledge 把 l2/knowledge-base 接上 manager
-// 门控 PROXY_L2_KNOWLEDGE 默认关（非侵入，与 skill/memory/mcp 同模式）；拉模式：读不鉴权、写鉴权（requireAuth）
+// 门控 PROXY_KNOWLEDGE_BASE 默认关（非侵入，与 skill/memory/mcp 同模式）；拉模式：读不鉴权、写鉴权（requireAuth）
 const knowledgeRoutes = require('./routes/knowledge-base');
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api', apiRoutes);
