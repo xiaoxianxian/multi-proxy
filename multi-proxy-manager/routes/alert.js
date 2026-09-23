@@ -32,6 +32,10 @@ const alertSvc = require('../../l2/alert.js');
 const ph = require('../lib/provider-health');
 const ep = require('../lib/error-patterns');
 const costTrack = require('../lib/cost-track');
+// M2 自动隔离执行层（l2/p3-design）：把建议态 executor 接上真实 provider-health 信号。
+// 门控 PROXY_HEALTH_ISOLATE 默认关 = observe 只读不写盘（非侵入默认）；门控开+executor 注册才真写 sidecar。
+// 详见 lib/provider-isolation-executor.js（demo 8/8、test 24/24 已绿）。
+const isolationExecutor = require('../lib/provider-isolation-executor');
 
 // ---- 门控（与 alert.js observeOnly 同门控：PROXY_HEALTH_ALERT）----
 function isGatedOpen() {
@@ -115,18 +119,32 @@ function runAllCollects() {
   const threshold = alertSvc.DEFAULT_CONFIG.errorFrequencyThreshold;
 
    // 1. provider-health 信号（只读 ph.listIsolated + correlateCrossProxy）
-  for (const rec of ph.listIsolated()) {
-    const correlation = ph.correlateCrossProxy(rec.providerId);
-    const sig = {
-      source: 'provider-health',
-      correlation,
-      providerId: rec.providerId,
-      status: rec.status,
-      consecutiveFailures: rec.consecutiveFailures,
+   const isolatedReqs = ph.listIsolated();
+   for (const rec of isolatedReqs) {
+   const correlation = ph.correlateCrossProxy(rec.providerId);
+   const sig = {
+     source: 'provider-health',
+     correlation,
+     providerId: rec.providerId,
+     status: rec.status,
+     consecutiveFailures: rec.consecutiveFailures,
        };
-    const fired = alertSvc.emit(sig, { persist: true });
-    for (const a of fired) alerts.push(a);
+   const fired = alertSvc.emit(sig, { persist: true });
+   for (const a of fired) alerts.push(a);
     }
+
+   // 1b. M2 自动隔离执行层：把全部建议隔离的 provider 喂给 executor。
+   //   门控 PROXY_HEALTH_ISOLATE 默认关 → run() 内 observe 只读不写盘（零副作用，非侵入默认）。
+   //   门控开 + 已注册 executor → 才真写隔离 sidecar（flippedEnabled 仍默认 null = 不 flip providers.json）。
+   //   第 1b 路与第 1 路解耦：executor 崩溃绝不拖垮告警主流程（best-effort + try/catch）。
+   let isolationSummary = null;
+   try {
+   isolationSummary = isolationExecutor.run(isolatedReqs);
+   } catch { isolationSummary = null; }
+   if (isolationSummary && isolationSummary.applied > 0) {
+   // 仅「真执行了隔离动作」(门控开)才打日志；observe/degraded 静默 = 零噪声。
+   console.log(`[isolation] applied=${isolationSummary.applied} degraded=${isolationSummary.degraded} markers=${isolationSummary.markers.length}`);
+   }
 
    // 2. error-patterns 信号（从 getHistory 统计 pattern_id 频次）
   const history = ep.getHistory(200);
