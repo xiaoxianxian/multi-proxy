@@ -215,14 +215,14 @@ router.get('/logs', requireAuth, (req, res) => {
   try {
     const { limit = 200 } = req.query;
     if (!fs.existsSync(LOG_FILE)) {
-      return res.json({ logs: '', count: 0 });
+      return res.json({ logs: '', count: 0, recent: 0 });
     }
     const content = fs.readFileSync(LOG_FILE, 'utf8');
     const lines = content.split('\n').filter(l => l.trim());
     const recent = lines.slice(-parseInt(limit));
     res.json({ logs: recent.join('\n'), count: lines.length, recent: recent.length });
   } catch (e) {
-    res.json({ logs: '', count: 0, success: false, error: 'Internal server error' });
+    res.json({ logs: '', count: 0, recent: 0, success: false, error: 'Internal server error' });
   }
 });
 

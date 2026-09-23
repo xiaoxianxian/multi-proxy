@@ -127,10 +127,19 @@ app.use((req, res, next) => {
 //     开 = 定时跑 runAllCollects（3 路：provider-health + error-patterns + cost × 预算）。
 //     unref 不阻塞进程退出；单次 tick 崩 best-effort 不影响后续。
 const costTrack = require('./lib/cost-track');
+// M2 自动隔离执行层接线（门控 PROXY_HEALTH_ISOLATE 默认关 = observe 零副作用）。
+// 门控开 = 显式 opt-in：注册内置 writeMarkers 进活跃表 → runAllCollects 第 1b 路真写隔离 sidecar
+// （flippedEnabled 仍默认 null = 不 flip providers.json/路由，仅写 sidecar；.tmp→rename 原子+backup）。
+const isolationExecutor = require('./lib/provider-isolation-executor');
 
 // 启动服务（跳过测试环境）
 if (process.env.NODE_ENV !== "test") {
   costTrack.loadPricingFromEnv();
+  // M2：门控开时把内置 writeMarkers 注册进活跃表 → 真执行写隔离 sidecar；门控关保持默认 observe（executors=[] 不真动作）。
+  if (isolationExecutor.isolationEnabled()) {
+    isolationExecutor.registerExecutor('writeMarkers');
+    console.log('[isolation] M2 executor active: writeMarkers registered (PROXY_HEALTH_ISOLATE=on; flipEnabled=null → 不flip providers.json)');
+  }
   const costScheduler = alertRoutes.startCostScheduler();
   // 管理面板默认只绑本回环 127.0.0.1（安全收紧：面板带 JWT 但不应全网卡可达）；
   // Docker/跨机部署显式设 BIND_HOST=0.0.0.0，沿用 hermes-proxy 的 BIND_HOST 惯例。
