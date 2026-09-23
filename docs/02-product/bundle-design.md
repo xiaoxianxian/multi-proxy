@@ -161,6 +161,25 @@
 - [ ] 设置卡片命名空间是否需 `WEB_SETTINGS_NAMESPACES` 白名单放行（§3.7，dsh 官方延后）。
 - [ ] `dsh.bundle.client.export` 写 Cordis 服务名 vs 包名（踩坑⑥，确认不写包名）。
 
+## 8 模块 → DSH service 映射表（§4.1 × §6 交叉一致版 · 据 DeepSeek item3）
+
+> 目的：商业化文档（`bundle-design.md §4.1`）与 `cordis.patch.yml` 草稿（§6.1）的映射**逐行一致**，避免两处漂移。
+> **`ctx.multiProxy.<svc>` 服务名一律标「占位·待 DSH 0.2 核对」**——DSH 无公开 service catalog，不臆造官方命名；落地时核对 §7 checklist 后定稿。
+
+| L2 模块 / 落点 | 职责 | 候选 Cordis 插件（id） | 半边 | 门控 env → Cordis config（live-applies） | 提供能力（占位服务名） |
+|---|---|---|---|---|---|
+| `l2/orchestrator.js` + `decomposer.js` | 任务拆解 → DAG 调度 | `multi-proxy-orchestrator` | host（wrap `llm/stream` waterfall） | `PROXY_ROUTE_OVERRIDE`（Q1=A，默认 shadow） | `ctx.multiProxy.orchestrate`/`decompose`（占位，待 0.2 核对） |
+| `l2/agent-registry.js` | agent 能力/模型注册 | `multi-proxy-registry` | host | `agent-profile.json` 注入 | `ctx.multiProxy.registry`（占位） |
+| `l2/route-engine.js` | modelType/能力路由 | 并入 `multi-proxy-orchestrator` 插件 | host | `PROXY_ROUTE_OVERRIDE`（默认 shadow） | `ctx.multiProxy.routeTask`（占位，= `orchestrate` 子） |
+| `l2/health-monitor.js` + `circuit-breaker.js` + `rate-limiter.js` | 韧性三件套 | `multi-proxy-resilience` | host（wrap `globalThis.fetch`，`ctx.effect` dispose 可逆） | —（默认关，failover 触发时开） | `ctx.multiProxy.resilience`（占位） |
+| `l2/alert.js` + `routes/alert.js` + `lib/{provider-health,error-patterns,cost-track}.js` | 告警（健康/错误模式/成本三路） | `multi-proxy-alert` | host + settings card | `PROXY_HEALTH_ALERT`（默认 off）、`PROXY_COST_SCHEDULE`（默认关） | `ctx.multiProxy.alert`（占位，卡 `WEB_SETTINGS_NAMESPACES` 白名单 §3.7） |
+| `l2/cost.js` + `lib/cost-track.js` + `forward.js:168` 埋点 | 成本核算（token×单价） | 并入 `multi-proxy-alert` `config.cost` 子段 | host | `PROXY_COST_TRACK`（默认关） | `ctx.multiProxy.cost`（= alert.cost，占位） |
+| `l2/plugin-runtime.js` | 「一切皆插件」运行时 | **插件宿主框架**（其余插件挂其下） | host | — | `ctx.multiProxy.host`（= plugin 注册/生命周期） |
+| `l2/skill-service.js` + `l2/memory-merge.js` | 技能 / 记忆 | 暂不暴露（二期，见 unknowns U5） | — | — | —（不暴露） |
+
+**一致性保证**：上表每一行的 `id`/`半边`/`门控` 三列与 §6.1 `cordis.patch.yml` 草稿条目**逐字段对应**；§6.3 门控映射表是其 env→config 投影。改 §4.1 必同步本表 + §6.1，三处一致。
+**当前消费面**：除 §6 bundle 外，L2 能力现经 **MCP bridge**（`l2/mcp-server.js`，见 `MCP-integration-guide.md`）暴露 `routeTask`/`decompose`/`orchestrate` 三工具——映射表中「提供能力列」的服务名，在 DSH 0.2 bundle 落地前，**已由 MCP 工具兑现**（`routeTask`≈`ctx.multiProxy.routeTask`、`decompose`≈`decompose`、`orchestrate`≈`orchestrate`）。
+
 ## 来源（外部，待 DSH 0.2 后按当时版本核对）
 
 - 官方：deepseek-ai/deepseek-harness/packages/bundle/base/cordis.patch.yml + /web-app/cordis.patch.yml

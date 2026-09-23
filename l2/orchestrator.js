@@ -21,16 +21,17 @@ const path = require('path');
 const DEFAULT_MAX_RETRIES = 1;
 
 class Orchestrator {
-    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES } = {}) {
-        this.executor = executor;         // 注入：(subtask, ctx, runOpts) => result；shadowMode 下不被调用
-        this.routeEngine = routeEngine;   // 注入：非 shadow 时由 executor 用其 route() 选 adapter
-        this.decomposer = decomposer;     // 注入：runFromInput 用；否则用内置 templateDecompose
+    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null } = {}) {
+        this.executor = executor;          // 注入：(subtask, ctx, runOpts) => result；shadowMode 下不被调用
+        this.routeEngine = routeEngine;    // 注入：非 shadow 时由 executor 用其 route() 选 adapter
+        this.decomposer = decomposer;      // 注入：runFromInput 用；否则用内置 templateDecompose
         this.shadowMode = shadowMode;
-        this.dir = dir;                   // 非侵入：null=仅内存；注入才落盘
+        this.dir = dir;                    // 非侵入：null=仅内存；注入才落盘
         this.maxRetries = maxRetries;
-        this.history = [];                // 协作历史（任务级）
+        this.retriever = retriever;        // I1 RAG（拉模式）：第 5 可注入项；null=不检索、不挂 ctx.knowledge（零回归）
+        this.history = [];                 // 协作历史（任务级）
         this._seq = 0;
-    }
+     }
 
     // 便捷：从原始输入拆解 + 执行
     async runFromInput(input, opts = {}) {
@@ -115,6 +116,19 @@ class Orchestrator {
             results[st.id] = { id: st.id, status: 'skipped', reason: 'dep-unmet' };
             executionOrder.push(st.id);
             return;
+         }
+
+        // I1 RAG（拉模式）：仅当 retriever 注入 + 子任务声明 useKnowledge!==false → 检索挂 ctx.knowledge。
+        // 默认 useKnowledge 视为 false（不检索、不注入，与「永不自动注入」一致）；shadowMode 下不检索（与 shadow 零回归一致）。
+        if (this.retriever && st.useKnowledge !== false && st.knowledgeQuery !== undefined && !this.shadowMode) {
+            try {
+                ctx.knowledge = await this.retriever.retrieve({
+                    query: st.knowledgeQuery || st.prompt || dag.input,
+                    topK: st.knowledgeTopK || 3,
+                });
+            } catch (e) {
+                ctx.knowledge = null; // 非侵入：检索失败不阻断调度
+            }
         }
 
         // 重试 + 执行

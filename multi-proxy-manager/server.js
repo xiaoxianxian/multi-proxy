@@ -82,6 +82,10 @@ app.use('/api/memory-merge', memoryMergeRoutes);
 // 门控 PROXY_L2_MCP 默认关（非侵入，与 skill/memory 同模式），只暴露只读查询 + 路由决策（shadow）。
 const mcpRoutes = require('./routes/mcp');
 app.use('/api/mcp', mcpRoutes);
+// L2 P0 · knowledge-base（RAG 知识库）生产接线：/api/knowledge 把 l2/knowledge-base 接上 manager
+// 门控 PROXY_L2_KNOWLEDGE 默认关（非侵入，与 skill/memory/mcp 同模式）；拉模式：读不鉴权、写鉴权（requireAuth）
+const knowledgeRoutes = require('./routes/knowledge-base');
+app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);

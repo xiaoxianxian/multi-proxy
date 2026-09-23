@@ -652,3 +652,28 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 **未 commit/push(等老板授权)**：B6(codex-proxy/proxy.js + stream-bypass.test.js)+ M2(4 文件)+ Q1(双计费)。全部 git add -- 显式列文件，绝不 add -A。
 
+### §13.26 架构评审稿 v1(2026-09-22)—— Q1 双计费+路由全设计 + 老板 8 点定论 + B6/M2 已 push
+
+**老板转"架构先行"**(原 Q1 子代理已 stop 的旧版落后,不采用): 计费+路由先出架构稿,老板评审定稿后才开发(绝不抢开发)。
+
+**git 状态(B6/M2 已 push)**: commit `6510849`(7 文件 = M2 执行层 4 文件 + B6 codex-proxy/proxy.js + stream-bypass.test.js + MEMORY + INDEX, **不含 Q1**)→ **已 push origin**(`e19bf09..6510849 main→main`, 绕 7897 代理直连——verge-mih 代理 SSL 抖动)。
+
+**Q1 旧 3 文件(未 commit/未 push)**: routeEngine.ts + ruleEvaluator.ts + routing-billing.test.ts(双计费初版, 143/143,**未 adopt**)。老板转架构后, 旧版落后于新设计, 等架构定稿后按架构稿重写。**当前 working tree dirty**: M(Q1 3 文件)+ ??(§13.25 架构稿 untracked)。
+
+**架构稿 `docs/02-product/q1-pricing-routing-arch-v1.md`(untracked, 27KB/417 行, 9 节完整)**:
+- §3.1 价表三层 L0 官方种子 > L1 用户覆盖 > L2 渠道缓存; §3.2 漂移哨兵(只提醒不覆盖, 用户主权 > 官价); §3.5 **老板纠错: 原币保留 + 换算 CNY 参与路由**(gpt6 等 USD 模型能路由命中); §3.8 配额耗尽优雅降级(类比 hermes 上下文压缩, 执行前评估+执行中 80% 预警+先存进展再优雅停不假死, `PROXY_QUOTA_GUARD` observe); §3.9 共享订阅=行业主流共享 credit 池(OpenAI/Claude/Gemini/Kimi, 精确 quota 待官方); §3.10 价格覆盖不强制+toast; §3.11 渠道健康度进权重 `score=costCny/reliability`(老板认可); §3.12 历史趋势 P5 待办; §4 路由三级兜底(L1 findProviderConfig/L2 defaultCustomModel 同 hermes/L3 ultimateFallbackModel, 缺失报错 ERR_NO_DEFAULT_MODEL/ERR_NO_FALLBACK)。
+- **8 家官方价已查(2026-09 回源)**: qwen/agnes=0(免费), deepseek-v4-pro=**0.5/3/0.02**(现 1/4/0.02 偏高 2× 待修), kimi-k2.6=6.5/27/1.3 + coding plan ¥199, glm-4.6=1/3, codex=2.5/15 USD, claude-opus=5/25 USD, gemini-2.5-pro=1.25/10 USD。
+- openrouter 定位=**独立渠道**(与 deepseek 平级, 同模型多渠道不同价 `resolvePricing(model,channel)`)。
+- **绝不产假值**: monthlyQuotaTokens 诚实标 estimate(各家官方无原生 token 数, 用户可改); 网络抖动 web_search SSL 全挂, 精确 quota 待网络恢复回源。
+
+**✅ D1-D6 已定稿(2026-09-22 老板拍"全部按建议")**: D1 汇率源 C(缓存+刷新,热路径零网络)/ D2 汇率兜底显性 `fx=1.0`+warning(7.2 仅缓存值,非硬兜底)/ D3 路由 L1-L3 分层+3 报错(`NO_PROVIDER`/`ERR_NO_DEFAULT_MODEL`/`ERR_NO_FALLBACK`,缺兜底即报错不静默)/ D4 配额先 observe 门控默认关 / D5 80% 预警阈值 / D6 漂移 toast 默认可见·只读镜像。**架构定稿完成**。⑧ 7 角色评审已落地 `docs/09-review/q1-arch-2026-09-22/00-评审汇总-7角色.md`(因本地单实例 qwen 7 并发卡死,父代理分饰+真跑取证);3 必修 F1 deepseek 价仍 1/4/0.02(§3.7 应 0.5/3/0.02,P1 首步)/ F3 UX `showToast` 契约 drift(4 处签名不一+不在 shared-styles.css)/ F6 AGENTS.md 测试数 131→143 待同步;4 建议 F2/F4/F5/F7;4 测试盲区(汇率/配额/漂移/三级兜底)待 P1-P5。E2E 真跑 0 波及:cursor 143/143(双计费 12/12)/l2 demo 全 PASS/hermes 77 passed。P1-P5 开发待老板另批(不抢)。
+
+**✅ 本轮(09-22 二更)已收口 5 项(老板 8 点定论)**: ① 汇率源=C(缓存+刷新,热路径零网络)/ ② **跑官方文档回源完成**——web_search 实查 OpenAI/Claude/Gemini/Kimi 4 家**官方均不公布精确固定 token 配额**(只 5h 消息区间/N× 倍率/社区等效),结论 + 无法闭环 5 项记入新建 `docs/02-product/q1-todo-tracker.md`(`monthlyQuotaTokens` 用 estimate+用户可改,绝不产假)/ ③ 配额预检"估算+宁可早停"(老板拍接受)/ ④ **派交互设计师子 agent** 产出 `docs/02-product/q1-ux-design-v1.md`(354 行,3 表面 A 价格漂移/toast B 币种换算 C 配额预检,各含文案+门控+状态机+边界+架构对应,补可访问性债 `role=dialog`/`aria-live`/焦点陷阱;引用 `09-review/8-UI设计师.md`/`visual-design.md`/`shared-styles.css` 全实存)/ ⑤ 告警复用 `alert.js`+可读铁律(绝不甩错误码,三件套) / ⑦ 建 cron `fa098cb41ec6`(B6/M2 观察期到 2026-10-06 提醒接热路径,只提醒不动码)。老板⑧ 多角色评审+E2E gated 在架构定稿之后。
+
+**⚠️ 网络/代理(09-22 二更)**: 本轮 web_search 4 家**已恢复**(官方回源成功),此前 SSL EOF 抖动已解。git push 仍可能撞 verge-mih 代理 SSL 抖动,`-c http/https.proxy=""` 绕过直连。
+
+**P1 已交付(老板 09-22「授权 P1」)**: M routeEngine.ts(F1 deepseek 1/4→0.5/3 + currency/source) + ruleEvaluator.ts(+234 行:resolveFxRate/resolvePricing/resolveBillingCost/resolveModelEnabled/rankByCostCny/approxEqual+3 类型) + 新增 pricing-fx.test.ts(31 条,305 行)。验收 tsc 0 错 + 全量 jest 174/174(原 143+31)+ 门控关逐字节不变(rankByCostCny≡rankByCost)+ 热路径 getNextRoute 0 改(汇率接入路由留 P5)。未 commit(等授权,`git add --` 显式)。**其余 untracked(非 P1,09-22 架构/评审稿)**: routing-billing.test.ts + 架构稿 v1(二更 §6.1/§9/§3.9.1) + q1-ux-design-v1.md + q1-todo-tracker.md(已加 §D P1 交付记录) + docs/09-review/q1-arch-2026-09-22/00-评审汇总-7角色.md。已同步 INDEX(198 行,定稿+P1 交付)。
+**owner/main = `6510849`**(已 push,P1 全 untracked/working,0 commit;热路径 0 触碰)。
+
+> **【新窗口续跑提示词(09-22 五更·P1 已交付)】** 我在《multi-proxy》项目(`/Users/xiaota/Documents/AI项目/multi-proxy`),09-22 Q1 双计费+路由**架构定稿 + ⑧ 7 角色评审 + P1 已交付**(老板授权「授权 P1」)。P1 落地:F1 deepseek 1/4→0.5/3 + 价表三层(L0/L1/L2+currency/source/_userSet)+ 7 纯函数(resolveFxRate/resolvePricing/resolveBillingCost/resolveModelEnabled/rankByCostCny/approxEqual)+ pricing-fx.test.ts 31 条;**验收 tsc 0 错 + 全量 jest 174/174(原 143+31)+ 门控关逐字节不变(rankByCostCny≡rankByCost)+ 热路径 getNextRoute 0 改动(汇率接入路由留 P5)**。架构/UX/评审稿 09-22 全 untracked 未 commit。D1-D6 定稿;老板 8 点全办;cron `fa098cb41ec6`(2026-10-06 提醒)。**下一步待老板拍:P2-P5 是否授权 + P1 是否 commit**。P2-P5 未授权,严守不抢。**请先读 MEMORY.md §13.26 + 架构稿 §6.1/§7/§3.9.1 + `q1-todo-tracker.md`(已加 §D P1 交付)+ `docs/09-review/q1-arch-2026-09-22/00-评审汇总-7角色.md`。铁律: E2E 真跑/显式 git add --/热路径非授权不动/push 前问/子代理 self-report 必独立核验/不产假配额价。**
+
