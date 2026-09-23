@@ -50,7 +50,8 @@ export interface Pricing {
   source?: string;             // 价来源：'official-openai'|'openrouter'|'user'|...（L0/L2 标注用）。
   channel?: string;           // 渠道：'official'|'openrouter'|...（Q1 同模型多渠道）。
   _userSet?: boolean;          // 用户手动覆盖标记：漂移是否覆盖的分水岭（_userSet:true 永不自动覆盖，§3.2）。
-  updatedAt?: string;         // 该价最后更新时间（ISO 或 YYYY-MM-DD）。
+  updatedAt?: string;          // 该价最后更新时间（ISO 或 YYYY-MM-DD）
+   subscriptionId?: string;    // 所属订阅(§3.9 共享配额;缺省=独立)。可选,estimateCost 不读,不影响路由。
 }
 
 /**
