@@ -85,6 +85,6 @@ router.delete('/docs/:id', requireAuth, (req, res) => {
 });
 
 // 测试辅助：复位单例（门控关闭/未设 dir 时回退内存空库）
-module.exports._resetForTest = () => { kb = new KnowledgeBase(); };
-
+// 注意：必须在 module.exports = router 之后设，否则被覆盖丢失。
 module.exports = router;
+router._resetForTest = () => { kb = new KnowledgeBase(); };
