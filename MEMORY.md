@@ -758,3 +758,18 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 **给后续 agent 的判据**:flaky 是 manager **测试基建级三重污染(env 已治 + torn-write 已治 + module-state 未治)**,非功能回归;768/768 单轮过、30 轮并发 ~10% 残留。别用「单轮过」当根治。**3 lib 原子化建议保留合并(生产加固价值),afterenv 保留(无害),module-state 根治按 §13.22 排期不进本轮**。
 
 **本轮 git 未 commit(等老板定 a=保留合并 / b=全回滚)**:`M jest.config.js`(+1 afterenv)/ `M lib/{error-patterns,process-manager,provider-health}.js`(各 +3/-1 原子化)/ `?? jest.setup-afterenv.js`(1111B)/ `?? docs/JEV*.md`(老板前序文件,非本任务,不动)。HEAD=`5115b22`(=origin/main,本轮 0 push)。基线:768/768 单轮过 / 30 轮并发 ~10% 残留(module-state) / 真实 ~/. 文件 7513/304 未污染。
+### §13.31 09-24 复核回填 + 老板 4 问拍板 + §13.30 git 段勘误（316a8a3 已 commit · push 已授权）
+
+**勘误（§13.30 结尾 git 段已过时）**：§13.30 末行写「本轮 git 未 commit / HEAD=`5115b22`」——**已过时**。本轮三件套（3 lib 原子化 + `jest.setup-afterenv.js` + `jest.config.js` 后 env 快照 + §13.30 文档）已全部 commit 进 **`316a8a3`**（6 文件 +51/−3，单轮 768/768）。`5115b22` 是上一轮 HEAD，非本轮落盘点。
+
+**09-24 15:11 复核（在 `316a8a3` 上真跑，非抄文档）**：30 轮 `--maxWorkers=4` 全量 = **2/30 失败**（run 5、run 9 各 1 test 偶挂）/ 单轮 **768/768 全绿**。印证 §13.29/§13.30 定性：残留 = module-level state 串味（env 残留已治 + torn-write 已治），非环境/数据问题、生产侧 0 影响；§13.30「~10% 残留」与此 2/30≈6.7% 在统计噪声内一致。
+
+**老板 4 问拍板（09-24，全接受建议）**：
+- **Q1 `316a8a3` = 保留 + push**。判据：3 lib 原子化与 flaky 根治解耦——原子化生产侧纯收益（止 torn-write + 数据完整性），不依赖测试基建 flaky 是否 100% 清；`afterenv` 无害保留。
+- **Q2 module-state 根 fix（`resetModules:true`）= 单独排期，不进本轮**。风险面全 768 test + 6 个 `require.cache` 强依赖 test（`memory-merge-route` / `skill-service-route` / `provider-health` / `provider-health-edge` / `orchestration-route` / `provider-isolation-executor.demo`）；生产侧 0 影响、不阻塞，与 §13.22 同性质。
+- **Q3 cost 实采接线 = 本轮不动，push 后单独一轮**。新接线（cost 信号源 mock→provider-health 实采），需先定接口形态（门控默认关 observe、不碰热路径）；§13.22 已确认热路径就位、C2 demo 34/34。
+- **Q4 D6-b / I1 P2+③ / DSH / P5 / kimi 价 = 维持 §13.22 拍板不动，本轮不碰**（D6-b/M2 维持 shadow/observe，kimi 价等商务定，DSH 等 0.2/P5 等 DSH 外部）。
+
+**生产数据复核**：`~/.multi-proxy-manager/` provider-health **7513B** / error-patterns **304B** / providers **2B**，均有效 JSON，30 轮后未污染。
+
+**git 现状**：`316a8a3` ahead origin/main 1；本次 §13.31 追加另起 1 commit；两 commit 一并 push（老板 09-24 授权）。`docs/JEV*.md`（老板 09-18 前序文件，非本任务）未 add、不动。
