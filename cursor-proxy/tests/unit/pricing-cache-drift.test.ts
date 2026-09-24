@@ -26,15 +26,16 @@ const EXPECTED: Record<string, { input: number; output: number; cacheHit?: numbe
   'claude-opus-4.7': { input: 15, output: 75, currency: 'USD' },
 };
 
-// RouteEngine inline pricing (dynamic import, tolerant to circular dep / export-name drift).
+// RouteEngine inline pricing (dynamic import — MUST import successfully in a real build).
 let routePricing: Record<string, any> | undefined;
+// P0-E: fail-loud gate.  import failure → test fails; no silent skip.
 beforeAll(async () => {
   try {
     const m = await import('../../src/routing/routeEngine.js') as any;
     routePricing = m && m.DEFAULT_ROUTE_CONFIG && m.DEFAULT_ROUTE_CONFIG.pricing;
-   } catch {
-     // routeEngine not importable -> seed-vs-literal lock is enough
-   }
+    } catch (err) {
+      throw err; // P0-E: import failure is a hard test failure, not a silent skip
+    }
 });
 
 const NOTIFY_SAVE = process.env.PROXY_PRICE_DRIFT_NOTIFY;
@@ -60,13 +61,19 @@ describe('Q1 P2/P3 price-cache + drift alert', () => {
     });
 
   it('A2 routeEngine inline pricing equals seed (anti-drift sync lock)', () => {
-    if (!routePricing) return; // import failed -> skip, not fail
-    for (const [model, exp] of Object.entries(EXPECTED)) {
-      const rp = routePricing[model];
-      if (!rp) continue; // routeEngine may lack a vendor (only assert what exists)
-      expect(rp.input).toBe(exp.input);
-      expect(rp.output).toBe(exp.output);
-      expect(rp.currency).toBe(exp.currency);
+   // P0-E: routeEngine MUST import (beforeAll throws on failure). And the models that
+   // ACTUALLY feed cost-optimization routing must be present + match seed — silent skip
+   // is what let the drift lock stay green. Non-routed reference entries (codex/glm/…)
+   // are NOT required in routeEngine, so we don't over-fire on those.
+    expect(routePricing).toBeDefined();
+   const rp = routePricing as Record<string, { input: number; output: number; currency: string }> && (
+     routePricing as Record<string, { input: number; output: number; currency: string }>);
+   const CORE = ['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-2.5-flash', 'kimi-k2.6'];
+   for (const m of CORE) {
+      expect(rp[m]).toBeDefined(); // anti-silent-skip: routed core must exist
+      expect(rp[m].input).toBe(EXPECTED[m].input);
+      expect(rp[m].output).toBe(EXPECTED[m].output);
+      expect(rp[m].currency).toBe(EXPECTED[m].currency);
      }
    });
 

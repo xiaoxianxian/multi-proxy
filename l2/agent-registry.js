@@ -25,6 +25,11 @@ const MODEL_TYPES = new Set(['text', 'multimodal', 'audio']);
 const MODEL_TIERS = new Set(['small', 'medium', 'large']);
 const DEFAULT_TIER = 'medium';
 const REQUIRED = ['id', 'name', 'type', 'capabilityTags', 'specVersion'];
+// P0-D: agent id 字符集白名单 —— 防存储型 XSS 的真正根。
+// dashboard 把 a.id 拼进 onclick="editAgent('id')"，esc() 在双引号属性上下文会被浏览器
+// 解码成裸字符 → 载荷可注入。在 registry 入口拒绝非白名单字符，比逐处转义更稳。
+//   合法 id 形如 codex-worker / hermes-multimodal（kebab-case），正则覆盖现有 demo + 测试。
+const ID_CHARSET = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 // 轻量校验（必填 + type enum + specVersion const + 基本类型）。返回错误数组或 null。
 function validate(profile) {
@@ -35,7 +40,10 @@ function validate(profile) {
     }
     if (typeof profile.id !== 'string' || !profile.id) {
         errs.push('id must be non-empty string');
-    }
+     } else if (!ID_CHARSET.test(profile.id)) {
+        // P0-D: 拒绝非白名单字符（含 < > " ' & 等 XSS 载荷），从源头堵住存储型 XSS。
+       errs.push('id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ (got ' + JSON.stringify(profile.id) + ')');
+     }
     if (!AGENT_TYPES.has(profile.type)) {
         errs.push(`type must be one of ${[...AGENT_TYPES].join('/')} (got ${JSON.stringify(profile.type)})`);
     }
