@@ -135,7 +135,9 @@ function bumpPatternFreq(id) {
       data.push({ id, occurrences: 1, resolution: seed ? seed.resolution : null, first_seen: new Date().toISOString().slice(0, 10) });
     }
     ensurePatternsDir();
-    fs.writeFileSync(activePatternFile, JSON.stringify(data, null, 2));
+    const tmp = activePatternFile + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, activePatternFile);
     return data.find((p) => p.id === id).occurrences;
   } catch {
     return null;

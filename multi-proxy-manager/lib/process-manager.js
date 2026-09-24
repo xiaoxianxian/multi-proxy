@@ -83,7 +83,9 @@ function loadCrashRecoveryState() {
 function saveCrashRecoveryState() {
   try {
     ensureCrashRecoveryDir();
-    fs.writeFileSync(CRASH_RECOVERY_FILE, JSON.stringify(proxyCrashRecovery, null, 2));
+    const tmp = CRASH_RECOVERY_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(proxyCrashRecovery, null, 2));
+    fs.renameSync(tmp, CRASH_RECOVERY_FILE);
   } catch (e) {
     console.error('[CrashRecovery] Failed to save state:', e.message);
   }

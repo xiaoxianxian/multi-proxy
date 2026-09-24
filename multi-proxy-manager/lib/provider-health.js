@@ -72,7 +72,9 @@ function saveProviderHealth() {
     for (const [id, rec] of health) {
       out[id] = { ...rec, _recentFailures: recentFailures.get(id) || [] };
     }
-    fs.writeFileSync(activeFile, JSON.stringify(out, null, 2));
+    const tmp = activeFile + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(out, null, 2));
+    fs.renameSync(tmp, activeFile);
   } catch (e) {
     console.error('[ProviderHealth] save failed:', e.message);
   }
