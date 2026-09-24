@@ -710,3 +710,31 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 > **【新窗口续跑提示词(09-23·8 项收口, I1 P2 只剩 ② UI)】** 我在《multi-proxy》(`/Users/xiaota/Documents/AI项目/multi-proxy`),**09-23 老板 8 项全收口 + git 全清 + push 到 `da036cd`**。8 项:① topic 已执行(占位符 owner bug→我用 `xiaoxianxian` 直跑,6 topic 挂上)② DSH #1496 仍 open 继续等 ③ **C4 kimi 定价老板三点全对我错,已按 platform.moonshot.cn 国内 CNY 修正 k3→20/100/2.0 + k2.6 cacheHit→1.1,tsc0+193/193** ④ M2 接线(门控开真写 sidecar)⑤ DSH 接入同② ⑥ **I1 P2+ 只做  ① jest 已完成(22/22, commit b3aae5f, 非 0c1a969 自带——上轮/上节「18/18、0c1a969 P0 自带」与 git 实查不符, 已据实勘误)、② `knowledge.html` UI 已接(commit b3aae5f: 独立页+routeMap `/knowledge`+nav 一项+门控关零副作用)、③ embedding 缓(检索质量验证后再上,内核须保持零依赖)** ⑦ /api/logs 已修 ⑧ untracked 全清(data/ gitignore + routing-billing.test 补 tracked + docs 归档)。**基线 cursor 193/193 / manager 746/746 / 热路径 0 改**。**下一步(老板已授权 push):写 `public/knowledge.html`(门控 `PROXY_KNOWLEDGE_BASE` 关时显示开启提示;开时显示文档列表/检索框/摄取+删除,复用 logs.html 的 fetch 拦截器),加 routeMap `/knowledge` + dashboard nav 一项,跑 manager 全量确认 746 不回归→commit+push**。请先读 §13.27+§13.28。铁律:E2E 真跑/显式 git add --/热路径非授权不动/push 前问/不产假配额价/`write_file` verified 不可信须 ls 实查。**
 
+
+### §13.29 09-24 orchestration-route flaky 深挖 + jest.setup.js 修污染(未根除 flaky, 待老板定根治方向)
+
+**触发**:老板 3 拍板之一"orchestration-route 并行 flaky 排"。本轮 100+ 轮实验确证它**比 §13.21/§13.22 定性更深**,非 orchestration 单文件、非纯并发、非 env 单一根因。
+
+**确证事实(全部真跑,非推断)**:
+- 30 轮 `--maxWorkers=4` 全量:**~6-10% 失败**,受害者**轮转** 5+ 文件(orchestration/knowledge-base/sessions-api/memory-merge/alert-route/fetch-models/rate-limit),**全部是 `require('../../server')` 重建 app 的 route test**。
+- 30 轮 `--runInBand` 串行:**2/30 失败**(knowledge-base 鉴权闭环 + fetch-models 无 token 401)→ **推翻"纯并发 torn-read"假说,串行也挂**。
+- `jest.setup.js` 实测**漏重定向 `provider-health`**:grep 确认它只重定向 logger/error-history/error-patterns 3 个,provider-health 未调 `setHealthFile`→ 所有 jest worker 共享默认 `~/.multi-proxy-manager/provider-health.json` 并发 `writeFileSync`→ torn-read → `[ProviderHealth] load failed: JSON at position 2`(30/30 轮出现)。
+
+**方案 B(本轮已做,未 commit)**:给 `jest.setup.js` 补 `ph = require('./lib/provider-health'); ph.setHealthFile(phTmp); ph.resetProviderHealth();` + `const phTmp=...` 1 行(PID-isolated tmp)。
+- ✅ **副作用已修复**:jest 不再污染真实 `~/.multi-proxy-manager/provider-health.json`(实测 7513/304 完全不变,改动前是被 7513→1819 撕裂)。
+- ❌ **flaky 未根治**:30 轮并发仍 1/30 失败(受害者转成 alert-route)。B 只把撕裂从"真实文件"隔离到"tmp PID 文件",同 worker 多 test 文件仍共享该 PID tmp 文件并发写,torn-read 照旧。
+
+**§13.21/§13.22 旧定性需勘误**:旧记"sessions-api 残余 flaky = module-level mockStore 的 worker 复用噪声,与功能无关,单独排期"。本轮实证的 flaky **受害面更广(7 文件轮转)+ 串行也挂 + 持久化 torn-read**,非仅 mockStore;**根因 = manager 测试基建的状态残留三重污染(env 残留 + 持久化文件 torn-read + require.cache/module-state 串味),非单点可解**。
+
+**本轮教训(已记 proxy-rebuild-dev/references/patch-pitfalls.md)**:① patch 工具对 >10KB 大文件 fuzzy 缩进漂移 5+ 次→大文件一律 Python line-based;② **诊断 flaky 先跑串行 vs 并发对照定根因类别,勿默认"并发 torn-read"**(本轮就因这个默认错,白跑 50+ 轮);③ **别用"768/768 单轮过"当根治判据**(B 单轮过但 30 轮 1 失败)。
+
+**未 commit 改动**:`multi-proxy-manager/jest.setup.js`(+4 行,方案 B,**修污染有效但 flaky 未根除,是否保留/补强待老板定**)。
+
+**待老板拍根治方向(3 选 1,均未擅自做)**:
+- **(A) jest.config 每 test 文件独立进程**(`testIsolation`/改 worker 模型):物理隔离持久化文件从根断 torn-read;代价全量略慢。
+- **(B) 补强 B + testIsolation**:保留本轮 B(已修污染)+ jest `testIsolation:false` 让每 test 独立 env/require.cache,治串行残留。
+- **(C) 只留 B(已修污染)+ flaky 记 MEMORY 待排,先收口**:承认 flaky 是测试基建级系统问题,本轮收口"停止污染真实数据",flaky 根治单独排期(同 §13.22 已定)。
+
+**git 状态(09-24 收口)**:①`server.js:86` 注释 `PROXY_L2_KNOWLEDGE→PROXY_KNOWLEDGE_BASE` 已 commit+push `c034d9e`;② orchestration flaky **未根治**(`jest.setup.js` B 改动**未 commit**);③ patch 教训已落盘 `proxy-rebuild-dev/references/patch-pitfalls.md`。真实 `~/.multi-proxy-manager/` 两文件已还原 + 校验 JSON 合法。
+
+**基线不变**:manager 768/768(单轮)/并发 ~6-10% flaky(测试基建级,非功能)/ cursor 193/193 tsc0 / 热路径 0 改 / 真实 ~/. 文件已还原 7513/304。

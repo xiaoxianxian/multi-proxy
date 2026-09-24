@@ -7,6 +7,7 @@ const pid = process.pid;
 const loggerTmp = path.join(os.tmpdir(), `jest-requests-${pid}.log`);
 const errHistTmp = path.join(os.tmpdir(), `jest-error-history-${pid}.jsonl`);
 const errPatTmp = path.join(os.tmpdir(), `jest-error-patterns-${pid}.json`);
+const phTmp = path.join(os.tmpdir(), `jest-provider-health-${pid}.json`);
 
 const logger = require('./lib/logger');
 const ep = require('./lib/error-patterns');
@@ -14,3 +15,6 @@ const ep = require('./lib/error-patterns');
 logger.setLogFile(loggerTmp);
 ep.setHistoryFile(errHistTmp);
 ep.setPatternFile(errPatTmp);
+const ph = require('./lib/provider-health');
+ph.setHealthFile(phTmp);
+ph.resetProviderHealth();
