@@ -8,14 +8,24 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-console.log = (...args) => {
-  const ts = new Date().toISOString();
-  process.stdout.write(`[${ts}] ${args.join(' ')}\n`);
-};
+// P0-E: 仅在直接运行时覆盖 console.log 输出 ISO 时间戳；被 require()（测试）时保留原行为。
+if (require.main === module) {
+  console.log = (...args) => {
+    const ts = new Date().toISOString();
+    process.stdout.write(`[${ts}] ${args.join(' ')}
+`);
+   };
+}
 
 const PORT = parseInt(process.env.PORT) || 18790;
 const HOME = process.env.HOME || path.join(require('os').homedir());
 const AUTH_TOKEN = process.env.PROXY_AUTH_TOKEN || '';
+
+if (!AUTH_TOKEN) {
+  // P0-C: fail-open with loud WARN — 未设 token 时 /api/* 对任意可达方开放，
+  // 仅适合本机使用。暴露到网络前必须设 PROXY_AUTH_TOKEN。
+  console.warn('[SECURITY][fail-open] PROXY_AUTH_TOKEN unset — /api/* open to anyone reachable; set it before network exposure.');
+}
 
 // ===== Auth Middleware =====
 function requireAuth(req, res, next) {
@@ -307,11 +317,17 @@ app.get('/health', requireAuth, (req, res) => {
 });
 
 // Admin API routes
+// P0-A: 凭证泄露根治 —— 只回路由元数据，绝不回 raw（含 api_key / 上游 token）。
+//   parseConfigToml() 内部仍保留 raw 供本地读用，但 HTTP 响应显式白名单字段。
 app.get('/api/config', requireAuth, (req, res) => {
   const configTomlPath = findConfigToml();
-  const config = parseConfigToml(configTomlPath);
-  config.path = configTomlPath;
-  res.json(config);
+  const parsed = parseConfigToml(configTomlPath);
+  res.json({
+    model: parsed.model,
+    model_provider: parsed.model_provider,
+    wire_api: parsed.wire_api,
+    path: configTomlPath,
+  });
 });
 
 // ===== Settings (key-value store for Web UI; e.g. current_model) =====
@@ -653,10 +669,19 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
   }
 });
 
-// Listen
-app.listen(PORT, () => {
-  console.log(`Codex Multi-Model Proxy started on port ${PORT}`);
-  console.log(`Config: ${CONFIG_TOML}`);
-  console.log(`Models: ${UPSTREAM_MODELS.flatMap(p => p.availableModels).join(', ')}`);
-  loadRoutingMode();
-});
+// ===== P0-E: 可测试性 =====
+//   把 app 导出，门禁测试可直接 supertest(app)，无需 require 时 listen 18790 撞端口。
+module.exports = { app, requireAuth, findConfigToml, parseConfigToml };
+
+// ===== P0-B: 默认绑 127.0.0.1（仅本机）=====
+//   暴露到网络前显式设 BIND_HOST=0.0.0.0；Docker 内可设 PROXY_BIND_HOST=0.0.0.0。
+const BINDING = process.env.BINDING || process.env.PROXY_BIND_HOST || '127.0.0.1';
+if (require.main === module) {
+  const netWarn = BINDING !== '127.0.0.1' ? ' (network-exposed — set PROXY_AUTH_TOKEN!)' : '';
+  app.listen(PORT, BINDING, () => {
+    console.log(`Codex Multi-Model Proxy started on ${BINDING}:${PORT}${netWarn}`);
+    console.log(`Config: ${CONFIG_TOML}`);
+    console.log(`Models: ${UPSTREAM_MODELS.flatMap(p => p.availableModels).join(', ')}`);
+    loadRoutingMode();
+   });
+}

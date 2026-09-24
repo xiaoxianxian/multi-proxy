@@ -6,6 +6,11 @@ import { db } from '../db/database.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// P0-C: fail-open WARN — 未设 PROXY_AUTH_TOKEN 时 /admin-api* 对任意可达方开放，仅适合本机。
+if (!process.env.PROXY_AUTH_TOKEN) {
+  console.warn('[SECURITY][fail-open] PROXY_AUTH_TOKEN unset — /admin-api* open to anyone reachable; set it before network exposure.');
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = parseInt(process.env.PORT || '18794');

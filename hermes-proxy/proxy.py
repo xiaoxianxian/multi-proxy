@@ -694,6 +694,9 @@ def get_balances():
 
 # Main entry point
 if __name__ == '__main__':
+    # P0-C: fail-open WARN — 未设 PROXY_AUTH_TOKEN 时 /api/* 对任意可达方开放，仅适合本机。
+    if not AUTH_TOKEN:
+        logger.warning('[SECURITY][fail-open] PROXY_AUTH_TOKEN unset — /api/* open to anyone reachable; set it before network exposure.')
     logger.info(f"Hermes Multi-Model Proxy starting on port {PORT}")
     logger.info(f"Config path: {find_config_yaml()}")
 
