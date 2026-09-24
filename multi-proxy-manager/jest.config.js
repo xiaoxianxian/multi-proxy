@@ -3,6 +3,7 @@ module.exports = {
   testMatch: ['<rootDir>/tests/unit/**/*.test.js'],
   roots: ['<rootDir>'],
   setupFiles: ['<rootDir>/jest.setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup-afterenv.js'],
   moduleNameMapper: {
     "^../server$": "<rootDir>/server",
   },

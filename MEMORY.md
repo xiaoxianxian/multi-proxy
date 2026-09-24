@@ -738,3 +738,23 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 **git 状态(09-24 收口)**:①`server.js:86` 注释 `PROXY_L2_KNOWLEDGE→PROXY_KNOWLEDGE_BASE` 已 commit+push `c034d9e`;② orchestration flaky **未根治**(`jest.setup.js` B 改动**未 commit**);③ patch 教训已落盘 `proxy-rebuild-dev/references/patch-pitfalls.md`。真实 `~/.multi-proxy-manager/` 两文件已还原 + 校验 JSON 合法。
 
 **基线不变**:manager 768/768(单轮)/并发 ~6-10% flaky(测试基建级,非功能)/ cursor 193/193 tsc0 / 热路径 0 改 / 真实 ~/. 文件已还原 7513/304。
+
+**§13.30 — flaky 根治方向 A 实测(老板选 A;09-24,原子化+env 快照未根治 module-state,3 lib 原子化有独立价值)**:
+
+**老板拍 A(根治方向)**——jest 每 test 文件独立进程/物理隔离从根断 torn-read。本 agent 落地为**三件套**(非只 testIsolation):
+- **3 lib 持久化文件改原子写**(POSIX tmp+renameSync,生产级数据完整性加固,非仅测试):`error-patterns.js bumpPatternFreq` L138 / `provider-health.js saveProviderHealth` L75 / `process-manager.js saveCrashRecovery` L86——3 处原为裸 `fs.writeFileSync`(非原子,并发下 reader 读到半截=position 2)。注:`error-patterns.js trimHistory` L173 早已是 tmp+renameSync,照此模式补其余 3 处。
+- **新建 `jest.setup-afterenv.js`**(per-test `process.env` 快照,`afterEach` 恢复 worker 加载时 env)+ `jest.config.js` 加 `setupFilesAfterEnv`——治 env 跨文件串味。
+- `auth.js` jwt/password **先原子化又回滚**(非 flaky 根因,精准修改原则,不扩大改动面)。
+
+**三轮实测(30 轮/轮,前台,不后台打转)**:
+| 阶段 | 真 test 失败 | 实测 |
+|---|---|---|
+| 改动前 | ~10% | 10/30,7 文件轮转(§13.29)|
+| 仅 3 lib 原子化 | **1/30** | 受害者轮转 sessions-lazy-store→api→logs → 原子写止 torn-write 有效,残余是 env/module-state |
+| A 全套(+afterenv env 快照) | **3/30** | login/rate-limit/sessions-api 各一,**没到 0** |
+
+**结论(诚实,不夸大)**:① **3 lib 原子化有效**——真实 `~/.multi-proxy-manager/` 两文件 30 轮始终 7513/304 未污染(止 torn-write + 止 jest 写真实数据两点都达成),且是**生产级数据完整性加固,独立于 flaky 是否 100% 清,值得合并**;② **flaky 残余 ~10% 未根治**——env 快照打不中,残余是 **module-level state 串味**(jest 同 worker 串行跑多 test 文件共享 `require.cache`,各 test 设的 module 内可变 map/store 不清 → 翻转 403/undefined);③ **module-state root fix = `resetModules:true`**(+ 各 test `jest.isolateModules`),**影响全部 768 test、可能破坏靠缓存语义的 13 个测试文件,不敢擅动**——同 §13.22「单独排期」处理。
+
+**给后续 agent 的判据**:flaky 是 manager **测试基建级三重污染(env 已治 + torn-write 已治 + module-state 未治)**,非功能回归;768/768 单轮过、30 轮并发 ~10% 残留。别用「单轮过」当根治。**3 lib 原子化建议保留合并(生产加固价值),afterenv 保留(无害),module-state 根治按 §13.22 排期不进本轮**。
+
+**本轮 git 未 commit(等老板定 a=保留合并 / b=全回滚)**:`M jest.config.js`(+1 afterenv)/ `M lib/{error-patterns,process-manager,provider-health}.js`(各 +3/-1 原子化)/ `?? jest.setup-afterenv.js`(1111B)/ `?? docs/JEV*.md`(老板前序文件,非本任务,不动)。HEAD=`5115b22`(=origin/main,本轮 0 push)。基线:768/768 单轮过 / 30 轮并发 ~10% 残留(module-state) / 真实 ~/. 文件 7513/304 未污染。
