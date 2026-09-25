@@ -70,16 +70,16 @@
 
 | 模块 | 文件数 | 测试数 | 套件 |
 |------|--------|--------|------|
-| multi-proxy-manager | 40 files | 644 tests | 40 suites |
-| cursor-proxy | 11 files | 131 tests | 11 suites |
-| codex-proxy | 4 files | 55 tests | 4 suites |
-| hermes-proxy | 3 pytest files | 63 checks | 3 suites（基本够用，无 E2E）|
-| L2 demo | 13 .demo.js（10 内核 + 3 adapter + 3 公共监控模块） | ~193 checks 全 PASS | 各自独立运行 |
+| multi-proxy-manager | 47 files | 770 tests | 47 suites |
+| cursor-proxy | 17 files | 219 tests | 17 suites |
+| codex-proxy | 6 files | 62 tests | 6 suites |
+| hermes-proxy | 4 files | 77 pytest 项 | 4 suites |
+| L2 demo | 23 .demo.js（10 内核 + 3 adapter + 10 监控/mcp/route/省钱网关） | 318 checks 全 PASS | 各自独立运行 |
 | shell (bats) | 1 .bats | 11 tests | — |
 
-**总计：~1088 checks 全绿**（jest 828 + pytest 63 + bats 11 + l2 demo ~193 + codex-integration 2）。
+**总计：1380 checks 全绿**（jest 1051 = 770+62+219 + pytest 77 + bats 11 + l2 demo 318 + codex-integration 2）。
 
-> **2026-09-21 task1 增量（本轮真跑，非引用）**：`savings-gateway` 落地 → `multi-proxy-manager` 全量 jest `719/719`（45 suites / 0 fail，相对 09-18 快照 +18 = 本轮 `savings-gateway.test.js`）；`l2/savings-gateway/savings-gateway.demo.js` 24/24 PASS；l2 demo 当前实存 21 个 `.demo.js`（10 内核 + 3 adapter + 3 公共监控 + mcp 编排 2 + 省钱网关 1 + route-engine-orchestrator）。09-18 上表为历史快照保留，下表为当前视图。
+> **2026-09-21 task1 增量（历史快照，09-25 已更新上方主表）**：`savings-gateway` 落地 → `multi-proxy-manager` 全量 jest `719/719`（45 suites / 0 fail，相对 09-18 快照 +18 = 本轮 `savings-gateway.test.js`）；`l2/savings-gateway/savings-gateway.demo.js` 24/24 PASS；09-21 l2 实存 21 个 `.demo.js`（10 内核 + 3 adapter + 3 公共监控 + mcp 编排 2 + 省钱网关 1 + route-engine-orchestrator）。**09-25 现状**：jest 770 / 47、cursor 219 / 17、codex 62 / 6、hermes 77 / 4、l2 demo 23 / 318 checks（新增 cost-watchdog 等）；09-21 上行为历史快照，当前真值见上方主表（2026-09-25 真跑）。
 
 ---
 

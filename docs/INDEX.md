@@ -145,7 +145,7 @@ bash manage.sh stop
 | 4 个前端页面 | 4/4 上线 + 3 新页面（health/alerts/registry） | ✅ |
 | L2 核心模块 | 10/10 实现 | ✅ |
 | L2 adapter | 3/3 实现 | ✅ |
-| 总测试（全模块） | 644 jest / 55 codex-jest / 63 pytest / ~193 l2 checks / 11 bats | ✅ 全绿 |
+| 总测试（全模块） | 770 jest(manager) / 62 codex-jest / 77 pytest(hermes) / 318 l2 checks / 11 bats | ✅ 全绿（2026-09-25 真跑；jest 合计 1051 = 770+62+219）|
 | P5 GUI 桌面壳 | 已验收（截图确认窗口正常显示，2163ca9 push） | ✅ |
 | 文档缺口 | 无（INDEX / feature-matrix / AGENTS / 模板已补） | ✅ |
 | DSH 生态接入 | DS1 骨架已落（2 SKILL + 规划文档）；DS2/DS3 暂缓（#1496 guardrail 未修） | ✅ |
@@ -158,12 +158,10 @@ bash manage.sh stop
 1. **C2/B7 幽灵路径**（`forward.js` axios 15s+100MB 全缓冲 / `codex-proxy` 120s+pipeTo）：
    全局零调用方，当前**修了反坑**，不修，触发条件（manager 成为 chat 统一入口）出现时再动。
 
-2. **hermes-proxy 测试覆盖度**：3 文件 / 63 pytest 项，覆盖基本够用（无 E2E）；
+2. **hermes-proxy 测试覆盖度**：4 文件 / 77 pytest 项（含 `test_e2e_hermes.py` 14 E2E；`integration_test.py` 20 为独立 integration，不进 pytest 发现集），覆盖基本够用；
    后续 P? 考虑补 E2E 测试。
 
-3. **codex-proxy 测试**：已补 `auth-and-admin.test.js`，3 文件 / 53 tests 全绿（2026-09-16，
-   auth 401/200 + settings + providers CRUD/脱敏/409 + balances + switch/test-connection guard）；
-   仅剩超时/流式断流的真实 pipeTo 路径未覆盖（需 mock upstream 流，非本次范围）。
+3. **codex-proxy 测试**：6 文件 / 62 tests 全绿（`proxy`/`integration`/`auth-and-admin`/`circuit-integration`/`config-leak-gate`/`stream-bypass`；2026-09-25 真跑），覆盖 auth 401/200 + settings + providers CRUD/脱敏/409 + balances + switch/test-connection guard + 配置白名单门禁；仅余超时/流式断流真实 pipeTo 路径部分未覆盖。
 
 || 4. **P5 GUI 看板 / 编排面板**：锦上添花，非阻塞，暂不实现。 → **已验收（2163ca9）** |
 
