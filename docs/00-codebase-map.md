@@ -54,7 +54,7 @@ multi-proxy-manager/
 │   ├── proxy-config.html  # 模型切换页
 │   └── login.html         # 登录页
 └── tests/
-    └── *.test.js          # jest，635 tests 全绿
+    └── *.test.js           # jest，770 tests 全绿（47 suites，2026-09-25）
 ```
 
 ### codex-proxy（端口 18790）
@@ -95,7 +95,7 @@ cursor-proxy/
 ├── dist/server/
 │   └── app.js             # 编译产物
 └── tests/
-    └── unit/*.test.ts      # jest，131 tests 全绿（需 NODE_OPTIONS=--experimental-vm-modules）
+    └── *.test.ts            # jest，219 tests 全绿（17 suites，需 NODE_OPTIONS=--experimental-vm-modules，2026-09-25）
 ```
 
 ### l2/ 编排内核
