@@ -773,3 +773,34 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 **生产数据复核**：`~/.multi-proxy-manager/` provider-health **7513B** / error-patterns **304B** / providers **2B**，均有效 JSON，30 轮后未污染。
 
 **git 现状**：`316a8a3` ahead origin/main 1；本次 §13.31 追加另起 1 commit；两 commit 一并 push（老板 09-24 授权）。`docs/JEV*.md`（老板 09-18 前序文件，非本任务）未 add、不动。
+
+### §13.32 Q2 module-state 根 fix 收口（09-25 · commit cbbe344 + 1de02b5 全 push · 老板「好,接受你的建议,继续执行」）
+
+**背景**:老板 09-25 采纳推荐「先等 CI 绿 → Q2 module-state 根 fix → Q3 cost 实采殿后」,本轮开 Q2。
+
+**找到并修了真 bug（KB dead-code）**:`routes/knowledge-base.js` 的 `_resetForTest` 原本设在 `module.exports = router` **之前**,被 `module.exports = router` 覆盖成 dead code → 它自己 test(`tests/unit/knowledge-base-route.test.js:18` 的 `router._resetForTest()`)的 self-cleanup **长期失效**,是 09-24 2/30 串味的一个真实根。移到 `module.exports = router` 之后 → commit `cbbe344`。
+
+**残余 flaky 量化(09-25 实测,非抄 09-24 数字)**:
+- 串行 `--runInBand` 10 轮:**10/10 全绿**(KB fix 彻底治好跨文件 module-state 串味)。
+- 并发 `--maxWorkers=4` 15 轮窗口:**13/15(2 真失败)**;10 轮窗口 **0/10 全绿** → 残余 <13%,单 test 偶发,属 §13.21 标的「**真 timer-flaky**」(非 module-state,需 `jest.useFakeTimers()` 改写或接受 ~3% 容差,单独排期)。
+- **实验 `afterEach` 万能 reset**(5 route `_resetForTest`/`_reset` + 5 lib reset)→ 引发 `sessions-api` **100% 回归**(清 `sessionStore` null 破坏其 in-suite 闭环断言;sessions/orchestration/skill-service 三 route 本就自带 in-suite self-cleanup,外层再清打架)→ **已回退弃用**。结论:Q2 是 system 级架构矛盾(需尊重各 suite in-suite 清理边界),非「加几个 reset」能解;KB dead-code fix 已收口,残余 timer-flaky 单独排期。
+
+**INDEX §7 收口行**:commit `1de02b5`(`docs/INDEX.md` line 209,纯插一行,§7 铁律)。
+
+**四模块回归(全部真跑,AGENTS.md §4「数字必须真跑」)**:
+| 模块 | 结果 | 备注 |
+|---|---|---|
+| codex-proxy | **62/62** | 含 P0-E `config-leak-gate` + P0-A 白名单门禁 |
+| cursor-proxy | **193/193** | `NODE_OPTIONS=--experimental-vm-modules`;含 P0-E `pricing-cache-drift` fail-loud |
+| hermes-proxy | **77/77** | 须用**有 flask 的 python3**;本地默认 `python` 指向无 flask 的 uv 解释器(误报 collection error,非逻辑失败);CI 用 `pip install -r requirements.txt` 无此问题 |
+| l2 | agent-registry **27/27** + mcp-server **11/11** + route-engine demo `✅ Demo complete` | P0-D `agent-registry` id 字符集生效零回归 |
+
+**两个中途「异常」均已查清是误报(非回归)**:① hermes `ModuleNotFoundError: No module named 'flask'`= 本地 `python` 解析到 `~/.local/share/uv/.../cpython-3.11`(无 flask);system `/usr/bin/python3` 与 `~/.hermes/hermes-agent/venv` 有 flask,77/77 通过。② l2 demo 全崩 = 我猜错文件名(`demo/*.demo.js` vs 真实 `l2/*.demo.js`,MODULE_NOT_FOUND)。
+
+**push 链(09-25,Q2 收口)**:`cbbe344`(KB dead-code fix)→ `1de02b5`(INDEX §7 收口行)→ `main` ahead 0 = origin/main。前序 P0 批 `058c601`/`aeab639`/`1175804`/`8b69982` 亦已 push(09-24/09-25 老板授权)。CI 工作流 `.github/workflows/p0-security-gate.yml` 4 job(codex/cursor/hermes/l2)已 push(1175804),云端红绿**按老板 09-25 指示挂到「整体验收出验收步骤」里程碑再提醒,不现查 Actions**。
+
+**Q3 cost 实采**:本轮不动(老板定最殿后)。= §13.13 cost 接线(P1-B 成本闭环,forward.js:166-168 已 `accumulate` 就位、门控默认关、C2 demo 34/34),cursor-proxy 侧需新接 cost 信号源(mock→provider-health 实采),需先定接口形态(门控默认关 observe、不碰热路径),单独一轮。
+
+**本轮 git**:工作树干净(除 `docs/JEV野石方案_本地搭建.md` untracked——老板 09-18 前序文件,非本任务,不动)。`git status -sb`:main ahead 0 = origin/main。
+
+**给后续 agent 的判据**:Q2 的「真 bug」是 KB `_resetForTest` dead-code(已修 commit `cbbe344`);残余 flaky 是 timer-based(非 module-state,§13.21 已定性),不值得本轮追;`afterEach` 万能 reset 是反模式(破坏 in-suite 闭环),勿再试。Q3 待开。
