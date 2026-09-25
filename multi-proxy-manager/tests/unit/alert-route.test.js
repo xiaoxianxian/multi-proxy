@@ -13,6 +13,7 @@ const fs = require('fs');
 // 顶层 require（jest 缓存稳定，跨测试共享同一模块实例）
 const alert = require('../../../l2/alert.js');
 const CT = require('../../lib/cost-track');
+const pm = require('../../lib/process-manager');
 
 describe('L2 P2 alert route (/api/alert)', () => {
   let app, router;
@@ -270,5 +271,39 @@ describe('L2 P2 alert route (/api/alert)', () => {
     const events = alert.list({ rule: 'cost-budget-exceeded' });
     expect(events.length).toBeGreaterThan(0);
     expect(events[0].providerId).toBe('openai');
-  });
+   });
+
+   // ---- Q3 P1-B 第 4 路：cursor 实采成本（HTTP 拉 /admin-api/cost → × 预算 → cost-budget-exceeded）----
+  test('collect：cursor 实采成本超预算 → 产生 cost-budget-exceeded 事件（providerId="cursor"）', async () => {
+    process.env.PROXY_HEALTH_ALERT = '1';
+    process.env.PROXY_COST_BUDGET = '10';
+     // 模拟 cursor 在跑 + 其实采端点返回 20 CNY 总成本
+    pm.isProcessRunning = (name) => name === 'cursor';
+    pm.fetchProxyApi = async (name, ep) => {
+      if (name === 'cursor' && ep === '/admin-api/cost') {
+        return { ok: true, totalCny: 20, requestCount: 5, source: 'actual' };
+       }
+      return null;
+     };
+    const res = await request(app).post('/api/alert/collect');
+    expect(res.status).toBe(200);
+    const cursorEvent = res.body.alerts.find(a => a.rule === 'cost-budget-exceeded' && a.providerId === 'cursor');
+    expect(cursorEvent).toBeTruthy();
+    expect(cursorEvent.signal.cost).toBeCloseTo(20, 6);
+    expect(cursorEvent.signal.budget).toBe(10);
+    pm.isProcessRunning = undefined;
+    pm.fetchProxyApi = undefined;
+   });
+
+  test('collect：cursor 未运行 / 拉取失败 → 第 4 路跳过 → 零误报（不报 cost 事件）', async () => {
+    process.env.PROXY_HEALTH_ALERT = '1';
+    process.env.PROXY_COST_BUDGET = '10';
+    pm.isProcessRunning = () => false;
+    pm.fetchProxyApi = async () => null;
+    const res = await request(app).post('/api/alert/collect');
+    expect(res.status).toBe(200);
+    expect(res.body.collected).toBe(0);
+    pm.isProcessRunning = undefined;
+    pm.fetchProxyApi = undefined;
+   });
 });

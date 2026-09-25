@@ -10,6 +10,31 @@ const { normalizeProxyHealth, persistHealthHistory } = require('../lib/health');
 
 const router = express.Router();
 
+// Q3 P1-B 成本闭环第 4 路（manager 侧）：拉 cursor /admin-api/cost 的实采成本。
+// 非侵入 + best-effort（AGENTS §3）：
+//   - running=false → 不拉（仿 /status 的 running 守卫，避免无谓等待/连接重试）
+//   - 拉取失败/无数据 → 返回 null（不产假值；cursor /cost 无数据时返回 0，这里归 null）
+//   - 字段：cursor /admin-api/cost → costTrack.getDailyCost 的 DailyCostSummary，
+//     真实字段是 totalCny（CNY，不是 totalCost）；见 cursor-proxy/src/monitoring/costTrack.ts:153。
+async function fetchCursorActualCost(running) {
+  if (!running) return null;
+  try {
+    const result = await pm.fetchProxyApi('cursor', '/admin-api/cost');
+    if (result && typeof result.totalCny === 'number' && result.totalCny > 0) {
+      return {
+        totalCny: result.totalCny,
+        requestCount: result.requestCount || 0,
+        byProvider: result.byProvider || {},
+        source: 'actual',
+        day: result.day,
+      };
+    }
+  } catch {
+    // best-effort：拉取失败/进程消失/超时 → 静默跳过，绝不影响 /status 其它字段
+  }
+  return null;
+}
+
 // 全局代理冲突检测：打开应用时调用，报告哪些 agent 被其它工具占用。
 // 返回 { conflicts: { codex: {...}, hermes: {...}, cursor: {...} }, any: bool }
 router.get('/conflicts', requireAuth, (_req, res) => {
@@ -60,7 +85,9 @@ router.get('/status', async (_req, res) => {
         latencyMs,
        },
       rawHealth: raw,
-     };
+      // Q3 P1-B：cursor 实采成本（/admin-api/cost 只读；未运行/无数据 = null，不产假值）
+      actualCost: (name === 'cursor') ? await fetchCursorActualCost(running && !fault) : null,
+       };
 
     // 持久化（best-effort，写入失败不影响响应）
     persistHealthHistory({

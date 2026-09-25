@@ -32,6 +32,7 @@ const alertSvc = require('../../l2/alert.js');
 const ph = require('../lib/provider-health');
 const ep = require('../lib/error-patterns');
 const costTrack = require('../lib/cost-track');
+const pm = require('../lib/process-manager');
 // M2 自动隔离执行层（l2/p3-design）：把建议态 executor 接上真实 provider-health 信号。
 // 门控 PROXY_HEALTH_ISOLATE 默认关 = observe 只读不写盘（非侵入默认）；门控开+executor 注册才真写 sidecar。
 // 详见 lib/provider-isolation-executor.js（demo 8/8、test 24/24 已绿）。
@@ -114,7 +115,29 @@ router.get('/config', (_req, res) => {
 // 第 3 路 cost：读 costTrack.getAll()（A 路 per-proxy 累计花费 × 当前预算），
 //  形状 { source:'cost', providerId, cost, budget } 精确喂 alert.js cost-budget-exceeded 规则。
 //  无预算（resolveBudget → undefined）的 proxy 跳过 = 不触发（YAGNI 正确）。
-function runAllCollects() {
+//
+//  Q3 P1-B 第 4 路：cursor 实采成本。runAllCollects 已 async，第 3 路 cost 循环前先拉
+//  cursor 实采汇总（collectCursorCostSignals）注入 allCost，与 A 路（codex/hermes token×单价）
+//  共用同一条 cost-budget-exceeded 规则。cursor 进程未运行 → 不拉（仿 /status 的 running 守卫），
+//  拉取失败 → 跳过；零新告警面、零误报。
+async function collectCursorCostSignals() {
+  const out = {};
+  try {
+    // 未运行 → 不拉，避免无谓等待/连接重试（同 proxy-control.js /status 先判 running）
+    if (!pm.isProcessRunning('cursor')) return out;
+    const result = await pm.fetchProxyApi('cursor', '/admin-api/cost');
+     // cursor /admin-api/cost 返回 { ok, day, totalCny, requestCount, byProvider, source:'actual' }
+     // 字段是 totalCny（CNY 实采，见 cursor costTrack.ts DailyCostSummary），非 totalCost。
+    if (result && typeof result.totalCny === 'number' && result.totalCny > 0) {
+      out.cursor = result.totalCny;
+     }
+  } catch {
+    // best-effort：拉取失败/进程消失/超时 → 跳过该路，绝不影响其它路告警，零误报
+  }
+  return out;
+}
+
+async function runAllCollects() {
   const alerts = [];
   const threshold = alertSvc.DEFAULT_CONFIG.errorFrequencyThreshold;
 
@@ -170,8 +193,20 @@ function runAllCollects() {
     }
 
    // 3. cost 信号（A 路 token×单价累计 × 预算）
-  const allCost = costTrack.getAll();
-  for (const proxyName of Object.keys(allCost)) {
+   const allCost = costTrack.getAll();
+
+   // 3b. Q3 P1-B 成本闭环第 4 路：cursor 实采成本（HTTP 拉 cursor /admin-api/cost →
+   //   cursor-cost.jsonl 实采汇总）注入第 3 路 map，与 A 路（codex/hermes）同一循环 ×
+   //   预算 → cost-budget-exceeded。best-effort：cursor 未起/拉取失败 → 跳过，零误报。
+   //   非侵入：cursor 侧采集门控 PROXY_CURSOR_COST 默认关；manager 侧仅读其 /cost 只读端点。
+   const cursorCost = await collectCursorCostSignals();
+   for (const [providerId, cost] of Object.entries(cursorCost)) {
+   allCost[providerId] = allCost[providerId] || { cost: 0, requestCount: 0 };
+   allCost[providerId].cost += cost;
+   allCost[providerId].source = 'actual-cursor';  // 标注来源，区分 A 路 token×单价
+   }
+
+   for (const proxyName of Object.keys(allCost)) {
     const budget = resolveBudget(proxyName);
     if (budget == null) { continue; } // 没设预算 → 不报超支（零误报）
     const sig = { source: 'cost', providerId: proxyName, cost: allCost[proxyName].cost, budget };
@@ -182,14 +217,13 @@ function runAllCollects() {
   return alerts;
 }
 
-// POST /api/alert/collect — 从三路真实信号源即时采集
+// POST /api/alert/collect — 从四路真实信号源即时采集
 router.post('/collect', (_req, res) => {
-  try {
-    const alerts = runAllCollects();
+  runAllCollects().then((alerts) => {
     res.json({ ok: true, collected: alerts.length, alerts });
-    } catch (e) {
+   }).catch((e) => {
     res.status(500).json({ ok: false, error: e.message });
-    }
+     });
 });
 
 // ---- 定时调度：门控 PROXY_COST_SCHEDULE 默认关 = 零副作用（不建 timer）----
@@ -200,8 +234,9 @@ function startCostScheduler(opts = {}) {
   if (!isCostScheduleOpen()) { return null; }      // 门控关 → 不建 timer（零副作用）
   const intervalMs = Number(opts.intervalMs) || Number(process.env.PROXY_COST_SCHEDULE_INTERVAL_MS) || 10 * 60 * 1000;
   const timer = setInterval(() => {
-    try { runAllCollects(); } catch { /* best-effort：单次崩不影响后续 tick */ }
-    }, intervalMs);
+   // 单次 tick 崩不影响后续（best-effort）；runAllCollects 已 async（第 4 路 cursor HTTP 拉取）
+    runAllCollects().catch(() => { /* best-effort：单次失败静默，下 tick 重试 */ });
+     }, intervalMs);
   if (typeof timer.unref === 'function') { timer.unref(); } // 不阻塞进程退出
   schedulerHandle = {
     handle: timer,
