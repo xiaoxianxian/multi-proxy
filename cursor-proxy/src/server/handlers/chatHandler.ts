@@ -8,6 +8,8 @@ import { ProviderAdapter, ProviderConfig } from '../../providers/base.js';
 import { db } from '../../db/database.js';
 import { SecretsManager } from '../../utils/crypto.js';
 import { routeShadow } from '../../routing/routing-shadow.js';
+// Q3 P1-B 成本闭环：实采 usage→精确 cost（含 cache）→JSONL sidecar。门控 PROXY_CURSOR_COST 默认关=零开销。
+import { accumulate as costAccumulate, resolvePricing } from '../../monitoring/costTrack.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -349,8 +351,17 @@ export async function forwardToProvider(
       if (!res.writableEnded) res.end();
     }
   } else {
-    const data = await upstreamResponse.json();
-    res.json(data);
+   const data = await upstreamResponse.json();
+   res.json(data);
+   // Q3 P1-B 实采：非流转发出口提 usage → 精确 cost（含 cache）→ JSONL sidecar。
+   // 门控 PROXY_CURSOR_COST 关 → costAccumulate 首行 enabled() 短路，零算价/零写盘/零 IO（仅一次布尔比较）。
+   // 流式路径暂未埋点（SSE 逐块解析是 P1-B 独立项，见本函数末注释）；本处对齐 manager 已验证 A 路（非流 usage 捕获）。
+   try {
+      const usage = (data as any)?.usage;
+      if (usage && reqBody && reqBody.model) {
+        costAccumulate(providerConfig.providerId, reqBody.model, usage, resolvePricing(reqBody.model, providerConfig.providerId));
+        }
+      } catch { /* 非致命：实采失败绝不阻塞主转发链路（AGENTS §3 非侵入） */ }
   }
 
   // 记录日志
