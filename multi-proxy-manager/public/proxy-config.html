@@ -707,16 +707,25 @@
     ];
 
     var MOCK_BALANCES = [];
+    // Q3 P1-B 成本闭环：cursor 实采成本（来自 /api/status 的 actualCost，单位 CNY）。
+    // 门控关 / 无付费请求 → null，余额卡片显示空态而非伪造 USD 随机值（不产假值，AGENTS §3）。
+    var currentActualCost = null;
 
+    // 余额卡片数据源：只读真实实采成本，绝不伪造 USD 随机余额。
+    // 与后端 fetchCursorActualCost 契约一致：totalCny > 0 才显卡（0 由后端已归 null → 空态）。
     function getBalancesFromProviders() {
       MOCK_BALANCES.length = 0;
-      for (var i = 0; i < providers.length; i++) {
+      if (currentActualCost && currentActualCost.totalCny > 0) {
         MOCK_BALANCES.push({
-          name: providers[i].name,
-          amount: parseFloat((Math.random() * 100).toFixed(2)),
-          currency: 'USD',
-        });
-      }
+          name: 'Cursor 实采成本',
+          amount: currentActualCost.totalCny,
+          currency: 'CNY',
+          requestCount: currentActualCost.requestCount || 0,
+          source: 'actual',
+         });
+       }
+      // cursor 无实采数据（门控 PROXY_CURSOR_COST 关 / 今日无付费请求）→ 空态，不产假值；
+      // codex/hermes 的账户余额由 /api/balances 真实提供，不经过此兜底。
     }
 
     // 切换历史：来自后端 /api/history（codex/hermes 内存记录）。
@@ -1221,6 +1230,14 @@
           if (data[currentProxyName]) {
             var st = data[currentProxyName];
             isRunning = st.running;
+             // Q3 P1-B：cursor 实采成本（/status.actualCost，CNY 实采）→ 余额卡片。
+             // 非 cursor / 门控关 / 无数据 = null → 空态（不产假值，不伪造 USD）。
+             // 仅 cursor 走此路，codex/hermes 余额仍由 /api/balances 真实提供，不被清。
+            if (currentProxyName === 'cursor') {
+              currentActualCost = st.actualCost || null;
+              getBalancesFromProviders();
+              renderBalances();
+             }
             var badge = document.getElementById('proxyStatusBadge');
             var text = document.getElementById('proxyStatusText');
             var btn = document.getElementById('btnStartStop');
@@ -1772,22 +1789,33 @@
         var b = MOCK_BALANCES[i];
         var amountDisplay;
         if (typeof b.amount === 'number') {
-          amountDisplay = b.amount.toFixed(2) + ' <span class="balance-currency">' + (b.currency || '') + '</span>';
+          amountDisplay = b.amount.toFixed(6) + ' <span class="balance-currency"' +
+                         (b.source === 'actual' ? ' title="实采 · 今日 ' + (b.requestCount || 0) + ' 次计费请求"' : '') + '>' +
+                         (b.currency || '') + '</span>';
         } else {
           amountDisplay = b.amount !== undefined && b.amount !== null ? esc(String(b.amount)) : '—';
         }
         html += '<div class="balance-card">' +
-          '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
-            '<div>' +
-              '<span class="balance-name">' + esc(b.name) + '</span>' +
-              '<div style="margin-top:4px;"><span class="balance-amount">' + amountDisplay + '</span></div>' +
-            '</div>' +
-            '<button class="btn btn-sm" style="font-size:10px;padding:2px 6px;flex-shrink:0;" onclick="refreshBalance(' + i + ')">刷新</button>' +
-          '</div>' +
-        '</div>';
+           '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+             '<div>' +
+               '<span class="balance-name">' + esc(b.name) + '</span>' +
+               '<div style="margin-top:4px;"><span class="balance-amount">' + amountDisplay + '</span></div>' +
+             '</div>' +
+             '<button class="btn btn-sm" style="font-size:10px;padding:2px 6px;flex-shrink:0;" onclick="refreshBalance(' + i + ')">刷新</button>' +
+           '</div>' +
+         '</div>';
       }
+      // 空态诚实占位：无实采/余额数据时明示，不渲染伪造数值（cursor 成本来自 /status actualCost，
+      // 门控关或今日无付费请求即空；codex/hermes 余额来自 /api/balances）。
+      if (MOCK_BALANCES.length === 0) {
+        html = '<div style="color:var(--color-text-tertiary);font-size:13px;padding:12px;">' +
+               '<span>暂无余额/成本数据。' +
+               (currentProxyName === 'cursor' ?
+                ' cursor 成本为实采（需门控 PROXY_CURSOR_COST 开启且有付费请求）。</span>' :
+                '</span>');</div>';
+       }
       grid.innerHTML = html;
-    }
+     }
 
     async function refreshBalance(index) {
       if (index < 0 || index >= MOCK_BALANCES.length) return;
