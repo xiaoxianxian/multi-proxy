@@ -1,5 +1,8 @@
 # 一致性报告（consistency-report）
 
+> ⚠️ **superseded（2026-09-26）**：本文件为 09-17 初版 / 09-18 复核的**历史快照**，文中 jest 数字（635/830/131 等）已过时。**当前测试真值见 `docs/01-feature-matrix.md` 主表（09-26 真跑：jest 1051 + pytest 77 + l2 demo 318 = 1380 checks）**。本文件仅作历史留档，内部数字不改。
+
+
 > 注（2026-09-17）：`CLAUDE.md` 已归档至 `docs/09-review/archive/`；下文 `CLAUDE.md` 均指归档前版本。铁律现收敛于 `AGENTS.md` / `03-adr/` / `07-ops/ENV-NOTES.md` / `P0-FIXES.md`。
 
 > doc↔code 真核对。历史生成 2026-09-17（HEAD `57c2774`，jest 635，见 §1.1）；复核 2026-09-18（HEAD `b947f9e`，Block 2 后重跑，见 §1.2）。

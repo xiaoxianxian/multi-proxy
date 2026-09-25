@@ -53,16 +53,16 @@ bash manage.sh logs {all|codex|hermes|cursor|manager}    # 看日志
 
 ```bash
 # manager
-cd multi-proxy-manager && npx jest --silent --forceExit          # 当前 722/722
+cd multi-proxy-manager && npx jest --silent --forceExit          # 770/770 (47 suites)
 
 # codex-proxy
-cd codex-proxy && npx jest --silent --forceExit                  # 55/55
+cd codex-proxy && npx jest --silent --forceExit                  # 62/62 (6 suites)
 
 # cursor-proxy(ESM,必须设 NODE_OPTIONS)
-cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --forceExit   # 193/193
+cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --forceExit   # 219/219 (17 suites · ESM)
 
 # hermes-proxy(Python)
-cd hermes-proxy && /usr/bin/python3 -m pytest tests/ -q          # 63/63
+cd hermes-proxy && /usr/bin/python3 -m pytest tests/ -q          # 77/77 (4 files)
 
 # L2 内核 demo(13 demo,~182 checks)
 cd .. && for f in l2/*.demo.js; do node "$f"; done
