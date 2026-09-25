@@ -19,6 +19,13 @@ AI 代理的启停、路由、日志和告警，核心是 L2 编排中枢（10 �
 
 ---
 
+## 当前待决策 / 进行中（2026-09-26）
+
+> 评估 / 推进任务统一入口：**`docs/PENDING-DECISIONS.md`**
+> - 待办 1：开源协议选型（AGPL-3.0 单许可 vs + 商业双许可），依据 `docs/04-business/LICENSE-STRATEGY.md`
+> - 待办 2：v1 收口就绪度评估，对照 `docs/02-product/V1-SCOPE-BOUNDARY.md`
+> 两项均待 hermes 评估后由 sifa 决策；本次评估**不擅自改代码**，结论回写 PENDING-DECISIONS.md。
+
 ## 快速开始
 
 ```bash
