@@ -164,15 +164,16 @@ bash manage.sh status
 
 ---
 
-## 十、测试与验收（当前 882/882 全绿）
+## 十、测试与验收（当前 1380/1380 全绿 · 2026-09-26 真跑）
 
 | 模块 | 命令 | 结果 |
 |------|------|------|
-| multi-proxy-manager | `cd multi-proxy-manager && npx jest --silent --forceExit` | 635/635（40 suites） |
-| codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 53/53（3 suites） |
-| cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --forceExit` | 131/131（11 suites） |
-| hermes-proxy | `/usr/bin/python3 -m pytest tests/ -q` | 63/63 |
-| **L2 demo** | `for f in l2/*.demo.js; do node "$f"; done` | 10/10 跑通（~182 checks） |
+| multi-proxy-manager | `cd multi-proxy-manager && npx jest --silent --forceExit` | 770/770（47 suites） |
+| codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 62/62（6 suites） |
+| cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --forceExit` | 219/219（17 suites） |
+| hermes-proxy | `/usr/bin/python3 -m pytest tests/ -q` | 77/77（4 files） |
+| **L2 demo** | `find l2 -name '*.demo.js' \| xargs -I{} node {}` | 23/23 跑通（318 checks，含 savings-gateway / cost-watchdog 子目录） |
+| shell (bats) | `cd tests/shell && bats *.bats` | 11/11（manage.sh 启停，本机沿用历史值，binary 待装） |
 
 完整验收（4/4 服务健康、DSH Skill、桌面壳）：见 `docs/09-review/consistency-report.md`。
 
@@ -235,10 +236,16 @@ multi-proxy/
 | L2 中台内核（10 模块 + 4 守卫 + 3 adapter） | 完成 |
 | DSH 接入通道（`.dsh/skills/`） | 完成 |
 | P0 安全修复（`P0-FIXES.md`：11 项） | 完成 |
-| 全量测试 882/882 + L2 demo 182 checks 全绿 | 完成 |
+| 全量测试 1380/1380 + L2 demo 318 checks 全绿(2026-09-26 真跑) | 完成 |
 
 > 设计蓝图 `L2-BLUEPRINT.md` · 文档总入口 `docs/INDEX.md` · 长期规划 `ITERATION-ROADMAP.md` · 验收报告 `docs/09-review/consistency-report.md`。
 
-## License
+## License (开源版 AGPL-3.0 · 双许可)
 
-Internal use only.
+本项目开源版采用 **GNU AGPL-3.0**（见本仓库 `LICENSE` 文件）。
+
+**双许可说明**：AGPL-3.0 下可免费使用、修改、再分发，但任何通过网络（SaaS）对外提供服务或分发衍生作品，须同样以 AGPL-3.0 开源其全部修改。
+**商业用途需单独授权**：若要将本项目用于闭源商业产品，或提供未开源的商业 SaaS 服务，请向作者获取单独的商业授权（联系：`281330913@163.com`）。
+
+> 协议策略依据：`docs/04-business/LICENSE-STRATEGY.md`（主推 AGPL-3.0 防大厂白嫖 + 保留商业双许可收费权）。
+> 依赖合规：现行依赖（Express / Flask / SQLite / better-sqlite3 等）均为宽松许可，AGPL 项目引用无需修改，保留其版权声明即可。
