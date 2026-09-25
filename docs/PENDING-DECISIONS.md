@@ -37,7 +37,7 @@
 
 **需 hermes 评估并回答**（只读文档 + 必要代码核查，不擅自改代码）：
 1. 对照 5 条判据，逐条给出：**已满足 / 部分满足 / 缺口** + 缺口说明。
-2. 重点核对测试基线真值：manager 770 · codex 62 · cursor 193 · hermes 77 是否仍全绿（参照 `docs/01-feature-matrix.md` 与 `docs/06-test/`）。
+2. 重点核对测试基线真值：manager 770 · codex 62 · cursor 219/17 · hermes 77/4 是否仍全绿（参照 `docs/01-feature-matrix.md` 与 `docs/06-test/`）。
 3. 列出 v1 发布前**必须**补的缺口（若有），与"可延后到 v2"的项，明确分开。
 4. 给出一句话结论：v1 是否已可进入"冻结 + 发布"状态？
 

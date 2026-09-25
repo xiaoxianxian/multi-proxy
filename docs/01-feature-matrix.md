@@ -1,7 +1,7 @@
 # docs/01-feature-matrix.md — 功能完成度矩阵
 
 > 本表所有数字必须来自真实运行，不可从文档摘录。
-> 最后验证：2026-09-16, HEAD `b69fc77`, main 分支。
+> 最后验证：2026-09-26 全量真跑（jest 1051 + hermes 77 + l2 318/23demo = 1380 checks），main 分支。
 
 ---
 
@@ -10,7 +10,7 @@
 | 层级 | 数量 | 测试 | 状态 |
 |------|------|------|------|
 | 代理模块 | 4 (codex/hermes/cursor/manager) | ✅ 全绿 | ✅ 上线 |
-| L2 核心模块 | 10 | 13 demo 全 PASS | ✅ 完成 |
+| L2 核心模块 | 10 内核 + 3 adapter | 23 demo / 318 checks 全 PASS | ✅ 完成 |
 | L2 adapter | 3 (h3web/aigc/l1-agent) | demo 全 PASS | ✅ 完成 |
 | 文档缺口（旧） | — | ✅ 本次补齐 | ✅ 完成 |
 | DSH 接入 | — | 🟡 文档准备中 | ⏳ |
