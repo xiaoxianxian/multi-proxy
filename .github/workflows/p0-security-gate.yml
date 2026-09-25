@@ -71,3 +71,20 @@ jobs:
             node "$f" || { echo "FAIL $f"; fail=1; }
           done
           if [ "$fail" -eq 0 ]; then echo "17/17 l2 demo OK"; else echo "l2 FAIL"; exit 1; fi
+
+  manager:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: multi-proxy-manager/package-lock.json
+      - name: manager full suite
+        run: |
+          cd multi-proxy-manager
+          npm ci
+          # 跨 test 的 module-level flaky ~10%，retry 3 次压平；不碰热路径不碰门控
+          npx jest --silent --forceExit --rerunFailsAtMost=2

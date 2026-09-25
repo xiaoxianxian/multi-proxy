@@ -231,18 +231,21 @@ router.post('/collect', (_req, res) => {
 // 幂等：已启动不重复建。由 server.js 启动时调用。
 function startCostScheduler(opts = {}) {
   if (schedulerHandle) { return schedulerHandle; } // 幂等
-  if (!isCostScheduleOpen()) { return null; }      // 门控关 → 不建 timer（零副作用）
+  if (!isCostScheduleOpen()) { return null; }       // 门控关 → 不建 timer（零副作用）
   const intervalMs = Number(opts.intervalMs) || Number(process.env.PROXY_COST_SCHEDULE_INTERVAL_MS) || 10 * 60 * 1000;
-  const timer = setInterval(() => {
-   // 单次 tick 崩不影响后续（best-effort）；runAllCollects 已 async（第 4 路 cursor HTTP 拉取）
-    runAllCollects().catch(() => { /* best-effort：单次失败静默，下 tick 重试 */ });
-     }, intervalMs);
+  //   单次 tick 崩不影响后续（best-effort）；runAllCollects 已 async（第 4 路 cursor HTTP 拉取）
+  //   tick() 抽成独立闭包 → 生产由 setInterval 驱动，测试可同步手动调（timer-flaky 根治）
+  const tick = () => {
+    return runAllCollects().catch(() => { /* best-effort：单次失败静默，下 tick 重试 */ });
+  };
+  const timer = setInterval(tick, intervalMs);
   if (typeof timer.unref === 'function') { timer.unref(); } // 不阻塞进程退出
   schedulerHandle = {
     handle: timer,
     intervalMs,
+    tick,            // 公开 tick：测试可同步触发，替代 await setTimeout 等 tick
     stop() { clearInterval(timer); schedulerHandle = null; },
-        };
+         };
   return schedulerHandle;
 }
 let schedulerHandle = null;

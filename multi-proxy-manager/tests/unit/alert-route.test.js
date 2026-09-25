@@ -265,8 +265,11 @@ describe('L2 P2 alert route (/api/alert)', () => {
     process.env.PROXY_COST_SCHEDULE = '1';
     seedCost('openai', 20);
     process.env.PROXY_COST_BUDGET = '10';
-    const h = router.startCostScheduler({ intervalMs: 10 });
-    await new Promise(r => setTimeout(r, 40));   // 等 ≥3 个 tick
+    const h = router.startCostScheduler({ intervalMs: 10000 });
+    // 手动触发 3 次 tick（await 每次 runAllCollects 完成），替代 await setTimeout 等真实 timer —— timer-flaky 根治
+    await h.tick();
+    await h.tick();
+    await h.tick();
     h.stop();
     const events = alert.list({ rule: 'cost-budget-exceeded' });
     expect(events.length).toBeGreaterThan(0);
