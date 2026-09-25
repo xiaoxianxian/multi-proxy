@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { db } from '../../db/database.js';
 import crypto from 'crypto';
 import { SecretsManager, getEncryptionKey } from '../../utils/crypto.js';
+// Q3 P1-B 成本闭环：/cost 读 cursor-cost.jsonl 实采汇总
+import * as costTrack from '../../monitoring/costTrack.js';
 
 const router = Router();
 const secrets = new SecretsManager();
@@ -160,6 +162,18 @@ router.get('/logs', (req: Request, res: Response) => {
 
 // ==================== Health ====================
 
+// GET /admin-api/cost — Q3 P1-B 成本闭环：读某日（缺省今天）实采成本汇总（只读，
+//  不受采集门控约束——读 API 可查任意时刻历史；数据来自 cursor-cost.jsonl 实采，source='actual'。无数据→空 0 汇总，不产假值）。
+router.get('/cost', (_req: Request, res: Response) => {
+  try {
+    const day = typeof _req.query.day === 'string' && _req.query.day ? _req.query.day : undefined;
+    const summary = costTrack.getDailyCost(day);
+    res.json({ ok: true, ...summary });
+   } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // GET /admin-api/health
 router.get('/health', (_req: Request, res: Response) => {
   const providers = db.prepare('SELECT * FROM providers').all();
@@ -168,7 +182,7 @@ router.get('/health', (_req: Request, res: Response) => {
     status: 'ok',
     providers: providers.length,
     models: models.length,
-  });
+   });
 });
 
 // ==================== Settings ====================
