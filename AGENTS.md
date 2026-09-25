@@ -81,12 +81,14 @@ NO_PROXY 仅允许 localhost 类项：127.0.0.1 / localhost / ::1
 | cc-switch（独立 App，非本项目） | Rust/Tauri | 15721 |
 
 - L2 编排内核全部在 `l2/` 目录，共 10 个核心模块 + 3 个 adapter。
-- 测试总计（截至 2026-09-16）：
-   - multi-proxy-manager: 40 files / 635 测试
-     - cursor-proxy: 11 files / 131 测试（需 NODE_OPTIONS=--experimental-vm-modules）
-   - hermes-proxy: 3 files / 63 pytest 项
-     - l2: 13 demo（10 内核 + 3 adapter） / 约 182 checks（全部 PASS）
-   - shell: 11 bats
+- 测试总计（2026-09-25 全量真跑；jest 合计 1051 = 770+62+219；+l2 318 + 6 Playwright TS + 11 bats ≈ 1380）：
+    - multi-proxy-manager: 47 files / 770 测试（2026-09-25 实跑；jest 含 e2e-scenarios）
+      - cursor-proxy: 17 files / 219 测试（需 NODE_OPTIONS=--experimental-vm-modules）
+    - codex-proxy: 6 files / 62 测试（jest 2026-09-25 实跑）
+    - hermes-proxy: 4 files / 77 pytest 项（含 e2e_hermes 14；integration_test.py 20 为独立 integration，不计入 77）
+      - l2: 23 demo / 318 checks（全部 PASS，逐 demo 实跑求和 2026-09-25）
+    - shell: 11 bats（本机无 bats binary，沿用历史值，不纳入 jest 合计）
+    - E2E Playwright（独立矩阵，jest 不跑）：6 .ts 文件 ≈165，沿用历史快照
 
 ---
 
