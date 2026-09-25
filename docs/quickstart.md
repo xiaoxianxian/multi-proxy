@@ -81,13 +81,15 @@ multi-proxy 走 **接入层(永远开源) / 服务层(未来付费)** 分层(`do
 ### 入口一:直接接入(开发者/操作者)
 就是上面这套:`install → .env → manage.sh`。本机跑的 100% 能力(4 代理 + L2 内核 + L1 网关 + 省钱网关)全开源,服务层断网本机 100% 照常。
 
-### 入口二:DSH 生态(Declarative Skill Hub)
+### 入口二:DSH 生态(DeepSeek Harness)
 仓库 `.dsh/skills/` 注册了 2 个 DSH Skill,生态 Agent 可直接加载本项目,无需通读代码:
 
 | DSH Skill | 用途 |
 |---|---|
-| `l2-orchestrator` | L2 内核(10 模块 + 4 守卫 + 13 demo)开发导引 |
+| `l2-orchestrator` | L2 内核(10 模块 + 4 守卫 + 23 demo)开发导引 |
 | `multi-proxy` | 项目操作入口(3 代理端口 + 管理台 + 4 守卫 + 全套测试) |
+
+> 术语:DSH 全称 **DeepSeek Harness**(官方 `deepseek-ai/deepseek-harness`,官方 `dsh-plugin` 生态)。本项目 `.dsh/skills/` 两个 SKILL.md 即按官方 `dsh-plugin` 规范编写。此前内部旧称 "Declarative Skill Hub" 已弃用。
 
 DSH 发布(DS2 `dsh plugin add` / cordis.patch.yml)依赖 DSH 0.2,见 `docs/02-product/dsh-integration.md`;本地 DS1 骨架 + option2/3 能力已就绪。
 

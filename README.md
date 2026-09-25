@@ -128,12 +128,14 @@ bash tools/agent-proxy-switch <agent> <owner>    # 切换（proxy-rebuild / dire
 
 ## 八、DSH 生态接入
 
-`.dsh/skills/` 注册两个 Skill，使 DSH（Declarative Skill Hub）生态的 Agent 能加载本项目：
+`.dsh/skills/` 注册两个 Skill，使 DSH（**DeepSeek Harness**，官方 `dsh-plugin` 生态）的 Agent 能加载本项目：
 
 | DSH Skill | 用途 |
 |-----------|------|
 | `l2-orchestrator` | 面向 L2 内核（10 模块 + 4 守卫 + demo 流程）的开发指南 |
 | `multi-proxy` | 项目操作入口：3 代理端口、诊断、管理台、4 守卫、全套测试 |
+
+> 术语：DSH 全称 **DeepSeek Harness**（官方仓库 `deepseek-ai/deepseek-harness`，`dsh-plugin` 生态，"Everything is a Plugin"）。本项目 `.dsh/skills/` 下两个 SKILL.md 即按官方 `dsh-plugin` 规范（`name` + `Use when…`）编写。此前内部旧称 "Declarative Skill Hub" 已弃用，统一对齐官方全称。
 
 详见 `ITERATION-ROADMAP.md` 的 DSH 接入规划。
 
