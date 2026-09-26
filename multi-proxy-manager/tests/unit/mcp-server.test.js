@@ -309,15 +309,91 @@ describe('McpServer · JSON-RPC 2.0 over stdio', () => {
 
         // 默认（realGate 缺省 0）orchestrate 仍 shadow=true（向后兼容既有 22 例的行为，零回归断言）
        test('默认门控关 → orchestrate shadow=true（既有行为零回归）', async () => {
+         const s = newServer('1');
+         const r = await s.handleMessageAsync({
+             jsonrpc: '2.0', id: 73, method: 'tools/call',
+             params: { name: 'orchestrate', arguments: { input: '做一个视频短片' } },
+           });
+         const p = JSON.parse(r.result.content[0].text);
+         expect(p.shadow).toBe(true);
+         expect(p.template).toBe('video-workflow');
+         expect(p.subtasks.every((s) => s.status === 'done')).toBe(true);
+           });
+           });
+
+           // ---- L2 Step 6（A3 #4）· MCP 资源面（非侵入只读视图）----
+       // resources/list = 活跃 agent 注册表；resources/read = 单 agent 只读视图（密钥脱敏）。
+       // 纯只读、不触下游 adapter；与 PROXY_ADAPTER_REAL 真执行路径解耦。
+       describe('L2 Step 6 · MCP 资源面（resources/list + resources/read，非侵入只读）', () => {
+       test('initialize 声明 resources.listChanged=false', () => {
+           const s = newServer();
+           const r = s.handleMessage({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+           expect(r.result.capabilities.resources).toEqual({ listChanged: false });
+        });
+
+       test('resources/list → 活跃 agent 注册表（每项含 uri/name/tags/mimeType）', () => {
+           const s = newServer();
+           const r = s.handleMessage({ jsonrpc: '2.0', id: 80, method: 'resources/list' });
+           expect(r.jsonrpc).toBe('2.0');
+           expect(Array.isArray(r.result.resources)).toBe(true);
+           const uris = r.result.resources.map((x) => x.uri);
+           expect(uris).toContain('l2://agent/h3web');
+           expect(uris).toContain('l2://agent/codex');
+           for (const x of r.result.resources) {
+               expect(x.uri).toMatch(/^l2:\/\/agent\//);
+               expect(x.mimeType).toBe('application/json');
+               expect(Array.isArray(x.tags)).toBe(true);
+            }
+        });
+
+       test('resources/read → 单 agent 只读视图（mimeType + contents）+ 密钥脱敏', () => {
+           const s = newServer();
+           // 注册一个带 token 字段的 agent，验证读视图脱敏
+           s.registry.create({ id: 'codex-secret', name: 'CodexSec', type: 'codex', adapterId: 'codex-secret',
+                               capabilityTags: ['code'], description: '测脱敏', token: 'sk-SECRET' });
+           const r = s.handleMessage({ jsonrpc: '2.0', id: 81, method: 'resources/read',
+                                      params: { uri: 'l2://agent/h3web' } });
+           expect(r.result.uri).toBe('l2://agent/h3web');
+           expect(r.result.mimeType).toBe('application/json');
+           expect(Array.isArray(r.result.contents)).toBe(true);
+           const view = JSON.parse(r.result.contents[0].text);
+           expect(view.id).toBe('h3web');
+
+           // 带 token 的 agent → read 视图里 token 被脱敏，绝不回传明文
+           const r2 = s.handleMessage({ jsonrpc: '2.0', id: 82, method: 'resources/read',
+                                       params: { uri: 'l2://agent/codex-secret' } });
+           const view2 = JSON.parse(r2.result.contents[0].text);
+           expect(view2.token).toEqual(expect.stringMatching(/\[redacted\]/));
+           expect(JSON.stringify(view2)).not.toContain('sk-SECRET');
+        });
+
+       test('resources/read 未知 uri → -32602 + available 列表', () => {
+           const s = newServer();
+           const r = s.handleMessage({ jsonrpc: '2.0', id: 83, method: 'resources/read',
+                                      params: { uri: 'l2://agent/nope' } });
+           expect(r.error.code).toBe(-32602);
+           expect(Array.isArray(r.error.data.available)).toBe(true);
+        });
+
+       test('resources/read 缺 uri → -32602', () => {
+           const s = newServer();
+           const r = s.handleMessage({ jsonrpc: '2.0', id: 84, method: 'resources/read', params: {} });
+           expect(r.error.code).toBe(-32602);
+        });
+
+       test('async 路径：handleMessageAsync 同支持 resources/list + resources/read', async () => {
            const s = newServer('1');
-           const r = await s.handleMessageAsync({
-               jsonrpc: '2.0', id: 73, method: 'tools/call',
-               params: { name: 'orchestrate', arguments: { input: '做一个视频短片' } },
-            });
-           const p = JSON.parse(r.result.content[0].text);
-           expect(p.shadow).toBe(true);
-           expect(p.template).toBe('video-workflow');
-           expect(p.subtasks.every((s) => s.status === 'done')).toBe(true);
+           const r1 = await s.handleMessageAsync({ jsonrpc: '2.0', id: 85, method: 'resources/list' });
+           expect(Array.isArray(r1.result.resources)).toBe(true);
+           const r2 = await s.handleMessageAsync({ jsonrpc: '2.0', id: 86, method: 'resources/read',
+                                                  params: { uri: 'l2://agent/codex' } });
+           expect(r2.result.uri).toBe('l2://agent/codex');
+        });
+
+       test('门控关 → resources 面同样被 gate 拒绝（非侵入一致）', () => {
+            const s = newServer('0');
+            expect(() => s.handleMessage({ jsonrpc: '2.0', id: 1, method: 'resources/list' }))
+                    .toThrow(/gate closed/);
           });
-       });
-    });
+     });
+});
