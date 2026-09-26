@@ -14,12 +14,28 @@ const { AgentRegistry, newFileStorage } = require('../../l2/agent-registry');
 const router = express.Router();
 
 // 存储可注入：默认内存；设 L2_REGISTRY_DIR 才落文件（manager 自己的 dir，非侵入）。
-function buildRegistry() {
-    const dir = process.env.L2_REGISTRY_DIR;
-    if (dir) return new AgentRegistry({ storage: newFileStorage(dir) });
-    return new AgentRegistry();
+// L2 热路径 Step 1：进程级共享单例，消除 registry 分裂（P2-1）。
+// seedDefaultProfiles 幂等（mcp-default-seed.js:47 已存在的 id 跳过），
+// 仅在 count()===0 时执行一次，与 mcp.js / gateway.js 共用同一 seed 来源。
+let _shared = null;
+function getSharedRegistry() {
+    if (!_shared) {
+        const dir = process.env.L2_REGISTRY_DIR;
+        _shared = dir
+            ? new AgentRegistry({ storage: newFileStorage(dir) })
+            : new AgentRegistry();
+        if (_shared.count() === 0) {
+            const { seedDefaultProfiles } = require('../../l2/mcp-default-seed.js');
+            seedDefaultProfiles(_shared);
+        }
+    }
+    return _shared;
 }
-const registry = buildRegistry();
+// 测试隔离钩子
+function _resetSharedRegistry() { _shared = null; }
+
+// CRUD 路由仍引用共享单例，与 MCP bridge 面看到同一份 agent
+const registry = getSharedRegistry();
 
 // 列表（只读，不挂 auth）
 router.get('/agents', (_req, res) => {
@@ -78,3 +94,8 @@ router.delete('/agents/:id', requireAuth, (req, res) => {
 });
 
 module.exports = router;
+// Step 1：把共享单例访问器作为命名属性挂到同一导出对象，
+// 让 routes/mcp.js 能注入同一份 registry（消除 registry 分裂 P2-1）。
+// router 仍是默认导出，app.use('/api/registry', router) 不变。
+module.exports.getSharedRegistry = getSharedRegistry;
+module.exports._resetSharedRegistry = _resetSharedRegistry;

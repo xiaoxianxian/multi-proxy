@@ -25,19 +25,16 @@ let _server = null;
 function server() {
   if (!_server) {
     const { McpServer } = require('../../l2/mcp-server.js');
-    const { AgentRegistry } = require('../../l2/agent-registry.js');
     const { PluginRuntime } = require('../../l2/plugin-runtime.js');
-    const { seedDefaultProfiles } = require('../../l2/mcp-default-seed.js');
-    const reg = new AgentRegistry();
-     // seed 本地默认能力（单一来源 l2/mcp-default-seed.js）：real adapter（h3web/codex）+
-    // 三档 text-tier profile（agnes/deepseek/qwen，complexity 路由落点，见 COMPLEXITY-MODE.md §2.1）。
-    // 与 mcp-server.js require.main 共用同一 seed，避免各改其半漂移。
-    seedDefaultProfiles(reg);
-   _server = new McpServer({
+    // Step 1：注入 registry.js 的进程级共享单例，不再自造 → 消除 registry 分裂。
+    // getSharedRegistry() 在 count()===0 时幂等 seed（与 gateway.js 共用同一 seed 来源）。
+    const { getSharedRegistry } = require('./registry');
+    const reg = getSharedRegistry();
+    _server = new McpServer({
       registry: reg,
       pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }),
       gate: String(process.env.PROXY_L2_MCP || '0'),
-    });
+     });
   }
   return _server;
 }
@@ -78,13 +75,15 @@ router.get('/health', (req, res) => {
   });
 });
 
-// POST /api/mcp/call — 调工具（shadow）
-router.post('/call', (req, res) => {
+// POST /api/mcp/call — 调工具（shadow · Step 2 统一走 async 分派）
+router.post('/call', async (req, res) => {
   const s = server();
   const name = req.body && req.body.name;
   if (!name) return res.status(400).json({ error: 'missing tool name' });
   try {
-    const result = s.callTool(name, req.body.arguments);
+    // Step 2：callToolAsync 对非 async 工具委托回同步 callTool（行为超集），
+    // 对 orchestrate/decompose 走 async 路径（修复 -32602 P2-2）。
+    const result = await s.callToolAsync(name, req.body.arguments);
     res.json({ ok: true, tool: name, result });
   } catch (e) {
     // error 带 JSON-RPC 错误码
@@ -94,16 +93,18 @@ router.post('/call', (req, res) => {
 });
 
 // POST /api/mcp/rpc — 透传一条 JSON-RPC 2.0 消息（兼容外部 MCP 客户端）
-router.post('/rpc', (req, res) => {
+router.post('/rpc', async (req, res) => {
   const s = server();
   try {
-    const resp = s.handleMessage(req.body);
+    // Step 2：handleMessageAsync 是 handleMessage 的超集，tools/call 走 callToolAsync
+    //（支持 orchestrate 等 async 工具），其余 method 行为与同步一致。
+    const resp = await s.handleMessageAsync(req.body);
     if (resp === null) return res.status(204).send(); // notification
     res.json(resp);
   } catch (e) {
     if (/gate closed/.test((e && e.message) || '')) {
       return res.status(403).json({ error: 'mcp gate closed' });
-    }
+     }
     res.status(400).json({ error: e && e.message || String(e) });
   }
 });
