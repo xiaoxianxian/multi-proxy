@@ -194,5 +194,53 @@ describe('RouteEngine', () => {
         e.setLogRedaction('off');
         const d = e.route({ id: 'r5', type: 'text', prompt: 'secret content here' });
         expect(d.taskPrompt).toBeNull();
+    });
+});
+
+// ---- L2 Step 4 · route() 纯决策化 · 防双执行断言（02 §二 Step 4 / N3）----
+// route() 非 shadow 下不得产生任何副作用：不触发 executor、不挂 decision.execution。
+// action 仍标记 'execute'（决策意图），但执行彻底交调用方，杜绝「fire 一次 + 调用方再 execute 一次」。
+describe('RouteEngine · Step 4 route() 纯决策（无侧面执行）', () => {
+    let registry;
+    let pluginRuntime;
+
+    beforeEach(() => {
+        registry = new AgentRegistry();
+        registry.create({
+            id: 'h3web-agent', name: 'H3web', type: 'custom',
+            adapterId: 'h3web', capabilityTags: ['video', 'text2video', 'image'],
+        });
+        pluginRuntime = new PluginRuntime({ logger: { log: () => {} } });
+    });
+
+    test('非 shadow + 注入 executor：route() 不触发 executor、不挂 execution 字段', async () => {
+        let execCalls = 0;
+        const engine = new RouteEngine({
+            registry, pluginRuntime, shadowMode: false,
+            executor: async (adapterId, task) => { execCalls++; return { ok: true, adapter: adapterId }; },
+         });
+        const decision = engine.route({ id: 'step4-1', type: 'video', prompt: 'cat' });
+         // 纯决策：action 标记 execute，但绝不自动执行
+        expect(decision.action).toBe('execute');
+        expect(decision.chosen).toMatchObject({ adapterId: 'h3web' });
+         // 防双执行守门：route() 内部零调用 executor
+        expect(execCalls).toBe(0);
+         // 不再有 fire-and-forget 的 execution 副作用字段
+        expect(decision.execution).toBeUndefined();
+         // 执行仍可由调用方显式触发（_execute 独立路径），且不污染 decision
+        const exec = await engine._execute(decision.chosen.adapterId, { id: 'step4-1', type: 'video' });
+        expect(execCalls).toBe(1);
+        expect(exec.status).toBe('done');
      });
+
+    test('非 shadow 下多次 route() 始终不产生副作用（幂等决策）', () => {
+        let execCalls = 0;
+        const engine = new RouteEngine({
+            registry, pluginRuntime, shadowMode: false,
+            executor: async () => { execCalls++; return { ok: true }; },
+        });
+        engine.route({ id: 'step4-2a', type: 'video', prompt: 'x' });
+        engine.route({ id: 'step4-2b', type: 'video', prompt: 'y' });
+        expect(execCalls).toBe(0); // 两次 route 都未触发执行
+    });
 });

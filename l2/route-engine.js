@@ -118,10 +118,13 @@ class RouteEngine {
          });
         decision.chosen = decision.candidates[0] || null;
 
-         // Shadow 模式：只记录，不执行
-        if (!this.shadowMode && decision.chosen) {
-            decision.action = 'execute';
-            decision.execution = this._execute(decision.chosen.adapterId, task);
+         // L2 Step 4（N3 防双执行）：route() 纯决策——绝不自动执行。
+         // 非 shadow 且选中：只把 action 标记为 'execute'（决策意图），
+         // 执行彻底交调用方（_execute / runDag / orchestrate）。
+         // 之前此处在非 shadow 下 fire-and-forget 调 _execute 且 0 读取
+         // decision.execution，一旦注入 executor 会与调用方二次 execute → 上游双调用。
+         if (!this.shadowMode && decision.chosen) {
+             decision.action = 'execute';
          }
 
         this._pushLog(decision);
