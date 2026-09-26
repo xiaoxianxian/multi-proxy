@@ -30,11 +30,19 @@ function server() {
     // getSharedRegistry() 在 count()===0 时幂等 seed（与 gateway.js 共用同一 seed 来源）。
     const { getSharedRegistry } = require('./registry');
     const reg = getSharedRegistry();
+    // ④ P0→P1：promptCache 注入缝（门控 PROXY_PROMPT_CACHE 默认 off → 不注入 → 零回归）。
+    // 注入后 McpServer.listTools() 暴露 cache_stats 工具 + orchestrate 附 cacheObservation sidecar。
+    let promptCache = undefined;
+    if (['1', 'true', 'on'].includes(String(process.env.PROXY_PROMPT_CACHE || '').toLowerCase())) {
+      const { createPromptCache } = require('../../l2/prompt-cache.js');
+      promptCache = createPromptCache({ gate: true });    // 门控开 = observe（不落盘）
+      }
     _server = new McpServer({
       registry: reg,
       pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }),
       gate: String(process.env.PROXY_L2_MCP || '0'),
-     });
+      promptCache,
+      });
   }
   return _server;
 }
