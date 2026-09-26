@@ -804,3 +804,23 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 **本轮 git**:工作树干净(除 `docs/JEV野石方案_本地搭建.md` untracked——老板 09-18 前序文件,非本任务,不动)。`git status -sb`:main ahead 0 = origin/main。
 
 **给后续 agent 的判据**:Q2 的「真 bug」是 KB `_resetForTest` dead-code(已修 commit `cbbe344`);残余 flaky 是 timer-based(非 module-state,§13.21 已定性),不值得本轮追;`afterEach` 万能 reset 是反模式(破坏 in-suite 闭环),勿再试。Q3 待开。
+
+### §13.33 09-26 ③ L2 热路径改造 + ④ token 控制平面 P0/P1 落地(全 push origin/main=ca2e31a · 老板 3 条指令)
+
+**老板 3 条指令(09-26)逐条落地**:① gateway.js:87 跨层共享=维持 A / ② 核实上游 cache_control 支持→支持则提级 P1 真注入 / ③ push 4 commit。
+
+**③ L2 热路径 Step 1-3(`c0e342c`)**:`routes/registry.js` 加共享 `AgentRegistry` 单例(`getSharedRegistry()`/`_resetSharedRegistry()`,幂等 seed)+ 导出(`module.exports = router` 后须显式挂命名属性——本轮踩坑:漏挂→`getSharedRegistry is not a function`,15 个 mcp-route 测试全 500,补挂即修);`routes/mcp.js` `server()` 在 `PROXY_L2_MCP` 开时注入共享 registry + `/call`·`/rpc` 改 async 分派(`callToolAsync`/`handleMessageAsync`,sync 入口保留为超集,非 async 工具委托回 sync=零回归);`l2/mcp-server.js` 两处 `-32602`「not implemented」实为已实现→改 `listTools().map()`(routeTask/orchestrator/decompose/cost_track)。
+
+**④ token 控制平面 P0(`b3edf24`)**:`l2/prompt-cache.js` 内核(纯 JS CRC32 前缀哈希 + 断点注册表 + cacheHitRate,门控 `PROXY_PROMPT_CACHE` 默认 off=observe 不落盘),前缀 key=`systemPrompt+toolSchemas+messages[0]`(`messages[1:]` 不进 key),与 `l2/cost.js`/`alert.js` 同构(工厂式独立 store,零 manager 依赖)+ demo 10 + jest 10。诚实边界:03 §1.1「cacheHit 28.7%」是设计目标非既成(全仓 `cacheHit`/`cache_control` 0 实现),P0 从 0 建基线;不真注入 upstream body。
+
+**④ P1 推广(`874d27a`)**:`McpServer` constructor 加 `promptCache` 注入缝(默认 `undefined`=不注入=`listTools()` 完全不变=零回归,这是能 0 回归的前提)+ `cache_stats` 工具(仅注入时暴露)+ orchestrate 路径注入时附 `cacheObservation` 旁路 sidecar(前缀哈希 hit/miss + 估算 token,**绝不写 live upstream body**,note 字段诚实标注 P2);`routes/mcp.js` 在 `PROXY_PROMPT_CACHE` 开时 lazy `createPromptCache({gate:true})` 注入。
+
+**上游 cache_control 核实(03 §9,外部文档,未发计费请求)**:DashScope/Qwen=隐式自动缓存(前缀命中约 1 折,代理无需注入)·Anthropic `/v1/messages` 原生 `cache_control:{type:'ephemeral'}`(命中读 ~0.1x、写 ~1.25x、~90% 省,但当前非项目 provider,属未来接入)·codex/hermes/cursor=本地/自研代理无缓存语义(Ollama Qwen3.8-MLX 不认 cache_control)。
+
+**真注入命门**:真·注入 point=改转发给上游的请求体,即 `multi-proxy-manager/lib/forward.js`(白名单转发 `FORWARD_ENDPOINTS`),与「热路径不碰」铁律冲突→**维持 P2**;需老板授权改 `forward.js` + 锁定云端 provider(建议先 anthropic messages 或 qwen 显式缓存)才能提级。
+
+**gateway.js:87 维持 A**(老板拍板):gateway(`l2/savings-gateway`,18795 独立进程)保留自有 `AgentRegistry`,不向 manager 反向 require(理由:agent 列表静态时等价 / 反向 require 违反非侵入 / `McpServer({registry})` 注入缝已就位)。生产期 option B=`POST /api/gateway/agents/sync` HTTP notify,留 P2 backlog。
+
+**数字全真跑(AGENTS §4)**:manager jest `780/48` 全绿(`--runInBand` 串行 0 回归;P1 三套件 mcp-route+mcp-server+prompt-cache=51/51)·l2 demo `328/24` 全 PASS。1 个 `error-classification.test.js:106`(`test-connection 连通成功`分支)并发偶发 flaky,独立/串行通过,与 P1 无关,属 §13.21 timer-based,排期 fake-timers 或接受 ~3% 容差。
+
+**push 链(09-26,全 5 commit 已 push origin/main=ca2e31a)**:`c0e342c`③ → `b3edf24`④P0 → `a4f2882`日志 → `874d27a`④P1 → `ca2e31a`(日志+03 §9)。**纪律**:`git add --` 显式列文件(绝不 -A);热路径 `forward.js`/`codex-proxy/proxy.js` 0 触碰(已 `git diff --stat` 验证);权威裁定 source(02 原文 59 行) > 日志二次转述(09-26 §六旧转述全作废)。详见 `MEMORY-2026-09-26.md` §六·§七 + `03 §9`。
