@@ -256,3 +256,39 @@ _落盘：2026-09-26 · 综合 9/26 多轮讨论 + 竞品研判 · 设计稿（�
 ### §5 P0 状态
 - 「是否先落 P0」：✅ 已落最小 PoC（仅内核 + test + demo，门控关）；**是否推广到路由挂载 / 真上游注入** 仍属 §7 待老板拍板。
 
+---
+
+## 9. P1 推广 + 上游 cache 支持核实（2026-09-26 追加 · 实跑数字 · 设计稿状态非「已上线省 token」）
+
+> 本节为老板拍板「①gateway 维持 A / ②上游支持则 cache_control 提级 P1 真注入 / ③push 4 commit」后的落盘记录。所有数字实跑；外部支持性结论来自官方/生态文档，**非本仓发计费请求实测**。
+
+### 9.1 P1 推广（路由挂载 + cache_stats 工具 + orchestrate 旁路观测）—— ✅ 已落，门控 off
+- **路由挂载**：`routes/mcp.js` 的 `McpServer` 新增可选 `promptCache` 注入缝——`PROXY_PROMPT_CACHE=1` 时才 `new PromptCacheStore()` 并注入，**默认 off = 不注入 = 行为零变化**。
+- **`cache_stats` 工具**：`l2/mcp-server.js` `listTools()` 仅当 `this.promptCache` 存在时把 `cache_stats` 推入工具表 → **门控 off 时工具表零变化**（这是能零回归的前提，jest 全量证）。
+- **orchestrate 旁路观测**：`orchestrate` 路径在注入时附 `cacheObservation` 字段（前缀哈希 + hit/miss + estimatedSavings），**仅观测、绝不注入 live 请求体**。
+- **实测（实跑）**：manager jest `780/48 全绿`；P1 三套件（mcp-route/mcp-server/prompt-cache）`51/51 全绿`（含旧 41，新 10 全过）；l2 demo `328/24 全 PASS`。
+- **commit `874d27a`**（3 文件，`git add --` 显式列，未 `-A`）；连同 `c0e342c`/`b3edf24`/`a4f2882` 共 4 commit 已 push origin/main（`c3a2ee1..874d27a`）。
+- **注**：全量 `--runInBand` 串行 780/48 全绿；`--forceExit` 并行偶发 1 fail（`error-classification.test.js:106` 单跑即过）= 并发 timer 污染类 flaky（§13.21，与本 P1 改动无关，jest fake-timers 排期项）。
+
+### 9.2 上游 cache_control 支持核实（老板②的「去核实」结果）
+| provider（providers.sample.json 实际 5 个） | 协议形态 | cache_control/前缀缓存支持 | 真注入可行性 |
+|---|---|---|---|
+| **dashscope / qwen** | 阿里云 DashScope Qwen，OpenAI 兼容 | ✅ **隐式自动缓存**（前缀命中约 1 折，无需 cache_control 字段）；显式缓存字段未公开核实 | 隐式=上游自动做，代理侧**无需注入**；显式字段待核实 |
+| **codex / hermes / cursor** | **本地/自研代理**（非直连云 LLM） | ❌ 本地推理，无 prompt-caching 语义（Ollama Qwen3.8-MLX 不认 cache_control） | 不适用 |
+| **anthropic（生态参照，非当前 provider）** | `/v1/messages` | ✅ 原生 `cache_control:{type:'ephemeral'}`（顶层=自动断点；block 级=显式）；命中读 ~0.1x、写 ~1.25x，~90% 省 | 真注入需改 `/v1/messages` 请求体 |
+| **gemini / openai 兼容（生态参照）** | OpenAI 兼容 | context caching 用独立 API 建 cache（非 inline `cache_control` 字段） | 形态不同，非本仓 prompt-cache.js 的注入点 |
+
+**核实命令**：`grep providers.sample.json`（确认 5 provider 形态）+ 官方/生态文档检索（Anthropic cache_control、DashScope Qwen 缓存）。**未发任何计费请求**（准确性铁律：核实支持性即可，不发真实扣费请求验证）。
+
+### 9.3 ⚠️ 真注入的命门（提级 P1 真注入的前置条件 + 风险，留老板拍）
+1. **注入点 = 热路径 `forward.js`**。真·注入必须改写转发给上游的**请求体**，该处即 `multi-proxy-manager/lib/forward.js`（白名单转发：`FORWARD_ENDPOINTS` 定义 codex/hermes/cursor 的 `POST /v1/chat/completions` 等转发体）。**按 9/26 铁律「热路径 forward.js / codex-proxy/proxy.js 不碰」，真注入需老板书面授权**，否则**保持 P2（不注入，维持旁路观测）**。
+2. **本地 provider 无收益**：codex/hermes/cursor（本地/自研代理）、Ollama 本地推理不认 `cache_control`，真注入对它们无效 → 真注入只对**走云端 API 的 provider（如 qwen/dashscope 显式缓存、anthropic/messages）**有意义。
+3. **隐式缓存上游自动做**：Qwen/DashScope 隐式缓存无需代理注入；真正需要代理侧注入的是 **Anthropic `/v1/messages` 的 `cache_control` 顶层字段**（当前非项目 provider，属未来接入）。
+4. **结论**：P1 现状 = 旁路观测（sidecar shadow，不碰热路径、不改 live 请求体、零回归）；**「提级 P1 真注入」需同时满足 ①老板授权改 forward.js 热路径 + ②锁定支持的云端 provider（建议先 anthropic messages 或 qwen 显式缓存二选一）**。
+
+### 9.4 gateway.js:87 跨层共享 —— 维持 A（老板①）
+- gateway（`l2/savings-gateway`，18795 独立进程）保留自有 `AgentRegistry` 实例；不向 manager 反向 require。
+- 理由：①当前 agent 列表静态，两实例等价，差异仅运行时增删（shadow/PoC 期暴露不出）；②gateway 是 L2 子进程，反向 require manager 违反非侵入铁律；③注入缝已在 `McpServer({registry})`，共享 registry 时 gateway 也能注入 manager 的同一份（零成本）。
+- 生产期（agent 需热增删）：推荐 **option B**——给 gateway 加 `POST /api/gateway/agents/sync`（HTTP 通知口，非模块反向依赖），manager 增删 agent 时 notify 推过去。**P2 排期项，未实施**。
+
+_§9 落盘：2026-09-26 · P1 路由挂载已落+已 push（commit `874d27a`）· 上游核实=Qwen 隐式/Anthropic 显式（外部文档，未发计费请求）· 真注入碰热路径 forward.js，维持 P2 待老板授权 + 锁定云端 provider · gateway 维持 A · 不报「已上线省 token」_
