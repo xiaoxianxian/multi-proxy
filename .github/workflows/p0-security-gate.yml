@@ -3,6 +3,7 @@
 #         → process-manager.js:41 探测 cursor = false → /api/installed 漏 cursor
 #         → api.test.js:106 / e2e-scenarios.test.js:36 / api.test.js:67 必挂（9 封邮件根因）
 #         修法：cursor job 构建 dist + upload-artifact，manager job needs cursor + download-artifact
+# 9/27 加 shell job：run tests/shell/check.sh（zero-dep CJK-safe 本机 15/15 绿，bats 无 bats 时的官方回退门禁）
 name: P0 Security Gate
 on:
   push:
@@ -111,3 +112,11 @@ jobs:
             # → api.test.js:106 / e2e-scenarios.test.js:36 / api.test.js:67 全绿
             # 跨 test module-level flaky ~10%，retry 3 次压平；不碰热路径不碰门控
           npx jest --silent --forceExit --rerunFailsAtMost=2
+
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: shell script gate (check.sh, zero-dep CJK-safe fallback)
+        run: bash tests/shell/check.sh
