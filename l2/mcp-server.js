@@ -196,23 +196,25 @@ class McpServer {
         };
     }
     // 其他 tool：返回 adapter 能力快照（不真执行）。
-    // registry.get 对未知 key 会抛，需兜住转 -32602（带 available 列表）。
+    // registry.get 对未知 key 会抛，需兜住转 -32602。
+    // Step 3：available 改为 listTools() 全量（adapter + routeTask + decompose + orchestrate），
+    // 而非只列 adapter（P2-3：误导消费者认为只有 adapter 可调）。
     let adapter;
     try {
-      adapter = this.registry.get(name);
+     adapter = this.registry.get(name);
       } catch (_) {
-      throw rpcError(
-        -32602,
-        `Tool not found: ${name}`,
-        { available: this.registry.list().map(a => a.adapterId) }
-        );
+     throw rpcError(
+       -32602,
+       `Tool not found: ${name}`,
+       { available: this.listTools().map(t => t.name) }
+       );
       }
     if (!adapter) {
-      throw rpcError(
-        -32602,
-        `Tool not found: ${name}`,
-        { available: this.registry.list().map(a => a.adapterId) }
-        );
+     throw rpcError(
+       -32602,
+       `Tool not found: ${name}`,
+       { available: this.listTools().map(t => t.name) }
+       );
       }
     const real = this.realGate === '1';
     return {
