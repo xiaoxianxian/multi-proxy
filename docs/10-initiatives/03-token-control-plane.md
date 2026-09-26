@@ -224,3 +224,35 @@ enabled: false                  # 默认关 —— 对齐非侵入铁律④（�
 - [ ] 是否先落 P0（prompt-cache 断点 PoC）
 
 _落盘：2026-09-26 · 综合 9/26 多轮讨论 + 竞品研判 · 设计稿（非实现）· 外部 benchmark 除特别标注外未独立复现_
+
+---
+
+## 8. P0 落盘状态（2026-09-26 追加 · 实跑数字非设计稿目标）
+
+> 本节为落盘事实记录；§7「待定/待用户拍板」仍全部待老板拍板，未自动推进。
+
+### 已落 P0 最小 PoC（④ 第一项，门控默认关 / shadow 默认开 / 零热路径）
+- **新增内核** `l2/prompt-cache.js`：前缀哈希（纯 JS CRC32，零依赖）缓存命中检测 + 断点注册表 + cacheHitRate 报告。
+   - 前缀 key = `systemPrompt + toolSchemas + messages[0]`（稳定前缀）；`messages[1:]` 进变动部分不参与 key。
+   - 门控 `PROXY_PROMPT_CACHE` 默认 `0` = observe（计数进内存、绝不落盘）；开 = 可落盘（一期未实现落盘路径，预留）。
+   - 与 `l2/cost.js`/`alert.js` 同构：工厂式独立 store（测试隔离）、门控在内核不在调用方、自包含零 manager 依赖。
+- **demo** `l2/prompt-cache.demo.js`：10 checks 全 PASS（`node l2/prompt-cache.demo.js`）。
+- **jest** `multi-proxy-manager/tests/unit/prompt-cache.test.js`：10 tests 全 PASS。
+
+### 实测数字（非 03 §1.1 的 28.7% 设计目标）
+- **03 §1.1 的「cacheHit 28.7%」是设计目标，全仓代码 0 命中**（`cacheHit`/`cache_control` 搜不到实现），P0 从 0 建立基线。
+- **本 PoC 基线**：`savings-gateway`/`cost-track` 当前只管档位差省账，**不含** cache 命中逻辑；prompt-cache.js 是首个引入 cache-breakpoint 概念的内核。
+- **全量回归（实跑，改前→改后）**：
+   - manager jest：`770/47 全绿` → `780/48 全绿`（+10 prompt-cache，0 回归，0 fail）。
+   - l2 demo：`318 checks / 23 demo` → `328 checks / 24 demo`（+10 prompt-cache，0 fail）。
+- **门控验证（demo 第 1、9、10 条）**：默认 off → `isGateOpen()===false`；`PROXY_PROMPT_CACHE=1` → `true`；关时 `report().gate===false`（observe 态）。
+- **零热路径触碰**：未改 `forward.js`/`codex-proxy/proxy.js`；未接任何现有 HTTP 路由；一期仅内存态机制验证。
+
+### 诚实边界（PoC 明确不含，属后续）
+- 不真注入 `cache_control` 到 upstream request body（二期 executor 缝预留）。
+- 不接入任何现有路由（P1+ 再评估挂载点）。
+- `estTokensSaved` 按 0.9 模拟（cache_control 9 折，03 §1.1 机制），非真上游返回值。
+
+### §5 P0 状态
+- 「是否先落 P0」：✅ 已落最小 PoC（仅内核 + test + demo，门控关）；**是否推广到路由挂载 / 真上游注入** 仍属 §7 待老板拍板。
+
