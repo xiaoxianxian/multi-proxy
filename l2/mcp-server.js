@@ -67,8 +67,12 @@ function toMcpTool(adapter, registry) {
 class McpServer {
   // 门控默认关（非侵入铁律）：gate 缺省时读 PROXY_L2_MCP，再缺省 '0'（关）。
   // 只有显式 gate='1' 或 env=1 才开；构造器不再默认 '1'。
-  constructor({ registry, routeEngine, gate, executor = null, realGate } = {}) {
+  constructor({ registry, routeEngine, gate, executor = null, realGate, promptCache } = {}) {
     this.registry = registry || new AgentRegistry();
+    // ④ P0→P1：token 控制平面 prompt-cache 内核（注入缝，默认 undefined = 不启用，零行为变更）。
+    // 注入后 listTools() 才暴露 cache_stats 工具、orchestrate 才附 cacheObservation sidecar，
+    // 默认路径不注入 → 现有测试 listTools()/orchestrate 行为完全不变（零回归）。
+    this.promptCache = (typeof promptCache === 'object' && promptCache !== null) ? promptCache : undefined;
     this.routeEngine = routeEngine || new RouteEngine({
       registry: this.registry,
       pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }),
@@ -157,12 +161,47 @@ class McpServer {
         required: [],
         },
       });
+    // ④ P0→P1：prompt-cache 内核注入时，才把 cache_stats 暴露为 MCP 工具（门控 off 不注入 → 零回归）。
+    // 非侵入铁律：默认路径 listTools() 不含 cache_stats，现有测试 toolCount 完全不变。
+    if (this.promptCache) {
+      tools.push({
+        name: 'cache_stats',
+        description: 'Token control plane · prompt-cache stats: cacheHitRate + recent cache observations (shadow · sidecar only, P0 PoC). Returns {cacheHitRate, cacheHits, totalObservations, breakpoints, recentObservations}.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', description: 'Max recent observations to include (default 50, max 200)' },
+             },
+          required: [],
+          },
+       });
+    }
     return tools;
-  }
+   }
 
-  // 调用工具
+   // 调用工具
   callTool(name, args) {
     const a = args || {};
+    // ④ P0→P1：cache_stats 工具（prompt-cache 注入时可用；门控 off / 未注入 → 不暴露，零回归）。
+    if (name === 'cache_stats' && this.promptCache) {
+      const limit = Math.min(Math.max(1, Number(a.limit) || 50), 200);
+      const report = this.promptCache.report();
+      const recent = this.promptCache.getHistory().slice(-limit).reverse();
+      return {
+        tool: 'cache_stats',
+        shadow: true,
+        cacheHitRate: report.cacheHitRate,
+        cacheHits: report.cacheHits,
+        cacheMisses: report.cacheMisses,
+        requestCount: report.requestCount,
+        totalEstTokensUsed: report.totalEstTokensUsed,
+        totalEstTokensSaved: report.totalEstTokensSaved,
+        breakPointCount: report.breakPointCount,
+        gate: report.gate,
+        recentObservations: recent,
+        note: 'Token control plane · prompt-cache P0 PoC (observational · sidecar only · no live request injection)',
+      };
+    }
     if (name === 'routeTask') {
       const task = {
         id: a.id || 'mcp-call',
@@ -300,9 +339,26 @@ class McpServer {
         // 观测：实际走的是 LLM 还是降级回模板；LLM 成功 → 'llm'，失败 → 'template(<reason>)'。
         // 直供 dag 路径 LLM 不介入 → decomposeSource 恒 null → 不发射该字段（保持 UC4 直供语义）。
         result.decomposeSource = decomposeSource;
-        }
+         }
+     // ④ P0→P1：prompt-cache 注入时，为本次 orchestrate 请求记一条 cache observation（前缀哈希命中）。
+     // 仅观测（sidecar shadow）：默认不注入 → orchestrate 行为完全不变（零回归）；注入时只加一个
+     // cacheObservation 旁路字段，绝不把 cache_control 写进真实 upstream 请求体（P2 待核实上游支持）。
+    if (this.promptCache) {
+      const obs = this.promptCache.record({
+        systemPrompt: a.systemPrompt,
+        toolSchemas:  a.toolSchemas,
+        messages:     a.messages || (input ? [{ role: 'user', content: input }] : []),
+       });
+      result.cacheObservation = {
+        cacheKey: obs.cacheKey,
+        hit: obs.hit,
+        estTokensUsed: obs.estTokensUsed,
+        estTokensSaved: obs.estTokensSaved,
+        note: 'Observational only; live cache_control injection is P2 (upstream capability unverified)',
+         };
+     }
       return result;
-      }
+       }
     if (name === 'decompose') {
       const { templateDecompose } = require('./decomposer.js');
       const input = a.input || a.prompt || '';
