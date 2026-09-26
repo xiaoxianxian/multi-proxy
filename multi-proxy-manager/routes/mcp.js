@@ -37,10 +37,19 @@ function server() {
       const { createPromptCache } = require('../../l2/prompt-cache.js');
       promptCache = createPromptCache({ gate: true });    // 门控开 = observe（不落盘）
       }
+    // L2 Step 5（A3 #5）：门控开时把 3 个 L2 adapter 注册进 pluginRuntime，让 route engine 的
+    // pluginCaps 非空（"一切皆插件"从生产空集变真）。门控关 → 不 bootstrap → runtime 空 → 零回归。
+    // bootstrap 非侵入：纯内存注册、不写 agent 文件、不触网；单 adapter 失败不阻断其余/启动。
+    const gate = String(process.env.PROXY_L2_MCP || '0');
+    const { bootstrapAdapters } = require('../../l2/l2-bootstrap.js');
+    const runtime = new PluginRuntime({ logger: { log: () => {} } });
+    if (gate === '1') {
+      bootstrapAdapters({ runtime, logger: { log: () => {}, warn: () => {} } });
+    }
     _server = new McpServer({
       registry: reg,
-      pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }),
-      gate: String(process.env.PROXY_L2_MCP || '0'),
+      pluginRuntime: runtime,
+      gate,
       promptCache,
       });
   }

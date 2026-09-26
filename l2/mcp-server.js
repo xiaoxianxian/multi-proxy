@@ -67,17 +67,19 @@ function toMcpTool(adapter, registry) {
 class McpServer {
   // 门控默认关（非侵入铁律）：gate 缺省时读 PROXY_L2_MCP，再缺省 '0'（关）。
   // 只有显式 gate='1' 或 env=1 才开；构造器不再默认 '1'。
-  constructor({ registry, routeEngine, gate, executor = null, realGate, promptCache } = {}) {
+  constructor({ registry, routeEngine, gate, executor = null, realGate, promptCache, pluginRuntime } = {}) {
     this.registry = registry || new AgentRegistry();
-    // ④ P0→P1：token 控制平面 prompt-cache 内核（注入缝，默认 undefined = 不启用，零行为变更）。
-    // 注入后 listTools() 才暴露 cache_stats 工具、orchestrate 才附 cacheObservation sidecar，
-    // 默认路径不注入 → 现有测试 listTools()/orchestrate 行为完全不变（零回归）。
+     // ④ P0→P1：token 控制平面 prompt-cache 内核（注入缝，默认 undefined = 不启用，零行为变更）。
+     // 注入后 listTools() 才暴露 cache_stats 工具、orchestrate 才附 cacheObservation sidecar，
+     // 默认路径不注入 → 现有测试 listTools()/orchestrate 行为完全不变（零回归）。
     this.promptCache = (typeof promptCache === 'object' && promptCache !== null) ? promptCache : undefined;
+     // L2 Step 5（A3 #5）：pluginRuntime 注入缝。缺省 new 空 runtime（旧行为，零回归）；
+     // 生产 routes/mcp.js 门控开时传 bootstrapAdapters 建好的 runtime → route engine 的 pluginCaps 非空。
     this.routeEngine = routeEngine || new RouteEngine({
       registry: this.registry,
-      pluginRuntime: new PluginRuntime({ logger: { log: () => {} } }),
+      pluginRuntime: pluginRuntime || new PluginRuntime({ logger: { log: () => {} } }),
       shadowMode: true,
-      });
+       });
     this.gate = (gate !== undefined) ? gate : String(process.env.PROXY_L2_MCP || '0');
     // 二级门控 PROXY_ADAPTER_REAL（默认 0=关）：orchestrate 真执行（真调 adapter / 注入 executor）须显式开。
     // 非侵入铁律：缺省保持 shadow（不触碰下游 adapter），与 PROXY_L2_MCP（bridge 开/关）解耦。
@@ -101,8 +103,10 @@ class McpServer {
       protocolVersion: this.protocolVersion,
       capabilities: {
         tools: { listChanged: false },
-        resources: {},
-        },
+        // L2 Step 6（A3 #4）：资源面（非侵入只读视图）——活跃 agent 注册表 + profile 只读视图。
+        // resources/listChanged:false：资源集由 registry 决定，注册表变更不主动推送（与 tools 同语义）。
+        resources: { listChanged: false },
+         },
       serverInfo: SERVER_INFO,
       };
   }
@@ -177,6 +181,55 @@ class McpServer {
        });
     }
     return tools;
+    }
+
+   // ---- L2 Step 6（A3 #4）· MCP 资源面（非侵入只读视图）----
+   // 暴露「活跃 agent 注册表」为 MCP resource：比 tools/call 更贴合非侵入铁律——
+   // 纯只读、不触下游 adapter、不写 agent 文件。让外部 agent 能「看见当前有哪些 agent + 各自能力」。
+   // 资源 uri 形如 l2://agent/<id>；uri 末段不匹配任何注册 agent → 抛 -32602。
+   // 注意：纯只读，不真执行任何 adapter（区别于 PROXY_ADAPTER_REAL 二级门控的真执行路径）。
+   listResources() {
+     const profiles = this.registry ? this.registry.list() : [];
+     return profiles.map((p) => ({
+       uri: `l2://agent/${p.id}`,
+       name: p.id,
+       title: p.name || p.id,
+       description: p.description || `Agent profile: ${p.id}`,
+       mimeType: 'application/json',
+       tags: Array.isArray(p.capabilityTags) ? p.capabilityTags : [],
+     }));
+   }
+
+   // 读单个 agent 的只读视图（脱敏：剔除 token/secret/credential 类字段，绝不回传密钥）。
+   // 未知 uri → 抛 -32602（带 available uri 列表，与 tools/call 的误导修复 Step 3 同风格）。
+   readResource(uri) {
+     if (typeof uri !== 'string' || !uri.startsWith('l2://agent/')) {
+      throw rpcError(-32602, `unknown resource uri: ${uri}`,
+            { available: this.listResources().map((r) => r.uri) });
+     }
+     const id = uri.slice('l2://agent/'.length);
+     let src;
+     try {
+       src = this.registry.get(id);
+     } catch (e) {
+      // registry.get 对未知 id 抛普通 Error（agent not found）→ 显式转 -32602
+      throw rpcError(-32602, `unknown agent id: ${id}`,
+             { available: this.listResources().map((r) => r.uri) });
+      }
+     // 只读视图：剔除任何疑似密钥字段（非侵入 + 防密钥经 MCP 面外泄）。
+     const SENSITIVE = /token|secret|credential|password|apiKey|bearer/i;
+     const view = {};
+     for (const [k, v] of Object.entries(src)) {
+       if (SENSITIVE.test(k)) view[k] = '[redacted]';
+       else view[k] = v;
+     }
+     return {
+      uri,
+      mimeType: 'application/json',
+      text: JSON.stringify(view, null, 2),
+      source: 'registry',
+      note: 'Read-only agent profile view (L2 Step 6). Secrets redacted; no real execution.',
+     };
    }
 
    // 调用工具
@@ -405,13 +458,37 @@ class McpServer {
         try {
           const result = this.callTool(name, args);
           return okResponse(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] });
-         } catch (e) {
+          } catch (e) {
           if (e && typeof e.code === 'number') {
             return errResponse(id, e.code, e.message, e.data);
-            }
+             }
           return errResponse(id, -32603, 'Tool execution failed: ' + (e && e.message || String(e)));
-         }
-       }
+          }
+        }
+
+      case 'resources/list':
+        // L2 Step 6（A3 #4）：活跃 agent 注册表的只读视图（非侵入，不触下游）。
+        return okResponse(id, { resources: this.listResources() });
+
+      case 'resources/read': {
+        // L2 Step 6：读单个 agent 只读视图（脱敏密钥）。纯只读、不真执行。
+        const uri = params && (params.uri || params.name);
+        if (!uri) return errResponse(id, -32602, 'Missing resource uri');
+        try {
+          const res = this.readResource(uri);
+          return okResponse(id, {
+            uri: res.uri,
+            mimeType: res.mimeType,
+            contents: [{ uri: res.uri, mimeType: res.mimeType, text: res.text }],
+            note: res.note,
+          });
+          } catch (e) {
+          if (e && typeof e.code === 'number') {
+            return errResponse(id, e.code, e.message, e.data);
+             }
+          return errResponse(id, -32603, 'Resource read failed: ' + (e && e.message || String(e)));
+          }
+        }
 
       default:
         return errResponse(id, -32601, `Method not found: ${method}`);
@@ -450,8 +527,31 @@ class McpServer {
             return errResponse(id, e.code, e.message, e.data);
             }
           return errResponse(id, -32603, 'Tool execution failed: ' + (e && e.message || String(e)));
-          }
-        }
+           }
+         }
+
+      case 'resources/list':
+        return okResponse(id, { resources: this.listResources() });
+
+      case 'resources/read': {
+        const uri = params && (params.uri || params.name);
+        if (!uri) return errResponse(id, -32602, 'Missing resource uri');
+        try {
+          const res = this.readResource(uri);
+          return okResponse(id, {
+            uri: res.uri,
+            mimeType: res.mimeType,
+            contents: [{ uri: res.uri, mimeType: res.mimeType, text: res.text }],
+            note: res.note,
+           });
+           } catch (e) {
+          if (e && typeof e.code === 'number') {
+            return errResponse(id, e.code, e.message, e.data);
+             }
+          return errResponse(id, -32603, 'Resource read failed: ' + (e && e.message || String(e)));
+           }
+         }
+
       default:
         return errResponse(id, -32601, `Method not found: ${method}`);
       }
