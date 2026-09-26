@@ -825,6 +825,22 @@ _最后更新: 2026-09-16(+ §13.11 待办盘点 + §13.11a M6 行动清单 + §
 
 **push 链(09-26,全 5 commit 已 push origin/main=ca2e31a)**:`c0e342c`③ → `b3edf24`④P0 → `a4f2882`日志 → `874d27a`④P1 → `ca2e31a`(日志+03 §9)。**纪律**:`git add --` 显式列文件(绝不 -A);热路径 `forward.js`/`codex-proxy/proxy.js` 0 触碰(已 `git diff --stat` 验证);权威裁定 source(02 原文 59 行) > 日志二次转述(09-26 §六旧转述全作废)。详见 `MEMORY-2026-09-26.md` §六·§七 + `03 §9`。
 
+### §13.36 P1 设计稿落地：token-control-plane 5-hook 接口 + 策略预算 + 集成分叉（A1-A3，本地 commit 未 push · 09-26 · 老板"同意推荐推进")
+
+**背景**：老板"同意你的推荐，继续推进"→ 落 03 §7 五待定项里的 A1-A3（§5 P0 已 push、P1 设计稿内核待落）。
+
+**A1 5-hook 接口定稿（§3.3）**：新建 `l2/token-policy.js`——`onRequestAssemble`/`onHistory`/`onToolOutput`/`onResponse`/`onRoute` + `applyPack` manifest 动态注册（默认 `enabled:false`，§3.4 / 非侵入铁律④）。
+**A2 策略预算（§3.5）**：`budget.maxInjectTokens`（默认 1000，可配）+ `perPolicyMaxRatio`（默认 0.3）；`apply` 按 priority DESC 贪心，超预算跳过低优先级（shadow 记账、不改 ctx 实际注入，防叠加负优化）。
+**A3 集成分叉（§4.5）**：`integration:true` 标记走外部引擎（Compressr Context Gateway / LiteLLM server-side compression），cost 不进预算，内核**不自研压缩算法**。
+**门控** `PROXY_TOKEN_POLICY` 默认 `0` = off（进内存、绝不落盘、不触 net）；延续 `prompt-cache.js` 工厂模式（独立 store / 测试隔离 / 内核自包含不 require manager）。
+
+**数字（真跑）**：`l2/token-policy.demo.js` 12/12 PASS；`multi-proxy-manager/tests/unit/token-policy.test.js` 18/18 PASS；全量回归 jest **807/49**（789→807，+18，0 回归）；l2 demo **20/20**（+1 token-policy，总 20，0 fail）；热路径 `forward.js`/`codex-proxy/proxy.js` **零触碰**（本次新增 3 文件 566 insertions，0 改现有模块）。
+**commit `2ba307a`**（3 新文件：`token-policy.js`+`token-policy.demo.js`+`token-policy.test.js`，`git add --` 显式；`git diff --cached --stat` 确认 3 文件）。`origin/main..HEAD` 由 ahead 3 → **本地 commit 后未 push**（等老板确认）。
+
+**诚实边界**：`estSavedTokens` 按 0.9 模拟（cache_control 9 折），非实测 upstream 返回值；不接任何现有路由；不外发任何计费请求（ACC 铁律）。
+**未推进项（维持待老板拍）**：① 是否推广 P1 到路由挂载（设计稿内核已落，挂载点属下一步）② 真·上游 `cache_control` 注入 P2（命门 = 改热路径 `forward.js`，需老板授权 + 锁云端 provider，建议 anthropic messages / qwen 显式缓存）③ agent 类型枚举是否扩更多（A4/A5 维持 4 类）④ `error-classification.test.js:106` timer-based flaky 排期（CI 靠 `--rerunFailsAtMost=2` 压，非本轮引入）。
+详见 `MEMORY-2026-09-26.md §十` + `03 §7.1` + `03 §7 待定项`。
+
 ### §13.35 ③ L2 热路径改造 Step 5 + Step 6 落地(plugin bootstrap + MCP 资源面 · 本地 commit 未 push · 09-26 · 老板"这几个逐个执行")
 
 **Step 5(A3 #5「一切皆插件」)**:新建 `l2/l2-bootstrap.js`——3 个 L2 adapter(`aigc`/`h3web`/`l1-agent`)桥接进 `PluginRuntime`。adapter 是 **class + `capabilitiesDeclaration()`(扁平字符串)**,PluginRuntime 契约 `{name,capabilities}` 对象 → 模块做形状映射(扁平→`{capability,name}`)+ no-op 生命周期钩子;纯内存、**不写 agent 文件、不触网**(实测 0.1ms)。**根因**:`routes/mcp.js:42` 把 `pluginRuntime` 传给根本不接收它的 McpServer(死参)→ 生产 `pluginCaps` 恒空集真因。`McpServer` 加 `pluginRuntime` 注入缝(缺省空=零回归);`routes/mcp.js` `PROXY_L2_MCP` 门控开时 `bootstrapAdapters()` 填充、关时空。验收 `l2/l2-bootstrap.demo.js` 13/13:pluginCaps 非空 + 能力提升对象形态 + 新 adapter 无需改 registry 即被识别(`matting→aigc source=plugin`/`code→l1-agent`)+ 不 bootstrap→恒空(零回归)。

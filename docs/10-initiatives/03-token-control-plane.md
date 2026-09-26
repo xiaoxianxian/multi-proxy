@@ -217,13 +217,27 @@ enabled: false                  # 默认关 —— 对齐非侵入铁律④（�
 - [x] 修正"独占位置"论断：透明压缩已有先行者，改为"集成不重造"
 
 ### 待定 / 待用户拍板
-- [ ] TokenPolicy hook 接口的最终签名与注册机制（§3.3 草案）
-- [ ] 策略预算的具体上限值（§3.5）
-- [ ] agent 类型维度的最终枚举（coding/aigc/research/general 是否够）
-- [ ] 压缩能力：自研 vs 集成 Context Gateway/LiteLLM 的最终取舍（§4.5）
-- [ ] 是否先落 P0（prompt-cache 断点 PoC）
+- [x] TokenPolicy hook 接口的最终签名与注册机制（§3.3 草案）— ✅ **已落 `l2/token-policy.js`（commit `2ba307a`）**：5-hook 定稿（`onRequestAssemble`/`onHistory`/`onToolOutput`/`onResponse`/`onRoute`）+ `applyPack` manifest 动态注册
+- [x] 策略预算的具体上限值（§3.5）— ✅ **已落 `l2/token-policy.js`**：`budget.maxInjectTokens`（默认 1000，可配）+ `perPolicyMaxRatio`（默认 0.3）；demo 12/12 验收贪心截断
+- [x] 压缩能力：自研 vs 集成 Context Gateway/LiteLLM 的最终取舍（§4.5）— ✅ **已落 `l2/token-policy.js`**：集成分叉 `integration:` 标志（默认 `false` 自研；`true` 标记走外部引擎、cost 不进预算、不自研压缩算法）
+- [ ] agent 类型维度的最终枚举（coding/aigc/research/general 是否够）— ✅ **已定稿 4 类**（`AGENT_TYPES`，§3.6 复用 route-engine small/med/large 扩展）；**是否扩更多类** 维持待老板拍
+- [ ] 是否先落 P0（prompt-cache 断点 PoC）— ✅ **已落 P0 + P1 push（commit `874d27a`）**
+- [ ] 是否先落 P1（token-policy pack 骨架 / 挂载到路由）— ✅ **设计稿内核已落**（`l2/token-policy.js`，commit `2ba307a`）；**是否推广到路由挂载** 仍属待老板拍
+- [ ] 真·上游 `cache_control` 注入提级（P2）— **命门 = 改热路径 `forward.js`**（9/26 铁律热路径不碰），需老板授权 + 锁云端 provider（建议 anthropic messages 或 qwen 显式缓存）— 维持**不自动推进**
 
 _落盘：2026-09-26 · 综合 9/26 多轮讨论 + 竞品研判 · 设计稿（非实现）· 外部 benchmark 除特别标注外未独立复现_
+
+### §7.1 P1 设计稿落地（2026-09-26 追加 · commit `2ba307a` · 本地未 push）
+
+> 老板 9/26 拍板 A1-A3 推进方向后，落 `l2/token-policy.js` 内核 + demo + jest。
+
+- **A1 5-hook 接口定稿**：`onRequestAssemble` / `onHistory` / `onToolOutput` / `onResponse` / `onRoute`；`applyPack` 从 manifest 动态注册一组 handler（默认 `enabled:false`，§3.4 / 非侵入铁律④）。
+- **A2 策略预算**：`budget.maxInjectTokens`（默认 1000）+ `perPolicyMaxRatio`（默认 0.3）；`apply` 按 priority DESC 贪心，超预算跳过低优先级（shadow 记账、不改 ctx，§3.5 防叠加负优化）。
+- **A3 集成分叉**：`integration:true` 标记走外部引擎（Compressr Context Gateway / LiteLLM server-side compression），cost 不进预算，内核不自研压缩算法（§4.5）。
+- **门控** `PROXY_TOKEN_POLICY` 默认 `0` = off（进内存、绝不落盘、不触 net）；延续 `prompt-cache.js` 工厂模式（独立 store / 测试隔离 / 内核自包含不 require manager）。
+- **数字（全真跑）**：`l2/token-policy.demo.js` 12/12 PASS；`multi-proxy-manager/tests/unit/token-policy.test.js` 18/18 PASS；全量回归 jest `807/49`（789→807，+18，0 回归）；l2 demo `20/20`（+1，0 fail）；热路径 `forward.js`/`codex-proxy/proxy.js` **零触碰**（本次新增 3 文件）。
+- **诚实边界**：`estSavedTokens` 按 0.9 模拟（cache_control 9 折），非实测 upstream 返回值；不接任何现有路由；不外发任何计费请求。
+- **未推进项**（维持待老板拍）：① 是否推广 P1 到路由挂载 ② 真·上游 `cache_control` 注入 P2（命门=热路径 `forward.js`，需授权+锁云端 provider）③ agent 类型枚举是否扩更多 ④ `error-classification.test.js:106` timer-based flaky 排期。
 
 ---
 
