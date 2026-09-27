@@ -1,0 +1,13 @@
+# packs/curator/pack.yaml  ·  Curator pack manifest（对齐 03-token-control-plane.md §3.4）
+# 引擎读 JS（curator-engine.js defaultManifest）不读 yaml；本 yaml 是设计/文档锚点。
+name: curator
+enabled: false                       # 默认关 —— 对齐非侵入铁律④（门控默认关）
+curated: true                       # curated 不 crowdsource（03:73）
+version: 1
+appliesTo:
+  agentTypes: [coding, aigc, research]   # AGENT_TYPES 子集（l2/token-policy.js:52）
+description: >
+  Curator pack：把 Raven 的 agent 级 RSI 思路适配到 multi-proxy 代理原生层。
+  通过 token-control-plane 的 5 个 hook 稳定扩展面，做「观察反馈 → 策略改动 → 校验 → 安装/回滚」闭环。
+  M/P/C/A/Prompt 五面映射 5 个 hook（06-curator-pack.md §3）；初始全部 passthrough，Curator 后续改写 params。
+  诚实边界：本 pack 尚未接入生产热路径（07 边界 5），仅单元/模拟层可见。
