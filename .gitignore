@@ -23,3 +23,36 @@ __pycache__/
 
 # 子代理运行时 dump（ 的 17/17 测试结果 JSON，内容已存 IMPLEMENTATION_REPORT.md，非源码）
 l2/python-middleware/result.json
+
+# ===== 内部资产：永不提交（2026-09-28 公开化清理 + push 闸门配套）=====
+MEMORY.md
+MEMORY-*.md
+AGENTGIT-*.md
+AgentGit-*.md
+ITERATION-ROADMAP.md
+JEV-*.md
+L2-BLUEPRINT.md
+c3-blind-spot-assessment.json
+会话存档插件-*.md
+docs/04-business/
+docs/09-review/
+docs/10-initiatives/
+docs/INDEX.md
+docs/PENDING-DECISIONS.md
+docs/02-product/PRD.md
+docs/02-product/V1-SCOPE-BOUNDARY.md
+docs/02-product/bundle-design.md
+docs/02-product/deepseek-baseline.md
+docs/02-product/dsh-integration.md
+docs/02-product/m2-execution-signoff.md
+docs/02-product/m6-action-checklist.md
+docs/02-product/q1-pricing-routing-arch-v1.md
+docs/02-product/q1-todo-tracker.md
+docs/02-product/q1-ux-design-v1.md
+docs/02-product/v1-signoff.md
+l2/COMPLEXITY-MODE.md
+l2/EXTERNAL-OPTIONS-REGISTER.md
+l2/continuity-kernel-design-*.md
+l2/p3-c1-paseo-integration.md
+l2/p3-sessions-checkpoint-design.md
+l2/python-middleware/IMPLEMENTATION_REPORT.md
