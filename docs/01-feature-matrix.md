@@ -76,7 +76,7 @@
 | codex-proxy | 6 files | 62 tests | 6 suites |
 | hermes-proxy | 4 files | 77 pytest 项 | 4 suites |
 | L2 demo | 23 .demo.js（10 内核 + 3 adapter + 10 监控/mcp/route/省钱网关） | 318 checks 全 PASS | 各自独立运行 |
-| shell (bats) | 1 .bats | 11 tests | — |
+| shell (bats) | 1 .bats | 11 tests（09-28 实跑 PASS；`bats-core` 1.14.0，修复后全绿） | — |
 
 **总计：1380 checks 全绿**（jest 1051 = 770+62+219 + pytest 77 + bats 11 + l2 demo 318 + codex-integration 2）。
 

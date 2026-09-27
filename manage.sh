@@ -392,6 +392,12 @@ run_target() {
 }
 
 # 主函数
+# Source 保护：被 source（测试/调用 helper）时 BASH_SOURCE[0]≠$0，函数已定义完，直接返回、不跑 main；
+# 直接执行（./manage.sh / bash manage.sh）时 BASH_SOURCE 缺失回退 $0，照旧跑 case。
+# 这样 bats 等可 source 本脚本调用 is_port_in_use / show_* 等，而 main 只在直接执行时运行。
+if [ "${BASH_SOURCE[0]:-$0}" != "$0" ]; then
+  return 0 2>/dev/null || exit 0
+fi
 case "${1:-status}" in
   start)
     print_status "启动所有服务..."
