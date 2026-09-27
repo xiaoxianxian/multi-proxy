@@ -1,7 +1,8 @@
 # docs/01-feature-matrix.md — 功能完成度矩阵
 
 > 本表所有数字必须来自真实运行，不可从文档摘录。
-> 最后验证：2026-09-26 全量真跑（jest 1051 + hermes 77 + l2 318/23demo = 1380 checks），main 分支。
+> 最后验证：2026-09-28 全量真跑（jest 1144 + hermes 77 + l2 318/23demo + curator 15 = 1556 checks），main 分支。
+> （2026-09-28：manager 822/50、cursor 17/219、codex 62/6、hermes 77/4、l2 demo 23/318、curator-pack 15/15，0 测试回归；详见 `docs/10-initiatives/11-v1-readiness-and-v2-schedule-2026-09-28.md §二`。）
 
 ---
 
@@ -70,7 +71,7 @@
 
 | 模块 | 文件数 | 测试数 | 套件 |
 |------|--------|--------|------|
-| multi-proxy-manager | 47 files | 770 tests | 47 suites |
+| multi-proxy-manager | 47 files（48 suites 含新增 curator-pack） | **822 tests**（09-28 实跑，含 curator-pack 15 + 其它增量；旧值 770 @ 09-26 / 807 @ 09-27） | 50 suites |
 | cursor-proxy | 17 files | 219 tests | 17 suites |
 | codex-proxy | 6 files | 62 tests | 6 suites |
 | hermes-proxy | 4 files | 77 pytest 项 | 4 suites |
