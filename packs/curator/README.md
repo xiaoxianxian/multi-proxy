@@ -6,7 +6,7 @@
 
 ## 诚实边界（必读）
 - **默认关**：`pack.yaml` 的 `enabled: false`，engine 不 enable 时 5 个 hook 的 `apply(...)` 结果数恒为 0，不触发任何行为变更、不触 net、不写 agent 文件。
-- **未接入生产热路径**：截至本 README，无任何业务代码调用 `apply()`（仅 `token-policy.demo.js` 与 jest 单测）。要产生**真实** token 节省，需把 `apply()` 接入 `codex-proxy/proxy.js` 转发路径——属另一条线（07 边界 5 / `03-token-control-plane.md` / `02-L2热路径改造计划.md`），本 pack 不含。
+- **未接入生产热路径**：截至本 README，无任何业务代码调用 `apply()`（仅 `token-policy.demo.js` 与 jest 单测 `token-policy.test.js` 18/18 + `curator-pack.test.js` 15/15，2026-09-28 全绿、核心 0 改动）。要产生**真实** token 节省，需把 `apply()` 接入 `codex-proxy/proxy.js` 转发路径——属另一条线（07 边界 5 / `03-token-control-plane.md` / `02-L2热路径改造计划.md`），本 pack 不含。
 - **实验性**：Raven Curator 作者自陈无跨场景统计验证；本 pack 是「方向跟」，验收只用模拟场景。
 
 ## 启用 / 回滚
