@@ -120,3 +120,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: shell script gate (check.sh, zero-dep CJK-safe fallback)
         run: bash tests/shell/check.sh
+
+  # 内部资产 push 闸门（2026-09-28 维护者拍板升级）：
+  # 与 .gitignore「内部资产：永不提交」段同源。该段每加一条规则，本 job 自动多查一类。
+  # 防 `git add -f` / 手工夹带 / 规则新增后漏 untrack 的存量文件进公开树。
+  internal-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: push-gate check (internal assets must not be tracked)
+        run: bash scripts/push-gate-check.sh HEAD
