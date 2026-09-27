@@ -31,10 +31,16 @@ const TIER_PROFILES = [
 
 // 真实 adapter 能力（与 mcp-server.js require.main 历史 seed 对齐）
 const ADAPTER_PROFILES = [
-   { id: 'h3web', name: 'H3Web', type: 'custom', adapterId: 'h3web',
+    { id: 'h3web', name: 'H3Web', type: 'custom', adapterId: 'h3web',
      capabilityTags: ['video', 'text2video', 'image'], description: 'H3Web 文/图/视频本地引擎' },
-   { id: 'codex', name: 'Codex', type: 'codex',  adapterId: 'codex',
+    { id: 'codex', name: 'Codex', type: 'codex',  adapterId: 'codex',
      capabilityTags: ['code', 'review'],              description: 'Codex 代码 agent' },
+     // v2-M5 R3-b：Claude 全家桶（Anthropic Messages API / claude-code / claude-desktop）。
+     // type='custom' 而非 'claude'——AGENT_TYPES 封闭白名单 = codex/hermes/cursor/custom
+     //（改 core 违反 0 副作用），语义区分靠 id/adapterId='claude'，同 h3web/三档 tier 惯例。
+     // 门控关：dormant，经 PROXY_L2_MCP 门控关闭时不进入路由决策面，不改变现有行为。
+    { id: 'claude', name: 'Claude', type: 'custom', adapterId: 'claude',
+     capabilityTags: ['code', 'writing'],             description: 'Claude 全家桶（code/writing 能力，anthropic 协议，见 l2/adapters/claude-adapter.js）' },
 ];
 
 // 全部默认 profile（adapter + 三档 tier）。单一来源，两处共用。
