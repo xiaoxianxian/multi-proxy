@@ -92,7 +92,7 @@
 | 2 | B7 `codex-proxy/proxy.js` 120s+pipeTo | 长流式超时 | 同上 | P1（触发时） |
 | 3 | hermes-proxy 无 E2E | 集成风险 | P? 补 1 个 pytest E2E | 中 |
 | 4 | ~~codex-proxy 仅 2 test 文件~~ | ✅ 已补 3 文件 / 53 tests（auth+CRUD+switch+balances guard，2026-09-16） | — | ✅ 已闭环 |
-| 5 | P5 GUI 看板 | 易用性，非阻塞 | 暂缓 | 低 |
+| 5 | ~~P5 GUI 看板~~ | 易用性 | ✅ 已闭环（`commit 2163ca9`：Electron 壳 `main.js` 117 行 + `launch-gui.sh` + `manage.sh gui` 子命令；启动脚本含 base_url 占用检测） | ✅ 已闭环（低） |
 | 6 | ~~DSH 生态（DS1 SKILL.md 待产）~~ | ✅ DS1 已落（2 SKILL + `docs/02-product/dsh-integration.md`）；DS2/DS3 暂缓（#1496） | ✅ 已闭环 |
 
 ---
