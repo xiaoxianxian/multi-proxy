@@ -9,8 +9,11 @@
 //   2. 三档 text-tier profile（agnes / deepseek / qwen）：complexity 路由的生产落点（see ③）。
 //      COMPLEXITY-MODE.md §2.1 的 cost 梯度映射——把 complexity 难度映射到档位：
 //        low(简单)→small / medium(默认·未知)→medium / high(复杂)→large。
-//      三者 capabilityTags 全为 ['text']，与 h3web(video/image)/codex(code/review) 能力标签
-//      不冲突：text 任务按档位分档，非 text 任务仍走 h3web/codex，向后兼容零破坏。
+//      三档文本 agent capabilityTags 含 'plan'（D2 解法①，09-29 维护者拍板）：decomposer 文本
+//      stage（understand/storyboard 等）产出 type='plan'，档位路由 tagMatch 需 capabilityTags
+//      含 task.type，故三档补 'plan' 以承接文本 stage；原 'text' 保留，向后兼容。
+//      与 h3web(video/image)/codex(code/review) 能力标签不冲突，plan 任务此前无 agent 承接
+//      （纯增量，不夺现有路由）。
 //
 // 非侵入：纯函数，只写注入的 registry（中枢自己的内存注册表），不写任何 agent 文件。
 // 幂等：create 对重复 id 抛错。调用方在「每个 server 实例构造一次」的语义下用，无重复 seed 风险；
@@ -19,14 +22,14 @@
 // 三档 text-tier profile（complexity 路由落点，见 COMPLEXITY-MODE.md §2.1 cost 梯度）
 const TIER_PROFILES = [
    { id: 'agnes',    name: 'Agnes (small)',  type: 'custom', adapterId: 'agnes',
-     modelTier: 'small',  modelType: 'text', capabilityTags: ['text'],
-     description: 'complexity 档位：small —— 简单/高频文本任务，最低成本档' },
+    modelTier: 'small',  modelType: 'text', capabilityTags: ['text', 'plan'],
+    description: 'complexity 档位：small —— 简单/高频文本任务，最低成本档' },
    { id: 'deepseek', name: 'DeepSeek (medium)', type: 'custom', adapterId: 'deepseek',
-     modelTier: 'medium', modelType: 'text', capabilityTags: ['text'],
-     description: 'complexity 档位：medium —— 常规文本任务，默认档' },
-   { id: 'qwen',     name: 'Qwen3.8 (large)',  type: 'custom', adapterId: 'qwen',
-     modelTier: 'large',  modelType: 'text', capabilityTags: ['text'],
-     description: 'complexity 档位：large —— 复杂/高要求文本任务，最高质量档' },
+    modelTier: 'medium', modelType: 'text', capabilityTags: ['text', 'plan'],
+    description: 'complexity 档位：medium —— 常规文本任务，默认档' },
+   { id: 'qwen',     name: 'Qwen3.8 (large)', type: 'custom', adapterId: 'qwen',
+    modelTier: 'large',  modelType: 'text', capabilityTags: ['text', 'plan'],
+    description: 'complexity 档位：large —— 复杂/高要求文本任务，最高质量档' },
 ];
 
 // 真实 adapter 能力（与 mcp-server.js require.main 历史 seed 对齐）
