@@ -174,7 +174,22 @@ start_cursor() {
 
   cd "$CURSOR_PROXY_DIR" || exit 1
   print_status "启动 Cursor Proxy..."
-  nohup node dist/server/start.js > "$LOG_DIR/cursor-proxy.log" 2>&1 &
+
+  # M6 固化 (2026-09-30): coding 任务路由 override 开关
+  # 非侵入铁律 (ADR-0003): 默认 NOT 注入 PROXY_ROUTE_OVERRIDE →
+  #   生产 18794 行为逐字节不变 (shadow 稳态), 绝不全局 launchctl setenv。
+  #   开 override: CURSOR_ROUTE_OVERRIDE=1 ./manage.sh start cursor
+  #     → 子进程 env 注入 PROXY_ROUTE_OVERRIDE=1 (子进程局部, §3 允许)
+  #     → coding 任务路由到 deepseek-v4-pro (B 验证 18801 隔离 200)
+  #     → 审计落 cursor-proxy/data/override-audit.jsonl
+  #   回退: 不设 CURSOR_ROUTE_OVERRIDE 重启即回 shadow 稳态。
+  local CURSOR_OVERENV=()
+  if [ "${CURSOR_ROUTE_OVERRIDE:-}" = "1" ]; then
+    CURSOR_OVERENV=(PROXY_ROUTE_OVERRIDE=1)
+    print_warning "M6 override 已开: coding 任务路由到 deepseek-v4-pro (审计: cursor-proxy/data/override-audit.jsonl)"
+  fi
+
+  nohup env "${CURSOR_OVERENV[@]}" node dist/server/start.js > "$LOG_DIR/cursor-proxy.log" 2>&1 &
   local pid=$!
   sleep 1
 
