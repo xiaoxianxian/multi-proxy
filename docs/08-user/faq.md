@@ -121,9 +121,69 @@ codesign -s - node_modules/electron/dist/Electron.app
 
 ---
 
+## Q9：agent 能力怎么注册？两个 agent 都有同一能力时怎么选
+
+**现状**：能力是 profile 里的 `capabilityTags` **静态声明**，非运行时探测——在 adapter 构造时挂上（`l2/adapters/l1-agent-adapter.demo.js:30` `new L1AgentAdapter({ capabilities: ['code','writing'] })`）。注册走 `AgentRegistry`（`l2/agent-registry.js`）：`REQUIRED` 字段含 `capabilityTags`（:27），按能力查询用 `byCapability(tag)`（:118-119），命中多个同能力 agent 时按 `strategy` 选（cost-optimization 取最便宜 / priority / round-robin）。
+
+---
+
+## Q10：PROXY_ADAPTER_REAL 是什么
+
+`l2/mcp-server.js:86`：二级门控，默认 `'0'`。关时 `orchestrate` 始终 **shadow**（只产出 plan JSON，executor 不被调用，不触碰下游 adapter，符合非侵入铁律）；开时才经注入缝真调 adapter 执行。缺省路径下 `listTools()` / `orchestrate` 行为完全不变（零回归）。
+
+---
+
+## Q11：路由兜底是写死 deepseek 吗
+
+**不是。** `cursor-proxy/src/routing/routeEngine.ts`：
+
+- 有健康候选：`pickByCost`（:136）按 cost 排序取最便宜，无价（`Infinity`，:147）排最末。
+- 无候选集：退化为 `DEFAULT_ROUTE_CONFIG.fallbackChain[0]`（:162），即 `defaultModel='qwen3.8:27b-mlx'`（本地、0 成本），非 deepseek。
+- `fallbackChain = ['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-2.5-flash', 'kimi-k2.6']`（:187）。没配 deepseek-v4-pro 时 DB `providers` 表无 `enabled=1` 行 → 退回 qwen 本地。
+
+路由是 DB 驱动 + 成本排序，非写死。
+
+---
+
+## Q12：override 为什么只在 cursor，codex / hermes 没有
+
+**现状**（已 grep 全仓确认）：`PROXY_ROUTE_OVERRIDE` 只在 `cursor-proxy/src/server/handlers/chatHandler.ts:32/396`。`codex-proxy/proxy.js`（687 行，Node）与 `hermes-proxy/proxy.py`（708 行，Python）是独立代理实现，**没有 L2 架构**（无 routeEngine / AgentRegistry / classifyTask），故无 override。
+
+cursor-proxy 是新写的 L2 架构载体（chatHandler + routeEngine + agentRegistry），override 是它独有的。
+
+---
+
+## Q13：override / 这类能力应该放哪一层
+
+按 `AGENTS.md` §3 末条「**通用能力放 L2 公共层，不重复实现**」（09-30 维护者拍板落地）：跨 proxy 的通用能力（路由决策 / override / 成本优化 / 能力注册 / 语义审阅）统一实现于 `l2/`，各 proxy 仅作 L1 消费方。
+
+据此 override 应抽到 `l2/route-engine.js` 或上层 `l2/mcp-server.js`，让 codex / hermes 共用一套路由 + 能力注册，不在 cursor 单独维护一份。
+
+---
+
+## Q14：还没实现 / 挂起的是哪些
+
+来源 `docs/10-initiatives/19-未做与待拍板清单-2026-09-30.md` §二：
+
+| 项 | 状态 | 优先级 |
+|----|------|--------|
+| P4 continuity-kernel 真代码 | ❌ 仅设计稿，无 `.js` | 高 |
+| P3 进程级崩溃恢复 | ❌ 草案未落 | 高 |
+| `/v1/messages` Anthropic ingress | ❌ 全仓无路由 | 中 |
+| provider-selector 4 策略（smart/order/rotate/usage） | ❌ 现状 order 隐式 | 中 |
+| hermes E2E 补 1 pytest | ❌ 未实施 | 中 |
+| D3-③ decomposer 扩 5-stage | ⏸ 挂起（消费方不存在） | 低 |
+| M6 override 固化到 manage.sh | ✅ `commit d85565a`（2026-09-30） | — |
+| override 抽到 L2 公共层 | ❌ 未做（§3 末条铁律已立） | 高 |
+
+竞品深调研（Claude Code / Cursor / n8n / Dify / magpie 的 agent 路由 + multi-proxy / Hermes 生存空间）见 `docs/10-initiatives/26-竞品深调研-agent路由与生存空间-2026-09-30.md`。
+
+---
+
 ## 数据源
 
 - `07-ops/ENV-NOTES.md` / `03-adr/0002`（NO_PROXY 铁律）
 - `docs/07-ops/runbook.md`
 - `manage.sh`
 - `docs/09-review/archive/MEMORY-2026-09-17.md` P5 桌面壳修复记录
+- Q9–Q14（2026-09-30 续跑）：`l2/agent-registry.js` / `mcp-server.js` / `adapters/l1-agent-adapter.demo.js`、`cursor-proxy/src/routing/routeEngine.ts`、`docs/10-initiatives/25-续跑状态`、`19-未做与待拍板清单`、`26-竞品深调研`
