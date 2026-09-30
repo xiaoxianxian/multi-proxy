@@ -15,6 +15,8 @@
 //      未设 modelTier 的 profile 不参与档位加分，行为完全不变（向后兼容旧 profile）。
 
 const { MODEL_TIERS, DEFAULT_TIER } = require('./agent-registry');
+// 语义审阅层（质量工程 2.2）：route() 决策是否真能接这活（默认关，零行为变更）。
+const { reviewRouteDecision, assertSemantic } = require('./semantic-review.js');
 
 const DEFAULT_LOG_CAPACITY = 100;
 
@@ -24,12 +26,14 @@ const DEFAULT_LOG_CAPACITY = 100;
 const DEFAULT_LOG_REDACTION = 'full';
 
 class RouteEngine {
-    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null } = {}) {
+    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null, semanticReview = false, semanticThrow = false } = {}) {
         this.registry = registry;
         this.pluginRuntime = pluginRuntime || { listCapabilities: () => [] };
         this.shadowMode = shadowMode;
         this.log = []; // 路由决策日志，最多 logCapacity 条
         this.logCapacity = logCapacity;
+        this.semanticReview = semanticReview; // 质量工程 2.2：决策语义审阅（默认关）
+        this.semanticThrow = semanticThrow;   // 默认关：打开则 error 级语义问题硬拒
         // log_redaction：控制 decision.taskPrompt 脱敏。默认 'full'（现状不变），见上方注释。
         this.logRedaction = DEFAULT_LOG_REDACTION;
         // L2 P3 真执行器注入：(adapterId, task, ctx, runOpts) => Promise<value>。
@@ -117,6 +121,13 @@ class RouteEngine {
             return b.confidence - a.confidence;
          });
         decision.chosen = decision.candidates[0] || null;
+
+         // 语义审阅层（质量工程 2.2）：选中的 adapter 是否真能接这活（默认关，零行为变更）。
+         if (this.semanticReview) {
+             const rev = reviewRouteDecision(decision, task);
+             decision.semanticIssues = rev.issues;
+             if (!rev.ok && this.semanticThrow) assertSemantic(rev.issues);
+         }
 
          // L2 Step 4（N3 防双执行）：route() 纯决策——绝不自动执行。
          // 非 shadow 且选中：只把 action 标记为 'execute'（决策意图），

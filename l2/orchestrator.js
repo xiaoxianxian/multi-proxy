@@ -18,10 +18,15 @@
 const fs = require('fs');
 const path = require('path');
 
+// 事实绑定层（质量工程 2.1）：编排进入执行前校验子任务形状契约。
+const { validateDag, validateSubtask } = require('./contract.js');
+// 语义审阅层（质量工程 2.2）：拆解产物是否有可路由 adapter（诊断级，默认关，零行为变更）。
+const { reviewDecomposition, assertSemantic } = require('./semantic-review.js');
+
 const DEFAULT_MAX_RETRIES = 1;
 
 class Orchestrator {
-    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null } = {}) {
+    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null, semanticReview = false, semanticThrow = false } = {}) {
         this.executor = executor;          // 注入：(subtask, ctx, runOpts) => result；shadowMode 下不被调用
         this.routeEngine = routeEngine;    // 注入：非 shadow 时由 executor 用其 route() 选 adapter
         this.decomposer = decomposer;      // 注入：runFromInput 用；否则用内置 templateDecompose
@@ -29,6 +34,8 @@ class Orchestrator {
         this.dir = dir;                    // 非侵入：null=仅内存；注入才落盘
         this.maxRetries = maxRetries;
         this.retriever = retriever;        // I1 RAG（拉模式）：第 5 可注入项；null=不检索、不挂 ctx.knowledge（零回归）
+        this.semanticReview = semanticReview; // 质量工程 2.2：拆解产物语义审阅（默认关）
+        this.semanticThrow = semanticThrow;   // 默认关：打开则 error 级语义问题在派发前硬拒
         this.history = [];                 // 协作历史（任务级）
         this._seq = 0;
      }
@@ -47,6 +54,18 @@ class Orchestrator {
         // 前置：拒绝环
        const { hasCycle } = require('./decomposer.js');
        if (hasCycle(dag)) throw new Error('orchestrator: DAG has cycle, refusing to schedule');
+       // 事实绑定层（质量工程 2.1）：进调度前校验子任务形状契约，挡住引用错/参数错。
+       validateDag(dag);
+
+       // 语义审阅层（质量工程 2.2）：拆解产物是否有可路由 adapter（诊断级，默认关，非阻塞）。
+       // 仅 registry 注入时才有候选信息可查；无 registry 则跳过（无法审阅）。
+       if (this.semanticReview) {
+           const reg = this.routeEngine && this.routeEngine.registry;
+           const pr = this.routeEngine && this.routeEngine.pluginRuntime;
+           const rev = reviewDecomposition(dag, { registry: reg, pluginRuntime: pr });
+           this._semanticIssues = rev.issues;
+           if (!rev.ok && this.semanticThrow) assertSemantic(rev.issues);
+       }
 
        const results = {}; // id -> { id, status, value?, attempts?, skipped?, fallbackFrom? }
        const executionOrder = [];
@@ -101,6 +120,8 @@ class Orchestrator {
     }
 
     async _executeSubtask(st, byId, results, ctx, executionOrder) {
+        // 事实绑定层（质量工程 2.1）：执行前再校验一次子任务形状契约（纵深防御）。
+        validateSubtask(st);
         // 条件分支：when(ctx) 为 false → 跳过
         if (typeof st.when === 'function') {
             let keep = true;
