@@ -16,13 +16,14 @@
 //   ① 0 联网 / 0 扣费：shadow 恒开，不注入 executor，不触任何真实 adapter；
 //      route() 只做「该谁来跑」的决策计算，不发任何下游请求。
 //   ② 0 副作用：不写 agent 文件、不写 home、不改任何业务状态；唯一写盘是本脚本的报告文件（--no-write 可关）。
+//      路由预演（route()）**只算决策**：不发请求、不触发 executor，因此 reject 口径下也不会真失败。
 //   ③ 零行为变更：本脚本只读生产代码，不改任何模块行为。
 //
 // 用法：
 //   node l2/observe-shadow-run.js                 # 默认：MCP + REST 两入口真跑，写报告
 //   node l2/observe-shadow-run.js --no-write      # 只打印，不落盘
 //   node l2/observe-shadow-run.js --mcp-only      # 只跑 MCP 入口（REST 需 express，可跳过）
-//   PROXY_L2_NOCANDIDATE=reject node l2/observe-shadow-run.js   # 预演 reject 策略下会硬拒哪些子任务
+//   PROXY_L2_NOCANDIDATE=observe node l2/observe-shadow-run.js  # 回退到观察口径再跑一遍（默认已是 reject）
 //
 // 输出解读：
 //   warn  = 拆解产物某 type 当前无 adapter 承接（诊断，不阻塞）
@@ -157,7 +158,7 @@ async function runRestEntry(corpus) {
     const policy = resolveNoCandidatePolicy();
 
     console.log('=== L2 翻闸门 Step 1 · 观察态真跑（shadow 恒开 · 0 联网 · 0 副作用）===');
-    console.log(`无候选策略 policy=${policy.strategy}（默认 observe；env PROXY_L2_NOCANDIDATE 可切）`);
+    console.log(`无候选策略 policy=${policy.strategy}（底座默认 2026-10-01 起 = reject；env PROXY_L2_NOCANDIDATE 可覆盖为 observe / fallback-default / reject）`);
     console.log(`语料 ${CORPUS.length} 条 · 入口 ${mcpOnly ? 'MCP' : 'MCP + REST'}\n`);
 
     const { server, routeEngine } = buildMcpServer();

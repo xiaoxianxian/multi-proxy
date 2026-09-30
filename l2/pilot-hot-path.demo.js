@@ -20,6 +20,7 @@ const { L1AgentAdapter } = require('./adapters/l1-agent-adapter.js');
 const { AgentRegistry } = require('./agent-registry.js');
 const { McpServer } = require('./mcp-server.js');
 const { seedDefaultProfiles } = require('./mcp-default-seed.js');
+const { resolveNoCandidatePolicy } = require('./knowledge-base/routing-base.js');
 
 let pass = 0;
 let fail = 0;
@@ -134,9 +135,11 @@ function call(server, id, args) {
             pt.subtasks.filter((s) => s.status === 'skipped').length >= 1);
     }
 
-    // ===== E：无候选兜底策略（质量工程 §四待办②）在热路径的两种形态 =====
+    // ===== E：无候选兜底策略（质量工程 §四待办②）在热路径的三种形态 =====
     // 构造一个**没有任何 adapter 承接**的能力自己喂进热路径（type='audio-mix'），
-    // 对比 observe（默认·现状）与 reject（显式策略）的差异。
+    // 对比 默认口径 / observe / reject 的差异。
+    // ⚠️ 2026-10-01 起底座默认 = reject，故 observe 分支必须显式设 env（不能再依赖默认），
+    //    并单独留一条"默认口径"断言当看门狗 —— 底座默认值再变，这里会第一时间红。
     console.log('\nE) 无候选兜底策略（type 无人承接）');
     {
         const orphanDag = {
@@ -146,9 +149,20 @@ function call(server, id, args) {
         };
         const server = new McpServer({ gate: '1', registry: reg, realGate: '1', executor });
 
+        // E0 默认口径（生产实际，当前 = reject）
+        const beforeDefault = execCalls;
+        const pd = await call(server, 60, { dag: orphanDag, quality: true });
+        const defaultPolicy = resolveNoCandidatePolicy().strategy;
+        ok(`默认口径 = ${defaultPolicy}（底座 noCandidatePolicy，生产实际）`,
+            defaultPolicy === 'reject'
+                ? pd.subtasks[0].status === 'failed' && execCalls === beforeDefault
+                : pd.subtasks[0].status === 'done' && execCalls === beforeDefault + 1);
+
+        // E1 observe（显式）
+        process.env.PROXY_L2_NOCANDIDATE = 'observe';
         const beforeExec = execCalls;
         const po = await call(server, 6, { dag: orphanDag, quality: true });
-        ok('observe（默认）：仍能执行但 routedAdapterId=null —— 现状的静默降级被如实记录',
+        ok('observe（显式）：仍能执行但 routedAdapterId=null —— 现状的静默降级被如实记录',
             po.subtasks[0].status === 'done' && po.report.subtasks[0].value.routedAdapterId === null);
         ok('observe 下 2.2 审阅层已对该 type 给出无候选诊断',
             po.quality.semanticIssues.some((i) => i.subtaskId === 'orphan'));

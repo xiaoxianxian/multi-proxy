@@ -35,7 +35,19 @@ const TIER_PROFILES = [
 // 真实 adapter 能力（与 mcp-server.js require.main 历史 seed 对齐）
 const ADAPTER_PROFILES = [
    { id: 'h3web', name: 'H3Web', type: 'custom', adapterId: 'h3web',
-    capabilityTags: ['video', 'text2video', 'image'], description: 'H3Web 文/图/视频本地引擎' },
+    // 模态/档位声明（2026-10-01 补，观察态真跑 §4.2 缺口 B）：
+    //   此前只有 capabilityTags、没写 modelType → route-engine 算 modelTypeMatch=(undefined==='multimodal')=false
+    //   → 2.2 语义审阅把「视频任务派给 h3web」判成 error「h3web is text-only」。这是**假阳性**：
+    //   h3web 是本地视频引擎，缺的是声明不是能力。补 modelType:'multimodal' 后误报消失。
+    //   modelTier:'large' 同理：视频生成属重活，期望档位即 large，补上后 tier gap warn 一并归零。
+    //   ⚠️ 影响面：这两个字段参与候选排序（modelTypeMatch → tierMatch → confidence），
+    //   属业务路由声明变更，由维护者 2026-10-01 拍板后才动。
+    modelType: 'multimodal', modelTier: 'large',
+    // 'compose'（同日补，§4.2 缺口 A）：video-workflow 的合成节点（compose: 合成+音频）
+    //   此前无任何 profile 承接 → 路由无候选（切 reject 会硬失败）。拍板归 h3web 承接
+    //   （视频合成属视频域；与 adapter 自身 capabilities 同步补，见 h3web-adapter.js:78）。
+    capabilityTags: ['video', 'text2video', 'image', 'compose'],
+    description: 'H3Web 文/图/视频本地引擎（含视频合成 compose）' },
    { id: 'codex', name: 'Codex', type: 'codex',  adapterId: 'codex',
     // 'test'（2026-10-01 补）：decomposer 模板产出的 unit-test 子任务 type='test'，
     // 此前无 profile 承接 → route() 无候选、却仍被 executor 执行（routedAdapterId=null）。

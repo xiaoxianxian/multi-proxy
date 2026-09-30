@@ -18,7 +18,7 @@
 const ROUTING_BASE = {
     version: 1,
     updatedAt: '2026-09-30',
-    note: '初始收口：从 decomposer.js / route-engine.js / claude-adapter.js / l1-agent-adapter.js 逐字迁移，零行为变更',
+    note: '初始收口：从 decomposer.js / route-engine.js / claude-adapter.js / l1-agent-adapter.js 逐字迁移，零行为变更；2026-10-01 无候选默认策略 observe→reject（观察态真跑归零后拍板）',
 
     // ---- 需求 → DAG 模板（原 l2/decomposer.js BUILTIN_TEMPLATES，逐字迁移）----
     templates: [
@@ -66,13 +66,20 @@ const ROUTING_BASE = {
     // ---- 无候选兜底策略（质量工程 §四 待办②）----
     // route() 选不出 adapter 时怎么办。此前是**隐式行为**：chosen=null 却照样执行，
     // 最终表现为 executor 拿到 adapterId=null 的静默降级（无人报错、无从复盘）。
-    //   'observe'（默认，零行为变更）：保持 chosen=null，只在 decision 上补诊断字段
+    //   'observe'：保持 chosen=null，只在 decision 上补诊断字段
     //            （noCandidate / noCandidateReason / noCandidatePolicy），便于事后审计。
     //   'fallback-default'：退到 defaultAdapterId（该 adapter 必须已在 registry 注册），
     //            decision.degraded=true —— 明示这不是能力匹配的结果，而是兜底。
     //   'reject'：decision.rejected=true，执行器据此硬失败，不再「无路由也执行」。
+    //
+    // ⚠️ 默认策略 2026-10-01 由 'observe' 切为 'reject'（维护者拍板）。前置条件已满足：
+    //    观察态真跑（l2/OBSERVE-REPORT-2026-10-01.md）在补齐 compose owner 与 h3web 模态声明后
+    //    error / warn / 无候选 **全部归零**（31 子任务 0 告警）——即「正常路径不会误伤」已被实测。
+    //    切 reject 的语义代价：registry 未 seed / 能力缺失的环境里，子任务由「静默执行」变为
+    //    「显式 hard fail」。这是刻意的（宁可显式失败，不要无路由也执行），且随时可回退：
+    //    env PROXY_L2_NOCANDIDATE=observe 即可，无需改代码。
     // 运行时可用 env PROXY_L2_NOCANDIDATE 覆盖同一组取值（非法值报错，fail-fast）。
-    noCandidatePolicy: { strategy: 'observe', defaultAdapterId: 'codex' },
+    noCandidatePolicy: { strategy: 'reject', defaultAdapterId: 'codex' },
 };
 
 const ALLOWED_NO_CANDIDATE = ['observe', 'fallback-default', 'reject'];

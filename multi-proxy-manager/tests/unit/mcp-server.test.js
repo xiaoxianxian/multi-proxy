@@ -8,12 +8,17 @@ const { McpServer, PROTOCOL_VERSION, SERVER_INFO } = require('../../../l2/mcp-se
 const { AgentRegistry } = require('../../../l2/agent-registry');
 const { PluginRuntime } = require('../../../l2/plugin-runtime');
 
+// fixture 能力声明必须与生产 seed（l2/mcp-default-seed.js）对齐，否则会造出"假的无候选"：
+// 2026-10-01 无候选默认策略切为 reject 后，下面两个「真执行」用例曾因此红——
+// fastapi-jwt 模板的 unit-test(type='test') 在 fixture 里没有 owner → 被 reject 硬失败。
+// 这是**测试落后于生产**而非生产缺陷（生产 seed 的 codex 已承接 code/review/test），
+// 故修 fixture 而不是放宽断言；无候选语义本身由 no-candidate-policy.demo.js + pilot 场景 E 专测。
 function newServer(gate = '1') {
     const reg = new AgentRegistry();
     reg.create({ id: 'h3web',  name: 'H3Web',  type: 'custom', adapterId: 'h3web',
-                 capabilityTags: ['video', 'text2video', 'image'], description: '本地视频引擎' });
+                 capabilityTags: ['video', 'text2video', 'image', 'compose'], description: '本地视频引擎' });
     reg.create({ id: 'codex',  name: 'Codex',  type: 'codex',  adapterId: 'codex',
-                 capabilityTags: ['code', 'review'],              description: '代码 agent' });
+                 capabilityTags: ['code', 'review', 'test'],     description: '代码 agent' });
     return new McpServer({ gate, registry: reg });
 }
 
@@ -273,8 +278,9 @@ describe('McpServer · JSON-RPC 2.0 over stdio', () => {
            expect(calls).toBe(4);                     // executor 真被调用（DAG 4 子任务）
           });
 
-        // 门控开但无注入 executor → 退化「仅路由」：所有子任务 status='routed'；
-        // 有注册 adapter 的类型带 routedAdapterId（快类型如 test 无 adapter → null，是正确退化，非缺陷）
+        // 门控开但无注入 executor → 退化「仅路由」：所有子任务 status='routed'。
+        // fixture 能力已与生产 seed 对齐（code/review/test 均有 owner）→ 4 子任务全 routed；
+        // 「无候选」的三种策略语义不在这里测（见 no-candidate-policy.demo.js / pilot 场景 E）。
         test('门控开 + 无 executor → 退化仅路由（routed，不触下游）', async () => {
           const s = newServer('1');
           s.realGate = '1';                           // 模拟 require.main：PROXY_ADAPTER_REAL=1 时 realGate 开、executor 仍 undefined

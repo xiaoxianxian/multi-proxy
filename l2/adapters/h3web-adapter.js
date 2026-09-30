@@ -75,7 +75,10 @@ class H3webAdapter {
         this.id = opts.id || 'h3web';
         this.name = opts.name || 'h3web (local Minimax H3 video)';
         this.transport = opts.transport || ['http'];
-        this.capabilities = opts.capabilities || ['video', 'text2video', 'lipsync', 'image'];
+        // 'compose'（2026-10-01 补）：与 registry profile（mcp-default-seed.js 的 h3web）保持同源，
+        // 避免「registry 说能接、adapter 自己说不能」的声明分裂。视频合成（compose）归 h3web 承接，
+        // 观察态真跑 §4.2 缺口 A：此前该 capability 无任何 owner → 路由无候选。
+        this.capabilities = opts.capabilities || ['video', 'text2video', 'lipsync', 'image', 'compose'];
         this.supportsTaskQueue = opts.supportsTaskQueue !== undefined ? opts.supportsTaskQueue : false;
         this.portCandidates = opts.portCandidates || [8731, 8732];
         this.injectedPort = opts.port;        // 调用方注入（mock 测试 / 非默认环境）

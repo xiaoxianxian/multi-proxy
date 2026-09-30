@@ -7,9 +7,13 @@
 // 没人报错、无从复盘。本策略把这条隐式路径变成显式、可审计、可配置的决策。
 //
 // 三种策略：
-//   observe          （默认，零行为变更）保持 null，只在 decision 上补诊断字段
+//   observe          保持 null，只在 decision 上补诊断字段（零行为变更；切 reject 前的观察态）
 //   fallback-default 退到底座声明的 defaultAdapterId（须已注册），decision.degraded=true
-//   reject           decision.rejected=true，执行器据此硬失败，不再「无路由也执行」
+//   reject          （2026-10-01 起为默认）decision.rejected=true，执行器据此硬失败，
+//                   不再「无路由也执行」。切换前提：观察态真跑告警归零（见 runbook §4.2/§4.3）。
+//
+// 注：本 demo 不依赖"默认值是多少"——每个策略都显式传 noCandidateStrategy（或 env），
+// 只有一条用例专门断言默认口径。这样底座默认值改了，策略行为用例不会跟着碎。
 //
 // 纪律：零依赖 node 标准库 + l2 内核；不联网、不写盘、0 副作用。
 
@@ -43,10 +47,25 @@ const cleanEnv = () => { delete process.env.PROXY_L2_NOCANDIDATE; };
 const basePolicy = JSON.parse(JSON.stringify(rb.ROUTING_BASE.noCandidatePolicy));
 const restoreBase = () => { rb.ROUTING_BASE.noCandidatePolicy = JSON.parse(JSON.stringify(basePolicy)); };
 
-// 1. observe（默认）—— 行为与改造前逐字一致，只多出诊断字段
-check('observe（默认）：无候选 → chosen=null，行为不变，仅补诊断字段', () => {
+// 0. 默认口径（生产实际）：2026-10-01 起默认 reject —— 与底座单一事实源对齐，
+//    且这条断言就是"默认翻没翻"的唯一看门狗（改底座默认值时这里必须先改）。
+check(`默认策略 = ${basePolicy.strategy}（底座 noCandidatePolicy，生产口径）`, () => {
     cleanEnv();
     const e = new RouteEngine({ registry: registryWithout(), shadowMode: true });
+    const d = e.route(NO_CANDIDATE_TASK);
+    assert.strictEqual(d.noCandidatePolicy, basePolicy.strategy);
+    if (basePolicy.strategy === 'reject') {
+        assert.strictEqual(d.rejected, true, '默认 reject：无候选必须标记 rejected');
+        assert.strictEqual(d.chosen, null);
+    } else {
+        assert.strictEqual(d.rejected, undefined, '默认 observe：不得标记 rejected');
+    }
+});
+
+// 1. observe（显式）—— 行为与改造前逐字一致，只多出诊断字段
+check('observe（显式）：无候选 → chosen=null，行为不变，仅补诊断字段', () => {
+    cleanEnv();
+    const e = new RouteEngine({ registry: registryWithout(), shadowMode: true, noCandidateStrategy: 'observe' });
     const d = e.route(NO_CANDIDATE_TASK);
     assert.strictEqual(d.chosen, null, 'observe 下 chosen 应仍为 null（零行为变更）');
     assert.strictEqual(d.noCandidate, true);
@@ -79,11 +98,14 @@ check('reject：无候选 → decision.rejected=true，chosen 仍为 null', () =
 });
 
 // 4. env 覆盖（PROXY_L2_NOCANDIDATE）+ 非法值 fail-fast
-check('env PROXY_L2_NOCANDIDATE 覆盖构造默认', () => {
+//    用 observe 覆盖（默认已是 reject）→ 能证明 env 真的压过默认值，而不是"恰好相同"。
+check('env PROXY_L2_NOCANDIDATE 覆盖底座默认', () => {
     cleanEnv();
-    process.env.PROXY_L2_NOCANDIDATE = 'reject';
+    process.env.PROXY_L2_NOCANDIDATE = 'observe';
     const e = new RouteEngine({ registry: registryWithout(), shadowMode: true });
-    assert.strictEqual(e.route(NO_CANDIDATE_TASK).noCandidatePolicy, 'reject');
+    const d = e.route(NO_CANDIDATE_TASK);
+    assert.strictEqual(d.noCandidatePolicy, 'observe');
+    assert.strictEqual(d.rejected, undefined, 'env=observe 时不得 rejected（证明确实压过了默认）');
     cleanEnv();
 });
 
@@ -112,7 +134,7 @@ check('有候选：不触发任何兜底字段（正常路径零污染）', () =
 });
 
 // 6. 底座单一事实源：改这里，所有 engine 生效；rollback 可回
-check('底座改 strategy → 生效；rollback → 回 observe（单一事实源）', () => {
+check(`底座改 strategy → 生效；rollback → 回 ${basePolicy.strategy}（单一事实源）`, () => {
     cleanEnv();
     const v0 = rb.update({ noCandidatePolicy: { strategy: 'fallback-default', defaultAdapterId: 'codex' } }, 'demo: policy');
     const e1 = new RouteEngine({ registry: registryWithout(), shadowMode: true });
@@ -121,7 +143,7 @@ check('底座改 strategy → 生效；rollback → 回 observe（单一事实�
     rb.rollback();
     const e2 = new RouteEngine({ registry: registryWithout(), shadowMode: true });
     const d2 = e2.route(NO_CANDIDATE_TASK);
-    assert.strictEqual(d2.noCandidatePolicy, 'observe', 'rollback 后应回 observe');
+    assert.strictEqual(d2.noCandidatePolicy, basePolicy.strategy, `rollback 后应回 ${basePolicy.strategy}`);
     assert.strictEqual(d2.chosen, null);
     restoreBase();
     assert.ok(v0 > 0);
