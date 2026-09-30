@@ -69,7 +69,22 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     value_type TEXT DEFAULT 'string'
-  );
+   );
+
+   -- P0-2 路由反馈闭环：shadow 观测落库（门控 PROXY_ROUTING_FEEDBACK=1，默认关）。
+   -- 记录每次 shadow 计算出的「引擎会选谁」+ 真实转发后的运行时元数据；纯加性，不改现有表，门控关时本表不写。
+  CREATE TABLE IF NOT EXISTS routing_feedback (
+    id INTEGER PRIMARY KEY,
+    task_type TEXT NOT NULL,
+    model TEXT NOT NULL,
+    suggestion TEXT,           -- 引擎建议的模型（null=建议与默认同）
+    default_model TEXT,
+    latency_ms REAL,           -- 真实转发耗时（ms），转发前为 null，转发后 UPDATE 补
+    output_tokens INTEGER,
+    retried INTEGER DEFAULT 0,
+    ts TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
 `);
 
 // ==================== Migrations ====================

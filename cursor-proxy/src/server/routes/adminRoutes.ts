@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { SecretsManager, getEncryptionKey } from '../../utils/crypto.js';
 // Q3 P1-B 成本闭环：/cost 读 cursor-cost.jsonl 实采汇总
 import * as costTrack from '../../monitoring/costTrack.js';
+// P0-2 路由反馈闭环：只读聚合 taskType × model → 延迟/重试率
+import { aggregateFeedback } from '../../routing/routeFeedback.js';
 
 const router = Router();
 const secrets = new SecretsManager();
@@ -224,3 +226,10 @@ router.put('/settings', (req: Request, res: Response) => {
 });
 
 export { router };
+
+// ==================== P0-2 路由反馈闭环（只读）====================
+// GET /admin-api/routing-feedback?days=7 → taskType × model 聚合（延迟/重试率/转发数）
+router.get('/routing-feedback', (req: Request, res: Response) => {
+  const days = Math.max(1, Math.min(90, Number(req.query.days || 7)));
+  res.json({ days, groups: aggregateFeedback(days) });
+});

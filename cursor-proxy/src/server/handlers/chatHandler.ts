@@ -10,6 +10,8 @@ import { SecretsManager } from '../../utils/crypto.js';
 import { routeShadow } from '../../routing/routing-shadow.js';
 // Q3 P1-B 成本闭环：实采 usage→精确 cost（含 cache）→JSONL sidecar。门控 PROXY_CURSOR_COST 默认关=零开销。
 import { accumulate as costAccumulate, resolvePricing } from '../../monitoring/costTrack.js';
+// M6 P0-2 路由反馈闭环：shadow 观测落库（门控 PROXY_ROUTING_FEEDBACK=1，默认关，零写入）。
+import { recordShadowFeedback, recordRuntimeUpdate } from '../../routing/routeFeedback.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -424,13 +426,20 @@ export async function handleChatCompletion(req: Request, res: Response): Promise
      }
    }
    if (!overrideApplied) {
-     // M6 影子路由建议（dry-run，不改变真实路由；仅 PROXY_ROUTING_SHADOW=1 时落日志）
+      // M6 影子路由建议（dry-run，不改变真实路由；仅 PROXY_ROUTING_SHADOW=1 时落日志）
      try {
-       routeShadow(model, messages as any[]);
-     } catch {
-       // 影子模式绝不影响主链路——异常即静默忽略
-     }
-   }
+       const shadow = routeShadow(model, messages as any[]);
+        // P0-2 反馈闭环落库（门控 PROXY_ROUTING_FEEDBACK=1，默认关；门控关时 recordShadowFeedback 直接跳过，零写入）
+       recordShadowFeedback({
+          taskType: shadow.taskType,
+          model,
+          suggestion: shadow.suggestion,
+          defaultModel: model,
+        });
+      } catch {
+        // 影子模式 + 反馈观测绝不影响主链路——异常即静默忽略
+      }
+    }
 
   try {
     await forwardToProvider(req.body, providerConfig, res, stream);
