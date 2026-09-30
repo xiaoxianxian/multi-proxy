@@ -22,11 +22,13 @@ const path = require('path');
 const { validateDag, validateSubtask } = require('./contract.js');
 // 语义审阅层（质量工程 2.2）：拆解产物是否有可路由 adapter（诊断级，默认关，零行为变更）。
 const { reviewDecomposition, assertSemantic } = require('./semantic-review.js');
+// 执行保真层（质量工程 2.3）：下发 executor 前后比对透传字段（默认关，零行为变更）。
+const { snapshotSubtask, diffFidelity, assertFidelity } = require('./quality-fidelity.js');
 
 const DEFAULT_MAX_RETRIES = 1;
 
 class Orchestrator {
-    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null, semanticReview = false, semanticThrow = false } = {}) {
+    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null, semanticReview = false, semanticThrow = false, fidelityCheck = false, fidelityThrow = false } = {}) {
         this.executor = executor;          // 注入：(subtask, ctx, runOpts) => result；shadowMode 下不被调用
         this.routeEngine = routeEngine;    // 注入：非 shadow 时由 executor 用其 route() 选 adapter
         this.decomposer = decomposer;      // 注入：runFromInput 用；否则用内置 templateDecompose
@@ -36,8 +38,11 @@ class Orchestrator {
         this.retriever = retriever;        // I1 RAG（拉模式）：第 5 可注入项；null=不检索、不挂 ctx.knowledge（零回归）
         this.semanticReview = semanticReview; // 质量工程 2.2：拆解产物语义审阅（默认关）
         this.semanticThrow = semanticThrow;   // 默认关：打开则 error 级语义问题在派发前硬拒
+        this.fidelityCheck = fidelityCheck;   // 质量工程 2.3：下发 executor 前后比对透传字段（默认关）
+        this.fidelityThrow = fidelityThrow;   // 默认关：打开则透传字段被改样即硬拒
         this.history = [];                 // 协作历史（任务级）
         this._seq = 0;
+        this._fidelityIssues = [];         // 2.3 诊断记录（fidelityCheck 开启时累积）
      }
 
     // 便捷：从原始输入拆解 + 执行
@@ -191,8 +196,18 @@ class Orchestrator {
 
     async _invoke(st, ctx) {
         if (typeof this.executor !== 'function') throw new Error('orchestrator: no executor injected (non-shadow)');
+        // 质量工程 2.3：下发前快照透传字段，executor 返回后比对，防交付变样。
+        const snap = this.fidelityCheck ? snapshotSubtask(st) : null;
         // 非 shadow：经 executor 执行（executor 内部可用 this.routeEngine 选 adapter，但 adapter 调用是 executor 自己的事）
-        return this.executor(st, ctx);
+        const result = await this.executor(st, ctx);
+        if (this.fidelityCheck) {
+            const { ok, mutations } = diffFidelity(snap, st);
+            if (!ok) {
+                this._fidelityIssues.push({ id: st.id, mutations });
+                if (this.fidelityThrow) assertFidelity(snap, st); // error 级硬拒
+            }
+        }
+        return result;
     }
 
     _aggregate(subtasks, results, meta) {
