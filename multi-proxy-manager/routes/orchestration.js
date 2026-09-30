@@ -63,16 +63,37 @@ function applyQuality(orch, on, shouldThrow) {
   return on;
 }
 
+// executor 接线（2026-10-01，runbook §4.4）：PROXY_EXECUTOR_BIND=1（默认 0）才把真实 adapter 绑上来。
+// 与 MCP 入口（routes/mcp.js）同一开关、同一绑定表，两入口不分裂。
+// ⚠️ 开了 = 真触下游（真 HTTP 到 codex-proxy / h3web / claude），会真花钱、真外发数据。
+let _executorBind = null;
+function getExecutorBind() {
+  if (_executorBind === null) {
+    const { isExecutorBindOpen, createBoundExecutor } = require('../../l2/executor-bind.js');
+    _executorBind = isExecutorBindOpen()
+      ? createBoundExecutor({ logger: { log: () => {}, warn: () => {} } })
+      : false;   // false = 门控未开（区别于 undefined，避免每次重复 require 判定）
+  }
+  return _executorBind || null;
+}
+
 // 长寿命单例：协作历史内存态累积（重启即失；持久化留 P3 dir 落盘）
 let _orchestrator = null;
 function getOrchestrator() {
   if (!_orchestrator) {
-    _orchestrator = new Orchestrator({
+    const opts = {
       // 默认 shadow：不注入 executor/routeEngine，shadow 下不被调用（零副作用）
       shadowMode: true,
       dir: null,
       decomposer: async (input, opts = {}) => decompose(input, { ...opts, input }),
-    });
+    };
+    const bind = getExecutorBind();
+    if (bind) {
+      // Orchestrator 的 executor 是 (subtask, ctx) 形态（McpServer 才有路由包装），
+      // 故此处用 forOrchestrator(routeEngine) 补上「路由 → 选中 adapter」这一步。
+      opts.executor = bind.forOrchestrator(getRouteEngine());
+    }
+    _orchestrator = new Orchestrator(opts);
   }
   return _orchestrator;
 }
@@ -188,3 +209,5 @@ module.exports = router;
 
 // 测试辅助（不暴露到路由，仅供单测重置单例验证长寿命语义）
 module.exports._resetForTest = () => { _orchestrator = null; };
+// 测试/运维辅助：查当前 executor 绑定状态（null = 未接线）
+module.exports._getExecutorBind = () => getExecutorBind();

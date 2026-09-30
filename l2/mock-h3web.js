@@ -16,6 +16,8 @@ const http = require('http');
 
 module.exports = function startMockH3web(port) {
     const jobs = {};
+    let genCalls = 0;    // canary 计数用：下游到底被真打了几枪（新增，向后兼容）
+    let statusCalls = 0;
 
     const server = http.createServer((req, res) => {
         const u = new URL(req.url, 'http://localhost');
@@ -25,6 +27,7 @@ module.exports = function startMockH3web(port) {
             let body = '';
             req.on('data', (c) => { body += c; });
             req.on('end', () => {
+                genCalls += 1;
                 const job_id = 'job_' + Math.random().toString(36).slice(2, 8);
                 jobs[job_id] = { attempts: 0, prompt: 'unknown' };
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -34,6 +37,7 @@ module.exports = function startMockH3web(port) {
         }
 
         if (idMatch && req.method === 'GET') {
+            statusCalls += 1;
             const id = idMatch[1];
             const j = jobs[id];
             if (!j) {
@@ -62,6 +66,9 @@ module.exports = function startMockH3web(port) {
     return {
         server,
         getPort: () => server.address().port,
+        getGenCalls: () => genCalls,
+        getStatusCalls: () => statusCalls,
+        getHttpCalls: () => genCalls + statusCalls,
         close: () => new Promise((res) => server.close(res)),
     };
 };

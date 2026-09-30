@@ -352,7 +352,16 @@ class McpServer {
          const value = await self.executor(chosen ? chosen.adapterId : null, subtask, ctx);
          return Object.assign(base, { status: 'executed', value });
          } catch (e) {
-         return Object.assign(base, { status: 'failed', error: e && e.message || String(e) });
+         // 失败必须**传播**，不能吞：把 executor 抛错包成 status:'failed' 返回，在 orchestrator
+         // 语义里等于"执行完成带回值"（子任务 done、下游照跑）→ 静默降级，与「绝不静默降级」
+         // 纪律直接冲突（2026-10-01 executor 接线后实测：UnboundAdapterError 被吞成 done，
+         // 表面上全绿、实际下游一次没调）。故 rethrow，让 orchestrator 走 failed + 下游 skipped。
+         // 影响面：仅 executor 被注入时才有此路径（生产此前恒 undefined → 走 'routed' 分支），
+         // 即新能力内部语义，既有零 executor 行为逐字不变。
+         const err = new Error(`executor failed (${chosen ? chosen.adapterId : 'no-adapter'}): ${e && e.message || e}`);
+         err.cause = e;
+         err.routedAdapterId = chosen ? chosen.adapterId : null;
+         throw err;
          }
        }
       return Object.assign(base, { status: 'routed' });
@@ -694,7 +703,17 @@ if (require.main === module) {
    // adapter（无注入下游 executor 时退化为「仅路由记录选中 adapter」，绝不触下游/不写 agent 文件）。
    // 缺省关 → orchestrate 保持 shadow。
   if (String(process.env.PROXY_ADAPTER_REAL || '0') === '1') {
-    server.executor = undefined;        // 真路由但无下游 executor → _realExecutor 走「仅路由」退化分支
+    // executor 接线（2026-10-01）：PROXY_EXECUTOR_BIND=1（默认 0）才把真实 adapter 绑上来。
+    // 不开 → executor 仍 undefined → _realExecutor 走「仅路由」退化分支（与改造前逐字一致）。
+    // ⚠️ 开了就会真触下游（真 HTTP 到本地 codex-proxy/h3web/claude），会真花钱、真外发数据。
+    const { isExecutorBindOpen, createBoundExecutor } = require('./executor-bind.js');
+    if (isExecutorBindOpen()) {
+      const bound = createBoundExecutor({ logger: { log: () => {}, warn: () => {} } });
+      server.executor = bound.executor;
+      server._executorBind = bound;      // 运维可见性：describe() 可查"到底绑了谁"
+    } else {
+      server.executor = undefined;       // 真路由但无下游 executor → 「仅路由」退化分支
+    }
     server.realGate = '1';
    }
   // exit 由 startStdioAsync 的 drain-on-EOF 独占（stdin EOF → 等在飞 async 响应 flush 落地再 exit）。

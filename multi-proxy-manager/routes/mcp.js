@@ -46,12 +46,24 @@ function server() {
     if (gate === '1') {
       bootstrapAdapters({ runtime, logger: { log: () => {}, warn: () => {} } });
     }
+    // executor 接线（2026-10-01，runbook §4.4）：PROXY_EXECUTOR_BIND=1（默认 0）才绑真实 adapter。
+    // 不开 → executor=undefined → 真执行走「仅路由」退化分支（与改造前逐字一致，零行为变更）。
+    // ⚠️ 开了 = 真触下游（真 HTTP 到 codex-proxy / h3web / claude），会真花钱、真外发数据。
+    let executor = undefined;
+    let executorBind = null;
+    const { isExecutorBindOpen, createBoundExecutor } = require('../../l2/executor-bind.js');
+    if (isExecutorBindOpen()) {
+      executorBind = createBoundExecutor({ logger: { log: () => {}, warn: () => {} } });
+      executor = executorBind.executor;
+    }
     _server = new McpServer({
       registry: reg,
       pluginRuntime: runtime,
       gate,
       promptCache,
+      executor,
       });
+    _server._executorBind = executorBind;   // 运维可见性（GET /api/mcp 的 executorBind 字段）
   }
   return _server;
 }
@@ -72,12 +84,17 @@ router.use(guard);
 // GET /api/mcp — 状态 + 工具列表
 router.get('/', (req, res) => {
   const s = server();
+  // executor 接线可见性：运维一眼看清「到底接没接上真下游」，不用猜 env。
+  const bind = s._executorBind;
   res.json({
     status: 'ok',
     gate: 'open',
     protocolVersion: s.protocolVersion,
     serverInfo: s.initialize().serverInfo,
     tools: s.listTools(),
+    executorBind: bind
+      ? { bound: true, adapters: bind.describe() }
+      : { bound: false, hint: 'PROXY_EXECUTOR_BIND=1 才接真下游；未接时真执行为「仅路由」形态' },
   });
 });
 
