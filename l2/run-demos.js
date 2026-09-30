@@ -75,6 +75,7 @@ const DEMO_TAGS = {
     'token-policy.demo.js': ['governance'],
     'knowledge-base.demo.js': ['knowledge', 'routing'],
     'routing-base.demo.js': ['routing', 'template', 'tier', 'adapter'],
+    'pilot-hot-path.demo.js': ['pilot', 'e2e', 'adapter', 'orchestrator'],
     'agent-live-e2e.demo.js': ['e2e', 'adapter', 'orchestrator'],
     'claude-adapter.demo.js': ['adapter', 'adapter:claude'],
     'l1-agent-adapter.demo.js': ['adapter', 'adapter:l1-agent'],

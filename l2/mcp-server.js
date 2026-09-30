@@ -29,6 +29,14 @@ function isLlmDecomposeOpen() {
   const v = String(process.env.PROXY_LLM_DECOMPOSE || '').toLowerCase();
   return v === '1' || v === 'true' || v === 'on';
 }
+// 门控 PROXY_L2_QUALITY ∈ {1,true,on}：开 → orchestrate 在热路径启用质量工程三层检查
+//   （2.1 事实绑定恒开无需门控；2.2 语义审阅 + 2.3 执行保真由此门控启用）。
+//   缺省关 → 与既有行为完全一致（零行为变更，非侵入铁律）。
+//   凭据：见 l2/L2-QUALITY-ENGINEERING.md §五「接热路径验收清单」——翻 realGate 前应显式开启本门控。
+function isQualityGateOpen() {
+  const v = String(process.env.PROXY_L2_QUALITY || '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'on';
+}
 // LLM 拆解连接配置（全部来自 env，缺省走内核默认 127.0.0.1:11434；与 HTTP 路由 buildLlmCfg 同款）
 function buildMcpLlmCfg() {
   return {
@@ -161,6 +169,8 @@ class McpServer {
           shadowMode: { type: 'boolean', description: 'Shadow mode. Default true unless PROXY_ADAPTER_REAL gate is enabled; can be forced per-call.' },
           maxRetries: { type: 'number',  description: 'Retry count per subtask on failure (default 1)' },
           llm:         { type: 'boolean',  description: 'LLM decompose this request first. Effective only when gate PROXY_LLM_DECOMPOSE is on (or per-call true); otherwise falls back to built-in template. LLM failure degrades to template silently.' },
+          quality:     { type: 'boolean',  description: 'Enable L2 quality gates (2.2 semantic review + 2.3 execution fidelity) for this call. Same as env PROXY_L2_QUALITY; adds a sidecar "quality" field with any issues found.' },
+          qualityThrow:{ type: 'boolean',  description: 'Only effective with quality=true: error-level semantic/fidelity issues hard-reject the subtask instead of being recorded as diagnostics.' },
           },
         required: [],
         },
@@ -355,9 +365,22 @@ class McpServer {
       const shadowMode = gateOn
          ? (a.shadowMode !== undefined ? (a.shadowMode === true) : false)
          : true;
+      // 质量工程三层检查在热路径的启用缝（默认关，非侵入铁律，凭据 L2-QUALITY-ENGINEERING.md §五）：
+      //   env PROXY_L2_QUALITY=1 或 per-call args.quality=true 才启用。
+      //   启用后 2.2 语义审阅 + 2.3 执行保真才生效（2.1 事实绑定恒开，无门控）。
+      //   默认关 → Orchestrator 构造参数与既有完全一致，零行为变更。
+      const qualityOn = isQualityGateOpen() || (a.quality === true);
+      const qualityThrow = a.qualityThrow === true;
       const orch = new Orchestrator({
       shadowMode,
       executor: shadowMode ? undefined : this._realExecutor(),
+      // 质量工程 2.2 需要候选信息：仅在质量层启用时注入 routeEngine（Orchestrator 由此从
+      // registry/pluginRuntime 取 adapter 候选）。默认关时传 undefined，保持既有 shadow 产物逐字一致。
+      routeEngine: qualityOn ? this.routeEngine : undefined,
+      semanticReview: qualityOn,
+      semanticThrow: qualityOn && qualityThrow,
+      fidelityCheck: qualityOn,
+      fidelityThrow: qualityOn && qualityThrow,
         });
       // P3  二期 · LLM 拆解真接线：门控 PROXY_LLM_DECOMPOSE（env）或 per-call a.llm===true 才介入；
       //   缺省关 → 走内置模板拆解（既有行为、零 LLM 依赖、零回归）。与 PROXY_ADAPTER_REAL 正交
@@ -392,6 +415,13 @@ class McpServer {
         // 观测：实际走的是 LLM 还是降级回模板；LLM 成功 → 'llm'，失败 → 'template(<reason>)'。
         // 直供 dag 路径 LLM 不介入 → decomposeSource 恒 null → 不发射该字段（保持 UC4 直供语义）。
         result.decomposeSource = decomposeSource;
+         }
+      // 质量层观测 sidecar：仅当质量门控开启时才附加字段（默认关 → 结果与既有完全一致，零行为变更）。
+      if (qualityOn) {
+        result.quality = {
+          semanticIssues: orch._semanticIssues || [],           // 2.2 语义审阅：无候选/模态不匹配的诊断
+          fidelityIssues: orch._fidelityIssues || [],            // 2.3 执行保真：下发 prompt 等透传字段被改样
+        };
          }
      // ④ P0→P1：prompt-cache 注入时，为本次 orchestrate 请求记一条 cache observation（前缀哈希命中）。
      // 仅观测（sidecar shadow）：默认不注入 → orchestrate 行为完全不变（零回归）；注入时只加一个

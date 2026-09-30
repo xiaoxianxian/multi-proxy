@@ -1,0 +1,136 @@
+'use strict';
+
+// Pilot —— 热路径小流量验证（翻闸门前的最后一步受控演练）。
+//
+// 验证对象 = **生产真实入口**，不是另搭假链路：
+//   McpServer.callToolAsync('orchestrate') → 二级门控 PROXY_ADAPTER_REAL（realGate='1'）
+//   → Orchestrator(shadowMode=false) → _realExecutor() → routeEngine.route() → executor → 真 adapter → 真 HTTP。
+//
+// 四个场景：
+//   A 真执行 + 质量层开：证明「翻闸门」后链路真的跑通，且 2.2/2.3 在热路径真的生效（不再是旁路）。
+//   B 一键回退：per-call shadowMode:true → executor 0 调用、下游 0 请求（回退开关真可用）。
+//   C 质量层默认关：不传 quality → result 无 quality 字段、行为与既有逐字一致（零行为变更）。
+//   D 保真拦截：executor 改样 prompt → fidelityIssues 记录；qualityThrow=true → 子任务 failed（不是静默通过）。
+//
+// 纪律（同 adapters/agent-live-e2e.demo.js）：
+//   ① 0 联网：下游是内联 mock-l1，不触真实上游、0 扣费。② 0 副作用：不写盘、不写 agent 文件。③ fake token 不打印。
+
+const startMockL1 = require('./mock-l1.js');
+const { L1AgentAdapter } = require('./adapters/l1-agent-adapter.js');
+const { AgentRegistry } = require('./agent-registry.js');
+const { McpServer } = require('./mcp-server.js');
+const { seedDefaultProfiles } = require('./mcp-default-seed.js');
+
+let pass = 0;
+let fail = 0;
+const ok = (msg, cond) => {
+    if (cond) { pass++; console.log(`  ✓ ${msg}`); }
+    else { fail++; console.log(`  ✗ ${msg}`); }
+};
+
+function call(server, id, args) {
+    return server.handleMessageAsync({
+        jsonrpc: '2.0', id, method: 'tools/call',
+        params: { name: 'orchestrate', arguments: args },
+    }).then((res) => JSON.parse(res.result.content[0].text));
+}
+
+(async () => {
+    console.log('--- Pilot: 热路径小流量验证（mock 隔离下游 · 0 扣费 · 0 副作用）---\n');
+
+    // mock 下游（带 chat 端点的 L1 代理形态）+ 真 adapter（真 HTTP round-trip 打它）
+    const mock = startMockL1(0, { noChat: false, model: 'pilot-model' });
+    await new Promise((r) => setTimeout(r, 50));
+    const adapter = new L1AgentAdapter({
+        id: 'pilot-codex', name: 'pilot-codex-proxy', portCandidates: [], port: mock.getPort(),
+        token: mock.token, capabilities: ['code', 'review'], chatPath: '/v1/chat/completions',
+    });
+
+    const reg = new AgentRegistry();
+    seedDefaultProfiles(reg);   // 生产默认注册表（codex/claude/h3web + 三档 tier）
+
+    let httpCalls = 0;
+    let execCalls = 0;
+    // 生产语义的 executor：(adapterId, subtask, ctx) → 经真 adapter 打真 HTTP round-trip
+    const executor = async (adapterId, subtask) => {
+        execCalls++;
+        const t = await adapter.invoke({ model: 'pilot-model', messages: [{ role: 'user', content: subtask.prompt }] });
+        httpCalls++;
+        return { marker: 'pilot-real-http', adapterId, content: t.result && t.result.content };
+    };
+    // 恶意 executor：改样 subtask.prompt（验证 2.3 执行保真在热路径能否检出）
+    const mutatingExecutor = (adapterId, subtask) => {
+        execCalls++;
+        subtask.prompt = `${subtask.prompt} [MUTATED]`;   // 下发后被改样
+        httpCalls++;
+        return { marker: 'pilot-mutated', adapterId };
+    };
+
+    const INPUT = '做一个 jwt 认证';   // → fastapi-jwt 模板：4 子任务线性依赖（code×3 + test×1）
+
+    // ===== A：真执行 + 质量层开 =====
+    console.log('A) 真执行 + 质量层开（realGate=1 + quality:true）');
+    {
+        const server = new McpServer({ gate: '1', registry: reg, realGate: '1', executor });
+        const p = await call(server, 1, { input: INPUT, quality: true });
+        ok('shadow=false（真执行，per-call 未强制回退）', p.shadow === false);
+        ok('模板命中 fastapi-jwt（4 子任务线性依赖）', p.template === 'fastapi-jwt' && p.subtasks.length === 4);
+        ok('4 子任务全部 done', p.subtasks.every((s) => s.status === 'done'));
+        const codeNodes = p.report.subtasks.filter((s) => s.id !== 'unit-test');
+        const testNode = p.report.subtasks.find((s) => s.id === 'unit-test');
+        ok('3 个 code 子任务真经 _realExecutor 执行（executed + 真实 routedAdapterId）',
+            codeNodes.every((s) => s.value && s.value.status === 'executed' && s.value.routedAdapterId));
+        ok('test 子任务无 adapter 候选 → routedAdapterId=null（路由缺口被如实记录，未被粉饰）',
+            testNode.value.routedAdapterId === null);
+        ok('2.2 审阅层的 warn 与此处路由缺口**自洽**（它提前预见了 unit-test 无候选）',
+            p.quality.semanticIssues.some((i) => i.level === 'warn' && i.subtaskId === 'unit-test' && /test/.test(i.message)));
+        ok(`下游真收到 4 次 HTTP 往返（实际 ${httpCalls}）`, httpCalls === 4);
+        ok('真值回传：mock content 出现在 report 里',
+            p.report.subtasks.every((s) => s.value && s.value.value && s.value.value.content === 'mock-ok'));
+        ok('质量观测 sidecar 存在（2.2/2.3 已接入热路径）',
+            p.quality && Array.isArray(p.quality.semanticIssues) && Array.isArray(p.quality.fidelityIssues));
+        ok('2.3 执行保真：良性 executor 无改样记录', p.quality.fidelityIssues.length === 0);
+        console.log(`     ℹ 2.2 语义审阅诊断: ${JSON.stringify(p.quality.semanticIssues)}`);
+    }
+
+    // ===== B：一键回退（同一 server，per-call shadowMode:true）=====
+    console.log('\nB) 一键回退（per-call shadowMode:true）');
+    {
+        const beforeExec = execCalls, beforeHttp = httpCalls;
+        const server = new McpServer({ gate: '1', registry: reg, realGate: '1', executor });
+        const p = await call(server, 2, { input: INPUT, shadowMode: true });
+        ok('回退立即生效：shadow=true', p.shadow === true);
+        ok('executor 0 调用（0 副作用）', execCalls === beforeExec);
+        ok('下游 0 请求', httpCalls === beforeHttp);
+        ok('回退后仍产出完整决策/ گزارش（4 子任务 done，仅不真执行）', p.subtasks.every((s) => s.status === 'done'));
+    }
+
+    // ===== C：质量层默认关 = 零行为变更 =====
+    console.log('\nC) 质量层默认关（不传 quality）');
+    {
+        const server = new McpServer({ gate: '1', registry: reg, realGate: '1', executor });
+        const p = await call(server, 3, { input: INPUT });
+        ok('默认关时 result 无 quality 字段（与既有逐字一致）', p.quality === undefined);
+        ok('默认关时仍正常真执行（行为不受质量 Gag 影响）', p.shadow === false && p.subtasks.every((s) => s.status === 'done'));
+    }
+
+    // ===== D：保真拦截（恶意 executor 改样）=====
+    console.log('\nD) 保真拦截（executor 改样 prompt）');
+    {
+        const serverWarn = new McpServer({ gate: '1', registry: reg, realGate: '1', executor: mutatingExecutor });
+        const pw = await call(serverWarn, 4, { input: INPUT, quality: true, qualityThrow: false });
+        ok('2.3 在热路径检出改样（fidelityIssues ≥1）', pw.quality.fidelityIssues.length >= 1);
+        ok('qualityThrow=false → 记录但不阻断（子任务仍 done）', pw.subtasks.every((s) => s.status === 'done'));
+
+        const serverThrow = new McpServer({ gate: '1', registry: reg, realGate: '1', executor: mutatingExecutor });
+        const pt = await call(serverThrow, 5, { input: INPUT, quality: true, qualityThrow: true });
+        ok('qualityThrow=true → 改样子任务 failed（硬拒生效，非静默通过）',
+            pt.subtasks.some((s) => s.status === 'failed'));
+        ok('失败按依赖传播：根 failed → 下游 skipped（2.1 传播在热路径成立）',
+            pt.subtasks.filter((s) => s.status === 'skipped').length >= 1);
+    }
+
+    await mock.close();
+    console.log(`\n--- PASS ${pass} / FAIL ${fail} ---`);
+    process.exit(fail === 0 ? 0 : 1);
+})().catch((e) => { console.error('FAIL:', e && e.stack || e); process.exit(1); });
