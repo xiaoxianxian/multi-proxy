@@ -13,6 +13,8 @@
 
 import { evaluateRules, estimateCost, rankByCost, RuleContext, Pricing } from './ruleEvaluator.js';
 import { TaskType, classifyTask } from './taskClassifier.js';
+import { filterByCapability } from './capability-profile.js';
+
 
 export interface RoutingRule {
   id: string;
@@ -113,8 +115,14 @@ export class RouteEngine {
 
      // 4a/4c：按 strategy 分支
      if (cfg.strategy === 'cost-optimization') {
-     return this.pickByCost(cfg, ctx?.candidates, ctx);
-     }
+     // P0-1：taskType 由 getNextRoute 下传（pickByCost 的 ctx 含 taskType，
+     //   供 filterByCapability 用；调用方 ctx 类型为 Omit 不含 taskType，故在此注入）。
+     return this.pickByCost(
+      cfg,
+      ctx?.candidates,
+       { ...ctx, taskType: taskTypeOrModel as TaskType },
+      );
+      }
 
      // round-robin：按 config.id 分桶，避免跨配置串号
      if (cfg.strategy === 'round-robin') {
@@ -137,16 +145,24 @@ export class RouteEngine {
     config: RouteConfig,
     candidates: RouteCandidate[] | undefined,
     ctx?: Partial<RouteContext>,
-  ): string {
-     // 估算 token：用 messageLength 粗算（字符数 ÷ 2 ≈ token，保守）
+   ): string {
+      // P0-1 能力过滤（门控 PROXY_CAPABILITY_FILTER='1' 时启用，默认关）：
+    //    在 cost rank 之前，排除能力不足的候选（如 vision 任务不选免费 flash）。
+    //    过滤后 0 候选 → 回退到原列表（不产假结果）；门控关 → 等同现状。
+    let cands = candidates;
+    if (process.env.PROXY_CAPABILITY_FILTER === '1' && cands) {
+      cands = filterByCapability(cands, ctx?.taskType ?? 'general', ctx?.quality);
+      }
+
+      // 估算 token：用 messageLength 粗算（字符数 ÷ 2 ≈ token，保守）
     const estInput = Math.max(1, Math.floor((ctx?.messageLength ?? 512) / 2));
     const estOutput = Math.max(1, Math.round(estInput * 0.3));
 
-    if (candidates && candidates.length > 0) {
-      const ranked = rankByCost(candidates, estInput, estOutput)
-         .filter((c) => c.cost !== Infinity); // 跳过无价（视为最贵，落最后）
+    if (cands && cands.length > 0) {
+      const ranked = rankByCost(cands, estInput, estOutput)
+          .filter((c) => c.cost !== Infinity); // 跳过无价（视为最贵，落最后）
        if (ranked.length > 0) return ranked[0].id;
-     }
+      }
 
      // 退化为按 fallbackChain 顺序 + pricing 比价（无候选集的简化路径）
     if (config.pricing && config.fallbackChain.length > 0) {

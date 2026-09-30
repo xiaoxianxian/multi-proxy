@@ -45,14 +45,22 @@ const CODE_KEYWORDS: readonly string[] = [
 ];
 // 「以…开头」的动作类前缀（取消息开头 16 字做匹配，限定为祈使式动作）
 const CODE_START_PATTERNS: readonly RegExp[] = [
-   /^实现/,
-   /^修复/,
-   /^写函数/,
-   /^写个函数/,
-   /^修复bug/i,
-   /^debug/i,
-   /^fix\s/i,
-   /^write\s+code/i,
+    /^实现/,
+    /^修复/,
+    /^写函数/,
+    /^写个函数/,
+    /^修复bug/i,
+    /^debug/i,
+    /^fix/i,
+    /^write\s+code/i,
+    // P1-4（09-30 路由能力矩阵 P1-4）：英文描述性需求补全，避免 "implement/refactor/…" 漏判为 general
+    /^implement/i,
+    /^refactor/i,
+    /^generate\s/i,
+    /^build\s/i,
+    /^deploy/i,
+    /^create\s+(a\s+)?function/i,
+    /^optimiz/i,
 ];
 
 const WRITING_KEYWORDS: readonly string[] = [
