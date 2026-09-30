@@ -73,6 +73,8 @@ class Orchestrator {
        }
 
        const results = {}; // id -> { id, status, value?, attempts?, skipped?, fallbackFrom? }
+       // 质量工程 §四 影响半径重跑：opts.seedResults 预置既有结果（未受影响节点直接复用，不执行）。
+       if (opts.seedResults) Object.assign(results, opts.seedResults);
        const executionOrder = [];
        const runId = `run_${Date.now()}_${(this._seq += 1)}`;
 
