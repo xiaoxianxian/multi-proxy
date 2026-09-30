@@ -186,9 +186,48 @@ async function forwardProxy(req, res) {
   }
 }
 
+// ── P2 cache_control 真注入（TDD GREEN · 2026-09-30） ──
+// 门控 PROXY_CACHE_CONTROL（默认 0 = 关，零行为回归）
+// 锁 provider = 选项 A：anthropic /v1/messages 原生 cache_control
+// 本地 provider（codex/hermes/cursor）不注入；隐式缓存（dashscope）不注入
+
+const LOCAL_PROVIDERS = new Set(['codex', 'hermes', 'cursor']);
+const CACHE_CONTROL_PROVIDERS = new Set(['anthropic']);
+
+function isCacheControlEligible(proxyName, gate) {
+  if (!gate) return false;
+  if (LOCAL_PROVIDERS.has(proxyName)) return false;
+  return CACHE_CONTROL_PROVIDERS.has(proxyName);
+}
+
+function maybeInjectCacheControl(body, { proxyName, gate } = {}) {
+  if (!isCacheControlEligible(proxyName, gate)) return body;
+  // 幂等：已注入不重复
+  if (body.cache_control) return body;
+
+  const result = { ...body, cache_control: { type: 'ephemeral' } };
+
+  // system prompt 转 block 数组 + 首 block 带 cache_control
+  if (result.system) {
+    if (typeof result.system === 'string') {
+      result.system = [
+        { text: result.system, cache_control: { type: 'ephemeral' } },
+      ];
+    } else if (Array.isArray(result.system) && result.system.length > 0 && !result.system[0].cache_control) {
+      result.system = result.system.map((block, i) =>
+        i === 0 ? { ...block, cache_control: { type: 'ephemeral' } } : block
+      );
+    }
+  }
+
+  return result;
+}
+
 module.exports = {
   classifyUpstreamError,
   normalizeModels,
   isAllowedEndpoint,
   forwardProxy,
+  isCacheControlEligible,
+  maybeInjectCacheControl,
 };
