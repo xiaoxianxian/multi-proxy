@@ -45,9 +45,9 @@ describe('L2 P2 orchestration route (/api/orchestration)', () => {
     const dag = {
       input: 'demo',
       template: 'single',
-      subtasks: [{ id: 'a', deps: [] }, { id: 'b', deps: ['a'] }],
+      subtasks: [{ id: 'a', type: 'plan', prompt: 'a', deps: [] }, { id: 'b', type: 'code', prompt: 'b', deps: ['a'] }],
       edges: [['a', 'b']],
-     };
+      };
     const r = await request(app).post('/api/orchestration/run').send({ dag, shadowMode: true });
     expect(r.status).toBe(200);
     expect(r.body.runId).toMatch(/^run_/);
@@ -97,7 +97,7 @@ describe('L2 P2 orchestration route (/api/orchestration)', () => {
   it('单例长寿命：两次 run 的历史累积为 2 条', async () => {
     process.env.PROXY_ORCHESTRATION = '1';
     build();
-    const dag = { input: 'd', subtasks: [{ id: 'a', deps: [] }], edges: [] };
+    const dag = { input: 'd', subtasks: [{ id: 'a', type: 'plan', prompt: 'a', deps: [] }], edges: [] };
     await request(app).post('/api/orchestration/run').send({ dag });
     await request(app).post('/api/orchestration/run').send({ dag });
     const hist = await request(app).get('/api/orchestration');
