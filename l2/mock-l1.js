@@ -20,13 +20,19 @@ const http = require('http');
 const FAKE_TOKEN = 'test-proxy-token';
 
 // opts.model 可注入到 chat 响应；opts.noChat=true 模拟 hermes（chat 端点 404）
+// opts.reasoningOnly=true → 模拟**推理型模型**（如本地 qwen3.8）：正文吐到 message.reasoning，
+//   content 返空串（2026-10-01 Ollama 实测形态）——用于验证调用方的空 content 兜底。
+// opts.content='' → 自定义空 content（不含 reasoning）。
+// opts.noAuth=true → 不校验 x-proxy-auth，模拟**本地 Ollama :11434**（本机开放、无鉴权概念）。
 module.exports = function startMockL1(port, opts = {}) {
     let chatCalls = 0;
+    const chatModels = [];   // 每次 chat 请求携带的 model（用于断言档位选对模型）
     const server = http.createServer((req, res) => {
         const u = new URL(req.url, 'http://localhost');
 
          // 鉴权：/v1/* 需 x-proxy-auth==FAKE_TOKEN（模拟两代理的 requireAuth）
-        if (u.pathname.startsWith('/v1/') || u.pathname === '/health') {
+        // opts.noAuth=true → 跳过校验（模拟本地 Ollama：无鉴权，任何请求都过）
+        if (!opts.noAuth && (u.pathname.startsWith('/v1/') || u.pathname === '/health')) {
             const header = req.headers['x-proxy-auth'];
             if (header !== FAKE_TOKEN) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -60,13 +66,23 @@ module.exports = function startMockL1(port, opts = {}) {
             req.on('data', (c) => { body += c; });
             req.on('end', () => {
                 chatCalls += 1;
+                let parsedBody = {};
+                try { parsedBody = JSON.parse(body || '{}'); } catch { parsedBody = {}; }
+                if (parsedBody.model) chatModels.push(parsedBody.model);
+                const message = { role: 'assistant' };
+                if (opts.reasoningOnly) {
+                    message.content = '';               // 推理型：正文在 reasoning，content 空
+                    message.reasoning = opts.reasoning || '（mock 推理正文：先把问题拆开想一遍）';
+                } else {
+                    message.content = ('content' in opts) ? opts.content : 'mock-ok';
+                }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({
                     id: 'chatcmpl-mock-' + chatCalls,
                     object: 'chat.completion',
                     created: Math.floor(Date.now() / 1000),
-                    model: JSON.parse(body || '{}').model || 'deepseek-v4-pro',
-                    choices: [{ index: 0, message: { role: 'assistant', content: 'mock-ok' }, finish_reason: 'stop' }],
+                    model: parsedBody.model || opts.model || 'deepseek-v4-pro',
+                    choices: [{ index: 0, message, finish_reason: opts.reasoningOnly ? 'length' : 'stop' }],
                     usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 },
                 }));
             });
@@ -83,6 +99,8 @@ module.exports = function startMockL1(port, opts = {}) {
         token: FAKE_TOKEN,
         getPort: () => server.address().port,
         getChatCalls: () => chatCalls,
+        getChatModels: () => chatModels.slice(),     // 每次 chat 请求携带的 model 列表
+        getLastModel: () => chatModels.length ? chatModels[chatModels.length - 1] : null,
         close: () => new Promise((res) => server.close(res)),
      };
 };

@@ -30,6 +30,8 @@
 const { H3webAdapter } = require('./adapters/h3web-adapter.js');
 const { L1AgentAdapter } = require('./adapters/l1-agent-adapter.js');
 const { ClaudeAdapter } = require('./adapters/claude-adapter.js');
+// 共享底座（质量工程 §三）：三档 text-tier 的下游绑定（tier → {ports, model, auth}）唯一事实源
+const { resolveTierBindings } = require('./knowledge-base/routing-base.js');
 
 // env 端口解析：'18790,18791' → [18790, 18791]；空 → 用默认候选
 function envPorts(name, fallback) {
@@ -42,6 +44,15 @@ function envPorts(name, fallback) {
 // 门控：PROXY_EXECUTOR_BIND ∈ {1,true,on} 才接线（默认关）
 function isExecutorBindOpen() {
     const v = String(process.env.PROXY_EXECUTOR_BIND || '').toLowerCase();
+    return v === '1' || v === 'true' || v === 'on';
+}
+
+// 三档 text-tier 门控：PROXY_TIER_BIND ∈ {1,true,on} 才绑（**默认 0**）。
+// 为什么单开一个开关：三档里的 agnes/deepseek **真的会花钱**（经 codex-proxy 打付费外网），
+// 与 codex/claude 一样属"真外发"性质 → 维持「默认关 = 未绑定硬失败」的既有语义，不偷偷开。
+// 想 0 成本演练三档链路：PROXY_TIER_BIND=1 + PROXY_TIER_LOCAL_ONLY=1（三档全指本地 qwen）。
+function isTierBindOpen() {
+    const v = String(process.env.PROXY_TIER_BIND || '').toLowerCase();
     return v === '1' || v === 'true' || v === 'on';
 }
 
@@ -130,6 +141,48 @@ const BINDING_DEFS = [
     },
 ];
 
+// ---- 三档 text-tier（runbook §4.5 待办 6，2026-10-01 拍板「复用 l1-agent」）----
+// 为什么复用而不是各写一个 adapter：三档**协议完全相同**（OpenAI 兼容 chat），
+// 实测差异只有 {port, model} → 写三个类是复制三份同款 HTTP 代码（违反 DRY，且无定制需求）。
+//   agnes(small) / deepseek(medium) → codex-proxy :18790（它按 model 名转发到付费外网）
+//   qwen(large)                    → 本地 Ollama :11434（qwen3.8:27b-mlx，无鉴权、0 成本）
+// 端口/模型/鉴权全部来自共享底座 tierBindings，不在这里硬编码。
+function tierDefs() {
+    if (!isTierBindOpen()) return [];   // 默认关 → 三档仍抛 UnboundAdapterError（零行为变更）
+    const tiers = resolveTierBindings();
+    return Object.entries(tiers).map(([tier, b]) => ({
+        adapterId: b.adapterId,
+        kind: 'chat',
+        desc: `text-tier ${tier}：${b.desc}`,
+        envName: b.envName,
+        build: () => new L1AgentAdapter({
+            id: b.adapterId,
+            portCandidates: b.ports,
+            chatPath: '/v1/chat/completions',
+            // 本地档（Ollama）无鉴权概念，不带 x-proxy-auth；代理档沿用 PROXY_AUTH_TOKEN
+            token: b.auth === 'none' ? undefined : (process.env.PROXY_AUTH_TOKEN || undefined),
+            capabilities: ['text', 'plan'],
+        }),
+        invoke: async (adapter, subtask) => {
+            const t = chatTask(subtask);
+            // 档位默认 model 兜底：subtask.params.model 优先，否则用底座声明的档位模型
+            const r = await adapter.invoke({ ...t, model: t.model || b.model });
+            return {
+                kind: 'chat', tier, agent: b.adapterId,
+                content: r.result && r.result.content,
+                contentSource: r.result && r.result.contentSource,  // 'content' | 'reasoning' | null
+                model: r.result && r.result.model,
+                raw: r,
+            };
+        },
+    }));
+}
+
+// 默认绑定表 = 真实 adapter + （门控开时）三档 tier
+function defaultDefs() {
+    return [...BINDING_DEFS, ...tierDefs()];
+}
+
 // 造一个绑定好的 executor。
 // opts.logger：可选（默认静默）；opts.defs：注入自定义绑定表（测试用）。
 // 返回：
@@ -137,7 +190,7 @@ const BINDING_DEFS = [
 //   forOrchestrator(routeEngine)             → REST 入口（Orchestrator 注入）用：(subtask, ctx) 形态
 //   boundIds / describe()                    → 运维可见性：到底绑了谁
 function createBoundExecutor(opts = {}) {
-    const { logger = { log: () => {}, warn: () => {} }, defs = BINDING_DEFS } = opts;
+    const { logger = { log: () => {}, warn: () => {} }, defs = defaultDefs() } = opts;
     const instances = new Map();   // adapterId → adapter 实例（懒构造 + 缓存，跨任务复用）
 
     const bindingOf = (adapterId) => defs.find((d) => d.adapterId === adapterId);
@@ -185,6 +238,9 @@ function createBoundExecutor(opts = {}) {
 module.exports = {
     createBoundExecutor,
     isExecutorBindOpen,
+    isTierBindOpen,
+    tierDefs,
+    defaultDefs,
     UnboundAdapterError,
     BINDING_DEFS,
 };

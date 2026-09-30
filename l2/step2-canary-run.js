@@ -35,6 +35,8 @@
 //   node l2/step2-canary-run.js --corpus                         # 打预设 4 条语料（code/test + video + video-workflow）
 //   node l2/step2-canary-run.js --no-write                       # 只打印不落盘
 //   node l2/step2-canary-run.js --no-mock-downstream             # 只跑 B/C（不起 mock，验证纯路由形态）
+//   node l2/step2-canary-run.js --corpus --with-bind --tier-bind  # D 场景含三档 text-tier（agnes/deepseek/qwen）
+//   node l2/step2-canary-run.js --corpus --with-bind --tier-bind --tier-local-only  # 三档全指本地档（0 成本）
 
 const fs = require('fs');
 const path = require('path');
@@ -122,6 +124,10 @@ async function callOrchestrate(server, id, args) {
     const useMock = !argv.includes('--no-mock-downstream');
     const useCorpus = argv.includes('--corpus');
     const withBind = argv.includes('--with-bind');
+    // 三档 text-tier（待办 6）：--tier-bind 把三档也接进 D 场景的绑定表（端口仍指 mock，0 扣费）；
+    // 再加 --tier-local-only 则三档全指本地档端口（PROXY_TIER_LOCAL_ONLY，0 成本演练）。
+    const withTierBind = argv.includes('--tier-bind');
+    const tierLocalOnly = argv.includes('--tier-local-only');
     const idx = argv.indexOf('--input');
     const singleInput = (idx >= 0 && argv[idx + 1]) ? argv[idx + 1] : DEFAULT_INPUT;
     const tasks = useCorpus ? CORPUS : [{ id: 'SINGLE', input: singleInput }];
@@ -136,13 +142,15 @@ async function callOrchestrate(server, id, args) {
 
     let execCalls = 0;
     let mockL1 = null;
+    let mockLocal = null;   // 充当本地 Ollama :11434（无鉴权）——三档里 qwen 档的下游替身
     let mockH3 = null;
     let l1Adapter = null;
     let h3Adapter = null;
     let executor = undefined;
     // 下游请求计数直接读 mock 自己的计数器（比手写 ++ 更不容易漏）
     const downstreamCalls = () =>
-        (mockL1 ? mockL1.getChatCalls() : 0) + (mockH3 ? mockH3.getHttpCalls() : 0);
+        (mockL1 ? mockL1.getChatCalls() : 0) + (mockLocal ? mockLocal.getChatCalls() : 0)
+        + (mockH3 ? mockH3.getHttpCalls() : 0);
 
     if (useMock) {
         const startMockL1 = require('./mock-l1.js');
@@ -151,6 +159,8 @@ async function callOrchestrate(server, id, args) {
         const { H3webAdapter } = require('./adapters/h3web-adapter.js');
 
         mockL1 = startMockL1(0, { noChat: false, model: 'canary-model' });
+        // 本地档替身：noAuth（真实 Ollama 本机开放、无 x-proxy-auth 概念）
+        mockLocal = startMockL1(0, { noAuth: true, model: 'qwen3.8:27b-mlx' });
         mockH3 = startMockH3web(0);
         await new Promise((r) => setTimeout(r, 50));
 
@@ -224,6 +234,17 @@ async function callOrchestrate(server, id, args) {
             process.env.PROXY_H3WEB_PORTS = String(await waitPort(() => mockH3.getPort()));
             process.env.PROXY_AUTH_TOKEN = mockL1.token;
             process.env.PROXY_H3WEB_POLL_MS = '20';
+            // 三档 text-tier（待办 6）：端口一并指到 mock —— agnes/deepseek → 代理档 mock，
+            // qwen → 本地档 mock（--tier-local-only 时三档全指本地档，付费侧 0 调用）。
+            if (withTierBind) {
+                process.env.PROXY_TIER_BIND = '1';
+                if (tierLocalOnly) process.env.PROXY_TIER_LOCAL_ONLY = '1';
+                const localPort = String(await waitPort(() => mockLocal.getPort()));
+                const proxyPort = String(await waitPort(() => mockL1.getPort()));
+                process.env.PROXY_AGNES_PORTS = tierLocalOnly ? localPort : proxyPort;
+                process.env.PROXY_DEEPSEEK_PORTS = tierLocalOnly ? localPort : proxyPort;
+                process.env.PROXY_QWEN_PORTS = localPort;
+            }
             const { createBoundExecutor } = require('./executor-bind.js');
             const bound = createBoundExecutor({ logger: { log: () => {}, warn: () => {} } });
             // 包一层只为计数（bound.executor 是生产代码，不掺计数逻辑）
@@ -233,13 +254,19 @@ async function callOrchestrate(server, id, args) {
             const p = await callOrchestrate(server, 4, { input: c.input, quality: true, qualityThrow: true });
             record('D 生产接线形态（executor-bind 真绑定 · 下游=mock）', p,
                 `绑定=${bound.boundIds().join('/')} · executor 调用 ${execCalls - before.e} 次 / ` +
-                `下游 HTTP ${downstreamCalls() - before.h} 次 · ` +
+                `下游 HTTP ${downstreamCalls() - before.h} 次` +
+                (withTierBind && mockLocal ? `（其中本地档 ${mockLocal.getChatCalls()} 次）` : '') + ' · ' +
                 `routedAdapterId=${(p.report.subtasks || []).map((s) => `${s.id}→${s.value && s.value.routedAdapterId}`).join(' ')}`);
             delete process.env.PROXY_EXECUTOR_BIND;
             delete process.env.PROXY_CODEX_PORTS;
             delete process.env.PROXY_H3WEB_PORTS;
             delete process.env.PROXY_AUTH_TOKEN;
             delete process.env.PROXY_H3WEB_POLL_MS;
+            delete process.env.PROXY_TIER_BIND;
+            delete process.env.PROXY_TIER_LOCAL_ONLY;
+            delete process.env.PROXY_AGNES_PORTS;
+            delete process.env.PROXY_DEEPSEEK_PORTS;
+            delete process.env.PROXY_QWEN_PORTS;
         }
 
         // ===== C：回退验证（per-call shadowMode:true）=====
@@ -257,6 +284,7 @@ async function callOrchestrate(server, id, args) {
     }
 
     if (mockL1) await mockL1.close();
+    if (mockLocal) await mockLocal.close();
     if (mockH3) await mockH3.close();
 
     const flat = allResults.flatMap((g) => g.rows);
@@ -285,6 +313,11 @@ async function callOrchestrate(server, id, args) {
         L.push(`> 语料：${allResults.length} 条（${allResults.map((g) => g.corpus.id).join(' / ')}）；无候选策略：\`${policy}\``);
         L.push(`> 下游：${useMock ? '内联 mock-l1 + mock-h3web（0 扣费 · 0 外发，按 routedAdapterId 分发）' : '未起 mock'}`);
         L.push('> 门控：per-call `quality:true` + `qualityThrow:true`（硬拒档），`realGate=1`；不动任何全局默认值。');
+        if (withBind) {
+            L.push(`> D 场景绑定：\`PROXY_EXECUTOR_BIND=1\`${withTierBind
+                ? ` + \`PROXY_TIER_BIND=1\`${tierLocalOnly ? ' + `PROXY_TIER_LOCAL_ONLY=1`（三档全指本地档）' : '（三档：agnes/deepseek→代理档 mock、qwen→本地档 mock）'}`
+                : '（三档未绑 → video 语料仍撞待办 6 缺口）'}；端口全部指 mock，0 扣费 0 外发。`);
+        }
         L.push('');
         L.push('## 一、结论');
         L.push('');

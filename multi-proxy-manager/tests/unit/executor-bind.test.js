@@ -9,7 +9,8 @@
 
 const path = require('path');
 const L2 = path.join(__dirname, '../../../l2');
-const { createBoundExecutor, isExecutorBindOpen, UnboundAdapterError, BINDING_DEFS } = require(path.join(L2, 'executor-bind.js'));
+const { createBoundExecutor, isExecutorBindOpen, isTierBindOpen, UnboundAdapterError, BINDING_DEFS } = require(path.join(L2, 'executor-bind.js'));
+const rb = require(path.join(L2, 'knowledge-base/routing-base.js'));
 const startMockL1 = require(path.join(L2, 'mock-l1.js'));
 const startMockH3web = require(path.join(L2, 'mock-h3web.js'));
 const { RouteEngine } = require(path.join(L2, 'route-engine.js'));
@@ -17,7 +18,10 @@ const { AgentRegistry } = require(path.join(L2, 'agent-registry.js'));
 const { seedDefaultProfiles } = require(path.join(L2, 'mcp-default-seed.js'));
 
 const BIND_ENV = ['PROXY_EXECUTOR_BIND', 'PROXY_CODEX_PORTS', 'PROXY_H3WEB_PORTS',
-    'PROXY_CLAUDE_PORTS', 'PROXY_AUTH_TOKEN', 'PROXY_H3WEB_POLL_MS', 'PROXY_H3WEB_MAX_TRIES'];
+    'PROXY_CLAUDE_PORTS', 'PROXY_AUTH_TOKEN', 'PROXY_H3WEB_POLL_MS', 'PROXY_H3WEB_MAX_TRIES',
+    // 三档 tier（待办 6）
+    'PROXY_TIER_BIND', 'PROXY_TIER_LOCAL_ONLY',
+    'PROXY_AGNES_PORTS', 'PROXY_DEEPSEEK_PORTS', 'PROXY_QWEN_PORTS'];
 
 function cleanEnv() { BIND_ENV.forEach((k) => delete process.env[k]); }
 
@@ -169,5 +173,113 @@ describe('executor-bind · REST 入口形态 forOrchestrator(routeEngine)', () =
     test('未给 routeEngine → 直接抛错（接线缺件不静默）', async () => {
         await expect(bound.forOrchestrator(null)({ id: 'r3', type: 'code', prompt: 'x' }))
             .rejects.toThrow(/routeEngine/);
+    });
+});
+
+// 三档 text-tier（agnes=small / deepseek=medium / qwen=large）—— runbook §4.5 待办 6。
+// 拍板方案：复用 L1AgentAdapter（三档协议都是 OpenAI 兼容 chat，差异只有 {port, model}），
+// 不写三个 adapter 类。端口/模型/鉴权全部来自共享底座 tierBindings。
+// 隔离纪律：mockProxy 充当 codex-proxy :18790，mockLocal 充当本地 Ollama :11434。
+//   0 联网 / 0 扣费 / 0 外发 —— 付费档的端口也被 env 指到 mock，绝不真打外网。
+describe('executor-bind · 三档 text-tier（待办 6）', () => {
+    let mockProxy = null;   // 代理档出口（agnes/deepseek 经它打付费外网；此处是 mock）
+    let mockLocal = null;   // 本地档（qwen → Ollama，无鉴权）
+    let proxyPort = null;
+    let localPort = null;
+
+    beforeAll(async () => {
+        mockProxy = startMockL1(0, { model: 'agnes-2.0-flash' });
+        mockLocal = startMockL1(0, { model: 'qwen3.8:27b-mlx', noAuth: true });
+        proxyPort = await waitPort(() => mockProxy.getPort());
+        localPort = await waitPort(() => mockLocal.getPort());
+    });
+
+    afterAll(async () => {
+        if (mockProxy) await mockProxy.close();
+        if (mockLocal) await mockLocal.close();
+        cleanEnv();
+    });
+
+    // defs 在 createBoundExecutor() 时求值（env 那时读），故每个用例现建
+    const buildBound = () => createBoundExecutor({ logger: { log: () => {}, warn: () => {} } });
+
+    test('默认（PROXY_TIER_BIND 未设）→ 三档不绑，维持「未绑定硬失败」零行为变更', async () => {
+        cleanEnv();
+        expect(isTierBindOpen()).toBe(false);
+        const b = buildBound();
+        await expect(b.executor('agnes', { id: 't0', type: 'plan', prompt: 'x' }))
+            .rejects.toThrow(UnboundAdapterError);
+    });
+
+    test('PROXY_TIER_BIND=1 → agnes/deepseek 走代理端口、qwen 走本地端口，各带档位 model', async () => {
+        cleanEnv();
+        process.env.PROXY_TIER_BIND = '1';
+        process.env.PROXY_AUTH_TOKEN = mockProxy.token;
+        process.env.PROXY_AGNES_PORTS = String(proxyPort);
+        process.env.PROXY_DEEPSEEK_PORTS = String(proxyPort);
+        process.env.PROXY_QWEN_PORTS = String(localPort);
+        const b = buildBound();
+        // 三档都进了绑定表（运维可见性）
+        expect(b.describe().map((x) => x.adapterId)).toEqual(expect.arrayContaining(['agnes', 'deepseek', 'qwen']));
+
+        const va = await b.executor('agnes', { id: 't1', type: 'plan', prompt: '理解诉求' });
+        const vd = await b.executor('deepseek', { id: 't2', type: 'plan', prompt: '分镜脚本' });
+        const vq = await b.executor('qwen', { id: 't3', type: 'plan', prompt: '复杂推理' });
+
+        expect([va.tier, vd.tier, vq.tier]).toEqual(['small', 'medium', 'large']);
+        expect([va.agent, vd.agent, vq.agent]).toEqual(['agnes', 'deepseek', 'qwen']);
+        // 模型真按档位下发（不是同一个 model 打天下）
+        expect(mockProxy.getChatModels()).toEqual(['agnes-2.0-flash', 'deepseek-v4-pro']);
+        expect(mockLocal.getChatModels()).toEqual(['qwen3.8:27b-mlx']);
+        expect(va.content).toBe('mock-ok');
+    });
+
+    test('PROXY_TIER_LOCAL_ONLY=1 → 三档全指本地端口（0 成本演练，付费侧 0 调用）', async () => {
+        cleanEnv();
+        process.env.PROXY_TIER_BIND = '1';
+        process.env.PROXY_TIER_LOCAL_ONLY = '1';
+        process.env.PROXY_QWEN_PORTS = String(localPort);
+        const proxyBefore = mockProxy.getChatCalls();
+        const b = buildBound();
+        await b.executor('agnes', { id: 'l1', type: 'plan', prompt: 'x' });
+        await b.executor('deepseek', { id: 'l2', type: 'plan', prompt: 'x' });
+        expect(mockProxy.getChatCalls()).toBe(proxyBefore);    // 付费上游一次没打
+        expect(mockLocal.getChatModels().slice(-2)).toEqual(['qwen3.8:27b-mlx', 'qwen3.8:27b-mlx']);
+    });
+
+    test('推理型模型 content 空 → 兜底取 reasoning（本地 qwen 实测坑，防静默空结果）', async () => {
+        const mockReasoning = startMockL1(0, { reasoningOnly: true, noAuth: true });
+        const rPort = await waitPort(() => mockReasoning.getPort());
+        try {
+            cleanEnv();
+            process.env.PROXY_TIER_BIND = '1';
+            process.env.PROXY_QWEN_PORTS = String(rPort);
+            const b = buildBound();
+            const v = await b.executor('qwen', { id: 't4', type: 'plan', prompt: '想清楚再答' });
+            expect(v.content).toContain('mock 推理正文');
+            expect(v.contentSource).toBe('reasoning');
+        } finally {
+            await mockReasoning.close();
+            cleanEnv();
+        }
+    });
+
+    test('底座单一事实源：update tierBindings → 档位 model 即刻生效；rollback 还原', async () => {
+        cleanEnv();
+        process.env.PROXY_TIER_BIND = '1';
+        process.env.PROXY_AUTH_TOKEN = mockProxy.token;
+        process.env.PROXY_AGNES_PORTS = String(proxyPort);
+        const orig = rb.ROUTING_BASE.tierBindings;
+        try {
+            rb.update({
+                tierBindings: { ...orig, small: { ...orig.small, model: 'patched-model' } },
+            }, 'test: tier model');
+            await buildBound().executor('agnes', { id: 't5', type: 'plan', prompt: 'x' });
+            expect(mockProxy.getLastModel()).toBe('patched-model');
+        } finally {
+            rb.rollback();
+        }
+        await buildBound().executor('agnes', { id: 't6', type: 'plan', prompt: 'x' });
+        expect(mockProxy.getLastModel()).toBe(orig.small.model);   // 回滚后回原档位模型
     });
 });

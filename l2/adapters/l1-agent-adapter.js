@@ -196,15 +196,29 @@ class L1AgentAdapter {
             parsed = { raw: r.body };
         }
         // OpenAI /v1/chat/completions 形态：{ id, choices:[{message:{content}}] }
-        const content = parsed.choices && parsed.choices[0] && parsed.choices[0].message
-            ? parsed.choices[0].message.content
-            : null;
+        const msg = (parsed.choices && parsed.choices[0] && parsed.choices[0].message) || {};
+        // ⚠️ 实测坑（2026-10-01，本地 Ollama qwen3.8:27b-mlx 真跑）：**推理型模型默认把正文吐到
+        //   message.reasoning，`content` 返空串**（max_tokens 小时必现）。只读 content 的调用方会
+        //   拿到空结果还以为调用成功——这是静默失败。此处兜底：content 空则取 reasoning，
+        //   并用 contentSource 标出内容来源，便于观测/排查（非空时行为逐字不变）。
+        let content = typeof msg.content === 'string' && msg.content ? msg.content : null;
+        let contentSource = content ? 'content' : null;
+        if (!content && typeof msg.reasoning === 'string' && msg.reasoning) {
+            content = msg.reasoning;
+            contentSource = 'reasoning';
+        }
         return {
             task_id: taskId,
             type: 'chat',
             state: 'done',
             agent: this.id,
-            result: { content, model: parsed.model || body.model, id: parsed.id || taskId, raw: parsed.raw ? undefined : parsed },
+            result: {
+                content,
+                contentSource,                 // 'content' | 'reasoning' | null（都空时）
+                model: parsed.model || body.model,
+                id: parsed.id || taskId,
+                raw: parsed.raw ? undefined : parsed,
+            },
             error: null,
         };
     }

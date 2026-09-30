@@ -63,6 +63,35 @@ const ROUTING_BASE = {
         'l1-agent': { capabilities: ['code', 'writing'], defaultModel: 'default' },
     },
 
+    // ---- 档位 → 下游绑定（tierBindings，2026-10-01 新增；runbook §4.5 待办 6 的落点）----
+    // 三档 text-tier profile（agnes=small / deepseek=medium / qwen=large，见 mcp-default-seed.js
+    // TIER_PROFILES）此前只有**路由落点**、没有**执行落点** → 真执行抛 UnboundAdapterError。
+    // 三档的下游收口在这里，理由（2026-10-01 curl 真探，非代码推断）：
+    //   ① 三档**协议完全相同**（OpenAI 兼容 chat），差异只有 {port, model} → 不需要三个 adapter 类；
+    //   ② agnes / deepseek 的下游现成：`codex-proxy :18790` 已按 model 名转发到
+    //      apihub.agnes / api.deepseek（实测 chat 端点可用、鉴权开放）；
+    //   ③ qwen 的下游现成：本地 `Ollama :11434`（实测 /v1/chat/completions 无鉴权可用）。
+    // 端口可被 env 覆盖（逗号分隔）：PROXY_AGNES_PORTS / PROXY_DEEPSEEK_PORTS / PROXY_QWEN_PORTS。
+    // ⚠️ agnes/deepseek 经 codex-proxy 打**付费外网**；qwen 走本地，**0 成本**。
+    //   `PROXY_TIER_LOCAL_ONLY=1` → 三档全指本地 qwen 端口/模型（0 成本演练，绝不碰付费上游）。
+    tierBindings: {
+        small: {
+            adapterId: 'agnes', defaultPorts: [18790], model: 'agnes-2.0-flash',
+            envName: 'PROXY_AGNES_PORTS', auth: 'proxy-auth',
+            desc: 'Agnes（small · 免费档；经 codex-proxy 转发 apihub.agnes-ai.com）',
+        },
+        medium: {
+            adapterId: 'deepseek', defaultPorts: [18790], model: 'deepseek-v4-pro',
+            envName: 'PROXY_DEEPSEEK_PORTS', auth: 'proxy-auth',
+            desc: 'DeepSeek（medium · 中档；经 codex-proxy 转发 api.deepseek.com）',
+        },
+        large: {
+            adapterId: 'qwen', defaultPorts: [11434], model: 'qwen3.8:27b-mlx',
+            envName: 'PROXY_QWEN_PORTS', auth: 'none',
+            desc: 'Qwen3.8-27B（large · 本地 Ollama，无鉴权，0 成本）',
+        },
+    },
+
     // ---- 无候选兜底策略（质量工程 §四 待办②）----
     // route() 选不出 adapter 时怎么办。此前是**隐式行为**：chosen=null 却照样执行，
     // 最终表现为 executor 拿到 adapterId=null 的静默降级（无人报错、无从复盘）。
@@ -97,6 +126,7 @@ function _snapshotCurrent() {
         complexityTierMap: ROUTING_BASE.complexityTierMap,
         adapterDefaults: ROUTING_BASE.adapterDefaults,
         noCandidatePolicy: ROUTING_BASE.noCandidatePolicy,
+        tierBindings: ROUTING_BASE.tierBindings,
     };
 }
 
@@ -122,11 +152,48 @@ function adapterDefaults(adapterId) {
     return (ROUTING_BASE.adapterDefaults && ROUTING_BASE.adapterDefaults[adapterId]) || null;
 }
 
+// env 端口解析：'18790,18791' → [18790, 18791]；空 → 用默认候选（与 executor-bind 同款语义）
+function envPorts(name, fallback) {
+    const raw = String((process.env && process.env[name]) || '').trim();
+    if (!raw) return fallback || [];
+    const ports = raw.split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0);
+    return ports.length ? ports : (fallback || []);
+}
+
+// 三档下游绑定解析（消费方：executor-bind 的三档 binding）。
+// 返回 { [tier]: { adapterId, model, ports, envName, auth, desc, localOnly } }。
+// PROXY_TIER_LOCAL_ONLY=1 → 三档的 ports/model/auth 全部改用 large（本地 qwen）档：
+//   语义是「0 成本演练」——验证三档链路都通，而不是验证档位分流（分流验证必须走真端口）。
+function resolveTierBindings() {
+    const raw = ROUTING_BASE.tierBindings || {};
+    const v = String((process.env && process.env.PROXY_TIER_LOCAL_ONLY) || '').toLowerCase();
+    const localOnly = v === '1' || v === 'true' || v === 'on';
+    const local = raw.large || null;
+    const out = {};
+    for (const [tier, b] of Object.entries(raw)) {
+        const src = localOnly && local ? local : b;
+        out[tier] = {
+            adapterId: b.adapterId,                    // adapterId 恒按原档位（绑定表三条仍在）
+            model: src.model,
+            ports: envPorts(src.envName, src.defaultPorts || []),
+            envName: src.envName,
+            auth: src.auth,
+            desc: b.desc,
+            localOnly,
+        };
+    }
+    return out;
+}
+
+function resolveTierBinding(tier) {
+    return resolveTierBindings()[tier] || null;
+}
+
 // 修订：浅合并 patch → version+1，旧版自动进快照历史。返回新 version。
 function update(patch, note) {
     if (!patch || typeof patch !== 'object') throw new Error('routing-base.update: patch object required');
     _history.push(_snapshotCurrent());
-    for (const k of ['templates', 'fallback', 'complexityTierMap', 'adapterDefaults', 'noCandidatePolicy']) {
+    for (const k of ['templates', 'fallback', 'complexityTierMap', 'adapterDefaults', 'noCandidatePolicy', 'tierBindings']) {
         if (patch[k] !== undefined) ROUTING_BASE[k] = patch[k];
     }
     ROUTING_BASE.version += 1;
@@ -144,6 +211,7 @@ function rollback() {
     ROUTING_BASE.complexityTierMap = prev.complexityTierMap;
     ROUTING_BASE.adapterDefaults = prev.adapterDefaults;
     ROUTING_BASE.noCandidatePolicy = prev.noCandidatePolicy;
+    ROUTING_BASE.tierBindings = prev.tierBindings;
     ROUTING_BASE.version = prev.version;
     ROUTING_BASE.updatedAt = prev.updatedAt;
     ROUTING_BASE.note = prev.note;
@@ -155,4 +223,8 @@ function history() {
     return _history.map((h) => ({ version: h.version, updatedAt: h.updatedAt, note: h.note }));
 }
 
-module.exports = { ROUTING_BASE, mapTier, adapterDefaults, resolveNoCandidatePolicy, update, rollback, history };
+module.exports = {
+    ROUTING_BASE, mapTier, adapterDefaults, resolveNoCandidatePolicy,
+    resolveTierBindings, resolveTierBinding, envPorts,
+    update, rollback, history,
+};
