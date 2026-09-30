@@ -27,6 +27,8 @@
 
 const http = require('http');
 const crypto = require('crypto');
+// 共享底座（质量工程 §三）：默认能力/默认模型唯一事实源（原本文件硬编码已迁入）。
+const { adapterDefaults } = require('../knowledge-base/routing-base.js');
 
 // ---- 动态端口探测（绝不写死，同 h3web/aigc/l1-agent 范式）----
 function netPortFree(port) {
@@ -83,8 +85,7 @@ function httpPostJson(host, port, pathStr, obj, headers = {}, timeoutMs = 120000
      });
 }
 
-// 默认能力：Claude 主 coding/通用 chat（非 vision/audio）
-const DEFAULT_CAPABILITIES = ['code', 'writing'];
+// 默认能力：已收口到共享底座 routing-base（原 'code', 'writing' 硬编码迁入，构造时实时读取）
 
 // Anthropic 固定版本头
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -106,7 +107,7 @@ class ClaudeAdapter {
         this.id = opts.id || 'claude';
         this.name = opts.name || 'Claude (Anthropic Messages API / claude-code / claude-desktop)';
         this.transport = opts.transport || ['http'];
-        this.capabilities = opts.capabilities || [...DEFAULT_CAPABILITIES];
+        this.capabilities = opts.capabilities || [...adapterDefaults('claude').capabilities];
         // 非任务队列：chat 型同步 invoke（无 task_id 持久化/轮询，同 l1-agent chat 型）
         this.supportsTaskQueue = opts.supportsTaskQueue !== undefined ? opts.supportsTaskQueue : false;
         this.portCandidates = opts.portCandidates || []; // 调用方注入（claude-code 本地 chat shim 端口待实测）
@@ -210,7 +211,7 @@ class ClaudeAdapter {
 
         // 有 chat 端点：POST /v1/messages，注入 x-api-key + anthropic-version
         const body = {
-            model: task.model || 'claude-3-5-sonnet-latest',
+            model: task.model || adapterDefaults('claude').defaultModel,
             messages: task.messages || [],
             stream: task.stream === true,
         };

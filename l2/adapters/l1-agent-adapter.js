@@ -24,6 +24,8 @@
 
 const http = require('http');
 const crypto = require('crypto');
+// 共享底座（质量工程 §三）：默认能力/默认模型唯一事实源（原本文件硬编码已迁入）。
+const { adapterDefaults } = require('../knowledge-base/routing-base.js');
 
 // ---- 动态端口探测（绝不写死，同 h3web/aigc 范式）----
 function netPortFree(port) {
@@ -74,15 +76,15 @@ function httpPostJson(host, port, pathStr, obj, headers = {}, timeoutMs = 120000
     });
 }
 
-// L1 chat 型 agent 的默认能力（来自 registry 注册，非 agent 自报）
-const DEFAULT_CAPABILITIES = ['code', 'writing'];
+// L1 chat 型 agent 的默认能力：已收口到共享底座 routing-base（原 'code', 'writing' 硬编码迁入，
+// 来自 registry 注册而非 agent 自报；构造时实时读取）
 
 class L1AgentAdapter {
     constructor(opts = {}) {
         this.id = opts.id || 'l1-agent';
         this.name = opts.name || 'L1 chat agent';
         this.transport = opts.transport || ['http'];
-        this.capabilities = opts.capabilities || [...DEFAULT_CAPABILITIES];
+        this.capabilities = opts.capabilities || [...adapterDefaults('l1-agent').capabilities];
         // 非任务队列：chat 型是同步 invoke（无 task_id 持久化/轮询）
         this.supportsTaskQueue = opts.supportsTaskQueue !== undefined ? opts.supportsTaskQueue : false;
         this.portCandidates = opts.portCandidates || []; // 调用方注入（codex [18790,18791] / hermes [18793,18792]）
@@ -180,7 +182,7 @@ class L1AgentAdapter {
 
         // chat 端点（codex）：POST /v1/chat/completions，注入 x-proxy-auth，同步返回
         const body = {
-            model: task.model || 'default',
+            model: task.model || adapterDefaults('l1-agent').defaultModel,
             messages: task.messages || [],
             ...(task.stream !== undefined ? { stream: task.stream } : {}),
         };

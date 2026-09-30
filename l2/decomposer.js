@@ -13,48 +13,18 @@
 // 子任务节点形状：{ id, type, complexity, prompt, deps: [subtaskId], when?(ctx), retry?, fallback? }
 // 拆解结果：{ template, input, subtasks: [...], edges: [[a,b],...] }
 
-// ---- 内置模板（规则拆解）：从一句话需求映射到子任务 DAG ----
-// 每个模板：match（判定是否命中）+ build(input)（产出 DAG）。
-const BUILTIN_TEMPLATES = [
-    {
-        // 5.1 蓝图样例：FastAPI + JWT + 数据库 + 测试 —— 4 子任务线性依赖
-        name: 'fastapi-jwt',
-        match: (input) => /jwt|认证|fastapi/i.test(input),
-        build: (input) => [
-            { id: 'design-api', type: 'code', complexity: 'low', prompt: `设计 API 接口（${input.slice(0, 40)}）`, deps: [] },
-            { id: 'db-model', type: 'code', complexity: 'medium', prompt: '实现数据库模型', deps: ['design-api'] },
-            { id: 'auth-jwt', type: 'code', complexity: 'medium', prompt: '实现 JWT 认证', deps: ['db-model'] },
-            { id: 'unit-test', type: 'test', complexity: 'low', prompt: '写单元测试', deps: ['auth-jwt'] },
-        ],
-    },
-    {
-        // 视频创作工作流（蓝图 4.8 指定 case）：理解诉求 → 拆镜 → 生成 → 合成
-        name: 'video-workflow',
-        match: (input) => /视频|短片|视频创作|video/i.test(input),
-        build: (input) => [
-            { id: 'understand', type: 'plan', complexity: 'low', prompt: `理解视频诉求（${input.slice(0, 40)}）`, deps: [] },
-            { id: 'storyboard', type: 'plan', complexity: 'medium', prompt: '分镜脚本', deps: ['understand'] },
-            { id: 'gen-clip-a', type: 'video', complexity: 'high', prompt: '生成片段 A', deps: ['storyboard'] },
-            { id: 'gen-clip-b', type: 'video', complexity: 'high', prompt: '生成片段 B', deps: ['storyboard'] },
-            { id: 'compose', type: 'compose', complexity: 'high', prompt: '合成 + 音频', deps: ['gen-clip-a', 'gen-clip-b'] },
-        ],
-    },
-];
-
-// 兜底模板：单节点（无法识别为已知模式时，整包交给一个 agent）
-const FALLBACK_TEMPLATE = {
-    name: 'single',
-    match: () => true,
-    build: (input) => [{ id: 'main', type: 'code', complexity: 'medium', prompt: String(input).slice(0, 80), deps: [] }],
-};
+// ---- 内置模板：已收口到共享底座 routing-base（质量工程 §三，落点 2）----
+// 修订规则：任何"需求→DAG"路由变更只改 l2/knowledge-base/routing-base.js，不再改本文件。
+// 消费方式：实时读 ROUTING_BASE.templates / .fallback（update() 后即刻生效，回滚只换一处）。
+const { ROUTING_BASE } = require('./knowledge-base/routing-base.js');
 
 // 内置规则拆解器（默认路径，确定性、零 LLM）。
 // 可注入 templates（opts.templates）：与 registry/pluginRuntime 同构的可注入缝，
 // 便于测试 + 让消费方注册自定义模板，内核不做全局可变状态。
 function templateDecompose(input, opts = {}) {
     const req = input == null ? '' : String(input);
-    const templates = Array.isArray(opts.templates) ? opts.templates : BUILTIN_TEMPLATES;
-    const tpl = templates.find((t) => t.match(req)) || FALLBACK_TEMPLATE;
+    const templates = Array.isArray(opts.templates) ? opts.templates : ROUTING_BASE.templates;
+    const tpl = templates.find((t) => t.match(req)) || ROUTING_BASE.fallback;
 
     const subtasks = tpl.build(req).map((st) => ({
         id: st.id,
@@ -107,4 +77,12 @@ function hasCycle(dag) {
     return seen !== dag.subtasks.length;
 }
 
-module.exports = { templateDecompose, decompose, hasCycle, BUILTIN_TEMPLATES, FALLBACK_TEMPLATE };
+// BUILTIN_TEMPLATES / FALLBACK_TEMPLATE 以 getter 再导出（兼容 decomposer.demo.js 等既有消费方；
+// 实时透传 routing-base 当前值，update()/rollback() 后取到的是最新定义）
+module.exports = {
+    templateDecompose,
+    decompose,
+    hasCycle,
+    get BUILTIN_TEMPLATES() { return ROUTING_BASE.templates; },
+    get FALLBACK_TEMPLATE() { return ROUTING_BASE.fallback; },
+};

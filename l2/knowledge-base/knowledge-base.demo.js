@@ -109,7 +109,7 @@ const asyncChecks = [
     let ranExecutor = false;
     const orch = new Orchestrator({ shadowMode: true, retriever: kb,
       executor: async () => { ranExecutor = true; } });
-    await orch.run({ input: 'x', subtasks: [{ id: 't1', type: 'code', knowledgeQuery: 'q', useKnowledge: true, deps: [] }], edges: [] });
+    await orch.run({ input: 'x', subtasks: [{ id: 't1', type: 'code', prompt: 'p', knowledgeQuery: 'q', useKnowledge: true, deps: [] }], edges: [] });
     assert.strictEqual(ranExecutor, false, 'shadow 下 executor 不被调用');
     } },
 ];

@@ -15,6 +15,8 @@
 //      未设 modelTier 的 profile 不参与档位加分，行为完全不变（向后兼容旧 profile）。
 
 const { MODEL_TIERS, DEFAULT_TIER } = require('./agent-registry');
+// 共享底座（质量工程 §三）：complexity→tier 映射的唯一事实源（原 _mapTier 硬编码已迁入）。
+const { mapTier } = require('./knowledge-base/routing-base.js');
 // 语义审阅层（质量工程 2.2）：route() 决策是否真能接这活（默认关，零行为变更）。
 const { reviewRouteDecision, assertSemantic } = require('./semantic-review.js');
 
@@ -178,12 +180,11 @@ class RouteEngine {
      }
 
      // 复杂度 → 档位映射（complexity 路由，见 l2/COMPLEXITY-MODE.md §2.2）
-     // high 不降级（质量优先），默认/未知 → medium（保守）。
+     // 映射定义已收口到共享底座 routing-base（质量工程 §三，落点 2）：改档位只改 routing-base。
      // 本期静态（decomposer 标签）；二期 LLM judge 动态复判，接口预留于此。
     _mapTier(complexity) {
-        if (complexity === 'low') return 'small';
-        if (complexity === 'high') return 'large';
-        return DEFAULT_TIER; // 'medium'（默认 / 未知 → 不降级）
+        const mapped = mapTier(complexity); // routing-base：low→small / high→large / 其余→medium（与原硬编码一致）
+        return MODEL_TIERS.has(mapped) ? mapped : DEFAULT_TIER; // 档位合法性兜底不变
      }
 
      // 校验档位合法性（二期 LLM judge 复判后、或外部传入 tier 时校验用）
