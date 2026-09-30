@@ -80,10 +80,14 @@ function call(server, id, args) {
         const testNode = p.report.subtasks.find((s) => s.id === 'unit-test');
         ok('3 个 code 子任务真经 _realExecutor 执行（executed + 真实 routedAdapterId）',
             codeNodes.every((s) => s.value && s.value.status === 'executed' && s.value.routedAdapterId));
-        ok('test 子任务无 adapter 候选 → routedAdapterId=null（路由缺口被如实记录，未被粉饰）',
-            testNode.value.routedAdapterId === null);
-        ok('2.2 审阅层的 warn 与此处路由缺口**自洽**（它提前预见了 unit-test 无候选）',
-            p.quality.semanticIssues.some((i) => i.level === 'warn' && i.subtaskId === 'unit-test' && /test/.test(i.message)));
+        // 2026-10-01：此前 unit-test(type='test') 无 profile 承接 → routedAdapterId=null，
+        // 已在 l2/mcp-default-seed.js 给声明 'code' 的 profile（codex/claude）补 'test' 能力。
+        ok(`test 子任务已有 adapter 承接（routedAdapterId=${testNode.value.routedAdapterId}）`,
+            !!testNode.value.routedAdapterId);
+        ok('全部 4 子任务均有真实 routedAdapterId（无静默无路由执行）',
+            p.report.subtasks.every((s) => s.value && s.value.routedAdapterId));
+        ok('2.2 审阅层对 unit-test 不再报「无候选」warn（能力补 owner 后自洽）',
+            !p.quality.semanticIssues.some((i) => i.subtaskId === 'unit-test' && /候选|路由不到/i.test(i.message)));
         ok(`下游真收到 4 次 HTTP 往返（实际 ${httpCalls}）`, httpCalls === 4);
         ok('真值回传：mock content 出现在 report 里',
             p.report.subtasks.every((s) => s.value && s.value.value && s.value.value.content === 'mock-ok'));
@@ -102,7 +106,7 @@ function call(server, id, args) {
         ok('回退立即生效：shadow=true', p.shadow === true);
         ok('executor 0 调用（0 副作用）', execCalls === beforeExec);
         ok('下游 0 请求', httpCalls === beforeHttp);
-        ok('回退后仍产出完整决策/ گزارش（4 子任务 done，仅不真执行）', p.subtasks.every((s) => s.status === 'done'));
+        ok('回退后仍产出完整决策/报告（4 子任务 done，仅不真执行）', p.subtasks.every((s) => s.status === 'done'));
     }
 
     // ===== C：质量层默认关 = 零行为变更 =====
@@ -111,7 +115,7 @@ function call(server, id, args) {
         const server = new McpServer({ gate: '1', registry: reg, realGate: '1', executor });
         const p = await call(server, 3, { input: INPUT });
         ok('默认关时 result 无 quality 字段（与既有逐字一致）', p.quality === undefined);
-        ok('默认关时仍正常真执行（行为不受质量 Gag 影响）', p.shadow === false && p.subtasks.every((s) => s.status === 'done'));
+        ok('默认关时仍正常真执行（行为不受质量门控影响）', p.shadow === false && p.subtasks.every((s) => s.status === 'done'));
     }
 
     // ===== D：保真拦截（恶意 executor 改样）=====
