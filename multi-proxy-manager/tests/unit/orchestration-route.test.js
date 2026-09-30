@@ -147,4 +147,36 @@ describe('L2 P2 orchestration route (/api/orchestration)', () => {
        server.close();
      }
     });
+
+  it('质量层默认关：响应无 quality 字段（REST 入口零行为变更）', async () => {
+    process.env.PROXY_ORCHESTRATION = '1';
+    build();
+    const r = await request(app).post('/api/orchestration/run').send({ input: '做一个 jwt 认证' });
+    expect(r.status).toBe(200);
+    expect(r.body.quality).toBeUndefined();
+   });
+
+  it('质量层 per-call 开启：响应带 quality 诊断（2.2/2.3 已在 REST 入口生效）', async () => {
+    process.env.PROXY_ORCHESTRATION = '1';
+    build();
+    const r = await request(app).post('/api/orchestration/run')
+      .send({ input: '做一个 jwt 认证', quality: true });
+    expect(r.status).toBe(200);
+    expect(r.body.quality).toBeDefined();
+    expect(Array.isArray(r.body.quality.semanticIssues)).toBe(true);
+    expect(Array.isArray(r.body.quality.fidelityIssues)).toBe(true);
+   });
+
+  it('质量层 env 开启：PROXY_L2_QUALITY=1 → 响应带 quality 诊断', async () => {
+    process.env.PROXY_ORCHESTRATION = '1';
+    process.env.PROXY_L2_QUALITY = '1';
+    build();
+    try {
+      const r = await request(app).post('/api/orchestration/run').send({ input: '做一个 jwt 认证' });
+      expect(r.status).toBe(200);
+      expect(r.body.quality).toBeDefined();
+     } finally {
+      delete process.env.PROXY_L2_QUALITY;
+     }
+   });
 });

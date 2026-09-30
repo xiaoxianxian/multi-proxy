@@ -134,6 +134,39 @@ function call(server, id, args) {
             pt.subtasks.filter((s) => s.status === 'skipped').length >= 1);
     }
 
+    // ===== E：无候选兜底策略（质量工程 §四待办②）在热路径的两种形态 =====
+    // 构造一个**没有任何 adapter 承接**的能力自己喂进热路径（type='audio-mix'），
+    // 对比 observe（默认·现状）与 reject（显式策略）的差异。
+    console.log('\nE) 无候选兜底策略（type 无人承接）');
+    {
+        const orphanDag = {
+            input: 'orphan', template: 'orphan',
+            subtasks: [{ id: 'orphan', type: 'audio-mix', complexity: 'low', prompt: '混音', deps: [] }],
+            edges: [],
+        };
+        const server = new McpServer({ gate: '1', registry: reg, realGate: '1', executor });
+
+        const beforeExec = execCalls;
+        const po = await call(server, 6, { dag: orphanDag, quality: true });
+        ok('observe（默认）：仍能执行但 routedAdapterId=null —— 现状的静默降级被如实记录',
+            po.subtasks[0].status === 'done' && po.report.subtasks[0].value.routedAdapterId === null);
+        ok('observe 下 2.2 审阅层已对该 type 给出无候选诊断',
+            po.quality.semanticIssues.some((i) => i.subtaskId === 'orphan'));
+        ok('observe 下 executor 确实被调用（等于改造前行为）', execCalls === beforeExec + 1);
+
+        process.env.PROXY_L2_NOCANDIDATE = 'reject';
+        const actsBefore = execCalls;
+        try {
+            const pr = await call(server, 7, { dag: orphanDag, quality: true });
+            ok('reject：无候选 → 子任务 failed（不再「无路由也执行」）', pr.subtasks[0].status === 'failed');
+            ok('reject 下 executor 未被调用（0 下游副作用）', execCalls === actsBefore);
+            ok(`reject 失败原因透出到 report：${String(pr.subtasks[0].error || pr.subtasks[0].reason || '').slice(0, 40)}…`,
+                JSON.stringify(pr).includes('route rejected'));
+        } finally {
+            delete process.env.PROXY_L2_NOCANDIDATE;
+        }
+    }
+
     await mock.close();
     console.log(`\n--- PASS ${pass} / FAIL ${fail} ---`);
     process.exit(fail === 0 ? 0 : 1);

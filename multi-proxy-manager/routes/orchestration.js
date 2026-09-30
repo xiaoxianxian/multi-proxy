@@ -13,12 +13,55 @@
 //   GET  /api/orchestration        → 协作历史
 //   POST /api/orchestration/run    → 触发一次编排（input 拆解 或 dag 直供）
 //   POST /api/orchestration/shadow → 开关 shadowMode
+//   /run 支持 per-call 质量层：body.quality=true（+ qualityThrow=true 硬拒）；
+//   等价 env  gate：PROXY_L2_QUALITY=1。默认关 → 与既有行为逐字一致。
 
 const express = require('express');
 const router = express.Router();
 const { Orchestrator } = require('../../l2/orchestrator.js');
 const { decompose } = require('../../l2/decomposer.js');
 const { makeLlmDecomposer } = require('../../l2/llm-decomposer.js');
+
+// 质量层（2.2 需候选信息）的共享 RouteEngine：与 routes/registry.js 共用**同一份** process 级
+// registry 单例（避免 registry 分裂 P2-1）。惰性构造：默认关时不 require、不建对象（零副作用）。
+let _routeEngine = null;
+function getRouteEngine() {
+  if (!_routeEngine) {
+    const { RouteEngine } = require('../../l2/route-engine.js');
+    const { getSharedRegistry } = require('./registry.js');
+    _routeEngine = new RouteEngine({ registry: getSharedRegistry(), shadowMode: true });
+  }
+  return _routeEngine;
+}
+
+// 质量层开关（与 MCP 入口 l2/mcp-server.js 同一套纪律）：
+//   env PROXY_L2_QUALITY=1 或 per-call body.quality===true 才启用 2.2/2.3；
+//   默认关 → Orchestrator 构造/行为与既有逐字一致（零行为变更铁律）。
+function isQualityGateOpen() {
+  const v = String(process.env.PROXY_L2_QUALITY || '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'on';
+}
+
+// 把质量层开关落到单例 Orchestrator 上（单例要保证协作历史跨请求累积，故按请求改开关而非重建）。
+//   开：挂共享 routeEngine + 2.2/2.3 开关，并在跑之前清空上轮诊断（避免单例跨请求串味）。
+//   关：全部复位为 false + routeEngine=undefined —— 与构造默认值一致，逐字零行为变更。
+function applyQuality(orch, on, shouldThrow) {
+  if (on) {
+    orch.routeEngine = getRouteEngine();   // 仅此时挂载：默认不挂时 shadow 产物不含 routedVia 等差异
+    orch.semanticReview = true;
+    orch.semanticThrow = !!shouldThrow;
+    orch.fidelityCheck = true;
+    orch.fidelityThrow = !!shouldThrow;
+    orch._semanticIssues = [];
+    orch._fidelityIssues = [];
+  } else {
+    orch.semanticReview = false;
+    orch.semanticThrow = false;
+    orch.fidelityCheck = false;
+    orch.fidelityThrow = false;
+  }
+  return on;
+}
 
 // 长寿命单例：协作历史内存态累积（重启即失；持久化留 P3 dir 落盘）
 let _orchestrator = null;
@@ -86,9 +129,12 @@ router.post('/run', async (req, res) => {
   const dag = reqBody.dag;
   const shadowMode = reqBody.shadowMode === undefined ? true : !!reqBody.shadowMode;
   const maxRetries = reqBody.maxRetries != null ? Number(reqBody.maxRetries) : undefined;
+  // 质量层：env PROXY_L2_QUALITY=1 或 per-call quality:true 才开（默认关，零行为变更）
+  const qualityOn = isQualityGateOpen() || reqBody.quality === true;
   try {
     const orch = getOrchestrator();
     orch.setShadowMode(shadowMode);
+    applyQuality(orch, qualityOn, reqBody.qualityThrow === true);
     let result;
     if (dag && Array.isArray(dag.subtasks) && dag.subtasks.length > 0) {
        // 直供 DAG（跳过拆解，便于测试 + 高级用法）
@@ -106,13 +152,21 @@ router.post('/run', async (req, res) => {
      } else {
       return res.status(400).json({ error: 'orchestration-no-input', hint: 'body 须提供 input 或 dag' });
     }
-    res.json({
+    const payload = {
       runId: result.history ? result.history.runId : null,
       template: result.history ? result.history.template : null,
       shadowMode,
       subtasks: result.history ? result.history.subtasks : [],
       results: Object.values(result.results || {}).map((r) => ({ id: r.id, status: r.status })),
-    });
+    };
+    // 质量层观测 sidecar：仅开启时附加（默认关 → 响应与既有逐字一致，零行为变更）
+    if (qualityOn) {
+      payload.quality = {
+        semanticIssues: orch._semanticIssues || [],   // 2.2 语义审阅：某 type 无候选 / 模态不匹配
+        fidelityIssues: orch._fidelityIssues || [],   // 2.3 执行保真：透传字段被改样
+      };
+    }
+    res.json(payload);
   } catch (e) {
     // 环 / 调度不收敛 / 拆解异常：转 400，不冒泡
     res.status(400).json({ error: 'orchestration-run-failed', message: e.message });

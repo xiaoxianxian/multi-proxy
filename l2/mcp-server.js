@@ -340,6 +340,13 @@ class McpServer {
      const decision = self.routeEngine.route({ ...subtask });
      const chosen = decision && decision.chosen;
      const base = { subtaskId: subtask.id, routedAdapterId: chosen ? chosen.adapterId : null };
+     // 无候选策略 = reject（质量工程 §四 待办②）：路由层明确拒执行 → 硬失败，
+     // 不再出现「没有 adapter 却照样调 executor」的静默降级。默认策略 observe 不会走到这里。
+     // 用抛错而非返回 status:'failed'：后者在 orchestrator 语义里只是"执行完成带回值"（status=done），
+     // 只有抛错才会走失败传播（downstream skipped）。重试只是重跑一次路由判定，不触达下游，代价为零。
+     if (decision && decision.rejected) {
+       throw new Error(`route rejected: ${decision.noCandidateReason || 'no routeable adapter'} (policy=reject)`);
+     }
      if (typeof self.executor === 'function') {
        try {
          const value = await self.executor(chosen ? chosen.adapterId : null, subtask, ctx);

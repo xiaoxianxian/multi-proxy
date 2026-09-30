@@ -57,6 +57,8 @@ const DEMO_TAGS = {
     'route-engine-orchestrator.demo.js': ['orchestrator', 'route'],
     'decomposer.demo.js': ['decomposer', 'template', 'routing'],
     'route-engine.demo.js': ['route', 'tier'],
+    'no-candidate-policy.demo.js': ['route', 'policy', 'orchestrator'],
+    'pilot-hot-path.demo.js': ['pilot', 'hot-path', 'orchestrator', 'adapter'],
     'llm-decomposer.demo.js': ['decomposer', 'llm'],
     'agent-registry.demo.js': ['registry', 'tier'],
     'alert.demo.js': ['governance'],

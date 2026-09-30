@@ -15,8 +15,8 @@
 //      未设 modelTier 的 profile 不参与档位加分，行为完全不变（向后兼容旧 profile）。
 
 const { MODEL_TIERS, DEFAULT_TIER } = require('./agent-registry');
-// 共享底座（质量工程 §三）：complexity→tier 映射的唯一事实源（原 _mapTier 硬编码已迁入）。
-const { mapTier } = require('./knowledge-base/routing-base.js');
+// 共享底座（质量工程 §三）：complexity→tier 映射 / 无候选兜底策略的唯一事实源。
+const { mapTier, resolveNoCandidatePolicy } = require('./knowledge-base/routing-base.js');
 // 语义审阅层（质量工程 2.2）：route() 决策是否真能接这活（默认关，零行为变更）。
 const { reviewRouteDecision, assertSemantic } = require('./semantic-review.js');
 
@@ -28,7 +28,7 @@ const DEFAULT_LOG_CAPACITY = 100;
 const DEFAULT_LOG_REDACTION = 'full';
 
 class RouteEngine {
-    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null, semanticReview = false, semanticThrow = false } = {}) {
+    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null, semanticReview = false, semanticThrow = false, noCandidateStrategy = null } = {}) {
         this.registry = registry;
         this.pluginRuntime = pluginRuntime || { listCapabilities: () => [] };
         this.shadowMode = shadowMode;
@@ -41,6 +41,8 @@ class RouteEngine {
         // L2 P3 真执行器注入：(adapterId, task, ctx, runOpts) => Promise<value>。
         // 默认 null = 保持 stub（status:'queued'），零行为变更。
         this.executor = executor;
+        // 无候选兜底策略（质量工程 §四 待办②）：null = 走 env/底座默认值。
+        this.noCandidateStrategy = noCandidateStrategy;
       }
 
      // 按任务类型路由：返回候选 adapter 列表 + 路由决策日志
@@ -124,7 +126,37 @@ class RouteEngine {
          });
         decision.chosen = decision.candidates[0] || null;
 
-         // 语义审阅层（质量工程 2.2）：选中的 adapter 是否真能接这活（默认关，零行为变更）。
+        // 无候选兜底策略（质量工程 §四 待办②）：把此前隐式的「chosen=null 却照样执行」
+        // 显式化、可审计、可配置。默认 observe —— 与既有行为逐字一致（零行为变更铁律）。
+        if (!decision.chosen) {
+            const policy = resolveNoCandidatePolicy(this.noCandidateStrategy);
+            decision.noCandidate = true;                    // 诊断：本次压根选不出 adapter
+            decision.noCandidatePolicy = policy.strategy;   // 本次生效策略，便于事后复盘
+            decision.noCandidateReason =
+                `no registered adapter claims capability "${task.type}" (tier=${expectedTier}, modelType=${expectedModelType || 'any'})`;
+            if (policy.strategy === 'fallback-default') {
+                // 只在 defaultAdapterId 确实注册过时兜底；没注册就保持 null（不随便挑一个充数）。
+                const fb = policy.defaultAdapterId
+                    ? allProfiles.find((p) => p.adapterId === policy.defaultAdapterId)
+                    : null;
+                if (fb) {
+                    decision.chosen = {
+                        adapterId: fb.adapterId,
+                        source: 'policy-fallback',   // 区别于 'registry' / 'plugin'
+                        confidence: 0,
+                        modelTypeMatch: fb.modelType === expectedModelType,
+                        tierMatch: false,
+                        modelTier: fb.modelTier !== undefined ? fb.modelTier : null,
+                        expectedTier,
+                    };
+                    decision.degraded = true;       // 明示：这是兜底，不是能力匹配的结果
+                }
+            } else if (policy.strategy === 'reject') {
+                decision.rejected = true;           // 执行器据此硬失败，不再「无路由也执行」
+            }
+        }
+
+        // 语义审阅层（质量工程 2.2）：选中的 adapter 是否真能接这活（默认关，零行为变更）。
          if (this.semanticReview) {
              const rev = reviewRouteDecision(decision, task);
              decision.semanticIssues = rev.issues;

@@ -62,7 +62,20 @@ const ROUTING_BASE = {
         claude: { capabilities: ['code', 'writing'], defaultModel: 'claude-3-5-sonnet-latest' },
         'l1-agent': { capabilities: ['code', 'writing'], defaultModel: 'default' },
     },
+
+    // ---- 无候选兜底策略（质量工程 §四 待办②）----
+    // route() 选不出 adapter 时怎么办。此前是**隐式行为**：chosen=null 却照样执行，
+    // 最终表现为 executor 拿到 adapterId=null 的静默降级（无人报错、无从复盘）。
+    //   'observe'（默认，零行为变更）：保持 chosen=null，只在 decision 上补诊断字段
+    //            （noCandidate / noCandidateReason / noCandidatePolicy），便于事后审计。
+    //   'fallback-default'：退到 defaultAdapterId（该 adapter 必须已在 registry 注册），
+    //            decision.degraded=true —— 明示这不是能力匹配的结果，而是兜底。
+    //   'reject'：decision.rejected=true，执行器据此硬失败，不再「无路由也执行」。
+    // 运行时可用 env PROXY_L2_NOCANDIDATE 覆盖同一组取值（非法值报错，fail-fast）。
+    noCandidatePolicy: { strategy: 'observe', defaultAdapterId: 'codex' },
 };
+
+const ALLOWED_NO_CANDIDATE = ['observe', 'fallback-default', 'reject'];
 
 // 快照历史（仅内存；单进程语义，与 agent-registry 默认内存同构）
 const _history = [];
@@ -76,6 +89,7 @@ function _snapshotCurrent() {
         fallback: ROUTING_BASE.fallback,
         complexityTierMap: ROUTING_BASE.complexityTierMap,
         adapterDefaults: ROUTING_BASE.adapterDefaults,
+        noCandidatePolicy: ROUTING_BASE.noCandidatePolicy,
     };
 }
 
@@ -83,6 +97,17 @@ function _snapshotCurrent() {
 function mapTier(complexity) {
     const m = ROUTING_BASE.complexityTierMap || {};
     return m[complexity] || 'medium';
+}
+
+// 无候选兜底策略解析：优先级 = 显式 override > env PROXY_L2_NOCANDIDATE > 底座默认值。
+// 非法取值直接抛错（fail-fast）：宁可显式失败，也不要静默退回不可预期的行为。
+function resolveNoCandidatePolicy(override) {
+    const base = ROUTING_BASE.noCandidatePolicy || {};
+    const raw = String(override || process.env.PROXY_L2_NOCANDIDATE || base.strategy || 'observe').toLowerCase();
+    if (!ALLOWED_NO_CANDIDATE.includes(raw)) {
+        throw new Error(`routing-base.resolveNoCandidatePolicy: unknown strategy "${raw}" (allowed: ${ALLOWED_NO_CANDIDATE.join(' | ')})`);
+    }
+    return { strategy: raw, defaultAdapterId: base.defaultAdapterId || null };
 }
 
 // adapter 默认声明（消费方：claude-adapter / l1-agent-adapter 构造与 invoke 默认值）
@@ -94,7 +119,7 @@ function adapterDefaults(adapterId) {
 function update(patch, note) {
     if (!patch || typeof patch !== 'object') throw new Error('routing-base.update: patch object required');
     _history.push(_snapshotCurrent());
-    for (const k of ['templates', 'fallback', 'complexityTierMap', 'adapterDefaults']) {
+    for (const k of ['templates', 'fallback', 'complexityTierMap', 'adapterDefaults', 'noCandidatePolicy']) {
         if (patch[k] !== undefined) ROUTING_BASE[k] = patch[k];
     }
     ROUTING_BASE.version += 1;
@@ -111,6 +136,7 @@ function rollback() {
     ROUTING_BASE.fallback = prev.fallback;
     ROUTING_BASE.complexityTierMap = prev.complexityTierMap;
     ROUTING_BASE.adapterDefaults = prev.adapterDefaults;
+    ROUTING_BASE.noCandidatePolicy = prev.noCandidatePolicy;
     ROUTING_BASE.version = prev.version;
     ROUTING_BASE.updatedAt = prev.updatedAt;
     ROUTING_BASE.note = prev.note;
@@ -122,4 +148,4 @@ function history() {
     return _history.map((h) => ({ version: h.version, updatedAt: h.updatedAt, note: h.note }));
 }
 
-module.exports = { ROUTING_BASE, mapTier, adapterDefaults, update, rollback, history };
+module.exports = { ROUTING_BASE, mapTier, adapterDefaults, resolveNoCandidatePolicy, update, rollback, history };
