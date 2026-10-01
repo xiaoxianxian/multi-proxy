@@ -27,6 +27,15 @@ const http = require('http');
 // 出片看着「成功」但分辨率不对。白名单让拼错字段名在单测里立刻炸，而不是变成假成功。
 // 注意：gen_mode='draft' 会在 h3web 侧被强制改写为 steps≤16 / 384×672，
 // 与「要 768×1344 竖屏成片」互斥 —— 想竖屏成片必须走 final 档再显式给 width/height。
+//
+// ---- 省时的真正大头：性能参数，不是 gen_mode 标志 ----
+// 2026-10-02 同尺寸（384×672 / steps 16）三档对照实测：
+//     只降 steps=16（默认 layers50/reuse3/token_reduction 关） → 12.2 min
+//     final 档手动给 layers40/reuse2/token_reduction         →  5.5 min   （省 55%）
+//     再叠 gen_mode='draft' 标志                              →  4.8 min   （只再省 13%）
+// build_args(h3web.py:1634-1654) 独立消费 layers/reuse/token_reduction/ssd_streaming，
+// **与 gen_mode 完全解耦、不改写尺寸**。所以 opts.perf 比 genMode='draft' 干净：
+// 省时的同时保住调用方指定的分辨率。
 const H3WEB_GEN_FIELDS = [
     'gen_mode', 'steps', 'width', 'height', 'seconds', 'frames',
     'layers', 'reuse', 'core_reuse',
@@ -34,6 +43,11 @@ const H3WEB_GEN_FIELDS = [
     'first_frame', 'last_frame', 'ref_images', 'ref_video', 'ref_audio',
     'ratio', 'ir',
 ];
+
+// ---- 省时性能预设（opts.perf）—— 一键塞 final 档，不改写尺寸 ----
+// 取自 draft 档那套参数，但作用在 final 档：尺寸完全由调用方决定，
+// 不会被 h3web 侧强转成 384×672。task 里显式给的同名 key 优先级更高（不会被覆盖）。
+const PERF_PRESET = Object.freeze({ layers: 40, reuse: 2, token_reduction: true, ssd_streaming: true });
 
 // ---- 动态端口探测（绝不写死）----
 function netPortFree(port) {
@@ -103,6 +117,8 @@ class H3webAdapter {
         this.genPath = opts.genPath || '/api/gen';
         this.statusPathBase = opts.statusPathBase || '/api/status';
         this.timeoutMs = opts.timeoutMs || 900000;
+        // 省时预设只读暴露，调用方可先读再决定用不用（也便于文档/route 里拿去拼 task）
+        this.perfPreset = PERF_PRESET;
         this._resolvedPort = null;
         this._resolvedHost = '127.0.0.1';
     }
@@ -140,15 +156,24 @@ class H3webAdapter {
     }
 
     // 接口 3：任务接收（转发到 h3web /api/gen）
-    // task 里按 H3WEB_GEN_FIELDS 白名单透传档位；opts.genMode 是便捷开关
-    // （'draft' 档省时约 4 倍：h3web 侧强转 steps 16 / 384×672 / layers 40 / reuse 2）。
-    // 返回体里的 echo = 本次真正发出去的 payload，调用方可自证「我传的档位到了下游」。
+    // task 里按 H3WEB_GEN_FIELDS 白名单透传档位；两个便捷开关：
+    //   opts.genMode='draft' —— 省时最少（实测 13%），且尺寸会被强制改写，只适合不看分辨率的草稿；
+    //   opts.perf            —— 省时最多（实测 55%）且不动尺寸，final 档专用，推荐走这个。
+    // return 体里的 echo = 本次真正发出去的 payload，调用方可自证「我传的档位到了下游」。
     async submit(task, opts = {}) {
         if (!task || !task.type) throw new Error('task.type required');
         const { host, port } = await this._resolveTarget();
         const payload = { prompt: task.prompt || '' };
         for (const k of H3WEB_GEN_FIELDS) {
             if (task[k] !== undefined && task[k] !== null) payload[k] = task[k];
+        }
+        if (opts.perf) {
+            // opts.perf===true → 用预设；传对象 → 预设叠加自定义微调（如 {layers:32}）。
+            // 只补 task 没显式给的同名 key，显式值优先，避免预设悄悄覆盖调用方的选择。
+            const preset = opts.perf === true ? PERF_PRESET : { ...PERF_PRESET, ...opts.perf };
+            for (const [k, v] of Object.entries(preset)) {
+                if (payload[k] === undefined) payload[k] = v;
+            }
         }
         if (opts.genMode) payload.gen_mode = opts.genMode;
         if (opts.steps) payload.steps = opts.steps;
@@ -183,4 +208,4 @@ class H3webAdapter {
     }
 }
 
-module.exports = { H3webAdapter, probePort };
+module.exports = { H3webAdapter, probePort, PERF_PRESET };

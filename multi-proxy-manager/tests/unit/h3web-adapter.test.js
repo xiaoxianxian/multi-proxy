@@ -91,6 +91,53 @@ describe('h3web adapter contract', () => {
             expect(r.echo.gen_mode).toBe('draft');
         });
 
+        test('opts.perf=true 一键塞省时参数，且不改写尺寸（final 档专用）', async () => {
+            const r = await adapter.submit(
+                { type: 'generate-video', prompt: '竖屏成片', width: 512, height: 896, steps: 20 },
+                { perf: true },
+            );
+            const p = mock.getLastGenPayload();
+            // 预设四件套都到了下游
+            expect(p.layers).toBe(40);
+            expect(p.reuse).toBe(2);
+            expect(p.token_reduction).toBe(true);
+            expect(p.ssd_streaming).toBe(true);
+            // 关键：走 final 档，调用方指定的尺寸原样保留（draft 会把宽高压成 384×672）
+            expect(p.width).toBe(512);
+            expect(p.height).toBe(896);
+            expect(p.gen_mode).toBeUndefined();
+            expect(r.echo.layers).toBe(40);
+            expect(r.echo.width).toBe(512);
+        });
+
+        test('opts.perf 不覆盖 task 显式给的同名 key（显式值优先）', async () => {
+            await adapter.submit(
+                { type: 'generate-video', prompt: 'x', layers: 32, reuse: 1 },
+                { perf: true },
+            );
+            const p = mock.getLastGenPayload();
+            expect(p.layers).toBe(32);   // task 显式值胜出，预设不许悄悄改
+            expect(p.reuse).toBe(1);
+            expect(p.token_reduction).toBe(true);  // 没显式给的照补
+        });
+
+        test('opts.perf={layers:24} 只做微调，其余仍取预设', async () => {
+            await adapter.submit({ type: 'generate-video', prompt: 'x' }, { perf: { layers: 24 } });
+            const p = mock.getLastGenPayload();
+            expect(p.layers).toBe(24);
+            expect(p.reuse).toBe(2);
+            expect(p.token_reduction).toBe(true);
+            expect(p.ssd_streaming).toBe(true);
+        });
+
+        test('opts.perf 与 opts.genMode 同时给时互不影响（perf 保参数、draft 只管标志）', async () => {
+            await adapter.submit({ type: 'generate-video', prompt: 'x' }, { perf: true, genMode: 'draft' });
+            const p = mock.getLastGenPayload();
+            expect(p.gen_mode).toBe('draft');
+            expect(p.layers).toBe(40);
+            expect(p.reuse).toBe(2);
+        });
+
         test('⚠️ 反证：白名单外的键（拼错的 size）不会静默透传 —— 否则会假成功回落 512×512', async () => {
             await adapter.submit({
                 type: 'generate-video', prompt: '竖屏',
