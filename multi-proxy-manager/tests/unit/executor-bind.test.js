@@ -151,6 +151,59 @@ describe('executor-bind · 分发真跑（内联 mock 下游）', () => {
     });
 });
 
+// 守卫「静默空结果」——同一个坑已第三次现形，每次换一家厂商：
+//   ① 本地 Ollama qwen：思维链在 message.reasoning，content 空 → status 却是 done
+//   ② DeepSeek / Kimi 官方：思维链在 message.reasoning_content（只认 reasoning 会整段丢掉）
+// 共同点：调用方拿到空 content 还以为调用成功，这是最难查的一类失败。
+// 断言必须落到 content 与 contentSource 两个字段上 —— 只断言 status 完全拦不住。
+describe('executor-bind · 推理模型思维链兜底（厂商字段不一致）', () => {
+    const servers = [];
+
+    afterAll(async () => {
+        for (const s of servers) await s.close();
+        cleanEnv();
+    });
+
+    async function invokeAgainst(mockOpts) {
+        const m = startMockL1(0, mockOpts);
+        servers.push(m);
+        const port = await waitPort(() => m.getPort());
+        // mock-l1 强制校验 x-proxy-auth，不给 token 就是 401（别省这一步）
+        process.env.PROXY_CODEX_PORTS = String(port);
+        process.env.PROXY_AUTH_TOKEN = m.token;
+        return port;
+    }
+
+    test('Ollama 系：content 空 + reasoning 有值 → 兜底取 reasoning', async () => {
+        const port = await invokeAgainst({ reasoningOnly: true, reasoning: '本地思维链' });
+        process.env.PROXY_CODEX_PORTS = String(port);
+        const v = await createBoundExecutor({ logger: { log: () => {}, warn: () => {} } })
+            .executor('codex', { id: 'r1', type: 'code', prompt: 'x' });
+        expect(v.raw.result.content).toBe('本地思维链');
+        expect(v.raw.result.contentSource).toBe('reasoning');
+    });
+
+    test('DeepSeek / Kimi 系：content 空 + reasoning_content 有值 → 兜底取 reasoning_content', async () => {
+        const port = await invokeAgainst({
+            reasoningOnly: true, reasoningField: 'reasoning_content', reasoning: '官方思维链',
+        });
+        process.env.PROXY_CODEX_PORTS = String(port);
+        const v = await createBoundExecutor({ logger: { log: () => {}, warn: () => {} } })
+            .executor('codex', { id: 'r2', type: 'code', prompt: 'x' });
+        expect(v.raw.result.content).toBe('官方思维链');
+        expect(v.raw.result.contentSource).toBe('reasoning_content');
+    });
+
+    test('正常模型：content 非空 → 逐字保留 content，contentSource=content', async () => {
+        const port = await invokeAgainst({ content: '正常正文' });
+        process.env.PROXY_CODEX_PORTS = String(port);
+        const v = await createBoundExecutor({ logger: { log: () => {}, warn: () => {} } })
+            .executor('codex', { id: 'r3', type: 'code', prompt: 'x' });
+        expect(v.raw.result.content).toBe('正常正文');
+        expect(v.raw.result.contentSource).toBe('content');
+    });
+});
+
 describe('executor-bind · REST 入口形态 forOrchestrator(routeEngine)', () => {
     let mockL1 = null;
     let bound = null;

@@ -212,15 +212,23 @@ class L1AgentAdapter {
         }
         // OpenAI /v1/chat/completions 形态：{ id, choices:[{message:{content}}] }
         const msg = (parsed.choices && parsed.choices[0] && parsed.choices[0].message) || {};
-        // ⚠️ 实测坑（2026-10-01，本地 Ollama qwen3.8:27b-mlx 真跑）：**推理型模型默认把正文吐到
-        //   message.reasoning，`content` 返空串**（max_tokens 小时必现）。只读 content 的调用方会
-        //   拿到空结果还以为调用成功——这是静默失败。此处兜底：content 空则取 reasoning，
-        //   并用 contentSource 标出内容来源，便于观测/排查（非空时行为逐字不变）。
+        // ⚠️ 实测坑（2026-10-01，三次现形，每次厂商不同 —— 这是本段注释存在的全部理由）：
+        //   推理型模型会把 token 预算先喂给思维链，`content` 返空串，却被当成成功返回。
+        //   ① 本地 Ollama qwen3.8：思维链在 **message.reasoning**
+        //   ② DeepSeek 官方 / Kimi 官方：思维链在 **message.reasoning_content**
+        //   两者字段不一致；只认 reasoning 那一版时，接 DeepSeek 会拿到空 content 且 status=done
+        //   —— 静默空结果，调用方看不出来。故两个字段都兜，并在 contentSource 里写明来源。
+        //   非空时行为逐字不变。
         let content = typeof msg.content === 'string' && msg.content ? msg.content : null;
         let contentSource = content ? 'content' : null;
-        if (!content && typeof msg.reasoning === 'string' && msg.reasoning) {
-            content = msg.reasoning;
-            contentSource = 'reasoning';
+        if (!content) {
+            const candidates = [
+                ['reasoning', msg.reasoning],
+                ['reasoning_content', msg.reasoning_content],
+            ];
+            for (const [src, txt] of candidates) {
+                if (typeof txt === 'string' && txt) { content = txt; contentSource = src; break; }
+            }
         }
         return {
             task_id: taskId,

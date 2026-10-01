@@ -82,7 +82,10 @@ const ROUTING_BASE = {
         },
         medium: {
             adapterId: 'deepseek', defaultPorts: [18790], model: 'deepseek-v4-pro',
-            envName: 'PROXY_DEEPSEEK_PORTS', auth: 'proxy-auth', maxTokens: 2048, timeoutMs: 120000,
+            envName: 'PROXY_DEEPSEEK_PORTS', auth: 'proxy-auth',
+            // 同 codex：推理模型会拿 thinking 吃掉整个预算，2048 实测必以
+            // finish_reason=length 收场且正文为空。see executorDefaults.codex 注释。
+            maxTokens: 8192, timeoutMs: 180000,
             desc: 'DeepSeek（medium · 中档；经 codex-proxy 转发 api.deepseek.com）',
         },
         // 本地档 timeoutMs 给到 300s：实测 2048 token 上限下约 57s 完成，但**超时必须大于真实生成
@@ -109,11 +112,20 @@ const ROUTING_BASE = {
         //   key / 额度 / 限流出了问题**。本地 :11434 的 qwen（large 档）稳定 200。
         //   → 默认 model 只保证「名字真实存在」；能不能真出内容取决于上游配额，两者别混为一谈。
         //   恢复后可用 env PROXY_CODEX_MODEL 临时改档，不必改代码。
+        // ⚠️ 模型名只认官方 `/v1/models` 实测（2026-10-01 核对，别信代理自己吐的列表）：
+        //   codex-proxy 的 UPSTREAM_MODELS 是**硬编码的过期名**（deepseek-v4-flash / moonshot-v1-*），
+        //   官方早就没了 —— 照它配只会得到一个假存在、真转发必炸的模型名。
+        //   DeepSeek 官方现役只有两个：deepseek-flash(V4.1-Flash) / deepseek-v4-pro(V4-Pro)。
         codex: {
-            model: 'deepseek-v4-flash',     // 下游 :18790 /v1/models 真实存在的模型（2026-10-01 实测）
+            model: 'deepseek-flash',        // DeepSeek 官方 V4.1-Flash（实测 /v1/models 真存在）
             envName: 'PROXY_CODEX_MODEL',
-            maxTokens: 2048,
-            timeoutMs: 120000,
+            // ⚠️ maxTokens 是被实测证伪后调上来的（2026-10-01，DeepSeek 官方真跑）：
+            //   给 2048 时复杂子任务必踩 `finish_reason=length` —— usage 显示
+            //   **completion_tokens 2048 全部进了 reasoning_tokens**，模型还在想，正文一个字没写，
+            //   而外层 status 仍是 done（静默空结果）。给到 8192 才有预算走完 thinking 再出正文。
+            //   一句话：推理模型的 maxTokens 不是"回答长度上限"，是"思考 + 回答的总预算"。
+            maxTokens: 8192,
+            timeoutMs: 180000,     // 8192 预算下生成更久，超时必须跟着放宽（防僵尸请求堵队列）
             desc: 'Codex L1 chat 默认落点（经 codex-proxy :18790 转付费上游）',
         },
         claude: {

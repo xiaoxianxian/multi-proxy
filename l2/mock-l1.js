@@ -71,8 +71,11 @@ module.exports = function startMockL1(port, opts = {}) {
                 if (parsedBody.model) chatModels.push(parsedBody.model);
                 const message = { role: 'assistant' };
                 if (opts.reasoningOnly) {
-                    message.content = '';               // 推理型：正文在 reasoning，content 空
-                    message.reasoning = opts.reasoning || '（mock 推理正文：先把问题拆开想一遍）';
+                    message.content = '';               // 推理型：正文在思维链字段里，content 空
+                    // 厂商字段不统一（2026-10-01 实测）：Ollama 用 `reasoning`，
+                    // DeepSeek/Kimi 官方用 `reasoning_content`。默认 reasoning（原行为）。
+                    message[opts.reasoningField || 'reasoning'] =
+                        opts.reasoning || '（mock 推理正文：先把问题拆开想一遍）';
                 } else {
                     message.content = ('content' in opts) ? opts.content : 'mock-ok';
                 }
