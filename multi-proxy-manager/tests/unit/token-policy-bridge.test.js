@@ -238,6 +238,16 @@ describe('端到端转发对照', () => {
 // 「内容对」不足以证明这件事，必须断言分块到达，所以单独一组。
 // 复用同一个 bridge 实例——UPSTREAM 是模块加载时常量，新建实例改 env 无效。
 describe('token-policy-bridge · 流式透传', () => {
+  test('joinUrl：上游带 /v1 且路径也带 /v1 时不得拼成 /v1/v1（否则全 404）', () => {
+    expect(B.joinUrl('https://x.cn/v1', '/v1/responses')).toBe('https://x.cn/v1/responses');
+    expect(B.joinUrl('https://x.cn/v1/', '/v1/responses')).toBe('https://x.cn/v1/responses');
+    expect(B.joinUrl('https://x.cn', '/v1/responses')).toBe('https://x.cn/v1/responses');
+    expect(B.joinUrl('https://x.cn/v1', '/responses')).toBe('https://x.cn/v1/responses');
+    expect(B.joinUrl('https://x.cn/v2', '/v2/chat/completions')).toBe('https://x.cn/v2/chat/completions');
+    // 别的路径前缀不该被误伤
+    expect(B.joinUrl('https://x.cn/v1', '/models')).toBe('https://x.cn/v1/models');
+  });
+
   test('extractUsageFromSSE：responses 与 chat 两种形状都能抽', () => {
     expect(B.extractUsageFromSSE('event: response.completed\ndata: {"response":{"usage":{"input_tokens":456,"output_tokens":9}}}\n\n'))
       .toEqual({ prompt_tokens: 456, completion_tokens: 9 });
@@ -273,6 +283,62 @@ describe('token-policy-bridge · 流式透传', () => {
     expect(span).toBeGreaterThanOrEqual(30);
     expect(r.text).toContain('"delta":"A"');
     expect(r.text).toContain('response.completed');
+  });
+});
+
+// 这一组专治「模块级引用未定义」这类只在 `node tools/token-policy-bridge.js`
+// 独立启动时才暴露的崩溃。此前所有用例都是 require 本模块（不触发 listen），
+// 所以「能不能真的起来」从没被任何用例覆盖过——上一版就是在这里带着
+// ReferenceError 提交了。spawn 真进程 + 读 /health 才能堵住。
+describe('token-policy-bridge · 独立进程真能启动', () => {
+  const { spawn } = require('child_process');
+  const BRIDGE = path.join(__dirname, '../../../tools/token-policy-bridge.js');
+  const port = 18999;
+  let child;
+
+  beforeAll(async () => {
+    child = spawn(process.execPath, [BRIDGE], {
+      env: {
+        ...process.env,
+        PORT: String(port), BINDING: '127.0.0.1', BRIDGE_MODE: 'observe',
+        UPSTREAM: 'http://127.0.0.1:1', // 故意指向不可达地址：health 不需要转发
+        BRIDGE_LOG_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-boot-')),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const errs = [];
+    child.stderr.on('data', (d) => errs.push(d.toString()));
+    child.stdout.resume();
+
+    const deadline = Date.now() + 10000;
+    let up = false;
+    while (Date.now() < deadline && !up) {
+      up = await new Promise((r) => {
+        const req = http.get({ host: '127.0.0.1', port, path: '/health' }, (res) => {
+          res.resume();
+          r(res.statusCode === 200);
+        });
+        req.on('error', () => r(false));
+      });
+      if (!up) await new Promise((r) => setTimeout(r, 150));
+    }
+    if (!up) throw new Error(`桥启动失败：${errs.join('') || '（无 stderr）'}`);
+  });
+
+  afterAll(() => { if (child) child.kill(); });
+
+  test('独立进程能起来，/health 返回模式与上游', async () => {
+    const body = await new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port, path: '/health' }, (res) => {
+        let b = '';
+        res.on('data', (d) => { b += d; });
+        res.on('end', () => resolve(b));
+      }).on('error', reject);
+    });
+    const j = JSON.parse(body);
+    expect(j.ok).toBe(true);
+    expect(j.mode).toBe('observe');
+    expect(String(j.upstream)).toContain('127.0.0.1:1');
   });
 });
 

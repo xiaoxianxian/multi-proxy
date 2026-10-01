@@ -162,6 +162,21 @@ function pickResponseHeaders(headers) {
 }
 
 /**
+ * 拼接上游 URL。
+ * 🔴 这里必须处理版本前缀重复：base_url 常带 /v1（如 https://x.cn/v1），客户端
+ *    请求路径也常带 /v1（/v1/responses），直接拼会得到 /v1/v1/responses → 上游 404。
+ *    实测踩过：桥起起来一切正常，只有真实请求全 404。
+ */
+function joinUrl(upstream, urlPath) {
+  const base = String(upstream || '').replace(/\/+$/, '');
+  const p = String(urlPath || '/');
+  const m = base.match(/\/v\d+$/);
+  if (m && p.startsWith(m[0] + '/')) return base + p.slice(m[0].length);
+  if (m && p === m[0]) return base;
+  return base + p;
+}
+
+/**
  * 从 SSE 文本里抽 usage。流式下 provider 不给 JSON 响应体，usage 只在最后一个
  * 事件里——拿不到它，实测轨（actualPromptTokens）在流式场景就全废了。
  * 两种协议都认：responses 的 response.usage.input_tokens、chat 的 usage.prompt_tokens。
@@ -191,7 +206,7 @@ function extractUsageFromSSE(text) {
 async function forward(req, bodyStr) {
   const started = Date.now();
   try {
-    const res = await fetch(UPSTREAM + req.url, {
+    const res = await fetch(joinUrl(UPSTREAM, req.url), {
       method: req.method,
       headers: pickRequestHeaders(req.headers),
       body: req.method === 'GET' ? undefined : bodyStr,
@@ -346,10 +361,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
+  // ⚠️ 这里只能用 DEFAULT_MODE，不能引用 MODE——MODE 是请求处理函数内的局部变量，
+  //    模块级没有它。上一版就是在这里 ReferenceError 崩掉的，而 demo/单测都是
+  //    require 本模块（不触发 listen），这个崩溃从没被任何用例覆盖到。
+  //    已加「真能启动」的端到端用例（spawn 子进程 + 读 /health）堵住这个盲区。
   server.listen(PORT, BINDING, () => {
-    console.log(`[bridge] listening http://${BINDING}:${PORT} → ${STUB ? 'STUB' : UPSTREAM} | mode=${MODE} agentType=${AGENT_TYPE}`);
+    console.log(`[bridge] listening http://${BINDING}:${PORT} → ${STUB ? 'STUB' : UPSTREAM} | mode=${process.env.BRIDGE_MODE || DEFAULT_MODE} agentType=${AGENT_TYPE}`);
     console.log(`[bridge] metrics → ${LOG_PATH}`);
   });
 }
 
-module.exports = { ctxFromRequest, mergeOutToRequest, server, MERGE_FIELDS, extractUsageFromSSE, pickRequestHeaders };
+module.exports = { ctxFromRequest, mergeOutToRequest, server, MERGE_FIELDS, extractUsageFromSSE, pickRequestHeaders, joinUrl };
