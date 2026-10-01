@@ -1,0 +1,215 @@
+'use strict';
+// token-policy-bridge 的保护网（28 号文档 §八 · apply() 接进真实转发链路）。
+//
+// 三条最要紧的断言：
+//   ① observe 模式转发到上游的包逐字节未变 —— 零行为改变是敢长期挂着的底线
+//   ② rewrite 模式 handler 输出真的写进上游请求 —— 否则接了等于没接
+//   ③ 改写只认白名单字段 —— 未知字段写进上游等于赌 provider 容忍度
+
+const http = require('http');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+
+const LOG_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-test-'));
+process.env.BRIDGE_LOG_DIR = LOG_DIR;
+process.env.BRIDGE_AGENT_TYPE = 'coding';
+
+const CHAT = {
+  model: 'demo-model',
+  messages: [
+    { role: 'system', content: 'SYS' },
+    { role: 'user', content: 'u1' },
+    { role: 'assistant', content: 'a1' },
+    { role: 'user', content: 'u2' },
+    { role: 'assistant', content: 'a2' },
+    { role: 'user', content: 'u3' },
+  ],
+  tools: [{ type: 'function', function: { name: 'mcp__heavy__search' } }],
+};
+
+const RESP = {
+  model: 'demo-model',
+  instructions: '你是一个助手',
+  input: [
+    { role: 'user', content: 'r1' },
+    { role: 'assistant', content: 'r2' },
+    { role: 'user', content: 'r3' },
+    { role: 'assistant', content: 'r4' },
+    { role: 'user', content: 'r5' },
+  ],
+};
+
+function post(port, urlPath, obj) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(obj);
+    const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (res) => {
+      const c = [];
+      res.on('data', (d) => c.push(d));
+      res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(c).toString() }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+function startEcho() {
+  return new Promise((resolve) => {
+    const s = http.createServer((req, res) => {
+      const c = [];
+      req.on('data', (d) => c.push(d));
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ echo: Buffer.concat(c).toString(), usage: { prompt_tokens: 123, completion_tokens: 7 } }));
+      });
+    });
+    s.listen(0, '127.0.0.1', () => resolve(s));
+  });
+}
+
+let B, TP, echo, bridge, bport;
+
+beforeAll(async () => {
+  // UPSTREAM 是 bridge 加载时读的常量，必须在 require 之前定端口
+  echo = await startEcho();
+  process.env.UPSTREAM = `http://127.0.0.1:${echo.address().port}`;
+  B = require('../../../tools/token-policy-bridge.js');
+  TP = require('../../../l2/token-policy.js');
+  TP.registerPolicy({
+    hook: 'onRequestAssemble',
+    name: '__test_prune',
+    enabled: true,
+    priority: 100, // 保证是 results[0]，rewrite 取的就是它
+    handler(ctx) {
+      const before = JSON.stringify(ctx.messages).length;
+      const kept = ctx.messages.length > 2 ? ctx.messages.slice(-2) : ctx.messages;
+      return { messages: kept, netTokenDelta: JSON.stringify(kept).length - before };
+    },
+  });
+  bridge = B.server;
+  await new Promise((r) => bridge.listen(0, '127.0.0.1', r));
+  bport = bridge.address().port;
+});
+
+afterAll(() => {
+  if (bridge) bridge.close();
+  if (echo) echo.close();
+  fs.rmSync(LOG_DIR, { recursive: true, force: true });
+});
+
+describe('协议归一 ctxFromRequest', () => {
+  test('chat/completions：system 剥离、history = 非 system 数 - 1', () => {
+    const c = B.ctxFromRequest(CHAT, 'chat-completions');
+    expect(c.messages).toHaveLength(5);
+    expect(c.history).toHaveLength(4);
+    expect(c.systemPrompt).toBe('SYS');
+    expect(c.tools).toHaveLength(1);
+  });
+
+  test('responses：instructions → systemPrompt，input 数组归一', () => {
+    const c = B.ctxFromRequest({ model: 'm', instructions: 'SYS', input: [{ role: 'user', content: 'a' }, { role: 'user', content: 'b' }] }, 'responses');
+    expect(c.systemPrompt).toBe('SYS');
+    expect(c.messages).toHaveLength(2);
+    expect(c.history).toHaveLength(1);
+  });
+
+  test('responses：input 为字符串时归一成单条 user', () => {
+    const c = B.ctxFromRequest({ input: '单轮' }, 'responses');
+    expect(c.messages).toHaveLength(1);
+    expect(c.messages[0].role).toBe('user');
+  });
+
+  test('agentType 必填——token-policy 在缺它时是静默跳过，这里必须给全', () => {
+    const c = B.ctxFromRequest(CHAT, 'chat-completions');
+    expect(c.agentType).toBeTruthy();
+    expect(TP.AGENT_TYPES).toContain(c.agentType);
+  });
+});
+
+describe('改写合并 mergeOutToRequest', () => {
+  test('白名单外字段被忽略，绝不写进上游请求', () => {
+    const m = B.mergeOutToRequest(CHAT, { messages: [{ role: 'user', content: 'x' }], evil: 1, netTokenDelta: -3 }, 'chat-completions');
+    expect(m.ignored).toEqual(['evil']);
+    expect(m.changed).toBe(true);
+    expect(m.body.evil).toBeUndefined();
+  });
+
+  test('history 写回不吞掉当前这轮输入（最危险的坑）', () => {
+    const m = B.mergeOutToRequest(CHAT, { history: [{ role: 'user', content: 'kept' }] }, 'chat-completions');
+    const last = m.body.messages[m.body.messages.length - 1];
+    expect(last.content).toBe('u3');
+    expect(m.body.messages[1].content).toBe('kept');
+  });
+
+  test('systemPrompt 替换后只保留一个 system', () => {
+    const m = B.mergeOutToRequest(CHAT, { systemPrompt: 'NEW' }, 'chat-completions');
+    expect(m.body.messages[0].content).toBe('NEW');
+    expect(m.body.messages.filter((x) => x.role === 'system')).toHaveLength(1);
+  });
+
+  test('无输出时不产生任何改动（changed=false）', () => {
+    const m = B.mergeOutToRequest(CHAT, null, 'chat-completions');
+    expect(m.changed).toBe(false);
+    expect(m.body).toBe(CHAT);
+  });
+});
+
+describe('端到端转发对照', () => {
+  test('observe：上游收到的包逐字节等于原包（零行为改变）', async () => {
+    process.env.BRIDGE_MODE = 'observe';
+    const r = await post(bport, '/v1/chat/completions', CHAT);
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.text).echo).toBe(JSON.stringify(CHAT));
+  });
+
+  test('rewrite：上游收到的包真的被改写了', async () => {
+    process.env.BRIDGE_MODE = 'rewrite';
+    const r = await post(bport, '/v1/chat/completions', CHAT);
+    const up = JSON.parse(JSON.parse(r.text).echo);
+    expect(JSON.stringify(up)).not.toBe(JSON.stringify(CHAT));
+    expect(up.messages.filter((m) => m.role === 'system')).toHaveLength(1);
+    expect(up.messages).toHaveLength(3);
+    expect(up.messages[2].content).toBe('u3');
+  });
+
+  test('responses 协议（codex 主力链路）· observe 原样转发', async () => {
+    process.env.BRIDGE_MODE = 'observe';
+    const r = await post(bport, '/v1/responses', RESP);
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.text).echo).toBe(JSON.stringify(RESP));
+  });
+
+  test('responses 协议 · rewrite 裁剪 input、instructions 不受影响', async () => {
+    process.env.BRIDGE_MODE = 'rewrite';
+    const r = await post(bport, '/v1/responses', RESP);
+    const up = JSON.parse(JSON.parse(r.text).echo);
+    expect(up.input).toHaveLength(2);
+    expect(up.input[1].content).toBe('r5');
+    expect(up.instructions).toBe('你是一个助手');
+  });
+
+  test('度量落盘：七类组成 + policy 净增量 + 上游实测 usage', async () => {
+    const f = fs.readdirSync(LOG_DIR).find((x) => x.endsWith('.jsonl'));
+    const lines = fs.readFileSync(path.join(LOG_DIR, f), 'utf8').trim().split('\n').map(JSON.parse);
+    const rw = lines.find((l) => l.mode === 'rewrite' && l.api === 'chat-completions');
+    const ob = lines.find((l) => l.mode === 'observe' && l.api === 'chat-completions');
+    expect(rw).toBeTruthy();
+    expect(ob).toBeTruthy();
+    expect(ob.estTotal).toBeGreaterThan(0);
+    expect(ob.byCategory.tools).toBeGreaterThan(0);
+    expect(rw.reported).toBe(1);
+    expect(rw.estSaved).toBeLessThan(0);
+    expect(rw.rewrote).toBe(true);
+    expect(ob.actualPromptTokens).toBe(123);
+  });
+
+  test('responses 也能测到七类组成（折叠前必须归一，否则恒为 0）', async () => {
+    const f = fs.readdirSync(LOG_DIR).find((x) => x.endsWith('.jsonl'));
+    const lines = fs.readFileSync(path.join(LOG_DIR, f), 'utf8').trim().split('\n').map(JSON.parse);
+    const rs = lines.find((l) => l.api === 'responses');
+    expect(rs).toBeTruthy();
+    // 修复前这里是 0——fold 只认 messages，responses 的 input 直接喂就是全 0
+    expect(rs.estTotal).toBeGreaterThan(0);
+  });
+});
