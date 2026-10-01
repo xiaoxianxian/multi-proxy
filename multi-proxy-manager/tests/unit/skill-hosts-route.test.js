@@ -129,6 +129,63 @@ describe('skill-hosts 路由（只读面）', () => {
         expect(countFiles(proj)).toBe(before + 1);   // 只多了我们手造的 1 个 SKILL.md（目录不计数），plan 没加量
     });
 
+    test('② budget-plan：按预算裁掉最贵的，且一个字节都不写', async () => {
+        process.env.PROXY_L2_SKILLHOSTS = '1';
+        // 造三条知道 token 量的 skill（估算口径 = 文本长度/3）
+        const mk = (name, chars) => {
+            fs.mkdirSync(path.join(proj, '.hermes', 'skills', name), { recursive: true });
+            fs.writeFileSync(path.join(proj, '.hermes', 'skills', name, 'SKILL.md'), 'x'.repeat(chars), 'utf8');
+        };
+        mk('cheap', 300); mk('mid', 3000); mk('fat', 30000);  // 100 / 1000 / 10000 tok
+
+        const r = await request(app).post('/api/skill-hosts/budget-plan')
+            .send({ project: proj, budget: 1100 });
+        expect(r.status).toBe(200);
+        // cost DESC：fat(10000) 塞不下 → excluded（fixture 里原有的 nested-one/top-one 也一起被挤掉，
+        // 所以只断言「fat 必在 excluded 且其 estTokens 就是造出来的量」，别把杂项算死）
+        const fat = r.body.excluded.find((s) => s.name === 'fat');
+        expect(fat).toBeTruthy();
+        expect(fat.estTokens).toBe(10000);
+        expect(r.body.injectedTokens).toBeLessThanOrEqual(1100);
+        expect(r.body.excludedTokens).toBeGreaterThanOrEqual(10000);
+        expect(r.body.netTokenDelta).toBe(-r.body.excludedTokens);
+        expect(r.body.excluded.every((s) => s.estTokens != null)).toBe(true);
+        // 装 + 关 = 候选总量（口径自洽）
+        expect(r.body.injectedTokens + r.body.excludedTokens).toBe(r.body.candidatesTokens);
+
+        // 纯算不落盘
+        expect(countFiles(proj)).toBe(before + 3);
+
+        // 预算放开 → 全装，excluded 空
+        const wide = await request(app).post('/api/skill-hosts/budget-plan')
+            .send({ project: proj, budget: 999999 });
+        expect(wide.body.excludedTokens).toBe(0);
+        // fixture 里原有条目也在（nested-one/top-one），所以只断言「我造的这 3 条全装进去」
+        for (const n of ['cheap', 'mid', 'fat']) {
+            expect(wide.body.injected.some((s) => s.name === n)).toBe(true);
+        }
+        expect(wide.body.injectedCount).toBeGreaterThanOrEqual(3);
+        expect(countFiles(proj)).toBe(before + 3);
+    });
+
+    test('② budget-plan：host 过滤 + 未知宿主 404', async () => {
+        process.env.PROXY_L2_SKILLHOSTS = '1';
+        const r = await request(app).post('/api/skill-hosts/budget-plan')
+            .send({ project: proj, host: 'hermes', budget: 999999 });
+        expect(r.status).toBe(200);
+        expect(r.body.candidates).toBeGreaterThan(0);
+        expect(r.body.injectedTokens + r.body.excludedTokens).toBe(r.body.candidatesTokens);
+
+        const bad = await request(app).post('/api/skill-hosts/budget-plan')
+            .send({ host: 'nope' });
+        expect(bad.status).toBe(404);
+    });
+
+    test('② budget-plan 门控未开 → 403', async () => {
+        const r = await request(app).post('/api/skill-hosts/budget-plan').send({ budget: 1000 });
+        expect(r.status).toBe(403);
+    });
+
     test('② plan 缺 host / 缺 name → 400', async () => {
         process.env.PROXY_L2_SKILLHOSTS = '1';
         const a = await request(app).post('/api/skill-hosts/plan').send({ name: 'x' });

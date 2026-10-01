@@ -13,6 +13,7 @@
 
 const express = require('express');
 const SH = require('../../l2/skill-hosts.js');
+const SP = require('../../l2/skill-policy.js');
 
 const router = express.Router();
 
@@ -68,6 +69,29 @@ router.get('/:hostId/scan', (req, res) => {
         // 含未知宿主（getHost 抛错）
         res.status(e.message.includes('unknown host') ? 404 : 500)
             .json({ error: 'skill-hosts-scan-failed', detail: e.message });
+    }
+});
+
+// POST /budget-plan → skill 预算 dry-run：只回答「给这么多预算会关掉哪几条」。
+// 纯算：不建 policy、不跑 apply、不落盘。l2/skill-policy.js 的 explainSkillBudget 口径。
+// body: { project?, host?, budget?, kind? }
+router.post('/budget-plan', (req, res) => {
+    try {
+        const b = req.body || {};
+        const opts = {};
+        if (b.project) { opts.project = b.project; }
+        // 未知宿主 → 404（跟 scan 一个口径，别静默返回空账本）
+        if (b.host) { SP.SK.getHost(b.host); opts.host = b.host; }
+        const out = SP.explainSkillBudget({
+            ...(opts.host ? { host: opts.host } : {}),
+            ...(b.kind ? { kind: b.kind } : {}),
+            ...(Number.isFinite(Number(b.budget)) && b.budget !== '' ? { budget: Number(b.budget) } : {}),
+            ledgerOpts: opts,
+        });
+        res.json(out);
+    } catch (e) {
+        res.status(e.message.includes('unknown host') ? 404 : 500)
+            .json({ error: 'skill-hosts-budget-plan-failed', detail: e.message });
     }
 });
 

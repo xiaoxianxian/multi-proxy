@@ -149,8 +149,24 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
      </div>
 
      <!-- 门控开时：账本统计 + 宿主分布 + 明细 -->
-     <div id="skillsView" style="display:none;">
+      <div id="skillsView" style="display:none;">
        <div class="kb-stat" id="ledgerStat"></div>
+
+       <div class="kb-card" style="margin-bottom:16px;">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">作用域与预算</div>
+             <div class="kb-card-meta" id="scopeMeta">项目目录留空 = 只扫全局 $HOME；填了绝对路径则项目级优先</div>
+           </div>
+         </div>
+         <div class="kb-card-body" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+           <input type="text" id="projectInput" placeholder="项目目录绝对路径（如 /Users/x/Documents/AI项目/multi-proxy）" style="flex:1;min-width:240px;">
+           <button class="btn btn-outline" id="scanProjectBtn">按项目扫</button>
+           <input type="number" id="budgetInput" placeholder="预算 token" value="12000" style="width:150px;" title="一次请求最多装多少 token（估算口径，非真实 usage）">
+           <button class="btn btn-primary" id="budgetBtn">算预算</button>
+         </div>
+         <div id="budgetResult"><div class="empty-state" style="padding:12px;">填个预算点数「算预算」，会告诉你哪几条被关掉</div></div>
+       </div>
 
        <div class="filter-bar">
          <select id="hostFilter" title="宿主">
@@ -372,16 +388,20 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
      if (!entries.length) { box.innerHTML = '<div class="empty-state">没有匹配的 skill（换个过滤条件）</div>'; return; }
 
      var rows = ['<div class="sk-row head"><div class="sk-c">宿主</div><div class="sk-c">名称</div>' +
-        '<div class="sk-c">类型</div><div class="sk-c">分类</div><div class="sk-c path">目录</div>' +
+        '<div class="sk-c">类型</div><div class="sk-c">分类</div><div class="sk-c">作用域</div><div class="sk-c path">目录</div>' +
         '<div class="sk-c num">token(估)</div><div class="sk-c">状态</div></div>'];
      rows = rows.concat(entries.map(function(e) {
        var kind = e.kind === 'skill' ? '标准' : '平铺md';
        var badgeKind = e.kind === 'skill' ? 'badge-success' : 'badge-info';
+       var scopeTxt = e.scope === 'project'
+          ? '<span class="badge badge-info">项目级</span>'
+          : '<span style="color:var(--color-text-tertiary);">全局</span>';
        return '<div class="sk-row">' +
           '<div class="sk-c">' + esc(e.host) + '</div>' +
           '<div class="sk-c">' + esc(e.name || '(无 name)') + '</div>' +
           '<div class="sk-c"><span class="badge ' + badgeKind + '">' + kind + '</span></div>' +
           '<div class="sk-c">' + esc(e.category || '-') + '</div>' +
+          '<div class="sk-c">' + scopeTxt + '</div>' +
           '<div class="sk-c path">' + esc(e.path || '-') + '</div>' +
           '<div class="sk-c num">' + (e.estTokens == null ? '<span title="没量过，不是 0">—</span>' : num(e.estTokens)) + '</div>' +
           '<div class="sk-c">' + (e.disabled ? '<span class="badge badge-info">已禁用</span>' : '') + '</div>' +
@@ -389,6 +409,66 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
      }));
      box.innerHTML = rows.join('');
    }
+
+   // ===== 预算 dry-run =====
+   function renderBudget(plan) {
+     var box = document.getElementById('budgetResult');
+     if (!box) return;
+     if (!plan) { box.innerHTML = '<div class="empty-state" style="padding:12px;">算失败了（门控未开或扫描出错）</div>'; return; }
+     var ex = plan.excluded || [];
+     var top = ex.slice(0, 8).map(function(s) {
+       return esc(s.host + '/' + s.name) + ' <b>' + num(s.estTokens) + '</b>';
+     }).join('；');
+     var more = ex.length > 8 ? '；…共 ' + num(ex.length) + ' 条' : '';
+     box.innerHTML =
+        '<div class="kb-card-meta" style="padding:10px 16px;line-height:1.9;">' +
+        '候选 <b>' + num(plan.candidates) + '</b> 条 / ' + num(plan.candidatesTokens) + ' tok　·　' +
+        '预算 <b>' + num(plan.budget) + '</b>　→　' +
+        '装 <b>' + num(plan.injectedCount) + '</b> 条 ' + num(plan.injectedTokens) + ' tok　·　' +
+        '关 <b>' + num(plan.excludedCount) + '</b> 条 ' + num(plan.excludedTokens) + ' tok　·　' +
+        '净省 <b>' + num(plan.excludedTokens) + '</b> tok' +
+        '</div>' +
+        (ex.length ? '<div class="kb-card-meta" style="padding:0 16px 14px;">被关掉的（最贵 8 条）：' + top + more + '</div>' : '') +
+        '<div class="kb-card-meta" style="padding:0 16px 14px;color:var(--color-text-tertiary);">' +
+        '这是 <b>proxy 侧的注入决策</b>，不是删文件 —— 否决 ≠ 卸载，要真卸载走 skill-hosts.setEnabled() 显式传 home|project。</div>';
+   }
+
+   document.getElementById('budgetBtn').addEventListener('click', function() {
+     showLoading();
+     var b = Number(document.getElementById('budgetInput').value);
+     var body = { budget: Number.isFinite(b) && b > 0 ? b : 12000 };
+     var pv = (document.getElementById('projectInput').value || '').trim();
+     if (pv) { body.project = pv; }
+     fetch('/api/skill-hosts/budget-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+     })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(d) {
+          hideLoading();
+          renderBudget(d);
+          if (!d) { showToast('预算计算失败或门控未开', 'error'); }
+        })
+        .catch(function(err) { hideLoading(); showToast('预算计算失败: ' + err.message, 'error'); });
+   });
+
+   document.getElementById('scanProjectBtn').addEventListener('click', function() {
+     showLoading();
+     var pv = (document.getElementById('projectInput').value || '').trim();
+     fetch('/api/skill-hosts/ledger?tokens=1' + (pv ? '&project=' + encodeURIComponent(pv) : ''))
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(d) {
+          hideLoading();
+          if (!d) { showToast('扫描失败或门控未开', 'error'); return; }
+          ledger = d;
+          render();
+          var sc = document.getElementById('scopeMeta');
+          if (sc) { sc.textContent = pv ? '当前：项目级 ' + pv : '当前：全局 $HOME（项目目录留空）'; }
+          showToast('已扫描 ' + (d.totals ? d.totals.entries : 0) + ' 条', 'success');
+        })
+        .catch(function(err) { hideLoading(); showToast('扫描失败: ' + err.message, 'error'); });
+   });
 
    // ===== 事件绑定 =====
    document.getElementById('refreshBtn').addEventListener('click', function() {

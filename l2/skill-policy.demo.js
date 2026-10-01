@@ -1,0 +1,145 @@
+'use strict';
+// 账本 → token-policy 控制面 · 真跑验证 demo（node l2/skill-policy.demo.js）
+// 断言分两组：①构造 ledger（确定性，任何机器都能过）②本机真账本（软断言，只报不断言失败）。
+const M = require('./skill-policy.js');
+const TP = require('./token-policy.js');
+const assert = require('assert');
+
+let pass = 0, fail = 0;
+const check = (name, fn) => { try { fn(); pass++; console.log(`PASS  ${name}`); } catch (e) { fail++; console.log(`FAIL  ${name}    -- ${e.message}`); } };
+
+// 构造账本：最贵 28,547 / 中 8,000 / 小 1,000 / 量不了的 null / 已禁用的
+const mkLedger = () => ({
+    entries: [
+        { host: 'hermes', name: 'proxy-rebuild-dev', kind: 'skill', estTokens: 28547, category: null, disabled: false },
+        { host: 'hermes', name: 'nested-one', kind: 'skill', estTokens: 8000, category: 'devops', disabled: false },
+        { host: 'workbuddy', name: 'small-one', kind: 'skill', estTokens: 1000, category: null, disabled: false },
+        { host: 'workbuddy', name: 'loose-md', kind: 'loose-md', estTokens: null, category: null, disabled: false },
+        { host: 'codex', name: 'off-one', kind: 'skill', estTokens: 9999, category: null, disabled: true },
+    ],
+});
+
+// 1. candidates：disabled 与量不了的（null）都不进预算；null 绝不按 0 算
+check('candidates 排除 disabled 与 estTokens=null（null 不是 0）', () => {
+    const cs = M.candidates(mkLedger(), {});
+    assert.strictEqual(cs.length, 3, '只剩 3 条真能参与预算的');
+    assert.ok(!cs.some((s) => s.estTokens == null), 'null 条目混入预算');
+    assert.ok(!cs.some((s) => s.disabled), 'disabled 条目混入预算');
+    assert.strictEqual(cs.reduce((n, s) => n + s.estTokens, 0), 28547 + 8000 + 1000);
+});
+
+// 2. host 过滤
+check('candidates 支持 host 过滤', () => {
+    const cs = M.candidates(mkLedger(), { host: 'hermes' });
+    assert.strictEqual(cs.length, 2);
+});
+
+// 3. 预算分配：塞不下的显式 excluded，且不装就不算它花钱
+check('planSkillBudget：cost DESC 贪心，塞不下进 excluded', () => {
+    const cs = M.candidates(mkLedger(), {});
+    const p = M.planSkillBudget(cs, { budget: 10000 });
+    assert.strictEqual(p.injectedCount, 2, '8,000 + 1,000 塞得进 10,000');
+    assert.strictEqual(p.injectedTokens, 9000);
+    assert.strictEqual(p.excludedCount, 1);
+    assert.strictEqual(p.excluded[0].name, 'proxy-rebuild-dev');
+    assert.strictEqual(p.excludedTokens, 28547);
+});
+
+// 4. 预算刚好等于某条 cost：边界要算进（<= 装，> 不装）
+check('planSkillBudget 边界：used + cost <= budget 才装', () => {
+    const cs = M.candidates(mkLedger(), {});
+    const p = M.planSkillBudget(cs, { budget: 9000 });
+    assert.strictEqual(p.injectedTokens, 9000, '8,000+1,000 刚好卡住 9,000');
+    assert.strictEqual(p.excludedCount, 1);
+    const p2 = M.planSkillBudget(cs, { budget: 8999 });
+    assert.strictEqual(p2.injectedCount, 1, '少 1 tok 就只剩 1 条');
+});
+
+// 5. 预算塞得下：excluded 空，netTokenDelta 为 0（0 是诚实值：确实一条没关）
+check('planSkillBudget 预算充足 → excluded 为空、netTokenDelta 0', () => {
+    const p = M.planSkillBudget(M.candidates(mkLedger(), {}), { budget: 999999 });
+    assert.strictEqual(p.excludedCount, 0);
+    assert.ok(!p.netTokenDelta, `一条没关就该是 0/-0，实际 ${p.netTokenDelta}`);   // -0 也 falsy
+});
+
+// 6. policy 描述：hook/appliesTo/default off/priority/cost
+check('createSkillBudgetPolicy 默认 enabled:false、cost=注入上限而非全量', () => {
+    const pol = M.createSkillBudgetPolicy({ ledger: mkLedger(), agentType: 'coding', budget: 12000 });
+    assert.strictEqual(pol.hook, 'onRequestAssemble');
+    assert.strictEqual(pol.enabled, false, 'pack 默认关铁律');
+    assert.strictEqual(pol.appliesTo.join(','), 'coding');
+    assert.strictEqual(pol.priority, 50);
+    assert.strictEqual(pol.cost, 12000, 'cost 是注入上限，不是 38k 全量');
+    assert.strictEqual(pol.name, '[skill-budget]all');
+});
+
+// 7. 真挂进 token-policy 跑：handler 被调、netTokenDelta 记入 estSaved、excluded 可查
+check('挂进 token-policy 实跑：estSaved 累加 = -excludedTokens', () => {
+    const tp = TP.createTokenPolicy({ budget: { maxInjectTokens: 20000, perPolicyMaxRatio: 0.5 } });
+    const pol = M.createSkillBudgetPolicy({ ledger: mkLedger(), agentType: 'coding', enabled: true });
+    tp.registerPolicy(pol);
+    const run = tp.apply('onRequestAssemble', { agentType: 'coding', skillBudget: 10000 });
+    const r = run.results.find((x) => x.policy === pol.name);
+    assert.ok(r, 'policy 没被跑到');
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.out.excludedCount, 1);
+    assert.strictEqual(r.out.netTokenDelta, -28547);
+    assert.strictEqual(run.estSaved, -28547, 'estSaved 累加器吃下了 netTokenDelta');
+    const rep = tp.report();
+    assert.strictEqual(rep.estSavedTokens, -28547);
+});
+
+// 8. ctx.skillBudget 是请求级覆盖：不传就用 policy 的 cost 上限
+check('ctx.skillBudget 请求级覆盖，缺省回落 DEFAULT_BUDGET', () => {
+    const tp = TP.createTokenPolicy({ budget: { maxInjectTokens: 200000, perPolicyMaxRatio: 1 } });
+    const pol = M.createSkillBudgetPolicy({ ledger: mkLedger(), agentType: 'coding', enabled: true });
+    tp.registerPolicy(pol);
+    const a = tp.apply('onRequestAssemble', { agentType: 'coding', skillBudget: 10000 });
+    const b = tp.apply('onRequestAssemble', { agentType: 'coding' });
+    assert.strictEqual(a.results[0].out.excludedTokens, 28547);
+    assert.strictEqual(b.results[0].out.budget, M.DEFAULT_BUDGET, '不传就用默认 12,000');
+});
+
+// 9. 诚实约束：token-policy 的 maxInjectTokens 小于 policy.cost → 被 §3.5 贪心判 skipped
+//    注意 handler **仍会被调用**（出来的是 applied=false），别误读成「策略没生效」。
+check('诚实约束：maxInjectTokens < policy.cost 时 applied=false（handler 仍跑）', () => {
+    const tp = TP.createTokenPolicy();                       // 默认 maxInjectTokens=1000 < 12000
+    const pol = M.createSkillBudgetPolicy({ ledger: mkLedger(), agentType: 'coding', enabled: true });
+    tp.registerPolicy(pol);
+    const run = tp.apply('onRequestAssemble', { agentType: 'coding', skillBudget: 10000 });
+    const r = run.results[0];
+    assert.strictEqual(r.skipped, true, '默认预算下确实被判超预算');
+    assert.strictEqual(r.out.excludedTokens, 28547, '但 handler 照跑，裁剪结果仍正确');
+});
+
+// 10. appliesTo 不对口的 agentType 不参与该次 apply
+check('appliesTo 不对口的 agentType 被 token-policy 过滤掉', () => {
+    const tp = TP.createTokenPolicy({ budget: { maxInjectTokens: 200000, perPolicyMaxRatio: 1 } });
+    tp.registerPolicy(M.createSkillBudgetPolicy({ ledger: mkLedger(), agentType: 'aigc', enabled: true }));
+    const run = tp.apply('onRequestAssemble', { agentType: 'coding' });
+    assert.strictEqual(run.results.length, 0, 'coding 不该跑到 aigc 的 policy');
+});
+
+// 11. explainSkillBudget dry-run：纯算不注册不落盘，数字与 plan 一致
+check('explainSkillBudget dry-run 与 plan 口径一致', () => {
+    const ex = M.explainSkillBudget({ ledger: mkLedger(), budget: 10000 });
+    assert.strictEqual(ex.candidates, 3);
+    assert.strictEqual(ex.excludedTokens, 28547);
+    assert.strictEqual(ex.netTokenDelta, -28547);
+    assert.strictEqual(ex.excluded[0].host, 'hermes');
+    assert.ok(ex.at, '带时间戳');
+});
+
+// 12. 本机真账本（软断言）：不硬断言具体条数，机器不一样就跳过
+check('本机真账本：能出候选、且不把量不了的当 0', () => {
+    const ex = M.explainSkillBudget({ budget: 12000 });
+    assert.ok(ex.candidates > 0, '本机至少扫出候选');
+    assert.ok(ex.excludedTokens > ex.injectedTokens, '12k 预算在本机装不全整本账');
+    assert.ok(!ex.excluded.some((s) => s.estTokens == null), 'excluded 里不许有量不了的');
+    const nulled = ex.injected.concat(ex.excluded).filter((s) => s.estTokens == null);
+    assert.strictEqual(nulled.length, 0, '候选里本来就不该有 null');
+    console.log(`      （本机真账本：候选 ${ex.candidates} 条 / 装 ${ex.injectedCount} 条 ${ex.injectedTokens} tok / 关 ${ex.excludedCount} 条 ${ex.excludedTokens} tok）`);
+});
+
+console.log(`\n[Skill-Policy demo] PASS ${pass} / ${pass + fail}`);
+process.exit(fail === 0 ? 0 : 1);

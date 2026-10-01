@@ -75,6 +75,7 @@ const DEMO_TAGS = {
     'rate-limiter.demo.js': ['governance'],
     'skill-service.demo.js': ['plugin', 'skill'],
     'skill-hosts.demo.js': ['plugin', 'skill', 'host'],
+    'skill-policy.demo.js': ['plugin', 'skill', 'policy'],
     'token-policy.demo.js': ['governance'],
     'knowledge-base.demo.js': ['knowledge', 'routing'],
     'routing-base.demo.js': ['routing', 'template', 'tier', 'adapter'],
