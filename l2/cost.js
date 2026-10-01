@@ -70,6 +70,29 @@ function makeCostSignal(name, s, now, providerId, opts) {
     return sig;
 }
 
+// ---- C7：A 路进料管（token×单价 → 等价余额，喂同一内核，内核零重写）----
+//
+// B 路喂「余额」（递减），消费额 = 首 − 末。A 路喂 token，得先折成同构的余额：
+// 累计消费取负（0 → -s1 → -(s1+s2)），且首条 A 路快照前补一条 0 起点——
+// 否则 total 会从 -s1 起算，少掉第一笔。seriesConsumption / makeCostSignal 完全不动。
+
+/**
+ * token → 钱（与 savings-gateway 同一口径：CNY / 百万 token）。
+ * 价格缺失或不合法 → 返回 null，**绝不拿默认值冒充**（0 会被读成「确实没花钱」）。
+ * @param {{promptTokens?:number, completionTokens?:number}} tokens 兼容 snake_case
+ * @param {{input:number, output:number}} pricing
+ * @returns {number|null}
+ */
+function tokenCost(tokens, pricing) {
+    if (!tokens || typeof tokens !== 'object') { return null; }
+    if (!pricing || !Number.isFinite(pricing.input) || !Number.isFinite(pricing.output)) { return null; }
+    const pt = Number.isFinite(tokens.promptTokens) ? tokens.promptTokens
+        : Number.isFinite(tokens.prompt_tokens) ? tokens.prompt_tokens : 0;
+    const ct = Number.isFinite(tokens.completionTokens) ? tokens.completionTokens
+        : Number.isFinite(tokens.completion_tokens) ? tokens.completion_tokens : 0;
+    return pt / 1e6 * pricing.input + ct / 1e6 * pricing.output;
+}
+
 // ---- 工厂：每实例独立 store（测试隔离）；信号源无关、非侵入 ----
 function createCostService(opts = {}) {
     const store = opts.store || { providers: [] };
@@ -96,13 +119,35 @@ function createCostService(opts = {}) {
     function record(name, balance, opts = {}) {
         const now = typeof opts.now === 'number' ? opts.now : localClock();
         const p = findP(name, opts.providerId);
-        const snap = { ts: now, balance: coerce(balance) };
+        // A 路：opts.tokens（+opts.pricing）→ 折算成等价余额，走与 B 路完全相同的下游
+        let bal = coerce(balance);
+        let basis = 'balance';
+        let spend = null;
+        let priced = true;
+        if (opts.tokens) {
+            spend = tokenCost(opts.tokens, opts.pricing);
+            if (spend != null) {
+                basis = 'token';
+                if (!Number.isFinite(p.spent)) {
+                    p.spent = 0;
+                    p.snapshots.push({ ts: now, balance: 0, basis: 'token' }); // A 路零点，缺它 total 会少第一笔
+                }
+                p.spent += spend;
+                bal = -p.spent;
+            } else {
+                // 给了 token 但价格缺失：不假装有价，也不填 0 冒充「没花钱」
+                basis = 'unpriced';
+                priced = false;
+            }
+        }
+        const snap = { ts: now, balance: bal, basis };
+        if (basis === 'token') { snap.spend = spend; snap.tokens = { ...opts.tokens }; }
         p.snapshots.push(snap);
         if (p.snapshots.length > currentConfig.maxSnapshots) { p.snapshots = p.snapshots.slice(-currentConfig.maxSnapshots); }
         const consumption = seriesConsumption(p.snapshots, undefined, currentConfig.reportWindowMs);
         const sig = makeCostSignal(name, p, now, opts.providerId, opts);
         if (opts.persist !== false) { persist(p); }
-        return { snapshot: snap, provider: p, consumption, signal: sig };
+        return { snapshot: snap, provider: p, consumption, signal: sig, basis, priced };
      }
      // consumption(name, opts?) — 消费额（= 首快照 − 末快照，非负）
     function consumption(name, opts = {}) {
@@ -162,6 +207,7 @@ module.exports = {
     report: _store.report,
     produceAlertSignal: _store.produceAlertSignal,
     seriesConsumption,
+    tokenCost,
     setConfig, setClock, getConfig, getSnapshotsFile, setSnapshotsFile,
     costEnabled, trackOnly,
     reset,

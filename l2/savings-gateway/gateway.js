@@ -44,6 +44,40 @@ const DEFAULT_PRICING = {
 };
 const PLANNED_TIER = 'large'; // 设计稿 §3：原计划成本 = 大模型基线
 
+// ---- C6：per-model 价表（取代「只有三档 tier」的粗粒度）----
+//
+// 为什么需要：三档 tier 是「量级估算」，同一个 tier 里不同模型价差可达数倍，
+// 拿 tier 价算出来的「省了多少」是量级数不是账目数。
+//
+// 默认空：没有 per-model 数据时一律回落 tier，**绝不拿 tier 估算冒充 model 实测价**。
+// 价表由调用方注入（opts.pricing），内核不读 manager lib（非侵入铁律）。
+
+/** per-model 表挂在 pricing.models 下，形状 { '<model>': { input, output } }（CNY / 百万 token）。 */
+const DEFAULT_MODEL_PRICING = Object.freeze({});
+
+/**
+ * 解析单价：per-model 优先 → 回落 tier → 都没有返回 null（不炸、不猜）。
+ * @param {object} pricing 价表；兼容现有扁平形状 { small, medium, large } 与新形状 { tiers, models }
+ * @param {string} [model] 具体模型名
+ * @param {string} [tier]  档位
+ * @returns {{input:number, output:number, source:'model'|'tier', key:string}|null}
+ */
+function resolvePricing(pricing, model, tier) {
+    const p = pricing && typeof pricing === 'object' ? pricing : DEFAULT_PRICING;
+    if (model && p.models && p.models[model]) {
+        const m = p.models[model];
+        if (Number.isFinite(m.input) && Number.isFinite(m.output)) {
+            return { input: m.input, output: m.output, source: 'model', key: model };
+        }
+    }
+    // 兼容扁平形状：新形状优先取 p.tiers[tier]
+    const t = p.tiers && p.tiers[tier] ? p.tiers[tier] : p[tier];
+    if (t && Number.isFinite(t.input) && Number.isFinite(t.output)) {
+        return { input: t.input, output: t.output, source: 'tier', key: tier };
+    }
+    return null;
+}
+
 // 粗估 prompt tokens：CJK/通用文本按 3 字符 ≈ 1 token（启发式，shadow 模拟用；
 // 真实 usage 由调用方传 reqBody.usage 覆盖）
 function estimatePromptTokens(messages) {
@@ -153,8 +187,15 @@ function createSavingsGateway(opts = {}) {
                 if (pt > 0 || ct > 0) { /* 真实 usage 覆盖估算 */ }
             }
         }
-        const pAct = pricing[actualTier] || pricing.medium;
-        const pPlan = pricing[PLANNED_TIER];
+        // C6：per-model 优先，回落 tier，兜底内置表（不炸）。
+        // pricingSource 必须落账——原来 `|| pricing.medium` 是静默回落，
+        // 档位/模型对不上时会拿 medium 的价算出个像样的数，那是假数字。
+        const model = reqBody && reqBody.model ? reqBody.model : null;
+        const resolvedAct = resolvePricing(pricing, model, actualTier);
+        const pAct = resolvedAct || resolvePricing(pricing, null, 'medium') || DEFAULT_PRICING.medium;
+        const pricingSource = resolvedAct ? resolvedAct.source : 'fallback';
+        const pricingKey = resolvedAct ? resolvedAct.key : 'medium';
+        const pPlan = resolvePricing(pricing, null, PLANNED_TIER) || DEFAULT_PRICING[PLANNED_TIER];
         const actualCost = round6(promptTokens / 1e6 * pAct.input + completionTokens / 1e6 * pAct.output);
         const plannedCost = round6(promptTokens / 1e6 * pPlan.input + completionTokens / 1e6 * pPlan.output);
         const saved = round6(Math.max(0, plannedCost - actualCost));
@@ -172,6 +213,8 @@ function createSavingsGateway(opts = {}) {
             plannedCost,
             actualCost,
             saved,
+            pricingSource,   // 'model' = per-model 实价；'tier' = 档位估算；'fallback' = 连档位都没对上，兜底 medium
+            pricingKey,
             shadow: engine.shadowMode,
             tokensEstimated: !(reqBody && reqBody.usage),
         });
@@ -295,7 +338,9 @@ module.exports = {
     GATE_ENV,
     SHADOW_ENV,
     DEFAULT_PRICING,
+    DEFAULT_MODEL_PRICING,
     PLANNED_TIER,
+    resolvePricing,
     estimatePromptTokens,
     createSavingsGateway,
     // 单例转发
