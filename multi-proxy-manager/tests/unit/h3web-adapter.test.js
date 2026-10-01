@@ -148,4 +148,57 @@ describe('h3web adapter contract', () => {
             expect(p.width).toBeUndefined();  // 且不会偷偷回落成默认值（那是另一种静默）
         });
     });
+
+    // ---- 多镜头故事板（2026-10-02 补，走 POST /api/storyboard）----
+    describe('多镜头故事板（submitStoryboard）', () => {
+        const shots = () => [
+            { prompt: '第一镜：猫在窗台醒来', width: 512, height: 896, steps: 16 },
+            { prompt: '第二镜：猫跳上书桌', width: 512, height: 896, steps: 16 },
+        ];
+
+        test('shots 逐镜的档位真的到达下游 /api/storyboard', async () => {
+            const r = await adapter.submitStoryboard(shots());
+            const s = mock.getLastStoryboardPayload().shots;
+            expect(s).toHaveLength(2);
+            expect(s[0].prompt).toBe('第一镜：猫在窗台醒来');
+            expect(s[0].width).toBe(512);
+            expect(s[0].height).toBe(896);
+            expect(s[1].prompt).toBe('第二镜：猫跳上书桌');
+            // echo 可自证：调用方拿得到逐镜真正发出去的 payload
+            expect(r.echo.shots[0].height).toBe(896);
+            expect(r.task_id).toBeTruthy();
+        });
+
+        test('opts.perf 逐镜补位，且显式给的 key 不被覆盖', async () => {
+            await adapter.submitStoryboard(
+                [{ prompt: 'A', layers: 45 }, { prompt: 'B' }],
+                { perf: true },
+            );
+            const s = mock.getLastStoryboardPayload().shots;
+            expect(s[0].layers).toBe(45);        // 显式胜出
+            expect(s[0].reuse).toBe(2);          // 没给的照补
+            expect(s[1].layers).toBe(40);
+            expect(s[1].token_reduction).toBe(true);
+            // 故事板走 final 档语义：不落 gen_mode，尺寸不被 draft 强转
+            expect(s[1].gen_mode).toBeUndefined();
+        });
+
+        test('opts.resumeJob 落到下游 resume_job（断点续跑用）', async () => {
+            await adapter.submitStoryboard(shots(), { resumeJob: 'job_1790876828830' });
+            expect(mock.getLastStoryboardPayload().resume_job).toBe('job_1790876828830');
+        });
+
+        test('⚠️ 反证：shots 为空立刻抛错，不下发', async () => {
+            await expect(adapter.submitStoryboard([])).rejects.toThrow(/非空/);
+            await expect(adapter.submitStoryboard(null)).rejects.toThrow(/非空/);
+        });
+
+        test('⚠️ 反证：某镜缺 prompt 在 adapter 层就拒 —— 否则下发后跑到第 N 镜才炸', async () => {
+            mock.resetLastStoryboard();   // 清掉上一次记录，否则「没下发」会被旧 payload 干扰
+            await expect(adapter.submitStoryboard(
+                [{ prompt: 'A' }, { prompt: '' }, { prompt: 'C' }],
+            )).rejects.toThrow(/prompt 必填/);
+            expect(mock.getLastStoryboardPayload()).toBeNull();
+        });
+    });
 });

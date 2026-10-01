@@ -22,6 +22,9 @@ module.exports = function startMockH3web(port) {
     // 没有这个，adapter 传错字段名（如 `size` 而非 `width`）也照样 200 done，是假绿灯。
     let lastGenPayload = null;
     let lastGenHeaders = null;
+    // 故事板侧替身：同样记录最后一次 POST /api/storyboard 的 body，
+    // 供单测断言「逐镜档位真的透传到了下游」（否则 adapter 传错键名也照样 200，是假绿灯）。
+    let lastStoryboardPayload = null;
 
     const server = http.createServer((req, res) => {
         const u = new URL(req.url, 'http://localhost');
@@ -36,6 +39,33 @@ module.exports = function startMockH3web(port) {
                 lastGenHeaders = req.headers;
                 const job_id = 'job_' + Math.random().toString(36).slice(2, 8);
                 jobs[job_id] = { attempts: 0, prompt: 'unknown' };
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ job_id, status: 'pending' }));
+            });
+            return;
+        }
+
+        // 多镜头故事板：语义对齐 h3web._handle_storyboard —— shots 非空才受理，
+        // 逐镜缺 prompt 视为参数错误（h3web 走 build_args 预校验拒 400，这里等价拒）。
+        if (u.pathname === '/api/storyboard' && req.method === 'POST') {
+            let body = '';
+            req.on('data', (c) => { body += c; });
+            req.on('end', () => {
+                let p = null;
+                try { p = JSON.parse(body || '{}'); } catch { p = null; }
+                if (!p || !Array.isArray(p.shots) || p.shots.length === 0) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'shots 不能为空' }));
+                }
+                const bad = p.shots.findIndex((s) => !(s && s.prompt));
+                if (bad >= 0) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: `第 ${bad + 1} 镜参数错误: prompt 缺失` }));
+                }
+                genCalls += 1;   // 故事板也算一次 gen 口径的下游调用
+                lastStoryboardPayload = p;
+                const job_id = 'job_' + Math.random().toString(36).slice(2, 8);
+                jobs[job_id] = { attempts: 0, prompt: 'storyboard' };
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ job_id, status: 'pending' }));
             });
@@ -77,6 +107,10 @@ module.exports = function startMockH3web(port) {
         getHttpCalls: () => genCalls + statusCalls,
         getLastGenPayload: () => lastGenPayload,
         getLastGenHeaders: () => lastGenHeaders,
+        getLastStoryboardPayload: () => lastStoryboardPayload,
+        // 清掉记录，供「这次根本没打枪」类断言（不清的话保留的是上一次的 payload，
+        // 断言 toBeNull 会假红）。
+        resetLastStoryboard: () => { lastStoryboardPayload = null; },
         close: () => new Promise((res) => server.close(res)),
     };
 };

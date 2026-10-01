@@ -49,6 +49,17 @@ const H3WEB_GEN_FIELDS = [
 // 不会被 h3web 侧强转成 384×672。task 里显式给的同名 key 优先级更高（不会被覆盖）。
 const PERF_PRESET = Object.freeze({ layers: 40, reuse: 2, token_reduction: true, ssd_streaming: true });
 
+// perf 补位：只往「没显式给过同名 key」的 payload 上填预设，显式值永不覆盖。
+// submit 与 submitStoryboard 共用（单镜 payload 与逐镜 payload 语义一致）。
+function applyPerf(payload, perfOpt) {
+    if (!perfOpt) return payload;
+    const preset = perfOpt === true ? PERF_PRESET : { ...PERF_PRESET, ...perfOpt };
+    for (const [k, v] of Object.entries(preset)) {
+        if (payload[k] === undefined || payload[k] === null) payload[k] = v;
+    }
+    return payload;
+}
+
 // ---- 动态端口探测（绝不写死）----
 function netPortFree(port) {
     return new Promise((res) => {
@@ -115,6 +126,8 @@ class H3webAdapter {
         this.healthPath = opts.healthPath || '/';
         // 真实 h3web 端点（只读转发，不改 h3web）
         this.genPath = opts.genPath || '/api/gen';
+        // 多镜头故事板（2026-10-02 补）：逐镜串行 + 末帧接首帧 + 断点续跑 + 自动拼接。
+        this.storyboardPath = opts.storyboardPath || '/api/storyboard';
         this.statusPathBase = opts.statusPathBase || '/api/status';
         this.timeoutMs = opts.timeoutMs || 900000;
         // 省时预设只读暴露，调用方可先读再决定用不用（也便于文档/route 里拿去拼 task）
@@ -167,14 +180,7 @@ class H3webAdapter {
         for (const k of H3WEB_GEN_FIELDS) {
             if (task[k] !== undefined && task[k] !== null) payload[k] = task[k];
         }
-        if (opts.perf) {
-            // opts.perf===true → 用预设；传对象 → 预设叠加自定义微调（如 {layers:32}）。
-            // 只补 task 没显式给的同名 key，显式值优先，避免预设悄悄覆盖调用方的选择。
-            const preset = opts.perf === true ? PERF_PRESET : { ...PERF_PRESET, ...opts.perf };
-            for (const [k, v] of Object.entries(preset)) {
-                if (payload[k] === undefined) payload[k] = v;
-            }
-        }
+        applyPerf(payload, opts.perf);
         if (opts.genMode) payload.gen_mode = opts.genMode;
         if (opts.steps) payload.steps = opts.steps;
         if (opts.width) payload.width = opts.width;
@@ -183,6 +189,37 @@ class H3webAdapter {
         if (r.status !== 200) throw new Error(`h3web submit failed: HTTP ${r.status}`);
         const j = JSON.parse(r.body);
         if (!j.job_id) throw new Error('h3web /api/gen did not return job_id');
+        return { task_id: j.job_id, state: j.status || 'pending', echo: payload };
+    }
+
+    // 接口 3b：多镜头故事板（转发到 h3web POST /api/storyboard）
+    // shots 每项 = 一镜的完整 gen 参数（h3web 侧 build_args(dict(s)) 逐镜预校验，
+    // 第 N 镜参数错会在提交阶段就 400，不会跑到一半才炸）。
+    // opts 与 submit 同构：perf 逐镜补位、opts.resumeJob 走断点续跑（opts.perf 的微调语义
+    // 与 submit 完全一致：只补空位，显式给的胜出）。
+    // 返回 { task_id, state, echo }，echo.shots = 逐镜真正发出去的 payload，可自证每镜档位。
+    async submitStoryboard(shots, opts = {}) {
+        if (!Array.isArray(shots) || shots.length === 0) {
+            throw new Error('shots 必须是非空数组（h3web /api/storyboard 要求 shots 不能为空）');
+        }
+        const built = shots.map((s, i) => {
+            if (!s || typeof s !== 'object') throw new Error(`shots[${i}] 必须是对象`);
+            const shot = { prompt: s.prompt || '' };
+            if (!shot.prompt) {
+                throw new Error(`shots[${i}].prompt 必填 —— h3web 预校验第 ${i + 1} 镜参数会拒`);
+            }
+            for (const k of H3WEB_GEN_FIELDS) {
+                if (s[k] !== undefined && s[k] !== null) shot[k] = s[k];
+            }
+            return applyPerf(shot, opts.perf);
+        });
+        const payload = { shots: built };
+        if (opts.resumeJob) payload.resume_job = opts.resumeJob;
+        const { host, port } = await this._resolveTarget();
+        const r = await httpPostJson(host, port, this.storyboardPath, payload);
+        if (r.status !== 200) throw new Error(`h3web storyboard submit failed: HTTP ${r.status}`);
+        const j = JSON.parse(r.body);
+        if (!j.job_id) throw new Error('h3web /api/storyboard did not return job_id');
         return { task_id: j.job_id, state: j.status || 'pending', echo: payload };
     }
 
