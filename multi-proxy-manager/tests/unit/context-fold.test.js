@@ -87,8 +87,10 @@ describe('context-fold kernel (l2/context-fold.js · 28 号文档 C1「秤」)',
   });
 
   test('默认估算器复用 token-policy.estimateTokens（AGENTS §3 不重复实现）', () => {
+    // 别把数字写死：估算器 2026-10-01 起是 CJK-aware（ASCII ≈ 0.255 token/字符），30 个 'a' 现在是 8 不是旧口径的 10。
+    // 断言钉「与估算器实值一致 + 量级下限」，系数再漂也不假失败。
     expect(F.createContextFold().fold({ messages: [{ role: 'system', content: 'a'.repeat(30) }] })
-      .estimate.byCategory.system).toBe(10);
+      .estimate.byCategory.system).toBe(TP.estimateTokens('a'.repeat(30)));
   });
 });
 

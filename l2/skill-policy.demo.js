@@ -141,5 +141,82 @@ check('本机真账本：能出候选、且不把量不了的当 0', () => {
     console.log(`      （本机真账本：候选 ${ex.candidates} 条 / 装 ${ex.injectedCount} 条 ${ex.injectedTokens} tok / 关 ${ex.excludedCount} 条 ${ex.excludedTokens} tok）`);
 });
 
+// ---- veto 真生效：在 tmp 的 project fixture 上真落盘（绝不碰 ~/.hermes 之类）----
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+function mkFixture() {
+    const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-veto-'));
+    const dir = path.join(proj, '.hermes', 'skills');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(path.join(dir, 'fat-one'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'fat-one', 'SKILL.md'), 'x'.repeat(3000), 'utf8');
+    fs.mkdirSync(path.join(dir, 'tiny-one'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'tiny-one', 'SKILL.md'), 'x'.repeat(300), 'utf8');
+    return { proj, dir };
+}
+
+check('disableExcluded：不显式给 home|project 就抛错（非侵入④）', () => {
+    assert.throws(() => M.disableExcluded({ budget: 1, apply: true }), /must pass explicit/);
+});
+
+check('disableExcluded：默认 dry-run，一个字节都不写', () => {
+    const { proj, dir } = mkFixture();
+    try {
+        const r = M.disableExcluded({ project: proj, budget: 50 });   // 两条都超（76 / 765）→ 都该被否决
+        assert.strictEqual(r.dryRun, true, '默认应是 dry-run');
+        assert.strictEqual(r.wouldDisable, 2, '该动 2 条');
+        assert.strictEqual(r.actionDisabled, false);
+        assert.strictEqual(fs.readdirSync(dir).filter((d) => d.endsWith('.disabled')).length, 0, 'dry-run 不许改名');
+        assert.ok(r.skipped.every((s) => s.reason === 'dry-run'), 'skipped 要说明是 dry-run');
+    } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+});
+
+check('disableExcluded：apply 后真打上 .disabled，且重新扫描就看不见它了', () => {
+    const { proj, dir } = mkFixture();
+    try {
+        const r = M.disableExcluded({ project: proj, budget: 50, apply: true });
+        assert.strictEqual(r.apply, true);
+        assert.strictEqual(r.applied.length, 2, '两条都被关掉');
+        assert.strictEqual(r.failed.length, 0, '不应有失败');
+        assert.ok(r.applied[0].to.endsWith('.disabled'), '落点必须是 .disabled 后缀');
+        assert.strictEqual(fs.existsSync(path.join(dir, 'fat-one')), false, 'fat-one 应改名走');
+        assert.strictEqual(fs.existsSync(path.join(dir, 'fat-one.disabled')), true);
+        // 复审：被关的不再进候选（candidates 排除 disabled）
+        const after = M.SK.scan('hermes', { project: proj, tokens: true });
+        const names = after.skills.map((s) => s.name);
+        assert.ok(!names.includes('fat-one') && !names.includes('tiny-one'), `候选应剩别的，实际 ${names}`);
+        assert.strictEqual(after.skills.filter((s) => s.disabled).length, 2, '两条都带 disabled 标记');
+    } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+});
+
+check('disableExcluded：maxDisable 拦住批量误操作（默认上限 10）', () => {
+    const { proj, dir } = mkFixture();
+    try {
+        for (let i = 0; i < 8; i += 1) {                                  // 造 8 条 + 原本 2 条 = 10
+            fs.mkdirSync(path.join(dir, `f${i}`), { recursive: true });
+            fs.writeFileSync(path.join(dir, `f${i}`, 'SKILL.md'), 'x'.repeat(5000), 'utf8');
+        }
+        const r = M.disableExcluded({ project: proj, budget: 50, apply: true, maxDisable: 3 });
+        assert.strictEqual(r.excludedCount, 10, '账本口径上 10 条都被否决');
+        assert.strictEqual(r.wouldDisable, 3, '真动手的只放前 3 条');
+        assert.strictEqual(r.actionDisabled, true, '撞上限要如实报');
+        assert.strictEqual(r.applied.length, 3, '只动前 3 条');
+        assert.strictEqual(fs.readdirSync(dir).filter((d) => d.endsWith('.disabled')).length, 3);
+    } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+});
+
+check('disableExcluded：单条失败不中断（不是-found 如实记 failed）', () => {
+    const { proj } = mkFixture();
+    try {
+        const r = M.disableExcluded({ project: proj, budget: 50, apply: true,
+            excluded: [{ host: 'hermes', name: 'ghost-one', estTokens: 9000 }] });   // 磁盘上没这条
+        assert.strictEqual(r.applied.length, 0);
+        assert.strictEqual(r.failed.length, 1, '幽灵条目应记 failed');
+        assert.strictEqual(r.failed[0].reason, 'not-found');
+    } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+});
+
 console.log(`\n[Skill-Policy demo] PASS ${pass} / ${pass + fail}`);
 process.exit(fail === 0 ? 0 : 1);

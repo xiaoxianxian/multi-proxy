@@ -56,9 +56,12 @@ describe('token-policy kernel (l2/token-policy.js · P1 设计稿 A1-A3)', () =>
 
   test('策略预算：超上限跳过最低优先级（§3.5）', () => {
     const inst = TP.createTokenPolicy({ gate: false, budget: { maxInjectTokens: 100, perPolicyMaxRatio: 0.3 } });
-    inst.registerPolicy({ hook: 'onRequestAssemble', name: 'big', priority: 10, handler: () => 'ok', payload: 'x'.repeat(300) });
-    inst.registerPolicy({ hook: 'onRequestAssemble', name: 'mid', priority: 5, handler: () => 'ok', payload: 'x'.repeat(150) });
-    inst.registerPolicy({ hook: 'onRequestAssemble', name: 'low', priority: 1, handler: () => 'ok', payload: 'x'.repeat(150) });
+    // ⚠️ payload 长度按校准后的估算系数（ASCII ≈ 0.255 token/字符）反推，这条用例的意图是
+    // 「big/mid 各被 per-policy 上限截断吃 30，剩 40 装不下 low(46)」。旧口径 /3 是 100/50/50，
+    // 同一组长度新口径会算出 77/77/77 → 只 skip 1 个或 2 个，断言就漂了。故三个长度错开：77 / 61 / 46。
+    inst.registerPolicy({ hook: 'onRequestAssemble', name: 'big', priority: 10, handler: () => 'ok', payload: 'x'.repeat(300) });  // 77
+    inst.registerPolicy({ hook: 'onRequestAssemble', name: 'mid', priority: 5, handler: () => 'ok', payload: 'x'.repeat(240) });  // 61
+    inst.registerPolicy({ hook: 'onRequestAssemble', name: 'low', priority: 1, handler: () => 'ok', payload: 'x'.repeat(180) });  // 46
     const r = inst.apply('onRequestAssemble', {});
     const byName = (n) => r.results.find((x) => x.policy === n);
     expect(byName('big')).toBeDefined();

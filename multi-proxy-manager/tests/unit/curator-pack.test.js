@@ -163,8 +163,9 @@ describe('Curator pack · 预算不超（§3.5：maxInjectTokens:1000 / perPolic
   test('perPolicyMaxRatio：单 handler 成本 > 30% 上限时截断到上限', () => {
     const c = createCurator();
     const inst = c.instance;
-    // cost = ceil(901/3) = 301 > per = ceil(1000*0.3)=300 → 截断到 300
-    inst.registerPolicy({ hook: 'onToolOutput', name: 'big', priority: 5, handler: () => 'ok', payload: 'x'.repeat(901) });
+    // ⚠️ 长度按 2026-10-01 校准后的估算系数（ASCII ≈ 0.255 token/字符）反推：
+    // 1500 字符 → 382 > per = ceil(1000*0.3)=300 → 截断到 300（旧口径 ceil(901/3)=301 也能截断，故长度改大以保住「截断」这条断言）
+    inst.registerPolicy({ hook: 'onToolOutput', name: 'big', priority: 5, handler: () => 'ok', payload: 'x'.repeat(1500) });
     const r = inst.apply('onToolOutput', {});
     const big = r.results.find((x) => x.policy === 'big');
     expect(big).toBeDefined();
@@ -175,10 +176,10 @@ describe('Curator pack · 预算不超（§3.5：maxInjectTokens:1000 / perPolic
   test('超剩余预算 → 低优先级 policy 被跳过（§3.5 串行贪心：前几个截断吃满后，末个 skip）', () => {
     const c = createCurator();
     const inst = c.instance; // 默认 budget max=1000 / perPolicyMaxRatio=0.3 → per=ceil(1000*0.3)=300
-    // 4 个 policy，priority DESC，各 cost=ceil(901/3)=301（>per=300 → 截断 300）
-    // p1: 301<1000 → eff 300, 余 700；p2: eff 300, 余 400；p3: eff 300, 余 100；p4: 301>100 → skipped
+    // 4 个 policy，priority DESC，各 cost=1500 字符 → 382（>per=300 → 截断 300）
+    // p1: 382<1000 → eff 300, 余 700；p2: eff 300, 余 400；p3: eff 300, 余 100；p4: 382>100 → skipped
     for (const [prio, name] of [[10, 'p1'], [9, 'p2'], [8, 'p3'], [7, 'p4']]) {
-      inst.registerPolicy({ hook: 'onRequestAssemble', name, priority: prio, handler: () => 'ok', payload: 'x'.repeat(901) });
+      inst.registerPolicy({ hook: 'onRequestAssemble', name, priority: prio, handler: () => 'ok', payload: 'x'.repeat(1500) });
     }
     const r = inst.apply('onRequestAssemble', {});
     expect(r.results.find((x) => x.policy === 'p1').ok).toBe(true);

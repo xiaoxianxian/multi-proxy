@@ -136,7 +136,8 @@ describe('skill-hosts 路由（只读面）', () => {
             fs.mkdirSync(path.join(proj, '.hermes', 'skills', name), { recursive: true });
             fs.writeFileSync(path.join(proj, '.hermes', 'skills', name, 'SKILL.md'), 'x'.repeat(chars), 'utf8');
         };
-        mk('cheap', 300); mk('mid', 3000); mk('fat', 30000);  // 100 / 1000 / 10000 tok
+        // ⚠️ 长度按校准后的估算系数（ASCII ≈ 0.255 token/字符）反推：300→76 / 3000→765 / 40000→10200
+        mk('cheap', 300); mk('mid', 3000); mk('fat', 40000);  // 76 / 765 / 10200 tok
 
         const r = await request(app).post('/api/skill-hosts/budget-plan')
             .send({ project: proj, budget: 1100 });
@@ -145,9 +146,9 @@ describe('skill-hosts 路由（只读面）', () => {
         // 所以只断言「fat 必在 excluded 且其 estTokens 就是造出来的量」，别把杂项算死）
         const fat = r.body.excluded.find((s) => s.name === 'fat');
         expect(fat).toBeTruthy();
-        expect(fat.estTokens).toBe(10000);
+        expect(fat.estTokens).toBe(10200);
         expect(r.body.injectedTokens).toBeLessThanOrEqual(1100);
-        expect(r.body.excludedTokens).toBeGreaterThanOrEqual(10000);
+        expect(r.body.excludedTokens).toBeGreaterThanOrEqual(10200);
         expect(r.body.netTokenDelta).toBe(-r.body.excludedTokens);
         expect(r.body.excluded.every((s) => s.estTokens != null)).toBe(true);
         // 装 + 关 = 候选总量（口径自洽）

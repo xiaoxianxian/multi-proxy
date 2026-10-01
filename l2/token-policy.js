@@ -57,10 +57,31 @@ function gateOpen() {
   return v === '1' || v === 'true' || v === 'on';
 }
 
-// ---- 估算 tokens（与 prompt-cache.js / savings-gateway 一致：CJK 3 字符 ≈ 1 token）----
+// ---- 估算 tokens（CJK-aware，2026-10-01 校准）----
+//
+// 旧公式是「总长/3」（读作「CJK 3 字 ≈ 1 token」），但这对中文**系统性低估**：
+// 拿本机 129 份真实 SKILL.md 全文（108 万字符 / 39.0 万真值 token，o200k_base 计）做对照：
+//   - 中文占比 ≥30% 的 37 份文件：真值/旧公式 = **1.732**（旧公式低估 73%）
+//   - 中文占比 <30% 的 92 份文件：真值/旧公式 = 0.974（那一档它反而略高估）
+// 整体 MAPE 32.9%。原因是中文在 o200k 里约 1 token/字，根本不是 1 token/3 字。
+//
+// 新公式（最小二乘拟合，语料同上，落盘证据 logs/token-estimate-calibration.json）：
+//   act ≈ 1.04 * CJK字 + 0.255 * 非CJK字符      加权(true/est)=0.997  MAPE=7.0%  最差单文件 24%
+// 对照：旧 ceil(len/3) 加权 1.082/MAPE 32.9%；sidecar 旧式 cjk*0.75+rest/3.6 加权 1.055/MAPE 14.5%。
+//
+// ⚠️ 诚实边界（三件必须知道的）：
+//   ① 系数是**混合语料**拟合出来的，不 tokenizer、不是 provider usage，拿它做硬阈值要留余量。
+//   ② 对的是 o200k_base（GPT-4o/5 系）。换 Qwen / Claude / DeepSeek 分词要重跑
+//      tools/token-estimate-calibrate.js 重造系数 —— 别拿这个数去套别的模型。
+//   ③ 系数可用环境变量覆盖（换分词器场景）：TOKEN_CJK_RATIO / TOKEN_ASCII_RATIO。
+const CJK_RATIO = Number(process.env.TOKEN_CJK_RATIO ?? '') || 1.04;
+const ASCII_RATIO = Number(process.env.TOKEN_ASCII_RATIO ?? '') || 0.255;
+const CJK_GLOBAL = new RegExp(/[㐀-䶿一-鿿぀-ヿ豈-﫿]/.source, 'g');   // 模块级 /g，match 自带重置，热路径不重建
+
 function estimateTokens(text) {
   if (!text || typeof text !== 'string') return 0;
-  return Math.max(1, Math.ceil(text.length / 3));
+  const cjk = (text.match(CJK_GLOBAL) || []).length;
+  return Math.max(1, Math.round(cjk * CJK_RATIO + (text.length - cjk) * ASCII_RATIO));
 }
 
 // 估算一组 handler policy 的注入 token 开销（按 payload 文本长度）

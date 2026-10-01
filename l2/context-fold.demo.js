@@ -3,6 +3,7 @@
 // 全内存、纯函数、零 manager 依赖。
 // 验收目标：给 injections / actuals / 异常 role / 图片等不同输入，七类组成都能算对且不丢数。
 const F = require('./context-fold.js');
+const TP = require('./token-policy.js');
 const assert = require('assert');
 
 let pass = 0, fail = 0;
@@ -143,10 +144,13 @@ check('12. 估算是 0 但实测有数 → 告警而非伪造', () => {
     assert.ok(r.warnings.some((w) => w.includes('estimate-total-is-zero')), '必须说明分摊失败原因');
 });
 
-// 13. 默认估算器（沿用 token-policy.js 的长度 /3）也能跑通，证明复用成立
+// 13. 默认估算器直接用 token-policy.estimateTokens（AGENTS §3 复用不重造）
+// ⚠️ 注意别把具体数值写死：2026-10-01 校准后估算器是 CJK-aware（ASCII ≈ 0.255 token/字符），
+// 30 个 'a' 现在是 8 而不是 8 的旧口径 10。断言只钉「与估算器实值一致」，系数再漂也不假失败。
 check('13. 默认估算器复用 token-policy.estimateTokens', () => {
     const r = F.createContextFold().fold({ messages: [{ role: 'system', content: 'a'.repeat(30) }] });
-    assert.strictEqual(r.estimate.byCategory.system, 10, '30 字符 /3 = 10');
+    assert.strictEqual(r.estimate.byCategory.system, TP.estimateTokens('a'.repeat(30)), '与估算器实值一致');
+    assert.ok(r.estimate.total >= 8, `30 ASCII 字符下限 8，实际 ${r.estimate.total}`);
 });
 
 // ---- C2：per-request 折叠 + Delta（时间线）----

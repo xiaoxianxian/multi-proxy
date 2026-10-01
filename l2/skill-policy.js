@@ -22,7 +22,13 @@
 
 const SK = require('./skill-hosts.js');
 
-// 默认注入预算：按本机实测定的保守值（单条最大 28,547 tok / 144 条合计 ~359k）。
+// 默认注入预算：按本机实测定的保守值。
+// 2026-10-01 复核（口径：l2/token-policy.estimateTokens 校准后 = CJK 1.04 token/字 + 其余 0.255/字符，
+// 语料 129 份真实 SKILL.md，真值对照 logs/token-estimate-calibration.json）：
+//   候选 129 条 / 合计 390,976 tok（旧口径 358,898，差 9.0%），最贵单条 25,346
+//   预算 12000 → 装 2 条（7,684 + 4,132），否决 127 条 / 379,160
+//   预算  6000 → 装 1 条（5,698）；预算 25000 → 装 3 条（24,962）
+// 「装 2 条」是刻意的：skill 是每次请求都跟着走的常驻开销，装太多等于把上下文租金付给插件。
 // 用 ctx.skillBudget 覆盖（请求级），传了就以 ctx 为准。
 const DEFAULT_BUDGET = 12000;
 
@@ -125,11 +131,68 @@ function explainSkillBudget(opts = {}) {
     };
 }
 
+// ---- veto：把「被预算否决」真正落到磁盘 ----
+//
+// 前面的 handler 只做**注入侧记帐**（否决 = 这次请求不注入，磁盘纹丝不动）。
+// 但用户真问过一句：「否决到底算不算生效？」—— 如果宿主照样加载那条 skill，下一轮它又回来了。
+// 所以这里补上「真关停」：给 skill 目录打 `.disabled` 后缀（skill-hosts 的既有约定）。
+//
+// ⚠️ 非侵入铁律在这条路径上一次都没松口：
+//   ① 必须显式传 home 或 project，**绝不默认 home**（setEnabled 自己就会抛错）；
+//   ② 默认 **dry-run**（apply 不传 = 只算不写），想动手得显式 apply:true；
+//   ③ 有批量上限 maxDisable（默认 10），防止「预算位一个数字错，本机 127 条 skill 全瞎」；
+//   ④ 逐个 try/catch，单条失败不回滚也不中断，如实回报 failed；
+//   ⑤ REST 面不上这个动作（routes/skill-hosts.js 只留只读端点），只走代码 / CLI。
+function disableExcluded(opts = {}) {
+    // ⚠️ 作用域必须往账本里传：不传 project/home 的话 scanLedger 会去扫**本机全账本**，
+    // 那 apply 就会拿「~/.hermes 里最贵的那几条」当目标去动磁盘 —— 正是非侵入铁律要防的事。
+    const scanOpts = { tokens: true, ...(opts.ledgerOpts || {}) };
+    if (opts.project) { scanOpts.project = opts.project; }
+    if (opts.home) { scanOpts.home = opts.home; }
+    const ledger = opts.ledger || SK.scanLedger(scanOpts);
+    const cands = candidates(ledger, opts);
+    const plan = planSkillBudget(cands, opts);
+    const targets = opts.excluded || plan.excluded;         // 允许外部指定要动谁（默认就是被否决的那批）
+    const apply = opts.apply === true;
+    const maxDisable = Number.isFinite(opts.maxDisable) ? opts.maxDisable : 10;
+    if (!opts.home && !opts.project) {
+        throw new Error('disableExcluded: must pass explicit {home} or {project} (never defaults to home)');
+    }
+    const apply2 = maxDisable > 0 && targets.length > maxDisable ? maxDisable : targets.length;
+    const list = targets.slice(0, apply2);                   // 只动前 maxDisable 个（cost DESC 已排序）
+    const applied = [], failed = [], skipped = [];
+    for (const s of list) {
+        if (s.disabled) { skipped.push({ name: s.name, reason: 'already-disabled' }); continue; }
+        const name = String(s.name || '').replace(new RegExp(SK.DISABLE_SUFFIX + '$'), '');
+        if (!name) { skipped.push({ name: s.name, reason: 'empty-name' }); continue; }
+        if (!apply) { skipped.push({ name, reason: 'dry-run' }); continue; }
+        try {
+            const r = SK.setEnabled(s.host, name, false, { home: opts.home, project: opts.project });
+            if (r && r.ok) { applied.push({ host: s.host, name, to: r.to, estTokens: s.estTokens }); }
+            else { failed.push({ host: s.host, name, reason: (r && r.reason) || 'not-found' }); }
+        } catch (e) {
+            failed.push({ host: s.host, name, reason: e.message });
+        }
+    }
+    return {
+        apply, dryRun: !apply,
+        budget: plan.budget,
+        // 注意：excludedCount 是「否决了几条」（全量口径），wouldDisable 是「真动手动了几个」（已受 maxDisable 截断）
+        excludedCount: plan.excludedCount,
+        excludedTokens: plan.excludedTokens,
+        wouldDisable: list.length,
+        maxDisable,
+        actionDisabled: apply2 < targets.length,             // true = 因为撞上批量上限没动完
+        applied, failed, skipped,
+    };
+}
+
 module.exports = {
     DEFAULT_BUDGET,
     candidates,
     planSkillBudget,
     createSkillBudgetPolicy,
     explainSkillBudget,
+    disableExcluded,
     SK,
 };

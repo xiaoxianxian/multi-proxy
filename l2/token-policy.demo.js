@@ -63,9 +63,12 @@ check('priority DESC：高优先级先执行', () => {
 check('策略预算：超上限跳过低优先级', () => {
   const inst = TP.createTokenPolicy({ gate: false, budget: { maxInjectTokens: 100, perPolicyMaxRatio: 0.3 } });
   const cap = Math.ceil(100 * 0.3); // 30
-  inst.registerPolicy({ hook: 'onRequestAssemble', name: 'big', priority: 10, handler: () => 'ok', payload: 'x'.repeat(300) }); // ~100
-  inst.registerPolicy({ hook: 'onRequestAssemble', name: 'mid', priority: 5, handler: () => 'ok', payload: 'x'.repeat(150) }); // cap→30
-  inst.registerPolicy({ hook: 'onRequestAssemble', name: 'low', priority: 1, handler: () => 'ok', payload: 'x'.repeat(150) }); // cap→30
+  // ⚠️ payload 长度是按 2026-10-01 校准后的估算系数（ASCII ≈ 0.255 token/字符）反推的：
+  // big=77 / mid=51 / low=51，要的就是「big、mid 各吃掉 30，剩 40 < low 的 51」。
+  // 改了 estimateTokens 的系数，这几个数会跟着漂 —— 重跑 tools/token-estimate-calibrate.js 再回来调。
+  inst.registerPolicy({ hook: 'onRequestAssemble', name: 'big', priority: 10, handler: () => 'ok', payload: 'x'.repeat(300) }); // 77
+  inst.registerPolicy({ hook: 'onRequestAssemble', name: 'mid', priority: 5, handler: () => 'ok', payload: 'x'.repeat(200) }); // 51
+  inst.registerPolicy({ hook: 'onRequestAssemble', name: 'low', priority: 1, handler: () => 'ok', payload: 'x'.repeat(200) }); // 51
   const r = inst.apply('onRequestAssemble', {});
   const byName = (n) => r.results.find((x) => x.policy === n);
   assert.ok(byName('big'), 'big 执行');
@@ -151,6 +154,24 @@ check('handler 异常 shadow：记 error 不抛', () => {
   assert.ok(!threw, 'apply 不抛 handler 异常');
   const rep = inst.report();
   assert.ok(rep.handlersExecuted >= 1, '仍计入执行');
+});
+
+// 13. 估算口径（2026-10-01 校准，语料 = 本机 129 份真实 SKILL.md，目标 o200k_base）
+// 结论：中文 ≈ 1 token/字（不是旧常说的 3 字 1 token），ASCII ≈ 0.255 token/字符。
+// 旧公式 ceil(len/3) 在中文占比 ≥30% 的语料上低估 73%（真值/估算 = 1.732）。
+check('估算：CJK-aware 系数（校准回归）', () => {
+  const zh = '中'.repeat(100);                       // 100 个中文字 → 真值约 100
+  const en = 'x'.repeat(400);                        // 400 ASCII → 真值约 102
+  const zhEst = TP.estimateTokens(zh);
+  const enEst = TP.estimateTokens(en);
+  assert.ok(zhEst > 90 && zhEst < 120, `中文 100 字应估到 ~104，实际 ${zhEst}`);
+  assert.ok(enEst > 85 && enEst < 125, `ASCII 400 字符应估到 ~102，实际 ${enEst}`);
+  // 混排 ≈ 线性叠加：2 个中文 + 202 ASCII ≈ 2 + 51.5 = 53.6（落在纯 ASCII 的估算区间内，但比它大）
+  const mixEst = TP.estimateTokens('用 ' + 'x'.repeat(200) + ' 查看');
+  assert.ok(mixEst > 45 && mixEst < enEst, `混排应介于两段之间，实际 ${mixEst} vs 纯 ASCII ${enEst}`);
+  assert.strictEqual(TP.estimateTokens(''), 0, '空串 = 0');
+  assert.strictEqual(TP.estimateTokens(null), 0, 'null = 0（不是 1）');
+  assert.strictEqual(TP.estimateTokens(123), 0, '非字符串 = 0（不是崩）');
 });
 
 console.log(`\n  token-policy demo:  ${pass} PASS / ${fail} FAIL`);
