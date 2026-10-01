@@ -11,6 +11,10 @@
 // 非侵入铁律④：pack 默认 enabled:false，未 enable 时 0 行为变更、不触 net、不写 agent 文件。
 
 const { createTokenPolicy } = require('../../l2/token-policy');
+const { createContextFold } = require('../../l2/context-fold.js');
+
+// C4 用的秤（与 policies/*.js 的 ledger 同一把，口径一致）
+const _fold = createContextFold();
 
 // 5 个 passthrough handler（M2）。映射 06 §3：
 //   Memory→onHistory, Planning→onRoute, Capability→onToolOutput, Action→onResponse, Prompt→onRequestAssemble
@@ -53,7 +57,30 @@ const CHANGE_VALIDATORS = {
   keepLastN: (n) => Number.isInteger(n) && n > 0 && n <= 20, // 0 < keepLastN <= 20（07 M6 例）
   maxOutputChars: (n) => Number.isInteger(n) && n > 0 && n <= 20000,
   perPolicyMaxRatio: (r) => Number.isFinite(r) && r > 0 && r <= 1,
+  // C4：scenePrefix 是 pack 唯一的注入口，必须走受限变更通道（有校验 + 有快照），
+  // 不容许绕过 applyChange 直接改 params 后无人知晓——那样第七类就称不到它。
+  scenePrefix: (s) => typeof s === 'string' && s.length <= 4000,
 };
+
+// C4：收集本 pack 各 policy 声明的注入，喂进 context-fold 的第七类。
+// 约定：policy 模块可选导出 injections() → [{ sink:'skill'|'inject', text }]；
+// 没导出就是不注入。新增 policy 想入账只需自己实现这个函数，不动本文件。
+function collectInjections() {
+  const out = [];
+  for (const { file } of POLICY_FILES) {
+    const mod = require(`./policies/${file}.js`);
+    if (typeof mod.injections !== 'function') { continue; }
+    for (const inj of mod.injections() || []) {
+      out.push({
+        sink: inj.sink === 'inject' ? 'inject' : 'skill',
+        source: 'curator-pack',
+        text: inj.text,
+        tokens: inj.tokens,
+      });
+    }
+  }
+  return out;
+}
 
 function createCurator(opts = {}) {
   const tp = createTokenPolicy({ gate: false });       // 工厂实例（修正 2），不需 env（确认 3）
@@ -108,6 +135,12 @@ function createCurator(opts = {}) {
     policies: () => tp.listPolicies({}),
     observe: () => tp.report(opts.windowMs),
     apply: (hook, ctx) => tp.apply(hook, ctx),
+    // C4：把本 pack 的注入接进七类坐标系。pack 全关 → 不注入 → 第七类归零。
+    // 这样「pack 开/关两态第七类之差」就是注入净增量，可直接 assert。
+    fold: (request = {}, o = {}) => _fold.fold(request, Object.assign({}, o, {
+      injections: refs.some((p) => p.enabled) ? collectInjections() : [],
+    })),
+    injections: collectInjections,
     manifest,
   };
 }

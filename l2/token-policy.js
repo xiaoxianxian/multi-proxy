@@ -166,7 +166,7 @@ function createTokenPolicy(opts = {}) {
         out = p.handler(ctx, { budget: { remaining, max: budget.maxInjectTokens } });
       } catch (e) {
         // shadow：吞 handler 异常（不改 ctx 实际注入），计入 skipped
-        results.push({ policy: p.name, ok: false, skipped: false, error: String(e && e.message || e), effCost });
+        results.push({ policy: p.name, ok: false, skipped: false, error: String(e && e.message || e), effCost, netTokenDelta: null });
         continue;
       }
       if (applied && !p.integration) {
@@ -182,12 +182,20 @@ function createTokenPolicy(opts = {}) {
         integration: p.integration,
         effCost,
         overBudget: p.cost > remaining + (applied ? effCost : 0) && p.cost > budget.maxInjectTokens,
+        // 28 号文档 C3：policy 自己上报的「净 token 变化」（正=净增、负=净省）。
+        // handler 没上报就是未知，记 null 而非 0——0 会被读成「确实没省」，那是假数字。
+        netTokenDelta: (out && typeof out === 'object' && Number.isFinite(out.netTokenDelta)) ? out.netTokenDelta : null,
       });
     }
     // 模拟节省记账（0.9 模拟 9 折，同 prompt-cache）
+    // 28 号文档 C3：真累加各 policy 上报的净增量，替代原来的 `+= 0` 占位死代码。
+    // 没上报的就是没数据，跳过，不当 0 累加。
     let estSaved = 0;
-    for (const p of policies) {
-      if (p.hook === hookName && p.enabled) p.estSavedTokens += 0;
+    for (const r of results) {
+      if (!Number.isFinite(r.netTokenDelta)) { continue; }
+      estSaved += r.netTokenDelta;
+      const owner = policies.find((p) => p.name === r.policy);
+      if (owner) { owner.estSavedTokens += r.netTokenDelta; }
     }
     const run = { hook: hookName, ts: io.now != null ? io.now : Date.now(), agentType, results, remaining, estSaved };
     runHistory.push(run);
@@ -273,4 +281,6 @@ module.exports = {
   listPolicies: _policy.listPolicies,
   isGateOpen: _policy.isGateOpen,
   isIntegration: _policy.isIntegration,
+  // 28 号文档 C3：透出执行留痕，让外部（context-fold / cost A 路）能读到每次 handler 的实际效果
+  _runHistory: _policy._runHistory,
 };

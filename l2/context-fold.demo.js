@@ -1,0 +1,153 @@
+'use strict';
+// context-fold 内核 · 真跑验证 demo（node l2/context-fold.demo.js）
+// 全内存、纯函数、零 manager 依赖。
+// 验收目标：给 injections / actuals / 异常 role / 图片等不同输入，七类组成都能算对且不丢数。
+const F = require('./context-fold.js');
+const assert = require('assert');
+
+let pass = 0, fail = 0;
+const check = (name, fn) => { try { fn(); pass++; console.log(`PASS ${name}`); } catch (e) { fail++; console.log(`FAIL ${name}      -- ${e.message}`); } };
+
+// 注入精确估算器（1 字符 = 1 token），让计数可被机械断言，不受默认 /3 启发式干扰
+const exact = (s) => (typeof s === 'string' ? s.length : 0);
+const mk = (o) => F.createContextFold({ estimate: exact, ...(o || {}) });
+
+// 1. 七类齐全且顺序稳定（顺序 = 堆叠条从上到下，不能每次变）
+check('1. 七类齐全且顺序固定', () => {
+    assert.deepStrictEqual(F.CATEGORIES, ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool']);
+    const r = mk().fold({ messages: [] });
+    assert.deepStrictEqual(Object.keys(r.estimate.byCategory), F.CATEGORIES, '返回对象的键顺序应与 CATEGORIES 一致');
+});
+
+// 2. 消息按 role 归五类（system / user / assistant / tool）
+check('2. 消息按 role 归五类', () => {
+    const r = mk().fold({
+        messages: [
+            { role: 'system', content: 'abcd' },        // 4
+            { role: 'user', content: 'abcdef' },        // 6
+            { role: 'assistant', content: 'xy' },       // 2
+            { role: 'tool', content: '123456789' },     // 9
+        ],
+    });
+    const c = r.estimate.byCategory;
+    assert.strictEqual(c.system, 4, 'system=4');
+    assert.strictEqual(c.user, 6, 'user=6');
+    assert.strictEqual(c.assistant, 2, 'assistant=2');
+    assert.strictEqual(c.tool, 9, 'tool=9');
+    assert.strictEqual(r.estimate.total, 21, '总数=21');
+});
+
+// 3. tools 类只算 schema 声明，且与 assistant 的 tool_calls arguments 互不混淆
+check('3. tools 类 = schema 声明；tool_calls arguments 归 assistant', () => {
+    const schema = { type: 'function', function: { name: 'search' } };
+    const schemaText = JSON.stringify(schema);
+    const r = mk().fold({
+        messages: [
+            { role: 'assistant', content: 'ok', tool_calls: [{ function: { arguments: '{"q":"ab"}' } }] },
+        ],
+        tools: [schema],
+    });
+    const c = r.estimate.byCategory;
+    assert.strictEqual(c.tools, schemaText.length, 'tools = schema JSON 长度');
+    assert.strictEqual(c.assistant, 2 + '{"q":"ab"}'.length, 'assistant = 正文 + arguments');
+});
+
+// 4. developer role（o1 之后的系统级）归 system，不丢进 unclassified
+check('4. developer role 归 system', () => {
+    const r = mk().fold({ messages: [{ role: 'developer', content: 'rule12345' }] });
+    assert.strictEqual(r.estimate.byCategory.system, 9, 'developer 计入 system');
+    assert.strictEqual(r.estimate.unclassified, 0, '不产生未分类残量');
+});
+
+// 5. 注入进第七类，并按 source 出明细（C4 pack 入账的前提）
+check('5. inject/skill 分类 + bySource 明细', () => {
+    const r = mk().fold({ messages: [{ role: 'user', content: 'hi' }] }, {
+        injections: [
+            { sink: 'inject', source: 'rag', tokens: 30 },
+            { sink: 'skill', source: 'curator-pack', tokens: 50 },
+            { sink: 'skill', source: 'curator-pack', tokens: 20 },
+        ],
+    });
+    const c = r.estimate.byCategory;
+    assert.strictEqual(c.inject, 30, 'inject=30');
+    assert.strictEqual(c.skill, 70, 'skill=30+... 两次注入累加=70');
+    assert.strictEqual(r.bySource['curator-pack'].skill, 70, 'bySource 按来源聚合');
+    assert.strictEqual(r.bySource.rag.inject, 30, 'rag 走 inject 桶');
+});
+
+// 6. 实测轨：七类之和必须精确等于 provider prompt_tokens（余数已校正）
+check('6. 实测分摊：七类之和精确 == prompt_tokens', () => {
+    const r = mk().fold({
+        messages: [
+            { role: 'system', content: 'a'.repeat(10) },
+            { role: 'user', content: 'b'.repeat(30) },
+        ],
+    }, { actuals: { prompt_tokens: 100, completion_tokens: 5, cached_tokens: 12 } });
+    assert.strictEqual(r.source, 'actual', '给了实测值 → source=actual');
+    const sum = Object.values(r.actual.byCategory).reduce((a, b) => a + b, 0);
+    assert.strictEqual(sum, 100, `七类分摊之和应精确等于 100，实得 ${sum}`);
+    assert.strictEqual(r.actual.total, 100, '实测总数透传');
+    assert.strictEqual(r.actual.cached, 12, '缓存命中 token 透传');
+    // 比例应保持估算占比：10 : 30 → 25 : 75
+    assert.strictEqual(r.actual.byCategory.system, 25, 'system 占 25');
+    assert.strictEqual(r.actual.byCategory.user, 75, 'user 占 75');
+});
+
+// 7. 双轨并存：有实测时估算轨仍在，且两轨互不污染
+check('7. 估算轨与实测轨并存互不污染', () => {
+    const r = mk().fold({ messages: [{ role: 'user', content: 'c'.repeat(20) }] },
+        { actuals: { prompt_tokens: 200 } });
+    assert.strictEqual(r.estimate.total, 20, '估算轨保留原始值 20');
+    assert.strictEqual(r.actual.total, 200, '实测轨保留上报值 200');
+    assert.notStrictEqual(r.estimate.byCategory, r.actual.byCategory, '两轨是不同对象');
+});
+
+// 8. 没有实测值时必须明说（不得拿估算冒充实测）
+check('8. 无实测 → source=estimate 且带告警', () => {
+    const r = mk().fold({ messages: [{ role: 'user', content: 'hi' }] });
+    assert.strictEqual(r.source, 'estimate', '没给 actuals 就不能标 actual');
+    assert.strictEqual(r.actual, null, 'actual 应为 null');
+    assert.ok(r.warnings.some((w) => w.includes('no-provider-actuals')), '必须告警说明这是估算');
+});
+
+// 9. 异常 role 不静默丢弃：进 unclassified 并告警
+check('9. 未知 role 不静默丢弃', () => {
+    const r = mk().fold({ messages: [{ role: 'mystery', content: 'zzzz' }] });
+    assert.strictEqual(r.estimate.unclassified, 4, '未知 role 的 token 单列');
+    assert.strictEqual(r.estimate.total, 0, '且不计入七类总数');
+    assert.ok(r.warnings.some((w) => w.includes('unclassified')), '必须告警');
+});
+
+// 10. 图片 part 按兜底值估算并声明
+check('10. 图片 part 兜底估算 + 告警', () => {
+    const r = mk({ imageTokens: 512 }).fold({
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'ab' }, { type: 'image_url', image_url: { url: 'x' } }] }],
+    });
+    assert.strictEqual(r.estimate.byCategory.user, 2 + 512, '文本 + 图片兜底值');
+    assert.ok(r.warnings.some((w) => w.includes('image-estimated')), '必须声明图片是估算');
+});
+
+// 11. 空请求不死、不造数
+check('11. 空请求安全降级', () => {
+    const r = mk().fold({});
+    assert.strictEqual(r.estimate.total, 0, '空请求总数 0');
+    assert.strictEqual(r.source, 'estimate', 'source 仍为 estimate');
+    const r2 = mk().fold();
+    assert.strictEqual(r2.estimate.total, 0, '不传参数也安全');
+});
+
+// 12. 估算总数为 0 而实测有值 → 无法分摊，必须告警而不是除零或硬编羼
+check('12. 估算是 0 但实测有数 → 告警而非伪造', () => {
+    const r = mk().fold({ messages: [] }, { actuals: { prompt_tokens: 42 } });
+    assert.strictEqual(r.actual, null, '无法分摊时 actual 保持 null');
+    assert.ok(r.warnings.some((w) => w.includes('estimate-total-is-zero')), '必须说明分摊失败原因');
+});
+
+// 13. 默认估算器（沿用 token-policy.js 的长度 /3）也能跑通，证明复用成立
+check('13. 默认估算器复用 token-policy.estimateTokens', () => {
+    const r = F.createContextFold().fold({ messages: [{ role: 'system', content: 'a'.repeat(30) }] });
+    assert.strictEqual(r.estimate.byCategory.system, 10, '30 字符 /3 = 10');
+});
+
+console.log(`\n${pass} PASS / ${fail} FAIL`);
+process.exit(fail ? 1 : 0);
