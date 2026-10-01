@@ -163,7 +163,7 @@ cursor-proxy 是新写的 L2 架构载体（chatHandler + routeEngine + agentReg
 
 ## Q14：还没实现 / 挂起的是哪些
 
-来源 `docs/10-initiatives/19-未做与待拍板清单-2026-09-30.md` §二：
+来源 `docs/10-initiatives/45-未做与待拍板清单-2026-09-30.md` §二：
 
 | 项 | 状态 | 优先级 |
 |----|------|--------|

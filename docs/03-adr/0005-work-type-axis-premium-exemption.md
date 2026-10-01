@@ -10,7 +10,7 @@ related_code:
    - l2/cost.js
 related_docs:
    - docs/04-tech/route-engine-spec.md
-   - docs/10-initiatives/05-layered-routing-wechat-reference.md
+   - docs/10-initiatives/33-layered-routing-wechat-reference-2026-09-27.md
 ---
 
 # [ADR-0005] 路由扩展「工作类型轴」+ 高价值路由成本豁免
@@ -21,7 +21,7 @@ related_docs:
 
 ## 背景
 
-外部一篇分享（《来看看AI老鸟是怎么使用AI的》，分析见 `docs/10-initiatives/05-layered-routing-wechat-reference.md`）把日常 AI 使用切成三层：设计 / 实现 / 杂活，且设计层"从不省钱、直上最强模型"。这与本项目的成本纪律同源，但点出一个 route-engine 当前**缺的旋钮**：**高价值任务应豁免成本优化**。
+外部一篇分享（《来看看AI老鸟是怎么使用AI的》，分析见 `docs/10-initiatives/33-layered-routing-wechat-reference-2026-09-27.md`）把日常 AI 使用切成三层：设计 / 实现 / 杂活，且设计层"从不省钱、直上最强模型"。这与本项目的成本纪律同源，但点出一个 route-engine 当前**缺的旋钮**：**高价值任务应豁免成本优化**。
 
 对照 `docs/04-tech/route-engine-spec.md §五` 已登记的真实缺口：
 
