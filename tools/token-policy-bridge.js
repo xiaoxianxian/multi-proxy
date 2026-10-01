@@ -16,8 +16,12 @@
 //   BRIDGE_MODE=rewrite node tools/token-policy-bridge.js  # 改写后转发
 //   PORT=18794 UPSTREAM=http://127.0.0.1:18790 node tools/token-policy-bridge.js
 //   BRIDGE_STUB=1 node tools/token-policy-bridge.js        # 桩响应，不消耗 token
+//   BRIDGE_LOG_BODY=1 node tools/token-policy-bridge.js    # 额外把请求正文落成语料
 //
 // 隐私：默认不落请求正文，只落类别分布 / delta / policy 名与净增量。
+//   需要语料时显式开 BRIDGE_LOG_BODY=1 —— 正文写入**独立**的 bridge-corpus-*.jsonl，
+//   不混进主日志（主日志是运营/度量数据，混进正文会让「这份数是被策略改过的吗」
+//   重新变成问句，也会让日志失去可公开性）。语料供 tools/bridge-dryrun.js 消费。
 
 const http = require('http');
 const fs = require('fs');
@@ -29,6 +33,7 @@ const BINDING = process.env.BINDING || '127.0.0.1';
 const UPSTREAM = (process.env.UPSTREAM || 'http://127.0.0.1:18790').replace(/\/$/, '');
 const DEFAULT_MODE = 'observe'; // observe | rewrite；运行时读 env，便于同一进程内切换做对照
 const STUB = process.env.BRIDGE_STUB === '1';
+const CAPTURE_BODY = process.env.BRIDGE_LOG_BODY === '1';
 const AGENT_TYPE = process.env.BRIDGE_AGENT_TYPE || 'coding';
 // 只有这几个字段允许写回请求体。handler 返回别的字段一律忽略并计数——
 // 未知字段写进上游请求等于赌 provider 会容忍，赢了没收益、输了直接 400。
@@ -39,6 +44,7 @@ const MERGE_FIELDS = ['messages', 'systemPrompt', 'history'];
 const REQUEST_HOOKS = ['onHistory', 'onRequestAssemble'];
 const LOG_DIR = process.env.BRIDGE_LOG_DIR || path.join(__dirname, '..', 'logs');
 const LOG_PATH = path.join(LOG_DIR, `token-policy-bridge-${new Date().toISOString().slice(0, 10)}.jsonl`);
+const CORPUS_PATH = path.join(LOG_DIR, `bridge-corpus-${new Date().toISOString().slice(0, 10)}.jsonl`);
 
 const TP = require('../l2/token-policy.js');
 const CF = require('../l2/context-fold.js');
@@ -277,6 +283,21 @@ function logRecord(rec) {
 }
 let loggedBoot = false;
 
+/**
+ * 落请求正文语料（仅在 BRIDGE_LOG_BODY=1 时调用）。
+ * 落的是**转发前的原始包**，不是改写后的——dry-run 要的就是「原始输入」，
+ * 改写结果是它自己算出来的，存进去反而会让语料污染。
+ */
+function captureCorpus(urlPath, api, body, model) {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    fs.appendFileSync(CORPUS_PATH, JSON.stringify({
+      ts: new Date().toISOString(), path: urlPath, api, model: model || null,
+      agentType: AGENT_TYPE, body,
+    }) + '\n');
+  } catch (e) { console.error('[bridge] corpus write fail:', e.message); }
+}
+
 const server = http.createServer(async (req, res) => {
   const tReq = Date.now();
   const chunks = [];
@@ -300,6 +321,7 @@ const server = http.createServer(async (req, res) => {
   const rec = { ts: new Date().toISOString(), path: req.url, mode: MODE, api, model: body.model || null, agentType: AGENT_TYPE };
 
   if (isChat) {
+    if (CAPTURE_BODY) captureCorpus(req.url, api, body, body.model);
     const t0 = Date.now();
     const ctx = ctxFromRequest(body, api);
     // ① 度量：真实请求体的七类组成。
