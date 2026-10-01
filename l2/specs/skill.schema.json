@@ -30,6 +30,11 @@
          "tags": { "type": "array", "items": { "type": "string" } },
          "enabled": { "type": "boolean" },
          "source": { "enum": ["builtin", "user", "shared"] },
+         "estTokens": {
+           "type": ["integer", "null"],
+           "minimum": 0,
+           "description": "可选。该 skill 落成 SKILL.md 后每轮约占多少 token。null = 没量过（默认，绝不填 0 冒充）；整数 = 实测/估算值。由 l2/skill-hosts.js measureSkillTokens() 回填。"
+         },
          "specVersion": { "const": "1.0.0" }
        }
      }

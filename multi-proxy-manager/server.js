@@ -78,6 +78,10 @@ const skillServiceRoutes = require('./routes/skill-service');
 app.use('/api/skill-service', skillServiceRoutes);
 const memoryMergeRoutes = require('./routes/memory-merge');
 app.use('/api/memory-merge', memoryMergeRoutes);
+// L2 P3 · skill-hosts 宿主 adapter 生产接线：/api/skill-hosts 把 l2/skill-hosts.js 接上 manager。
+// 门控 PROXY_L2_SKILLHOSTS 默认关（同 skill/memory/mcp 模式），**只读面**（scan + plan dry-run，绝不写 agent 目录）。
+const skillHostsRoutes = require('./routes/skill-hosts');
+app.use('/api/skill-hosts', skillHostsRoutes);
 // L2 P3 · MCP Bridge 生产接线：/api/mcp 把 l2/mcp-server.js（JSON-RPC 2.0）接上 manager
 // 门控 PROXY_L2_MCP 默认关（非侵入，与 skill/memory 同模式），只暴露只读查询 + 路由决策（shadow）。
 const mcpRoutes = require('./routes/mcp');

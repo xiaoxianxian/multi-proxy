@@ -124,5 +124,35 @@ check('整库非侵入：跑完 process.env 无 SERVICE_LEAK_TEST', () => {
      assert.strictEqual(process.env.SERVICE_LEAK_TEST, undefined);
  });
 
+// 14–16. P3 持久化欠账：注入 dir 才落盘，不注入 = 与 P1 完全一致的纯内存
+const os = require('os');
+const fsP = require('fs');
+const pathP = require('path');
+const tmpDir = fsP.mkdtempSync(pathP.join(os.tmpdir(), 'skill-svc-'));
+check('P3 持久化：注入 dir 落盘，新实例读回（重启不丢）', () => {
+    const a = M.createSkillService({ dir: tmpDir });
+    a.create({ ...base, name: 'persisted' });
+    assert.ok(fsP.existsSync(pathP.join(tmpDir, 'skills.json')), '落盘文件存在');
+    const b = M.createSkillService({ dir: tmpDir });          // 模拟重启
+    assert.strictEqual(b.get('persisted').name, 'persisted');
+    b.remove('persisted');
+    const c = M.createSkillService({ dir: tmpDir });
+    assert.throws(() => c.get('persisted'), /not found/);     // remove 也落盘
+ });
+check('不注入 dir = 纯内存零文件（与 P1 行为一致）', () => {
+    const probe = fsP.mkdtempSync(pathP.join(os.tmpdir(), 'skill-mem-'));
+    const cwd = process.cwd();
+    process.chdir(probe);
+    try {
+        const d = M.createSkillService();
+        d.create({ ...base, name: 'in-memory' });
+        assert.strictEqual(fsP.readdirSync(probe).length, 0, '纯内存模式下零文件');
+     } finally { process.chdir(cwd); }
+ });
+check('原子写：rename 后无 .tmp 残留', () => {
+    const left = fsP.readdirSync(tmpDir).filter((f) => f.endsWith('.tmp'));
+    assert.strictEqual(left.length, 0, 'tmp 已被 rename 掉');
+ });
+
 console.log(`\n[Skill-Service demo] PASS ${pass} / ${pass + fail}`);
 process.exit(fail === 0 ? 0 : 1);

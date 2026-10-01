@@ -14,6 +14,7 @@ entries:
       - auth
     enabled: true
     source: builtin
+    estTokens: null            # 没量过（绝不填 0 冒充"不花钱"）
     specVersion: "1.0.0"
   - id: skill-hermes-agent
     name: hermes-agent
@@ -26,4 +27,5 @@ entries:
       - config
     enabled: true
     source: builtin
+    estTokens: 42
     specVersion: "1.0.0"

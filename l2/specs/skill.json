@@ -11,6 +11,7 @@
       "tags": ["devops", "lark", "auth"],
       "enabled": true,
       "source": "builtin",
+      "estTokens": null,
       "specVersion": "1.0.0"
     },
     {
@@ -23,6 +24,7 @@
       "tags": ["hermes", "config"],
       "enabled": true,
       "source": "builtin",
+      "estTokens": 42,
       "specVersion": "1.0.0"
     }
   ]

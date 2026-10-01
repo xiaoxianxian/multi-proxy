@@ -1,7 +1,11 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 // 技能服务内核（P1 · 蓝图 4.5「技能服务」+ L2-BLUEPRINT P1 行 349 的 3 个验收项）
-// 职责：Skill CRUD + 版本管理 + 规范格式适配器（市场/可热插拔）——全内存、非侵入、零网络零文件。
+// 职责：Skill CRUD + 版本管理 + 规范格式适配器（市场/可热插拔）——默认全内存、非侵入、零网络零文件。
+// P3 持久化：仅当调用方注入 opts.dir 才落盘（见 loadEntries/saveEntries）；不注入 = 与 P1 行为完全一致。
 //
 // 设计原则（与 agent-registry.js / memory-merge.js 同构，与蓝图 ①②④ 一致）：
 //    - 非侵入④：默认纯内存 store；写中枢自己的 registry，绝不写 agent 自身文件
@@ -43,6 +47,11 @@ function validateSkill(s) {
     if (s.source !== undefined && typeof s.source !== 'string') {
         errs.push('source must be string');
        }
+    // estTokens：可选。null = 没量过（默认，诚实纪律：绝不填 0 冒充"不花钱"）；整数 = 量过的非负整数
+    if (s.estTokens !== undefined && s.estTokens !== null
+        && (!Number.isInteger(s.estTokens) || s.estTokens < 0)) {
+        errs.push('estTokens must be null or non-negative integer');
+       }
     return errs.length ? errs : null;
 }
 
@@ -62,9 +71,30 @@ function toEntry(raw, now) {
     return e;
 }
 
+// ---- 持久化（P3 欠账；对齐 l2/agent-registry.js:156 newFileStorage）----
+// 绝不默认写 home、绝不写 agent 自身目录（非侵入④）：dir 必须由调用方注入。
+// 格式与 l2/specs/skill.json 同构（{specVersion, entries:[]}）。
+const PERSIST_FILE = 'skills.json';
+
+function loadEntries(file) {
+    if (!fs.existsSync(file)) { return []; }
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));   // 坏文件 fail loud，绝不静默吞成空库
+    const list = Array.isArray(doc.entries) ? doc.entries : (Array.isArray(doc) ? doc : []);
+    return list.filter((e) => !validateSkill(e));            // 不合法条目丢弃（手改坏的不进内存）
+}
+function saveEntries(file, entries) {
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify({ specVersion: SPEC_VERSION, entries }, null, 2),
+        { flag: 'w', encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, file);                                // 原子替换，杜绝半截文件
+}
+
 function createSkillService(opts = {}) {
     const now = () => (opts.clock ? opts.clock() : new Date().toISOString());
-    const store = { entries: [] };
+    const file = opts.dir ? path.join(opts.dir, PERSIST_FILE) : null;
+    const store = { entries: file ? loadEntries(file) : [] };
+    // 落盘时机：每次写操作后同步写（与 agent-registry 同款；写失败直接抛，不静默继续）
+    const persist = () => { if (file) { saveEntries(file, store.entries); } };
 // key 可为 id 或 name；返回该 name 下 version 最高的条目（semver 倒序），无则 null
     const find = (key) => {
         const matches = store.entries.filter((e) => e.id === key || e.name === key);
@@ -80,6 +110,7 @@ function createSkillService(opts = {}) {
             if (errs) { throw new Error(`invalid skill: ${errs.join('; ')}`); }
             // 同一 name 视为同一条技能的不同版本 → 多 version 共名是允许的
             store.entries.push(stamped);
+            persist();
             return stamped;
         },
         // 市场：registerBuiltin / upload 只是带 source 标签的 create（YAGNI：不另起一套状态）
@@ -97,6 +128,7 @@ function createSkillService(opts = {}) {
             if (validateSkill(next)) { throw new Error(`invalid skill update: ${validateSkill(next).join('; ')}`); }
             const i = store.entries.indexOf(e);
             store.entries[i] = next;
+            persist();
             return next;
          },
         bump(key, opts4 = {}) {
@@ -108,6 +140,7 @@ function createSkillService(opts = {}) {
             if (old) { old.enabled = false; }
             next.enabled = true;
             store.entries.push(next);
+            persist();
             return next;
         },
         rollback(key, targetVersion) {
@@ -121,13 +154,14 @@ function createSkillService(opts = {}) {
             }
             target.enabled = true;
             target.updatedAt = now();
+            persist();
             return target;
         },
         remove(key) {
             const e = find(key);
             if (!e) { return false; }
             const i = store.entries.indexOf(e);
-            if (i >= 0) { store.entries.splice(i, 1); }
+            if (i >= 0) { store.entries.splice(i, 1); persist(); }
             return true;
         },
         list(filter = {}) {

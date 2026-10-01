@@ -74,6 +74,7 @@ const DEMO_TAGS = {
     'prompt-cache.demo.js': ['cache'],
     'rate-limiter.demo.js': ['governance'],
     'skill-service.demo.js': ['plugin', 'skill'],
+    'skill-hosts.demo.js': ['plugin', 'skill', 'host'],
     'token-policy.demo.js': ['governance'],
     'knowledge-base.demo.js': ['knowledge', 'routing'],
     'routing-base.demo.js': ['routing', 'template', 'tier', 'adapter'],

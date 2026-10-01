@@ -6,7 +6,8 @@
 // 设计（非侵入④ + 门控默认关）：
 //   - 门控 PROXY_L2_SKILL ∈ {1,true,on} 才放行，默认 0 → 403 零副作用（热路径零影响）。
 //   - 长寿命 module-level 单例 SkillService：条目跨请求累积才有意义（重启即失，留 P3 落盘）。
-//   - 不写任何 agent 文件（skill service 内核自带 store，HTTP 仅读写内存态）。
+//   - 不写任何 agent 文件。默认纯内存；仅当显式设 L2_SKILL_DIR 才落盘到该 dir
+//     （由调用方注入，内核绝不默认写 home，与 routes/registry.js:23 同款）。
 //   - 异常一律 catch → 4xx，不冒泡污染 manager 主进程。
 //
 // 路由面（YAGNI，对齐内核 API）：
@@ -22,10 +23,13 @@ const { createSkillService } = require('../../l2/skill-service.js');
 
 const router = express.Router();
 
-// 长寿命单例：内存态跨请求累积（重启即失；持久化留 P3 dir 落盘）
+// 长寿命单例：内存态跨请求累积。默认重启即失；设 L2_SKILL_DIR 才落盘（P3 欠账已还）。
 let _svc = null;
 function getService() {
-    if (!_svc) { _svc = createSkillService(); }
+    if (!_svc) {
+        const dir = process.env.L2_SKILL_DIR;
+        _svc = dir ? createSkillService({ dir }) : createSkillService();
+    }
     return _svc;
 }
 

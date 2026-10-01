@@ -6,6 +6,9 @@
 
 const express = require('express');
 const request = require('supertest');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 describe('L2 P3 skill-service route (/api/skill-service)', () => {
     let app;
@@ -28,6 +31,7 @@ describe('L2 P3 skill-service route (/api/skill-service)', () => {
 
     afterEach(() => {
         delete process.env.PROXY_L2_SKILL;
+        delete process.env.L2_SKILL_DIR;
     });
 
     test('门控关(默认)：GET + POST 均 403 零副作用', async () => {
@@ -115,4 +119,36 @@ describe('L2 P3 skill-service route (/api/skill-service)', () => {
         const g = await request(app).get('/api/skill-service');
         expect(g.body.length).toBe(0);
      });
+
+    test('P3 持久化：设 L2_SKILL_DIR 才落盘，重建单例从文件读回', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-route-'));
+        process.env.PROXY_L2_SKILL = '1';
+        process.env.L2_SKILL_DIR = dir;
+        build();
+        await request(app)
+            .post('/api/skill-service')
+            .send(base);
+        expect(fs.existsSync(path.join(dir, 'skills.json'))).toBe(true);
+
+        build();                                  // 重建单例 = 模拟进程重启
+        const g = await request(app).get('/api/skill-service');
+        expect(g.status).toBe(200);
+        expect(g.body.length).toBe(1);            // 不是从空内存开始，磁盘生效
+    });
+
+    test('未设 L2_SKILL_DIR = 纯内存：不产生任何文件', async () => {
+        const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-route-mem-'));
+        const cwd = process.cwd();
+        process.chdir(probe);
+        process.env.PROXY_L2_SKILL = '1';
+        build();
+        try {
+            await request(app)
+                .post('/api/skill-service')
+                .send(base);
+            expect(fs.readdirSync(probe).length).toBe(0);
+        } finally {
+            process.chdir(cwd);
+        }
+    });
 });
