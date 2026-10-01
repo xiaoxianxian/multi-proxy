@@ -82,6 +82,18 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
 .sk-c { flex: 1 1 auto; min-width: 80px; word-break: break-word; }
 .sk-c.num { flex: 0 0 auto; min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
 .sk-c.path { flex: 2 1 220px; min-width: 160px; color: var(--color-text-tertiary); font-size: 12px; }
+/* 基线 diff 面板：净增标红是这条能力的全部意义 —— 装了新 skill 涨了多少要一眼看见 */
+.diff-net { margin: 0 16px 10px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; line-height: 1.6; }
+.diff-net.up { color: var(--color-error); background: var(--color-error-light); border-left: 3px solid var(--color-error); }
+.diff-net.down { color: var(--color-success); background: var(--color-success-light); border-left: 3px solid var(--color-success); }
+.diff-net.flat { color: var(--color-text-tertiary); background: var(--color-bg-secondary); border-left: 3px solid var(--color-border); }
+.diff-net b { font-variant-numeric: tabular-nums; }
+.diff-line { display: flex; gap: 8px; font-size: 12px; padding: 4px 16px; color: var(--color-text-secondary); line-height: 1.7; }
+.diff-line .d-k { flex: 0 0 auto; }
+.diff-line .d-v { flex: 1 1 auto; word-break: break-all; }
+.diff-line.up .d-v { color: var(--color-error); }
+.diff-line.down .d-v { color: var(--color-success); }
+.diff-hint { font-size: 12px; color: var(--color-text-tertiary); padding: 0 16px 14px; }
 @media (max-width: 768px) { .mobile-menu-btn { display: flex; } .sidebar { position: fixed; left: -100%; transition: left 0.3s ease; } .sidebar.open { left: 0; } .sidebar-overlay.show { display: block; } }
 </style>
 <body>
@@ -168,6 +180,22 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
          <div id="budgetResult"><div class="empty-state" style="padding:12px;">填个预算点数「算预算」，会告诉你哪几条被关掉</div></div>
        </div>
 
+       <!-- 基线对比：浏览器/Node 双用模块 public/skill-ledger-diff.js 复用 CLI 的 keyOf/diffLedger 口径 -->
+       <div class="kb-card" style="margin-bottom:16px;">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">基线对比</div>
+             <div class="kb-card-meta" id="baselineMeta">还没基线：点「设为基线」把当前账本存成本机快照</div>
+           </div>
+         </div>
+         <div class="kb-card-body" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+           <button class="btn btn-outline" id="setBaselineBtn">设为基线</button>
+           <button class="btn btn-primary" id="diffBtn">与基线对比</button>
+           <button class="btn btn-outline" id="clearBaselineBtn">清除基线</button>
+         </div>
+         <div id="diffResult"><div class="diff-hint">基线只存本机 localStorage（不落盘、不上传、不新增后端写端点）。装了新 skill 之后，这里会标红「比上次多涨 X token」。</div></div>
+       </div>
+
        <div class="filter-bar">
          <select id="hostFilter" title="宿主">
            <option value="">全部宿主</option>
@@ -210,11 +238,12 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
            </div>
          </div>
          <div class="kb-card-body">
-           • <b>token 是估算口径</b>（长度/3，复用 token-policy.estimateTokens），不是真实分词器、不是 provider usage；对外引用请标「估算」。<br>
-           • <b>null = 没量过</b>，绝不拿 0 冒充 —— 平铺 md 没有单体 SKILL.md，量不了就显示 <code>—</code>。<br>
-           • <b>SkillSwitch</b> 列是外部工具 DargonLee/skill-switch 的五件套（claude/codex/gemini/cursor/windsurf）覆盖范围；<code>否</code> = 它管不到，但这正是本机 skill 的大头。<br>
-           • 嵌套 = hermes / workbuddy 用分类目录（<code>skills/&lt;category&gt;/&lt;name&gt;/SKILL.md</code>），扫描已下探一层。<br>
-           • <code>.disabled</code> 后缀约定抄自 whale2002/skills-switch，<b>未在宿主上逐个验证生效</b>，此处只如实标出来。
+          • <b>token 是估算口径</b>：CJK 字数×1.04 + 非 CJK 字符×0.255（复用 <code>token-policy.estimateTokens</code>），2026-10-01 用 129 份真实 SKILL.md 对齐 o200k 校准；不是真实分词器、不是 provider usage，对外引用请标「估算」。换 Qwen 分词可 <code>TOKEN_CJK_RATIO=0.96</code>。<br>
+          • <b>null = 没量过</b>，绝不拿 0 冒充 —— 平铺 md 没有单体 SKILL.md，量不了就显示 <code>—</code>。<br>
+          • <b>SkillSwitch</b> 列是外部工具 DargonLee/skill-switch 的五件套（claude/codex/gemini/cursor/windsurf）覆盖范围；<code>否</code> = 它管不到，但这正是本机 skill 的大头。<br>
+          • 嵌套 = hermes / workbuddy 用分类目录（<code>skills/&lt;category&gt;/&lt;name&gt;/SKILL.md</code>），扫描已下探一层；这类条目禁用必须带 <code>category</code>，否则找不到。<br>
+          • <b>禁用机制分两种</b>：hermes 的 <code>.disabled</code> <b>后缀无效</b>（<code>agent/skill_utils.py</code> 的排除名单是精确白名单，不含 <code>.disabled</code>），真禁用走 <code>~/.hermes/config.yaml</code> 的 <code>skills.disabled</code>（按 frontmatter 的 name 生效）；其余宿主只能用后缀，<b>逐个验证尚未做</b>，一律标未验证。<br>
+          • <b>只读边界</b>：本页只有扫描和 dry-run，任何写盘（安装 / 禁用）都要显式传 <code>home|project</code>，且不上 HTTP。
          </div>
        </div>
      </div>
@@ -223,6 +252,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
 
 <div class="toast-container" id="toastContainer"></div>
 
+<script src="./skill-ledger-diff.js"></script>
 <script>
 (function() {
    'use strict';
@@ -281,6 +311,135 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
    // ===== 账本（只读全量扫描结果） =====
    var ledger = null;
 
+   // ===== 基线对比 =====
+   // 基线只存本机 localStorage：不落盘、不上传、也不新增任何后端写端点（非侵入④）。
+   // diff 口径从 public/skill-ledger-diff.js（浏览器/Node 双用）来，跟 CLI 的 --diff 是同一份真源。
+   var BASE_KEY = 'mp.skill-ledger.baseline';
+   var baseline = null;   // 上次快照（trim 过：只留 diff 用到的字段）
+   var diffState = null;  // 最近一次 diff
+   var addedKeys = {};    // 相对基线新增的键 → 明细表里打「新增」标记
+
+   // 只留 diff 需要的字段，别把整棵账本塞进 localStorage
+   function snapshot(l) {
+     if (!l) return null;
+     return {
+       generatedAt: l.generatedAt || null,
+       totals: l.totals || null,
+       entries: (l.entries || []).map(function (e) {
+         return { host: e.host, category: e.category || '', name: e.name, estTokens: e.estTokens };
+       })
+     };
+   }
+
+   function loadBaseline() {
+     baseline = null;
+     var raw = null;
+     try { raw = localStorage.getItem(BASE_KEY); } catch (e) { raw = null; }   // 隐私模式下 localStorage 会抛
+     if (!raw) return null;
+     try {
+       var o = JSON.parse(raw);
+       if (o && Array.isArray(o.entries)) baseline = o;
+     } catch (e) { baseline = null; }
+     return baseline;
+   }
+
+   function hasDiffModule() { return typeof window.SkillLedgerDiff === 'object' && window.SkillLedgerDiff !== null; }
+
+   // 静态资源没加载上（大概率是缓存的旧页面）时老实说，别假装「没涨」
+   function lkey(e) {
+     if (hasDiffModule()) return window.SkillLedgerDiff.keyOf(e);
+     return [e.host, e.category || '', e.name].filter(Boolean).join('/');
+   }
+
+   function computeDiff() {
+     diffState = null;
+     addedKeys = {};
+     if (!ledger || !baseline || !hasDiffModule()) return null;
+     diffState = window.SkillLedgerDiff.diffLedger(ledger, baseline);
+     diffState.added.forEach(function (x) { addedKeys[x.key] = true; });
+     return diffState;
+   }
+
+   function renderDiff() {
+     var box = document.getElementById('diffResult');
+     var meta = document.getElementById('baselineMeta');
+     if (!box) return;
+     if (meta) {
+       meta.textContent = baseline
+         ? '基线快照：' + (baseline.generatedAt || '未知时间') + '（' + (baseline.entries || []).length + ' 条目）'
+         : '还没基线：点「设为基线」把当前账本存成本机快照';
+     }
+     if (!baseline) {
+       box.innerHTML = '<div class="diff-hint">还没基线。点「设为基线」把当前这份账本存成本机快照，下次扫描就会告诉你涨了多少。</div>';
+       return;
+     }
+     var d = computeDiff();
+     if (!d) {
+       box.innerHTML = '<div class="diff-hint">账本还没拉到' + (hasDiffModule() ? '' : '，或 skill-ledger-diff.js 没加载上（清一下缓存）') + '。</div>';
+       return;
+     }
+     var from = num(d.tokensFrom), to = num(d.tokensTo);
+     var cls = d.tokensDelta > 0 ? 'up' : (d.tokensDelta < 0 ? 'down' : 'flat');
+     var head;
+     if (d.tokensDelta > 0) {
+       head = '⚠️ 比上次多涨 <b>' + num(d.tokensDelta) + '</b> token（估算口径：' + from + ' → ' + to + '）';
+     } else if (d.tokensDelta < 0) {
+       head = '↓ 比上次少 <b>' + num(-d.tokensDelta) + '</b> token（估算口径：' + from + ' → ' + to + '）';
+     } else {
+       head = '与基线持平（' + to + ' token，估算口径）';
+     }
+     var html = '<div class="diff-net ' + cls + '">' + head + '</div>';
+
+     function lw(label, arr, c, fmt) {
+       if (!arr.length) return '';
+       var items = arr.slice(0, 6).map(function (x) { return fmt(x); }).join('；');
+       var more = arr.length > 6 ? '；…共 ' + arr.length + ' 条' : '';
+       return '<div class="diff-line ' + c + '"><span class="d-k">' + label + ' ' + arr.length + ' 条：</span>' +
+              '<span class="d-v">' + items + more + '</span></div>';
+     }
+     // 变动条目必须带旧值：不给 from → to，人看到「涨了」却查不出是哪条变贵、变了多少
+     var fmtChanged = function (x) {
+       return esc(x.key) + ' ' + num(x.from) + ' → ' + num(x.to) +
+              ' <b>(' + (x.delta >= 0 ? '+' : '') + num(x.delta) + (x.ratio ? ', ×' + x.ratio : '') + ')</b>';
+     };
+     var changed = d.changed.slice().sort(function (a, b) { return b.delta - a.delta; });
+     var changedCls = changed.reduce(function (n, x) { return n + x.delta; }, 0) >= 0 ? 'up' : 'down';
+     html += lw('新增', d.added, 'up', function (x) { return esc(x.key) + (x.estTokens != null ? ' <b>' + num(x.estTokens) + '</b>' : ''); })
+          +  lw('消失', d.removed, 'down', function (x) { return esc(x.key) + (x.estTokens != null ? ' <b>' + num(x.estTokens) + '</b>' : ''); })
+          +  lw('token 变动', changed, changedCls, fmtChanged);
+     if (!d.addedCount && !d.removedCount && !d.changedCount) {
+       html += '<div class="diff-line"><span class="d-v">与基线完全一致：没有新增 / 消失 / 变动。</span></div>';
+     }
+     html += '<div class="diff-hint">基线条目 ' + (baseline.entries || []).length +
+        ' → 当前 ' + ((ledger.entries || []).length) + '；token 为估算口径，null 显示为空。想换基线就再点「设为基线」。</div>';
+     box.innerHTML = html;
+   }
+
+   document.getElementById('setBaselineBtn').addEventListener('click', function () {
+     if (!ledger) { showToast('先扫描一次再设基线', 'error'); return; }
+     baseline = snapshot(ledger);
+     try { localStorage.setItem(BASE_KEY, JSON.stringify(baseline)); showToast('已设为基线：' + ((ledger.totals || {}).tokens || 0) + ' token（估算）', 'success'); }
+     catch (e) { showToast('存基线失败（localStorage 不可用）: ' + e.message, 'error'); baseline = null; }
+     renderDiff();
+     renderSkills();     // 基线换了，明细表上的「新增」标要跟着重算，不能留到下次刷新才消
+   });
+
+   document.getElementById('diffBtn').addEventListener('click', function () {
+     if (!baseline) { showToast('先点「设为基线」', 'error'); return; }
+     var d = computeDiff();
+     renderDiff();
+     if (d && d.tokensDelta > 0) { showToast('比上次多涨 ' + num(d.tokensDelta) + ' token', 'error'); }
+     else if (d) { showToast('与基线比：净 ' + (d.tokensDelta >= 0 ? '+' : '') + num(d.tokensDelta) + ' token', 'success'); }
+   });
+
+   document.getElementById('clearBaselineBtn').addEventListener('click', function () {
+     try { localStorage.removeItem(BASE_KEY); } catch (e) { /* 存储不可用就当已清 */ }
+     baseline = null; diffState = null; addedKeys = {};
+     renderDiff();
+     renderSkills();     // 清基线后明细表上的「新增」标必须当场消失（上次就是这里留了个脏标）
+     showToast('已清除基线', 'info');
+   });
+
    function setGate(open) {
      var gateView = document.getElementById('gateClosedView');
      var view = document.getElementById('skillsView');
@@ -318,6 +477,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
      if (!ledger) { checkGate(); return; }
      renderStat();
      renderHosts();
+     renderDiff();     // 先算 diff（顺带填 addedKeys），明细表才能给新增条目打标
      renderSkills();
    }
 
@@ -372,6 +532,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
 
    function renderSkills() {
      var entries = (ledger.entries || []).slice();
+     var isNew = function (e) { return !!addedKeys[lkey(e)]; };
      var hostF = document.getElementById('hostFilter') ? document.getElementById('hostFilter').value : '';
      var nameF = (document.getElementById('nameFilter').value || '').trim().toLowerCase();
      var kindF = document.getElementById('kindFilter') ? document.getElementById('kindFilter').value : '';
@@ -404,7 +565,8 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
           '<div class="sk-c">' + scopeTxt + '</div>' +
           '<div class="sk-c path">' + esc(e.path || '-') + '</div>' +
           '<div class="sk-c num">' + (e.estTokens == null ? '<span title="没量过，不是 0">—</span>' : num(e.estTokens)) + '</div>' +
-          '<div class="sk-c">' + (e.disabled ? '<span class="badge badge-info">已禁用</span>' : '') + '</div>' +
+          '<div class="sk-c">' + (e.disabled ? '<span class="badge badge-info">已禁用</span>' : '') +
+             (isNew(e) ? '<span class="badge badge-success">新增</span>' : '') + '</div>' +
         '</div>';
      }));
      box.innerHTML = rows.join('');
@@ -563,6 +725,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
 
    // ===== Init =====
    initDarkMode();
+   loadBaseline();     // 有基线就先读回来：下次打开页面直接能看到「比上次多涨了多少」
    checkGate();
 })();
 </script>

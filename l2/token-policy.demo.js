@@ -174,6 +174,31 @@ check('估算：CJK-aware 系数（校准回归）', () => {
   assert.strictEqual(TP.estimateTokens(123), 0, '非字符串 = 0（不是崩）');
 });
 
+// 14. 换分词器场景（2026-10-01 qwen 重测）：系数可覆盖，且**默认不动**是有依据的。
+// 真值不出网：qwen 拟合推荐 cjk 0.96 / ascii 0.26（logs/token-estimate-calibration-qwen.json），
+// 现行 1.04/0.255 在 qwen 上加权 0.983（略高估 = 保守），换成 0.96 则在 o200k 上变成低估。
+check('估算：系数可被 env 覆盖（换 Qwen 分词场景，一行 env 切换）', () => {
+  const { execFileSync } = require('child_process');
+  const fs2 = require('fs');
+  const os2 = require('os');
+  const path2 = require('path');
+  // 写成文件再跑：内联 -e 会被引号层层吃掉，报错看着像系数没生效其实是语法错
+  const probeFile = path2.join(os2.tmpdir(), `tok-env-probe-${process.pid}.js`);
+  fs2.writeFileSync(probeFile, [
+    [`const m = require(${JSON.stringify(require.resolve('./token-policy.js'))});`,
+    `process.stdout.write(String(m.estimateTokens('中'.repeat(100))));`, ''].join('\n'),
+    '',
+  ].join('\n'), 'utf8');
+  // 别在 probe 里删文件：第一次调用删掉后第二次就报 Cannot find module
+  const probe = (env) => Number(execFileSync(process.execPath, [probeFile], { env: { ...process.env, ...env } }).toString().trim());
+  const dflt = probe({});                    // 1.04 * 100 = 104
+  const qwen = probe({ TOKEN_CJK_RATIO: '0.96' });   // qwen 口径 96
+  assert.strictEqual(dflt, 104, `默认系数下 100 中文应估 104，实际 ${dflt}`);
+  assert.strictEqual(qwen, 96, `TOKEN_CJK_RATIO=0.96 应估 96，实际 ${qwen}`);
+  assert.ok(qwen < dflt, '换 qwen 口径就该低一点（qwen 对中文更省）');
+  fs2.rmSync(probeFile, { force: true });
+});
+
 console.log(`\n  token-policy demo:  ${pass} PASS / ${fail} FAIL`);
 if (fail > 0) process.exit(1);
 console.log('  PASS');

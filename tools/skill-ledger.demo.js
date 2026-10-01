@@ -76,6 +76,27 @@ check('diffLedger：账本一样就三类全 0（不是「没 diff」）', () =>
     assert.strictEqual(d.tokensDelta, 0);
 });
 
+check('双用模块：浏览器分支（无 module）能挂出全局 SkillLedgerDiff', () => {
+    // 页面只 <script src>，环境里没有 module/CJS → 必须走 root.SkillLedgerDiff 那条分支。
+    // 用 vm 造一个「没有 module」的沙箱真跑一遍，别只信注释。
+    const fs = require('fs');
+    const vm = require('vm');
+    const code = fs.readFileSync(require.resolve('../multi-proxy-manager/public/skill-ledger-diff.js'), 'utf8');
+    const sandbox = { self: {} };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+    const g = sandbox.Self || sandbox.self.SkillLedgerDiff;
+    assert.ok(g, '浏览器分支没挂出 SkillLedgerDiff');
+    assert.strictEqual(g.keyOf({ host: 'hermes', category: 'devops', name: 'x' }), 'hermes/devops/x');
+    assert.strictEqual(typeof g.diffLedger, 'function');
+});
+
+check('双用模块：CLI 复用的是同一份真源（不是复制出来的第二份）', () => {
+    const LD = require('../multi-proxy-manager/public/skill-ledger-diff.js');
+    assert.strictEqual(M.keyOf, LD.keyOf);
+    assert.strictEqual(M.diffLedger, LD.diffLedger);
+});
+
 check('parseArgs：--diff / --out / --host 都认，host 可重复', () => {
     const a = M.parseArgs(['--host', 'hermes', '--host', 'codex', '--out', '/tmp/x.json', '--diff', '/tmp/base.json', '--top', '5']);
     assert.deepStrictEqual(a.hosts, ['hermes', 'codex']);

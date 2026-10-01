@@ -146,14 +146,31 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-function mkFixture() {
+// host 可选：'workbuddy' = 走后缀通道（未验证但会改名），'hermes' = 走原生 skills.disabled（有源码依据）。
+// 2026-10-01 改：fixture 不能再一律当 hermes —— hermes 的 `.disabled` 后缀**无效**，
+// 落盘断言会挂。两条路径各用各的 fixture，正好把机制分派也测了。
+function mkFixture(host = 'workbuddy') {
     const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-veto-'));
-    const dir = path.join(proj, '.hermes', 'skills');
-    fs.mkdirSync(dir, { recursive: true });
-    fs.mkdirSync(path.join(dir, 'fat-one'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'fat-one', 'SKILL.md'), 'x'.repeat(3000), 'utf8');
-    fs.mkdirSync(path.join(dir, 'tiny-one'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'tiny-one', 'SKILL.md'), 'x'.repeat(300), 'utf8');
+    const mkHost = (h, withTiny) => {
+        const d = path.join(proj, `.${h}`, 'skills');
+        fs.mkdirSync(path.join(d, 'fat-one'), { recursive: true });
+        fs.writeFileSync(path.join(d, 'fat-one', 'SKILL.md'), 'x'.repeat(3000), 'utf8');
+        if (withTiny) {
+            fs.mkdirSync(path.join(d, 'tiny-one'), { recursive: true });
+            fs.writeFileSync(path.join(d, 'tiny-one', 'SKILL.md'), 'x'.repeat(300), 'utf8');
+        }
+        return d;
+    };
+    // 'both' = 每个宿主只放一条 fat，用来验证机制分组：hermes → 配置，workbuddy → 后缀
+    const dir = host === 'both' ? mkHost('workbuddy', false) : mkHost(host === 'hermes' ? 'hermes' : 'workbuddy', true);
+    if (host === 'both') { mkHost('hermes', false); }
+    if (host === 'hermes' || host === 'both') {
+        const cfgDir = path.join(proj, '.hermes');
+        fs.mkdirSync(cfgDir, { recursive: true });
+        // 真实 ~/.hermes/config.yaml 就是这么写的（skills: 块 + 若干子项，没有 disabled 行）
+        fs.writeFileSync(path.join(cfgDir, 'config.yaml'),
+            'model: qwen\nskills:\n  external_dirs: []\n  guard_agent_created: false\ntimezone: \'\'\n', 'utf8');
+    }
     return { proj, dir };
 }
 
@@ -173,8 +190,8 @@ check('disableExcluded：默认 dry-run，一个字节都不写', () => {
     } finally { fs.rmSync(proj, { recursive: true, force: true }); }
 });
 
-check('disableExcluded：apply 后真打上 .disabled，且重新扫描就看不见它了', () => {
-    const { proj, dir } = mkFixture();
+check('disableExcluded（workbuddy 后缀通道）：apply 后真打上 .disabled，且重新扫描就看不见它了', () => {
+    const { proj, dir } = mkFixture('workbuddy');
     try {
         const r = M.disableExcluded({ project: proj, budget: 50, apply: true });
         assert.strictEqual(r.apply, true);
@@ -183,11 +200,49 @@ check('disableExcluded：apply 后真打上 .disabled，且重新扫描就看不
         assert.ok(r.applied[0].to.endsWith('.disabled'), '落点必须是 .disabled 后缀');
         assert.strictEqual(fs.existsSync(path.join(dir, 'fat-one')), false, 'fat-one 应改名走');
         assert.strictEqual(fs.existsSync(path.join(dir, 'fat-one.disabled')), true);
-        // 复审：被关的不再进候选（candidates 排除 disabled）
-        const after = M.SK.scan('hermes', { project: proj, tokens: true });
-        const names = after.skills.map((s) => s.name);
-        assert.ok(!names.includes('fat-one') && !names.includes('tiny-one'), `候选应剩别的，实际 ${names}`);
+        // 复审：条目还在账本里（便于追溯），但全部带 disabled 标记，且不再算进活跃 token
+        const after = M.SK.scan('workbuddy', { project: proj, tokens: true });
+        assert.strictEqual(after.skills.length, 2, '禁用 ≠ 消失，账本要能追溯它去哪了');
         assert.strictEqual(after.skills.filter((s) => s.disabled).length, 2, '两条都带 disabled 标记');
+        assert.strictEqual(after.skills.filter((s) => !s.disabled).length, 0, '不该还有活跃条目');
+        assert.strictEqual(after.tokens, 0, '禁用后活跃 token 应为 0');
+        assert.ok(after.disabledTokens > 0, '被关掉的 token 记在 disabledTokens');
+        assert.deepStrictEqual(M.candidates({ entries: after.skills }, { budget: 1e9 }), [], 'candidates 必须排除已禁用的');
+        assert.strictEqual(r.mechanism.suffix, 2, '两条都该归到后缀通道');
+    } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+});
+
+check('disableExcluded（hermes 原生通道）：改 config.yaml 的 skills.disabled，不碰目录名', () => {
+    const { proj, dir } = mkFixture('hermes');
+    try {
+        const r = M.disableExcluded({ project: proj, budget: 50, apply: true });
+        assert.strictEqual(r.failed.length, 0, `不该失败：${JSON.stringify(r.failed)}`);
+        assert.strictEqual(r.applied.length, 2, '两条都写进清单');
+        assert.ok(r.applied.every((a) => a.mechanism === 'native-config'), '都要标原生通道');
+        assert.strictEqual(r.applied[0].config, path.join(proj, '.hermes/config.yaml'));
+        assert.ok(fs.existsSync(r.applied[0].backup), '备份得真落盘');
+        assert.strictEqual(fs.readdirSync(dir).filter((d) => d.endsWith('.disabled')).length, 0,
+            'hermes 用后缀是无效的，不许偷偷改名');
+        // 复审：清单里两条 => 账本把它们标成 disabled，token 挪去 disabledTokens
+        const after = M.SK.scanLedger({ project: proj, hosts: ['hermes'] });
+        assert.strictEqual(after.totals.disabled, 2);
+        assert.ok(after.totals.disabledTokens > 0, '被关掉的 token 要如实记在 disabledTokens');
+        const cfg = fs.readFileSync(path.join(proj, '.hermes/config.yaml'), 'utf8');
+        assert.ok(/disabled: \[.*fat-one.*tiny-one.*\]/s.test(cfg), `清单没写全：${cfg}`);
+        assert.ok(/model: qwen/.test(cfg) && /timezone/.test(cfg), '别块外的键弄丢');
+    } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+});
+
+check('disableExcluded：按机制分组落盘（workbuddy 走后缀、hermes 走配置，各走各的）', () => {
+    const { proj } = mkFixture('both');
+    try {
+        const r = M.disableExcluded({ project: proj, budget: 50, apply: true });
+        assert.strictEqual(r.mechanism.suffix, 1, 'workbuddy 那条归后缀');
+        assert.strictEqual(r.mechanism['native-config'], 1, 'hermes 那条归原生（hermes 认后缀是无效的）');
+        assert.strictEqual(r.failed.length, 0, JSON.stringify(r.failed));
+        assert.strictEqual(r.applied.length, 2);
+        assert.ok(r.applied.some((a) => a.host === 'hermes' && a.mechanism === 'native-config'));
+        assert.ok(r.applied.some((a) => a.host === 'workbuddy' && a.strategy === 'suffix'));
     } finally { fs.rmSync(proj, { recursive: true, force: true }); }
 });
 
@@ -208,7 +263,7 @@ check('disableExcluded：maxDisable 拦住批量误操作（默认上限 10）',
 });
 
 check('disableExcluded：单条失败不中断（不是-found 如实记 failed）', () => {
-    const { proj } = mkFixture();
+    const { proj } = mkFixture('hermes');            // 配置存在但条目不在磁盘上 => 该报 not-found，不是别的
     try {
         const r = M.disableExcluded({ project: proj, budget: 50, apply: true,
             excluded: [{ host: 'hermes', name: 'ghost-one', estTokens: 9000 }] });   // 磁盘上没这条

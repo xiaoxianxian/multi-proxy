@@ -10,11 +10,15 @@
 //   skills    本机真实 SKILL.md 全文（l2/skill-hosts.js 扫出来的 129 份）—— 估算器现在就是给
 //             「skill 上下文资产账本」记钱的，拿会话语料去拟合系数其实是**答非所问**，
 //             2026-10-01 的系数就是改用 skills 语料拟合出来的。
-// 真值：gpt-tokenizer（o200k_base，GPT-4o/5 系）。若目标是 Qwen/其他分词，系数要另测。
+// 真值（--truth 选，默认 o200k）：
+//   o200k  gpt-tokenizer（o200k_base，GPT-4o/5 系）—— 2026-10-01 那组系数就是拿它拟合的
+//   qwen   本机 Ollama 模型的 tokenizer.json（HF tokenizers）—— 走 tools/qwen-tokenizer-count.py，
+//          只为数 token 不去起模型（MLX 27B 起一次几秒还占 18GB）
 //
 // 用法：
 //   TOKENIZER_PKG=/path/to/node_modules/gpt-tokenizer node tools/token-estimate-calibrate.js
 //   TOKENIZER_PKG=... node tools/token-estimate-calibrate.js --corpus=skills
+//   node tools/token-estimate-calibrate.js --truth=qwen --tokenizer-file=.../tokenizer.json
 //   → 结果落 logs/token-estimate-calibration.json（含 recommended 系数）；控制台打印分组误差表。
 
 const fs = require('fs');
@@ -23,9 +27,28 @@ const os = require('os');
 const cp = require('child_process');
 
 const SESSIONS = process.env.CODEX_SESSIONS || path.join(os.homedir(), '.codex', 'sessions');
-const OUT = process.env.CALIB_OUT || path.join(__dirname, '..', 'logs', 'token-estimate-calibration.json');
 const MAX_BLOCKS = Number(process.env.MAX_BLOCKS || 400);
 const CORPUS = process.argv.includes('--corpus=skills') ? 'skills' : 'sessions';
+const TRUTH = (process.argv.find((a) => a.startsWith('--truth=')) || '--truth=o200k').slice('--truth='.length);
+const TOKENIZER_FILE = (process.argv.find((a) => a.startsWith('--tokenizer-file=')) || '').slice('--tokenizer-file='.length);
+// ⚠️ 文件名带 truth：o200k 与 qwen 的系数**不一样**，两份证据必须能同时看，
+//   共用一个文件名会互相覆盖（上一版就因此干净地盖掉了 o200k 那份）。
+const OUT = process.env.CALIB_OUT
+    || path.join(__dirname, '..', 'logs', `token-estimate-calibration-${TRUTH}.json`);
+
+// 数真值：qwen 走 HF tokenizers（一次调用把整批文本数完，别一条一进程）
+function countWithQwen(texts) {
+    const tmp = path.join(os.tmpdir(), `qwen-tok-${process.pid}.json`);
+    fs.writeFileSync(tmp, JSON.stringify(texts));
+    try {
+        const py = process.env.QWEN_TOKENIZER_PY || 'python3';
+        const out = cp.execSync(`${JSON.stringify(py)} ${JSON.stringify(path.join(__dirname, 'qwen-tokenizer-count.py'))} ${JSON.stringify(TOKENIZER_FILE)} ${JSON.stringify(tmp)}`,
+            { maxBuffer: 1 << 28 }).toString().trim();
+        const arr = JSON.parse(out);
+        if (!Array.isArray(arr) || arr.length !== texts.length) { throw new Error(`python 回的是 ${out.slice(0, 120)}`); }
+        return arr;
+    } finally { fs.rmSync(tmp, { force: true }); }
+}
 
 // 与内核完全一致的估算公式（改了一边必须改另一边）：CJK-aware，系数可 env 覆盖。
 const CJK_RATIO = Number(process.env.TOKEN_CJK_RATIO ?? '') || 1.04;
@@ -90,11 +113,24 @@ function collect() {
 
 // ---------- 主流程 ----------
 let tok;
-try {
-  tok = require(process.env.TOKENIZER_PKG || 'gpt-tokenizer');
-} catch (e) {
-  console.error('缺少真 tokenizer。先装（一次性）：\n  mkdir -p /tmp/tokcal && cd /tmp/tokcal && npm i gpt-tokenizer --no-bin-links\n然后：\n  TOKENIZER_PKG=/tmp/tokcal/node_modules/gpt-tokenizer node tools/token-estimate-calibrate.js');
-  process.exit(2);
+if (TRUTH === 'qwen') {
+    if (!TOKENIZER_FILE || !fs.existsSync(TOKENIZER_FILE)) {
+        console.error('缺 --tokenizer-file=<tokenizer.json>。\n' +
+            '本机拿 tokenizer.json 的办法（一次性，模型已在那儿）：\n' +
+            '  python3 -c "import json,os;m=json.load(open(os.path.expanduser(\'~/.ollama/models/manifests/registry.ollama.ai/library/qwen3.8/27b-mlx\'));print([l[\'digest\'] for l in m[\'layers\'] if l.get(\'name\')==\'tokenizer.json\'][0])"\n' +
+            '  # 拿到 digest 后：cp ~/.ollama/models/blobs/sha256-<digest> /tmp/qwen-tokenizer/tokenizer.json\n' +
+            `然后：QWEN_TOKENIZER_PY=/path/to/python-with-tokenizers node tools/token-estimate-calibrate.js --corpus=skills --truth=qwen --tokenizer-file=/tmp/qwen-tokenizer/tokenizer.json`);
+        process.exit(2);
+    }
+    try { cp.execSync(`${process.env.QWEN_TOKENIZER_PY || 'python3'} -c "import tokenizers"`, { stdio: 'ignore' }); }
+    catch (e) { console.error('python 里没有 tokenizers 包：pip install tokenizers（或给 QWEN_TOKENIZER_PY 指向装了的那个 venv）'); process.exit(2); }
+} else {
+    try {
+        tok = require(process.env.TOKENIZER_PKG || 'gpt-tokenizer');
+    } catch (e) {
+        console.error('缺少真 tokenizer。先装（一次性）：\n  mkdir -p /tmp/tokcal && cd /tmp/tokcal && npm i gpt-tokenizer --no-bin-links\n然后：\n  TOKENIZER_PKG=/tmp/tokcal/node_modules/gpt-tokenizer node tools/token-estimate-calibrate.js');
+        process.exit(2);
+    }
 }
 
 const blocks = collect();
@@ -103,13 +139,16 @@ const sorted = blocks.sort((a, b) => a.text.length - b.text.length);
 const step = Math.max(1, Math.floor(sorted.length / MAX_BLOCKS));
 const sample = sorted.filter((_, i) => i % step === 0);
 
+// 真值：qwen 用批量数好的数组，o200k 逐条问 gpt-tokenizer
+const acts = TRUTH === 'qwen' ? countWithQwen(sample.map((b) => b.text)) : null;
+
 // 分组：按 CJK 占比分桶。旧版用「含代码特征就归 code」的启发式，会把中英混排的长块错分，
 // 出来的 cjk 桶 median 与 tokens/char 互相打脸（1.016 vs 0.5165）—— 那是分组的锅，不是系数的锅。
 const groups = { 'cjk>=0.5': [], 'cjk 0.1-0.5': [], 'cjk<0.1': [], all: [] };
-for (const b of sample) {
+sample.forEach((b, i) => {
   const est = estNow(b.text);
-  const act = tok.countTokens(b.text);
-  if (!act) continue;
+  const act = acts ? acts[i] : tok.countTokens(b.text);
+  if (!act) return;                     // forEach 里没有 continue，0 token 的块直接跳过
   const len = b.text.length;
   const cjk = (b.text.match(CJK_RE) || []).length;
   const r = act / est;
@@ -117,7 +156,7 @@ for (const b of sample) {
   const k = cjk / len >= 0.5 ? 'cjk>=0.5' : cjk / len >= 0.1 ? 'cjk 0.1-0.5' : 'cjk<0.1';
   groups[k].push(row);
   groups.all.push(row);
-}
+});
 
 const q = (arr, p) => { const a = arr.slice().sort((x, y) => x - y); return a[Math.floor(a.length * p)]; };
 function summarize(name, rows) {
@@ -154,7 +193,7 @@ function fitCoeffs(rows) {
 
 const result = {
   ts: new Date().toISOString(),
-  tokenizer: 'gpt-tokenizer(o200k_base)',
+  tokenizer: TRUTH === 'qwen' ? 'HF tokenizers(本地 qwen3.8 tokenizer.json)' : 'gpt-tokenizer(o200k_base)',
   corpus: CORPUS,
   corpusPath: CORPUS === 'skills' ? '本机 129 份真实 SKILL.md 全文（l2/skill-hosts.scanLedger）' : SESSIONS,
   corpusBlocks: blocks.length,
@@ -174,10 +213,12 @@ const result = {
       const sa = rows.reduce((s, r) => s + r.act, 0);
       return +(sa / se).toFixed(3);
     };
+    const rec = fitCoeffs(rows);
     return {
       'ceil(len/3)（旧）': { weighted: w(estOld), mape: mape(estOld) },
       'cjk*0.75+rest/3.6（sidecar 旧式）': { weighted: w((t) => Math.round((t.match(CJK_RE) || []).length * 0.75 + t.replace(CJK_RE, '').length / 3.6)), mape: 0 },
-      'cjk*1.04+rest*0.255（现行）': { weighted: w(estNow), mape: mape(estNow) },
+      [`cjk*1.04+rest*0.255（现行）`]: { weighted: w(estNow), mape: mape(estNow) },
+      [`拟合推荐 cjk*${rec.cjkRatio}+rest*${rec.asciiRatio}`]: { weighted: w((t) => Math.max(1, Math.round((t.match(CJK_RE) || []).length * rec.cjkRatio + t.replace(CJK_RE, '').length * rec.asciiRatio))), mape: mape((t) => Math.max(1, Math.round((t.match(CJK_RE) || []).length * rec.cjkRatio + t.replace(CJK_RE, '').length * rec.asciiRatio))) },
     };
   })(),
 };

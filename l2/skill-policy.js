@@ -14,10 +14,14 @@
 //      （handler 仍会跑，但结果里 applied=false，别误读成「没生效」）。见 demo。
 //   ② **否决 ≠ 删文件**。落点是 proxy 侧的注入决策 + 记账 + 可观测，绝不碰 agent 目录
 //      （非侵入④铁律；而且 skill 是 agent 自己按目录加载的，proxy 删了它下一轮也读不到）。
-//      要真把 skill 关掉，走 skill-hosts.setEnabled() 并显式传 home|project。
+//      要真把 skill 关掉，走 skill-hosts.setEnabled() / setConfigDisabled()，且必须显式传 home|project。
+//      ⚠️ 2026-10-01 逐宿主验证：`.disabled` 后缀**对 hermes 无效**（hermes 认 config.yaml 的
+//      skills.disabled，按 skill 名生效，见 l2/skill-hosts.js 的 DISABLE_MECHANISM），
+//      所以落盘通道按机制分组，别一刀切后缀。
 //   ③ **policy 默认 enabled:false**（pack 默认关铁律 §3.4），要生效必须显式开。
 //
-// 诚实边界：estTokens 是估算口径（token-policy.estimateTokens：中文 3 字 ≈ 1 token），
+// 诚实边界：estTokens 是**估算**口径（token-policy.estimateTokens：CJK 1.04 token/字 + 其余 0.255/字符，
+// 2026-10-01 用本机 129 份真实 SKILL.md 对 o200k 校准，见 tools/token-estimate-calibrate.js），
 // 不是 tokenizer 也不是上游 provider usage —— 拿它做硬阈值判断要留余量。
 
 const SK = require('./skill-hosts.js');
@@ -161,17 +165,52 @@ function disableExcluded(opts = {}) {
     const apply2 = maxDisable > 0 && targets.length > maxDisable ? maxDisable : targets.length;
     const list = targets.slice(0, apply2);                   // 只动前 maxDisable 个（cost DESC 已排序）
     const applied = [], failed = [], skipped = [];
+    // 账本里真实存在的条目（key 与 scanLedger 一致）；原生通道写配置不看磁盘，
+    // 少了这道校验就会把「幽灵条目」静默写进 skills.disabled，用户以为被关了其实根本不存在。
+    const known = new Set(ledger.entries.map((e) => `${e.host}/${e.category || ''}/${String(e.name).replace(new RegExp(SK.DISABLE_SUFFIX + '$'), '')}`));
+    const byMechanism = { suffix: [], 'native-config': [] };   // 按宿主真禁用机制分组，别一处后缀一处配置各写各的
     for (const s of list) {
         if (s.disabled) { skipped.push({ name: s.name, reason: 'already-disabled' }); continue; }
         const name = String(s.name || '').replace(new RegExp(SK.DISABLE_SUFFIX + '$'), '');
         if (!name) { skipped.push({ name: s.name, reason: 'empty-name' }); continue; }
         if (!apply) { skipped.push({ name, reason: 'dry-run' }); continue; }
-        try {
-            const r = SK.setEnabled(s.host, name, false, { home: opts.home, project: opts.project });
-            if (r && r.ok) { applied.push({ host: s.host, name, to: r.to, estTokens: s.estTokens }); }
-            else { failed.push({ host: s.host, name, reason: (r && r.reason) || 'not-found' }); }
-        } catch (e) {
-            failed.push({ host: s.host, name, reason: e.message });
+        const mech = SK.disableMechanismOf(s.host).strategy || 'suffix';
+        if (!known.has(`${s.host}/${s.category || ''}/${name}`)) {
+            failed.push({ host: s.host, name, reason: 'not-found' });
+            continue;
+        }
+        byMechanism[mech] = byMechanism[mech] || [];
+        byMechanism[mech].push({ name, category: s.category || null, host: s.host, estTokens: s.estTokens });
+    }
+    for (const [mech, group] of Object.entries(byMechanism)) {
+        if (!group.length) { continue; }
+        if (mech === 'native-config') {
+            if (!apply) { for (const g of group) { skipped.push({ name: g.name, reason: 'dry-run' }); } continue; }
+            try {
+                const r = SK.setConfigDisabled(group[0].host, group.map((g) => g.name),
+                    { home: opts.home, project: opts.project, enabled: false, apply });
+                if (r && r.ok) {
+                    for (const g of group) {
+                        applied.push({ host: g.host, name: g.name, mechanism: 'native-config',
+                            config: r.config, backup: r.backup, estTokens: g.estTokens });
+                    }
+                } else {
+                    for (const g of group) { failed.push({ host: g.host, name: g.name, reason: (r && r.reason) || 'config-failed' }); }
+                }
+            } catch (e) {
+                for (const g of group) { failed.push({ host: g.host, name: g.name, reason: e.message }); }
+            }
+            continue;
+        }
+        for (const g of group) {
+            try {
+                const r = SK.setEnabled(g.host, g.name, false,
+                    { home: opts.home, project: opts.project, category: g.category });
+                if (r && r.ok) { applied.push({ host: g.host, name: g.name, to: r.to, strategy: r.strategy, estTokens: g.estTokens }); }
+                else { failed.push({ host: g.host, name: g.name, reason: (r && r.reason) || 'not-found' }); }
+            } catch (e) {
+                failed.push({ host: g.host, name: g.name, reason: e.message });
+            }
         }
     }
     return {
@@ -184,6 +223,7 @@ function disableExcluded(opts = {}) {
         maxDisable,
         actionDisabled: apply2 < targets.length,             // true = 因为撞上批量上限没动完
         applied, failed, skipped,
+        mechanism: { suffix: (byMechanism.suffix || []).length, 'native-config': (byMechanism['native-config'] || []).length },
     };
 }
 

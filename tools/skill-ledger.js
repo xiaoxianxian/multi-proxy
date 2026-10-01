@@ -14,14 +14,18 @@
 //   node tools/skill-ledger.js --out ~/.multi-proxy/skill-ledger.json
 //   node tools/skill-ledger.js --json                 # 纯 JSON（给别的脚本吃）
 //
-// ⚠️ estTokens 是**估算口径**（长度/3，复用 token-policy.estimateTokens），
+// ⚠️ estTokens 是**估算口径**（CJK 字数×1.04 + 非 CJK 字符×0.255，复用 token-policy.estimateTokens），
 //    不是真实 tokenizer、不是 provider usage。对外引用必须标「估算」。
+//    2026-10-01 用 129 份真实 SKILL.md 对齐 o200k 校准过；换 Qwen 分词口径可设 TOKEN_CJK_RATIO=0.96。
 //   null = 没量过（例如 cursor 的平铺 md 没有单体 SKILL.md），**绝不填 0**——
 //    0 会被下游读成「这条 skill 不花钱」。
 
 const fs = require('fs');
 const path = require('path');
 const SH = require('../l2/skill-hosts.js');
+// diff 口径的真源在浏览器/Node 双用模块里，页面（skills.html「基线」按钮）与 CLI 共用同一份，
+// 防止两边各自实现导致同一个条目在 CLI 算「没变」、在页面算「新增」。
+const LD = require('../multi-proxy-manager/public/skill-ledger-diff.js');
 
 function parseArgs(argv) {
     const args = { hosts: [], out: null, json: false, top: 15, diff: null };
@@ -37,38 +41,9 @@ function parseArgs(argv) {
     return args;
 }
 
-// 账本之间做 diff。基线就是 `--out` 落的那份 json（ledger 原样），读回来即可。
-// 条目主键 = host[/category]/name —— 跟明细表显示的路径一致，别另造一套 key 否则两边对不上。
-function keyOf(e) {
-    return [e.host, e.category || '', e.name].filter(Boolean).join('/');
-}
-
-function diffLedger(cur, base) {
-    const bMap = new Map((base.entries || []).map((e) => [keyOf(e), e]));
-    const cMap = new Map((cur.entries || []).map((e) => [keyOf(e), e]));
-    const added = [], removed = [], changed = [];
-    for (const [k, e] of cMap) {
-        const b = bMap.get(k);
-        if (!b) { added.push({ key: k, host: e.host, name: e.name, estTokens: e.estTokens }); continue; }
-        if (b.estTokens !== e.estTokens) {
-            changed.push({ key: k, host: e.host, name: e.name, from: b.estTokens, to: e.estTokens,
-                delta: e.estTokens - b.estTokens, ratio: b.estTokens ? +(e.estTokens / b.estTokens).toFixed(3) : null });
-        }
-    }
-    for (const [k, e] of bMap) { if (!cMap.has(k)) { removed.push({ key: k, host: e.host, name: e.name, estTokens: e.estTokens }); } }
-    const sum = (a, f) => a.reduce((n, x) => n + (f ? f(x) : 0), 0);
-    const bt = (base.totals && base.totals.tokens) || 0;
-    const ct = (cur.totals && cur.totals.tokens) || 0;
-    return {
-        baselineAt: base.generatedAt || null,
-        added, removed, changed,
-        addedCount: added.length, removedCount: removed.length, changedCount: changed.length,
-        addedTokens: sum(added, (x) => x.estTokens || 0),
-        removedTokens: -sum(removed, (x) => x.estTokens || 0),
-        tokensDelta: ct - bt,
-        tokensFrom: bt, tokensTo: ct,
-    };
-}
+// keyOf / diffLedger 直接复用双用模块，本文件不再各写一份（见上方 LD 注释）。
+const keyOf = LD.keyOf;
+const diffLedger = LD.diffLedger;
 
 function loadLedger(file) {
     let raw; try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return null; }
