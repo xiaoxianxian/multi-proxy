@@ -31,7 +31,7 @@ const { H3webAdapter } = require('./adapters/h3web-adapter.js');
 const { L1AgentAdapter } = require('./adapters/l1-agent-adapter.js');
 const { ClaudeAdapter } = require('./adapters/claude-adapter.js');
 // 共享底座（质量工程 §三）：三档 text-tier 的下游绑定（tier → {ports, model, auth}）唯一事实源
-const { resolveTierBindings } = require('./knowledge-base/routing-base.js');
+const { resolveTierBindings, resolveExecutorDefault } = require('./knowledge-base/routing-base.js');
 
 // env 端口解析：'18790,18791' → [18790, 18791]；空 → 用默认候选
 function envPorts(name, fallback) {
@@ -117,12 +117,24 @@ const BINDING_DEFS = [
             id: 'codex',
             portCandidates: envPorts('PROXY_CODEX_PORTS', [18790, 18791]),
             chatPath: '/v1/chat/completions',
+            // 超时来自底座：不显式超时 / 超时小于真实生成耗时都会制造僵尸请求
+            //（客户端断开 ≠ 取消，Ollama/上游仍跑完 → 串行队列被堵，见 runbook §4.5.1）
+            timeoutMs: (resolveExecutorDefault('codex') || {}).timeoutMs || undefined,
             token: process.env.PROXY_AUTH_TOKEN || undefined,
             capabilities: ['code', 'review', 'test'],
         }),
         invoke: async (adapter, subtask) => {
-            const r = await adapter.invoke(chatTask(subtask));
-            return { kind: 'chat', agent: 'codex', content: r.result && r.result.content, raw: r };
+            // ⚠️ model 必须给（2026-10-01 真开踩坑）：不给 → adapter 用兜底名 'default'
+            // → 真 :18790 回 `Unsupported model: default` HTTP 400；而 mock-l1 不校验模型名，
+            //   所以这个问题在 mock 时代的全部场景里都不会现形。**这就是真跑的意义。**
+            const d = resolveExecutorDefault('codex') || {};
+            const t = chatTask(subtask);
+            const r = await adapter.invoke({
+                ...t,
+                model: t.model || d.model,
+                maxTokens: t.maxTokens || d.maxTokens,
+            });
+            return { kind: 'chat', agent: 'codex', content: r.result && r.result.content, model: r.result && r.result.model, raw: r };
         },
     },
     {
@@ -134,11 +146,19 @@ const BINDING_DEFS = [
             id: 'claude',
             portCandidates: envPorts('PROXY_CLAUDE_PORTS', []),
             apiKey: process.env.ANTHROPIC_API_KEY || undefined,
+            timeoutMs: (resolveExecutorDefault('claude') || {}).timeoutMs || undefined,
             capabilities: ['code', 'writing', 'test'],
         }),
         invoke: async (adapter, subtask) => {
-            const r = await adapter.invoke(chatTask(subtask));
-            return { kind: 'chat', agent: 'claude', content: r.result && r.result.content, raw: r };
+            // 与 codex 同源纪律：model/maxTokens 由底座收口（真 model 名，绝不落到兜底名）
+            const d = resolveExecutorDefault('claude') || {};
+            const t = chatTask(subtask);
+            const r = await adapter.invoke({
+                ...t,
+                model: t.model || d.model,
+                maxTokens: t.maxTokens || d.maxTokens,
+            });
+            return { kind: 'chat', agent: 'claude', content: r.result && r.result.content, model: r.result && r.result.model, raw: r };
         },
     },
 ];

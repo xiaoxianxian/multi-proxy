@@ -193,8 +193,17 @@ class L1AgentAdapter {
             ...(task.maxTokens ? { max_tokens: task.maxTokens } : {}),
         };
         const r = await httpPostJson(host, port, this.chatPath, body, this._authHeaders(), this.timeoutMs);
-        if (r.status === 401) throw new Error(`L1 agent auth failed: 401 (task ${taskId})`);
-        if (r.status !== 200) throw new Error(`L1 agent chat failed: HTTP ${r.status} (task ${taskId})`);
+        // ⚠️ 错误信息必须带响应体摘要（2026-10-01 真开暴露的可诊断性缺口）：
+        //   上层代理会对**上游故障**回自己的状态码再包一层 —— 实测 :18790 对失效 key /
+        //   额度耗尽 / 限流一律回 `{"error":"Upstream error","code":"UPSTREAM_ERROR"}`，
+        //   状态码在 401 与 429 之间跳。只报 "HTTP 401" 会被误读成「我的 token 配错了」，
+        //   而真因是**上游 provider 那边的事**（去查 key / 额度 / 限流），方向完全不同。
+        if (r.status !== 200) {
+            const brief = String(r.body || '').replace(/\s+/g, ' ').slice(0, 200);
+            const tag = r.status === 401 ? 'auth failed' : 'chat failed';
+            throw new Error(`L1 agent ${tag}: HTTP ${r.status} (task ${taskId})` +
+                `${brief ? ` :: ${brief}` : ''}` + (r.status === 429 ? ' [上游限流，退避重试]' : ''));
+        }
         let parsed;
         try {
             parsed = JSON.parse(r.body);

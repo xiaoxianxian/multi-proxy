@@ -95,6 +95,36 @@ const ROUTING_BASE = {
         },
     },
 
+    // ---- 执行落点默认参数（executorDefaults，2026-10-01 真开暴露的同类坑）----
+    // 教训同 tierBindings.maxTokens：**底座声明了 ≠ 出口透出了**。这次缺的是 model：
+    //   BINDING_DEFS.codex 的 invoke 从不传 model → L1AgentAdapter 用 adapterDefaults 的
+    //   兜底名 'default' → mock-l1 不校验模型名（所以 canary 64 个 mock 场景全绿），
+    //   真 (:18790) 立刻 `{"error":"Unsupported model: default","code":"UNSUPPORTED_MODEL"}` HTTP 400。
+    // 一句话：mock 全绿 ≠ 真能跑，缺的东西只在真账单那一步才现形。
+    // 与 tierBindings 同构收口在底座（可被 update()/rollback() 管），env 可覆盖。
+    executorDefaults: {
+        // ⚠️ 上游实测现状（2026-10-01 真开当天 curl 逐个探，非推断）：
+        //   :18790 背后 deepseek / kimi / moonshot / agnes **全部**回 401 或 429 且统一包一层
+        //   {"error":"Upstream error","code":"UPSTREAM_ERROR"} —— 即代理本身活着，**上游 provider 的
+        //   key / 额度 / 限流出了问题**。本地 :11434 的 qwen（large 档）稳定 200。
+        //   → 默认 model 只保证「名字真实存在」；能不能真出内容取决于上游配额，两者别混为一谈。
+        //   恢复后可用 env PROXY_CODEX_MODEL 临时改档，不必改代码。
+        codex: {
+            model: 'deepseek-v4-flash',     // 下游 :18790 /v1/models 真实存在的模型（2026-10-01 实测）
+            envName: 'PROXY_CODEX_MODEL',
+            maxTokens: 2048,
+            timeoutMs: 120000,
+            desc: 'Codex L1 chat 默认落点（经 codex-proxy :18790 转付费上游）',
+        },
+        claude: {
+            model: 'claude-3-5-sonnet-latest',
+            envName: 'PROXY_CLAUDE_MODEL',
+            maxTokens: 2048,
+            timeoutMs: 120000,
+            desc: 'Claude chat 默认落点（需 ANTHROPIC_API_KEY）',
+        },
+    },
+
     // ---- 无候选兜底策略（质量工程 §四 待办②）----
     // route() 选不出 adapter 时怎么办。此前是**隐式行为**：chosen=null 却照样执行，
     // 最终表现为 executor 拿到 adapterId=null 的静默降级（无人报错、无从复盘）。
@@ -130,6 +160,7 @@ function _snapshotCurrent() {
         adapterDefaults: ROUTING_BASE.adapterDefaults,
         noCandidatePolicy: ROUTING_BASE.noCandidatePolicy,
         tierBindings: ROUTING_BASE.tierBindings,
+        executorDefaults: ROUTING_BASE.executorDefaults,
     };
 }
 
@@ -198,11 +229,31 @@ function resolveTierBinding(tier) {
     return resolveTierBindings()[tier] || null;
 }
 
+function resolveExecutorDefaults() {
+    const raw = ROUTING_BASE.executorDefaults || {};
+    const out = {};
+    for (const [adapterId, d] of Object.entries(raw)) {
+        const envModel = String((process.env && process.env[d.envName]) || '').trim();
+        out[adapterId] = {
+            adapterId,
+            model: envModel || d.model,
+            maxTokens: d.maxTokens,
+            timeoutMs: d.timeoutMs,
+            desc: d.desc,
+        };
+    }
+    return out;
+}
+
+function resolveExecutorDefault(adapterId) {
+    return resolveExecutorDefaults()[adapterId] || null;
+}
+
 // 修订：浅合并 patch → version+1，旧版自动进快照历史。返回新 version。
 function update(patch, note) {
     if (!patch || typeof patch !== 'object') throw new Error('routing-base.update: patch object required');
     _history.push(_snapshotCurrent());
-    for (const k of ['templates', 'fallback', 'complexityTierMap', 'adapterDefaults', 'noCandidatePolicy', 'tierBindings']) {
+    for (const k of ['templates', 'fallback', 'complexityTierMap', 'adapterDefaults', 'noCandidatePolicy', 'tierBindings', 'executorDefaults']) {
         if (patch[k] !== undefined) ROUTING_BASE[k] = patch[k];
     }
     ROUTING_BASE.version += 1;
@@ -221,6 +272,7 @@ function rollback() {
     ROUTING_BASE.adapterDefaults = prev.adapterDefaults;
     ROUTING_BASE.noCandidatePolicy = prev.noCandidatePolicy;
     ROUTING_BASE.tierBindings = prev.tierBindings;
+    ROUTING_BASE.executorDefaults = prev.executorDefaults;
     ROUTING_BASE.version = prev.version;
     ROUTING_BASE.updatedAt = prev.updatedAt;
     ROUTING_BASE.note = prev.note;
@@ -235,5 +287,6 @@ function history() {
 module.exports = {
     ROUTING_BASE, mapTier, adapterDefaults, resolveNoCandidatePolicy,
     resolveTierBindings, resolveTierBinding, envPorts,
+    resolveExecutorDefaults, resolveExecutorDefault,
     update, rollback, history,
 };

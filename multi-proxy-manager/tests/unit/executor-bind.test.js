@@ -104,6 +104,29 @@ describe('executor-bind · 分发真跑（内联 mock 下游）', () => {
         expect(v.content).toBe('mock-ok');
     });
 
+    // 守卫（2026-10-01 真开暴露的同类坑，第 2 次）：底座声明了 ≠ 出口透出了。
+    //   第 1 次是 tierBindings.maxTokens 漏透出 → 本地 27B 无上限生成 → 超时 + 僵尸请求堵队列；
+    //   第 2 次是 codex 从不传 model → adapter 用兜底名 'default' → 真 :18790 回
+    //   `Unsupported model: default` HTTP 400。两次的根因结构一模一样，都在 mock 时代全绿。
+    //   mock-l1 不校验 model 名，所以本断言必须直接查**发出去的请求体**才拦得住。
+    test('codex 必须带上真 model 名（不是 adapter 兜底的 "default"）', async () => {
+        const expected = rb.resolveExecutorDefault('codex').model;
+        expect(expected).toBeTruthy();
+        expect(expected).not.toBe('default');
+        await bound.executor('codex', { id: 's1m', type: 'code', prompt: '写一个 jwt 中间件' });
+        expect(mockL1.getLastModel()).toBe(expected);
+    });
+
+    test('PROXY_CODEX_MODEL 可覆盖默认 model（运维临时换档不必改代码）', async () => {
+        cleanEnv();
+        process.env.PROXY_CODEX_PORTS = String(l1Port);
+        process.env.PROXY_AUTH_TOKEN = mockL1.token;
+        process.env.PROXY_CODEX_MODEL = 'agnes-2.0-flash';
+        expect(rb.resolveExecutorDefault('codex').model).toBe('agnes-2.0-flash');
+        await bound.executor('codex', { id: 's1o', type: 'code', prompt: 'x' });
+        expect(mockL1.getLastModel()).toBe('agnes-2.0-flash');
+    });
+
     test('h3web → /api/gen + /api/status 真走 job 状态机到终态', async () => {
         const before = mockH3.getGenCalls();
         const v = await bound.executor('h3web', { id: 's2', type: 'video', prompt: '生成一段视频' });
