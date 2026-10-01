@@ -63,6 +63,37 @@ describe('Memory 面 · 内容级压缩（改内容，不改条数）', () => {
     expect(r.netTokenDelta).toBeLessThan(0);
   });
 
+  // 50 号文档实测：codex 走 /v1/responses，文本 part 叫 **input_text**（助手侧叫 output_text），
+  // 只有 chat 协议才叫 'text'。只认 'text' 的后果是「filter 出空数组 → join 出空串 → 长度 0
+  // → 判定没超长 → 压缩静默恒等于零且零报错」，本机真实语料 18/18 条全部命中不到。
+  // 这类「静默失效」比崩掉更难发现，所以钉死在测试里，别让后人改回去。
+  test('codex/responses 的 input_text：必须被压缩（认死 text 会静默恒等于零）', () => {
+    require(MEM).params.maxMsgChars = 40;
+    const hist = [{ type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'a:' + 'x'.repeat(300) }] }];
+    const r = run('onHistory', { history: hist });
+    expect(r.out.history[0].content[0].type).toBe('input_text'); // 写回必须保住 part 类型，改成 chat 的 text 等于换协议
+    expect(r.out.history[0].content[0].text.length).toBeLessThan(300);
+    expect(r.netTokenDelta).toBeLessThan(0);
+  });
+
+  test('助手侧 output_text 同样认（不是 output_text 就漏掉一半历史）', () => {
+    require(MEM).params.maxMsgChars = 40;
+    const hist = [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'b:' + 'y'.repeat(300) }] }];
+    const r = run('onHistory', { history: hist });
+    expect(r.out.history[0].content[0].type).toBe('output_text');
+    expect(r.out.history[0].content[0].text.length).toBeLessThan(300);
+    expect(r.netTokenDelta).toBeLessThan(0);
+  });
+
+  test('纯图片消息：不硬塞一个 text part 进请求体（宁可这条不压，也不能注入脏 type）', () => {
+    require(MEM).params.maxMsgChars = 40;
+    const hist = [{ type: 'message', role: 'user', content: [{ type: 'input_image', image_url: 'data:image/png;base64,x' }] }];
+    const r = run('onHistory', { history: hist });
+    expect(r.out.history[0].content).toHaveLength(1);
+    expect(r.out.history[0].content[0].type).toBe('input_image');
+    expect(r.netTokenDelta).toBeNull();
+  });
+
   test('头尾保留：尾部内容还在（只留头部会丢掉错误堆栈/最新日志）', () => {
     require(MEM).params.maxMsgChars = 40;
     const tail = 'TAIL-MARK';

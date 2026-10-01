@@ -46,31 +46,51 @@ function headTail(s, maxChars) {
   return { text, changed: true, omitted };
 }
 
+// /v1/responses 协议（codex 走的这条）里文本 part 不叫 'text'：
+//   用户 / 开发者侧 = input_text，助手侧 = output_text，只有 chat 协议才叫 'text'。
+// 只认 'text' 的后果不是报错，是**静默失效**：filter 出空数组 → join 出空串 →
+// 长度 0 → 下游判定「这条没超长」→ 压缩恒等于零、零报错。
+// 实测本机真实语料 18/18 条 input item 全部取不到文本（(p.text)||'' 那版更是把非字符串也吞成空串）。
+const TEXT_PART_TYPES = new Set(['text', 'input_text', 'output_text']);
+
+function isTextPart(p) {
+  return !!p && typeof p === 'object' && TEXT_PART_TYPES.has(p.type);
+}
+
 /**
- * 取一条消息的文本。只认字符串 content 与 text part 数组；
+ * 取一条消息的文本。认字符串 content 与三类文本 part；
  * 图片等非文本 part 不参与压缩（压缩它们等于丢信息，且本 pack 无权决定）。
  */
 function textOf(m) {
   if (!m || typeof m !== 'object') return null;
   if (typeof m.content === 'string') return m.content;
   if (Array.isArray(m.content)) {
-    return m.content.filter((p) => p && p.type === 'text').map((p) => (p && p.text) || '').join('\n');
+    return m.content.filter(isTextPart)
+      .map((p) => (typeof p.text === 'string' ? p.text : ''))
+      .join('\n');
   }
   return null;
 }
 
-/** 写回文本，保留原消息的其他字段与非文本 part（只替换第一个 text part）。 */
+/**
+ * 写回文本，保留原消息的其他字段与非文本 part。
+ *
+ * 关键：**保留原 part 的 type**。把 input_text 改写成 text 会让上游按 chat 协议去读，
+ * 那是把请求体换了个协议，不是压缩。
+ */
 function setText(m, text) {
   if (!m || typeof m !== 'object') return m;
   if (typeof m.content === 'string') return Object.assign({}, m, { content: text });
   if (Array.isArray(m.content)) {
     let done = false;
     const parts = m.content.map((p) => {
-      if (!done && p && p.type === 'text') { done = true; return Object.assign({}, p, { text }); }
+      if (!done && isTextPart(p)) { done = true; return Object.assign({}, p, { text }); }
       return p;
     });
-    if (!done) parts.push({ type: 'text', text });
-    return Object.assign({}, m, { content: parts });
+    // 一个文本 part 都没有（纯图片 / 空 content）：不硬塞一个 part 进去——
+    // 那等于往请求体里注入协议不认的 type，比不压这条更糟。返回原对象，静默不压。
+    if (done) return Object.assign({}, m, { content: parts });
+    return m;
   }
   return Object.assign({}, m, { content: text });
 }
