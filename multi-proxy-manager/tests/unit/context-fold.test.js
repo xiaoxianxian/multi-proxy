@@ -214,3 +214,74 @@ describe('context-fold · C2 per-request 记录 + Delta（时间线）', () => {
     expect(a).not.toBe(b);
   });
 });
+
+describe('context-fold C5（tool schema 来源标注 · schema 懒加载前置）', () => {
+  const exact = (s) => (typeof s === 'string' ? s.length : 0);
+  const mk = (o) => F.createContextFold({ estimate: exact, ...(o || {}) });
+
+  test('classifyToolName 三种来源，且 server 名含下划线不被贪婪匹配吞掉', () => {
+    expect(F.classifyToolName('mcp__github__search')).toEqual({ source: 'mcp', server: 'github', name: 'search' });
+    expect(F.classifyToolName('Read')).toEqual({ source: 'named', server: null, name: 'Read' });
+    expect(F.classifyToolName('')).toEqual({ source: 'unnamed', server: null, name: null });
+    expect(F.classifyToolName(undefined)).toEqual({ source: 'unnamed', server: null, name: null });
+    const r = F.classifyToolName('mcp__my_server__do_thing');
+    expect(r.server).toBe('my_server');
+    expect(r.name).toBe('do_thing');
+  });
+
+  test('MCP 工具按 server 分组（懒加载的最小可动粒度）', () => {
+    const t1 = { name: 'mcp__github__aa' };
+    const t3 = { name: 'mcp__linear__cc' };
+    const unit = JSON.stringify(t1).length;
+    expect(JSON.stringify(t3).length).toBe(unit);
+    const r = mk().fold({ tools: [t1, { name: 'mcp__github__bb' }, t3] });
+    expect(r.estimate.toolCount).toBe(3);
+    expect(r.estimate.toolsBySource['mcp:github']).toBe(unit * 2);
+    expect(r.estimate.toolsBySource['mcp:linear']).toBe(unit);
+  });
+
+  test('来源分组之和 == tools 桶总量（C5 不得改变既有口径）', () => {
+    const r = mk().fold({
+      tools: [
+        { name: 'mcp__github__aa' },
+        { name: 'mcp__github__bb' },
+        { name: 'mcp__linear__cc' },
+        { name: 'Read' },
+      ],
+    });
+    const sum = Object.values(r.estimate.toolsBySource).reduce((a, b) => a + b, 0);
+    expect(sum).toBe(r.estimate.byCategory.tools);
+    expect(r.estimate.toolsBySource.named).toBeGreaterThan(0);
+  });
+
+  test('OpenAI function 形态（function.name）也能认出来源', () => {
+    const r = mk().fold({ tools: [{ type: 'function', function: { name: 'mcp__github__aa' } }] });
+    expect(r.estimate.toolsBySource['mcp:github']).toBeGreaterThan(0);
+    expect(r.estimate.toolsUnnamed).toBe(0);
+  });
+
+  test('取不到名字 → 归 unnamed 且告警，不静默丢弃', () => {
+    const r = mk().fold({ tools: [{ type: 'function' }, { description: 'x' }] });
+    expect(r.estimate.toolsUnnamed).toBe(2);
+    expect(r.estimate.toolsBySource.unnamed).toBeGreaterThan(0);
+    expect(r.warnings.some((w) => w.includes('unnamed'))).toBe(true);
+  });
+
+  test('无 tools 时来源分组为空对象，不产生噪音字段', () => {
+    const r = mk().fold({ messages: [{ role: 'user', content: 'hi' }] });
+    expect(r.estimate.toolsBySource).toEqual({});
+    expect(r.estimate.toolCount).toBe(0);
+    expect(r.estimate.toolsUnnamed).toBe(0);
+    // 注意：warnings 不为空——C1 常驻一条 no-provider-actuals（未给实测值即告警）。
+    // 这里要守的是 C5 不额外制造噪音，而不是 warnings 为空。
+    expect(r.warnings.some((w) => w.includes('unnamed'))).toBe(false);
+  });
+
+  test('答得出「某个 MCP server 占 tools 桶多少」——懒加载的决策依据', () => {
+    const tools = [];
+    for (let i = 0; i < 40; i++) { tools.push({ name: `mcp__heavy__t${String(i).padStart(2, '0')}` }); }
+    tools.push({ name: 'Read' });
+    const r = mk().fold({ tools });
+    expect(r.estimate.toolsBySource['mcp:heavy'] / r.estimate.byCategory.tools).toBeGreaterThan(0.9);
+  });
+});

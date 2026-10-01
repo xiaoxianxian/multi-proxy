@@ -225,5 +225,66 @@ check('20. maxRecords 上限保护（丢弃最老）', () => {
     assert.strictEqual(f.list()[0].turn, 3, '最老的 1、2 被丢弃');
 });
 
+// ---- C5：tool schema 来源标注（schema 懒加载的前置）----
+// 断言一律用「关系」而非硬编码绝对值，估算器口径变了也不会假失败。
+
+check('21. classifyToolName 三种来源：MCP / named / unnamed', () => {
+    assert.deepStrictEqual(F.classifyToolName('mcp__github__search'), { source: 'mcp', server: 'github', name: 'search' });
+    assert.deepStrictEqual(F.classifyToolName('Read'), { source: 'named', server: null, name: 'Read' });
+    assert.deepStrictEqual(F.classifyToolName(''), { source: 'unnamed', server: null, name: null });
+    assert.deepStrictEqual(F.classifyToolName(null), { source: 'unnamed', server: null, name: null });
+    // server 名含下划线：非贪婪匹配不能被吞掉
+    assert.strictEqual(F.classifyToolName('mcp__my_server__do_thing').server, 'my_server');
+    assert.strictEqual(F.classifyToolName('mcp__my_server__do_thing').name, 'do_thing');
+});
+
+check('22. MCP 工具按 server 分组（懒加载的最小可动粒度）', () => {
+    const t1 = { name: 'mcp__github__aa' };
+    const t2 = { name: 'mcp__github__bb' };
+    const t3 = { name: 'mcp__linear__cc' };
+    const unit = JSON.stringify(t1).length;
+    assert.strictEqual(JSON.stringify(t3).length, unit, '构造前提：三条声明等长，便于倍数断言');
+    const r = mk().fold({ tools: [t1, t2, t3] });
+    assert.strictEqual(r.estimate.toolCount, 3, 'toolCount=3');
+    assert.strictEqual(r.estimate.toolsBySource['mcp:github'], unit * 2, 'github 两条');
+    assert.strictEqual(r.estimate.toolsBySource['mcp:linear'], unit, 'linear 一条');
+});
+
+check('23. 来源分组之和 == tools 桶总量（C5 不得改变既有口径）', () => {
+    const r = mk().fold({
+        tools: [
+            { name: 'mcp__github__aa' },
+            { name: 'mcp__github__bb' },
+            { name: 'mcp__linear__cc' },
+            { name: 'Read' },
+        ],
+    });
+    const sum = Object.values(r.estimate.toolsBySource).reduce((a, b) => a + b, 0);
+    assert.strictEqual(sum, r.estimate.byCategory.tools, '分组求和必须等于 tools 桶总量');
+    assert.ok(r.estimate.toolsBySource.named > 0, '非 MCP 具名工具落 named');
+});
+
+check('24. OpenAI function 形态（function.name）也能认出来源', () => {
+    const r = mk().fold({ tools: [{ type: 'function', function: { name: 'mcp__github__aa' } }] });
+    assert.ok(r.estimate.toolsBySource['mcp:github'] > 0, 'function.name 应被识别为 MCP 来源');
+    assert.strictEqual(r.estimate.toolsUnnamed, 0, '不该被判为无名');
+});
+
+check('25. 取不到名字 → 归 unnamed 且告警（不静默丢弃）', () => {
+    const r = mk().fold({ tools: [{ type: 'function' }, { description: 'x' }] });
+    assert.strictEqual(r.estimate.toolsUnnamed, 2, '两条都无名字');
+    assert.ok(r.estimate.toolsBySource.unnamed > 0, 'unnamed 桶必须有量，不能丢');
+    assert.ok(r.warnings.some((w) => w.includes('unnamed')), '必须告警');
+});
+
+check('26. 答得出「某个 MCP server 占 tools 桶多少」——懒加载的决策依据', () => {
+    const tools = [];
+    for (let i = 0; i < 40; i++) { tools.push({ name: `mcp__heavy__t${String(i).padStart(2, '0')}` }); }
+    tools.push({ name: 'Read' });
+    const r = mk().fold({ tools });
+    const ratio = r.estimate.toolsBySource['mcp:heavy'] / r.estimate.byCategory.tools;
+    assert.ok(ratio > 0.9, `单个重型 server 应占 tools 桶九成以上，实测 ${(ratio * 100).toFixed(1)}%`);
+});
+
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

@@ -120,6 +120,41 @@ function diffFrames(from, to) {
   };
 }
 
+// ---- C5：tool schema 来源标注（schema 懒加载的前置）----
+//
+// 为什么需要：tools 桶此前是一整坨 JSON.stringify 累加，只答得出「schema 一共多少」，
+// 答不出「是谁的、能不能整组裁掉」。懒加载要动刀，得先知道刀往哪落。
+//
+// 只认跨宿主的 `mcp__<server>__<tool>` 约定，不内置任何一家的工具名表——
+// multi-proxy 引擎无关，硬编码某家的 Read/Bash 会把宿主绑死。
+// 认不出就如实标 unnamed 并告警，与 C1「不静默丢弃」同一条纪律。
+
+/** MCP 工具命名约定：mcp__<server>__<tool>。非贪婪匹配，server 名可含下划线。 */
+const MCP_TOOL_RE = /^mcp__(.+?)__(.+)$/;
+
+/** 从一条 tool 声明里取出名字（OpenAI 形态在 function.name，MCP 形态在 name）。 */
+function toolNameOf(t) {
+    if (typeof t === 'string') { return t; }
+    if (!t || typeof t !== 'object') { return null; }
+    const n = t.function && t.function.name ? t.function.name : t.name;
+    return typeof n === 'string' && n ? n : null;
+}
+
+/**
+ * @returns {{source:'mcp'|'named'|'unnamed', server:string|null, name:string|null}}
+ */
+function classifyToolName(name) {
+    if (typeof name !== 'string' || !name) { return { source: 'unnamed', server: null, name: null }; }
+    const m = MCP_TOOL_RE.exec(name);
+    if (m) { return { source: 'mcp', server: m[1], name: m[2] }; }
+    return { source: 'named', server: null, name };
+}
+
+/** 来源 → toolsBySource 的 key。MCP 按 server 分组：一个 server 往往几十个工具，是可整体懒加载的最小粒度。 */
+function toolSourceKey(c) {
+    return c.source === 'mcp' ? `mcp:${c.server}` : c.source;
+}
+
 // ---- 工厂：每实例独立配置（测试隔离；延续 l2/ 工厂惯例）----
 function createContextFold(opts = {}) {
     const estimate = typeof opts.estimate === 'function' ? opts.estimate : estimateTokens;
@@ -132,6 +167,8 @@ function createContextFold(opts = {}) {
      *   o.actuals     provider 返回值 { prompt_tokens, completion_tokens, cached_tokens }（可选，给了才有实测轨）
      *   o.injections  代理侧注入 [{ sink:'inject'|'skill', source:'pack-x', text?:string, tokens?:number }]
      * @returns {{ estimate:object, actual:object|null, source:string, bySource:object, warnings:string[] }}
+     *   estimate.toolsBySource  C5：tool schema 按来源分组的估算量，key 形如 `mcp:github` / `named` / `unnamed`
+     *   estimate.toolCount / estimate.toolsUnnamed  工具条数与取不到名字的条数
      */
     function fold(request = {}, o = {}) {
         const byCategory = emptyTally();
@@ -165,8 +202,19 @@ function createContextFold(opts = {}) {
         }
 
         // tools 类 = schema 声明本身（一次请求里通常全量带上，是最容易被忽略的隐性大头）
+        // C5：同时按来源分组。总量口径不变，只是多一层「是谁的」——byCategory.tools 仍是同一个数。
+        const toolsBySource = {};
+        let toolsUnnamed = 0;
         for (const t of tools) {
-            byCategory.tools += estimate(typeof t === 'string' ? t : JSON.stringify(t));
+            const n = estimate(typeof t === 'string' ? t : JSON.stringify(t));
+            byCategory.tools += n;
+            const c = classifyToolName(toolNameOf(t));
+            if (c.source === 'unnamed') { toolsUnnamed += 1; }
+            const key = toolSourceKey(c);
+            toolsBySource[key] = (toolsBySource[key] || 0) + n;
+        }
+        if (toolsUnnamed > 0) {
+            warnings.push(`${toolsUnnamed} 条 tool 声明取不到名字，来源归入 unnamed（懒加载无法按来源裁剪）`);
         }
 
         // 代理侧注入：pack / skill / RAG 等。第七类为什么要单列——
@@ -184,7 +232,16 @@ function createContextFold(opts = {}) {
         }
 
         const estTotal = CATEGORIES.reduce((a, c) => a + byCategory[c], 0);
-        const estimateSide = { byCategory, total: estTotal, unclassified: stats.unclassifiedTokens };
+        const estimateSide = {
+            byCategory,
+            total: estTotal,
+            unclassified: stats.unclassifiedTokens,
+            // C5：来源细分只存在于估算轨。实测轨（provider 的 prompt_tokens）没有来源维度，
+            // 不硬凑——凑出来就是假颗粒度。
+            toolsBySource,
+            toolCount: tools.length,
+            toolsUnnamed,
+        };
 
         let actual = null;
         let source = 'estimate';
@@ -297,6 +354,8 @@ module.exports = {
     apportion,
     diffFrames,
     pickFrame,
+    classifyToolName,
+    toolNameOf,
     // 单例转发
     fold: _fold.fold,
     record: _fold.record,
