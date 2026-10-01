@@ -1,0 +1,14 @@
+# packs/dev-workflow/pack.yaml — dev-workflow pack 索引
+name: dev-workflow
+version: 0.1.0
+type: agent
+description: 多 agent 协同开发规范 + 共享任务队列（首个 agent 能力类 pack）
+requires:
+  - beads>=1.0
+init_script: init.sh
+p0:
+  - init.sh  # 安装即得：初始化自动化（规范拷备 + QUEUE 骨架 + bd init + 必读前置）
+p1:
+  - retro.sh  # 半自动进化：双周回顾草稿
+p2:
+  - observe.js  # 代理原生观测（依赖 L2 热路径，默认关）
