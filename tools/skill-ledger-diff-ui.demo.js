@@ -218,6 +218,45 @@ function boot(opts) {
         assert.ok(nb.doc.getElementById('skillTable').innerHTML.indexOf('new-one') >= 0, '模块缺失时明细表也该照常渲染');
     });
 
+    // ===== 场景 6：总量持平但条目有变化（新增一条 + 删掉一条差不多大的） =====
+    // 真浏览器验证时撞出来的：头部说「与基线持平」、下面列「新增 2 条」，页面自相矛盾。
+    const A2 = mk([E('hermes', 'a-one', '', 500), E('codex', 'old-one', '', 200)], 700, '2026-10-02T01:00:00.000Z');
+    const A3 = mk([E('hermes', 'a-one', '', 500), E('workbuddy', 'new-one', '', 200)], 700, '2026-10-02T02:00:00.000Z');
+    const m = boot({ ledger: A2 });
+    await flush();
+    m.el('setBaselineBtn').click();
+    await flush();
+    m.setLedger(A3);
+    m.el('refreshBtn').click();
+    await flush();
+
+    check('总量持平但条目有变：不许只说「与基线持平」把条目变化盖掉', () => {
+        const h = m.diffHtml();
+        assert.ok(/diff-net flat/.test(h), '总量没变就该走 flat 样式');
+        assert.ok(h.indexOf('与基线完全一致') < 0, '还有条目变化时不许说「完全一致」：' + h);
+        assert.ok(h.indexOf('token 总量持平') >= 0, '没点明「总量持平」：' + h);
+        assert.ok(h.indexOf('新增 1 条') >= 0 && h.indexOf('消失 1 条') >= 0, '没列出条目变化：' + h);
+    });
+
+    // ===== 场景 7：一边没量过（null）不能画成 0 =====
+    const N1 = mk([E('hermes', 'q-one', '', 800)], 800, '2026-10-02T03:00:00.000Z');
+    const N2 = mk([E('hermes', 'q-one', '', null)], 0, '2026-10-02T04:00:00.000Z');
+    const n = boot({ ledger: N2 });
+    await flush();
+    n.el('setBaselineBtn').click();
+    await flush();
+    n.setLedger(N1);
+    n.el('refreshBtn').click();
+    await flush();
+
+    check('一边没量过：变动行画「—」而不是「0」，且说清无法比较', () => {
+        const h = n.diffHtml();
+        assert.ok(h.indexOf('>—<') >= 0, 'null 该渲染成 —，实际：' + h);
+        assert.ok(h.indexOf('无法比较') >= 0, 'delta 无从算起时要说明，别编数字');
+        assert.ok(h.indexOf('估算口径：— → 800') >= 0, '基线一份都没量出来时，头部不许印「0 → 800」：' + h);
+        assert.ok(!/lang->0<\/span> 0 →/.test(h), '不许把「量不了」印成 0 token');
+    });
+
     console.log(`\n[skill-ledger-diff ui demo] PASS ${pass} / ${pass + fail}`);
     process.exit(fail === 0 ? 0 : 1);
 }());

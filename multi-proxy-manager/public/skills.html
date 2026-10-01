@@ -378,16 +378,26 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
        box.innerHTML = '<div class="diff-hint">账本还没拉到' + (hasDiffModule() ? '' : '，或 skill-ledger-diff.js 没加载上（清一下缓存）') + '。</div>';
        return;
      }
-     var from = num(d.tokensFrom), to = num(d.tokensTo);
+     // 🔴 一份 token 都没量出来时 totals 会是 0，直印「0 → 800」会被读成「基线本来是 0 token」，
+    //    跟面板自己写的「null 显示为空」打架。这种时候画「—」。
+    var bCount = (baseline.entries || []).length;
+    var cCount = (ledger.entries || []).length;
+    var from = (d.tokensFrom === 0 && bCount > 0) ? '—' : num(d.tokensFrom);
+    var to = (d.tokensTo === 0 && cCount > 0) ? '—' : num(d.tokensTo);
      var cls = d.tokensDelta > 0 ? 'up' : (d.tokensDelta < 0 ? 'down' : 'flat');
      var head;
      if (d.tokensDelta > 0) {
        head = '⚠️ 比上次多涨 <b>' + num(d.tokensDelta) + '</b> token（估算口径：' + from + ' → ' + to + '）';
      } else if (d.tokensDelta < 0) {
        head = '↓ 比上次少 <b>' + num(-d.tokensDelta) + '</b> token（估算口径：' + from + ' → ' + to + '）';
-     } else {
-       head = '与基线持平（' + to + ' token，估算口径）';
-     }
+    } else {
+      // 🔴 总量持平 ≠ 没变化：新增一条小 skill 同时又删掉一条差不多大的，token 持平但条目变了。
+      //    只说「与基线持平」却在下行列「新增 2 条」，人一眼就觉得页面自相矛盾 → 这里必须把条目变化讲明白。
+      var mix = d.addedCount + d.removedCount + d.changedCount;
+      head = mix
+        ? '↔ token 总量持平（' + to + '），但条目有变化：新增 ' + d.addedCount + ' / 消失 ' + d.removedCount + ' / 变动 ' + d.changedCount
+        : '与基线完全一致（' + to + ' token，估算口径）';
+    }
      var html = '<div class="diff-net ' + cls + '">' + head + '</div>';
 
      function lw(label, arr, c, fmt) {
@@ -398,11 +408,12 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
               '<span class="d-v">' + items + more + '</span></div>';
      }
      // 变动条目必须带旧值：不给 from → to，人看到「涨了」却查不出是哪条变贵、变了多少
-     var fmtChanged = function (x) {
-       return esc(x.key) + ' ' + num(x.from) + ' → ' + num(x.to) +
-              ' <b>(' + (x.delta >= 0 ? '+' : '') + num(x.delta) + (x.ratio ? ', ×' + x.ratio : '') + ')</b>';
-     };
-     var changed = d.changed.slice().sort(function (a, b) { return b.delta - a.delta; });
+    var tok = function (v) { return v == null ? '<span title="没量过，不是 0">—</span>' : num(v); };
+    var fmtChanged = function (x) {
+      var dl = x.delta == null ? '无法比较' : (x.delta >= 0 ? '+' : '') + num(x.delta) + (x.ratio ? ', ×' + x.ratio : '');
+      return esc(x.key) + ' ' + tok(x.from) + ' → ' + tok(x.to) + ' <b>(' + dl + ')</b>';
+    };
+    var changed = d.changed.slice().sort(function (a, b) { return (b.delta || 0) - (a.delta || 0); });
      var changedCls = changed.reduce(function (n, x) { return n + x.delta; }, 0) >= 0 ? 'up' : 'down';
      html += lw('新增', d.added, 'up', function (x) { return esc(x.key) + (x.estTokens != null ? ' <b>' + num(x.estTokens) + '</b>' : ''); })
           +  lw('消失', d.removed, 'down', function (x) { return esc(x.key) + (x.estTokens != null ? ' <b>' + num(x.estTokens) + '</b>' : ''); })

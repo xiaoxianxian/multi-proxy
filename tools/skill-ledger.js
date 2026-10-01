@@ -132,11 +132,13 @@ function main() {
             for (const x of arr.slice(0, args.top)) { process.stdout.write('  ' + fmt(x) + '\n'); }
             if (arr.length > args.top) { process.stdout.write(`  …还有 ${arr.length - args.top} 条\n`); }
         };
-        if (diff.addedCount) { line('新增：', diff.added, (x) => `${String(x.estTokens ?? 0).padStart(6)} tok  ${x.key}`); }
-        if (diff.removedCount) { line('消失：', diff.removed, (x) => `${String(x.estTokens ?? 0).padStart(6)} tok  ${x.key}`); }
+        // 🔴 null = 没量过，绝不打 0（0 会被读成「这条不占 token」）
+        const cell = (v) => (v == null ? '    —' : String(v).padStart(6));
+        if (diff.addedCount) { line('新增：', diff.added, (x) => `${cell(x.estTokens)} tok  ${x.key}`); }
+        if (diff.removedCount) { line('消失：', diff.removed, (x) => `${cell(x.estTokens)} tok  ${x.key}`); }
         if (diff.changedCount) {
-            line('token 变动（按增减降序）：', diff.changed.sort((a, b) => b.delta - a.delta),
-                (x) => `${String(x.from).padStart(6)} → ${String(x.to).padStart(6)}  (${x.delta >= 0 ? '+' : ''}${x.delta}, ×${x.ratio})  ${x.key}`);
+            line('token 变动（按增减降序）：', diff.changed.sort((a, b) => (b.delta || 0) - (a.delta || 0)),
+                (x) => `${cell(x.from)} → ${cell(x.to)}  ${x.delta == null ? '（一边没量过，无法比较）' : `(${x.delta >= 0 ? '+' : ''}${x.delta}, ${x.ratio == null ? '×?' : '×' + x.ratio})`}  ${x.key}`);
         }
         if (!diff.addedCount && !diff.removedCount && !diff.changedCount) { process.stdout.write('  （与基线完全一致：没有新增/消失/变动）\n'); }
         process.stdout.write(`\n可用 --out 把这次的账本存成下一次的基线。\n`);

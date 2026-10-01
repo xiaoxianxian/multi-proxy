@@ -57,6 +57,45 @@ check('diffLedger：token 变动带 from/to/delta/倍率', () => {
     assert.strictEqual(c.ratio, 1.8);
 });
 
+// 🔴 「没量过」必须留 null，不能折算成 0 —— 0 会被读成「这条不占 token」，
+//    真浏览器验证时这条口径打脸过一次（面板打出「1 → 0 (-1)」，其实是「基线量不了→现在量得了」）。
+check('diffLedger：没量过留 null，绝不折算成 0', () => {
+    const mLedger = {
+        generatedAt: 't', hosts: [], totals: { entries: 3, measured: 2, skipped: 1, tokens: 1200 },
+        entries: [
+            { host: 'hermes', name: 'x-one', category: null, estTokens: null },   // 基线量不了
+            { host: 'hermes', name: 'y-one', category: null, estTokens: 100 },
+            { host: 'codex', name: 'z-one', category: null, estTokens: 1100 },
+        ],
+    };
+    const d = M.diffLedger(mLedger, {
+        generatedAt: 't', hosts: [], totals: { entries: 3, measured: 2, skipped: 1, tokens: 1200 },
+        entries: [
+            { host: 'hermes', name: 'x-one', category: null, estTokens: null },
+            { host: 'hermes', name: 'y-one', category: null, estTokens: 100 },
+            { host: 'codex', name: 'z-one', category: null, estTokens: 1100 },
+        ],
+    });
+    assert.strictEqual(d.changed.length, 0, '两边都没量过时不该被判成「变动」');
+
+    // 一边量得了、一边没有 → delta 只能是 null，谁也不许编数字
+    const half = M.diffLedger(
+        { hosts: [], totals: { tokens: 1000 }, entries: [{ host: 'hermes', name: 'x-one', category: null, estTokens: 800 }] },
+        { hosts: [], totals: { tokens: 1000 }, entries: [{ host: 'hermes', name: 'x-one', category: null, estTokens: null }] },
+    );
+    assert.strictEqual(half.changedCount, 1, '一边 null 一边有值时仍要报「变动」，否则「现在量得了」这件事会静默掉');
+    assert.strictEqual(half.changed[0].from, null);
+    assert.strictEqual(half.changed[0].to, 800);
+    assert.strictEqual(half.changed[0].delta, null, 'delta 无法确定就必须 null，不能瞎算');
+
+    // 新增/消失条目同样不许把 null 变 0
+    const add = M.diffLedger(
+        { hosts: [], totals: { tokens: 0 }, entries: [{ host: 'codex', name: 'loose', category: null, estTokens: null }] },
+        { hosts: [], totals: { tokens: 0 }, entries: [] },
+    );
+    assert.strictEqual(add.added[0].estTokens, null, '新增条目量不了也要是 null，不是 0');
+});
+
 check('diffLedger：总量口径与端点一致（别用 totals 之外的混算）', () => {
     const d = M.diffLedger(cur, base);
     assert.strictEqual(d.tokensFrom, 1000);
