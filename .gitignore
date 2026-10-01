@@ -21,6 +21,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# WorkBuddy 跨 agent 运行时 + 运行产物（非源码，且 .workbuddy/MEMORY.md 是跨 agent 共享记忆，勿进 git）
+.workbuddy/
+logs/
+
 # 子代理运行时 dump（ 的 17/17 测试结果 JSON，内容已存 IMPLEMENTATION_REPORT.md，非源码）
 l2/python-middleware/result.json
 
