@@ -54,14 +54,34 @@ function post(port, urlPath, obj) {
   });
 }
 
+// echo 上游：原样回显收到的 body，用来断言「转发前包长什么样」。
+// 请求体带 stream:true 时改回 SSE，用来断言桥是分块透传而不是攒成整块。
 function startEcho() {
   return new Promise((resolve) => {
     const s = http.createServer((req, res) => {
       const c = [];
       req.on('data', (d) => c.push(d));
       req.on('end', () => {
+        const raw = Buffer.concat(c).toString();
+        let body = {};
+        try { body = JSON.parse(raw); } catch { /* 非 JSON 按普通回显 */ }
+        if (body && body.stream) {
+          res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+          const parts = [
+            'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"A"}\n\n',
+            'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"B"}\n\n',
+            'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":456,"output_tokens":9}}}\n\n',
+          ];
+          let i = 0;
+          const tick = () => {
+            if (i < parts.length) { res.write(parts[i++]); setTimeout(tick, 60); }
+            else { res.end(); }
+          };
+          tick();
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ echo: Buffer.concat(c).toString(), usage: { prompt_tokens: 123, completion_tokens: 7 } }));
+        res.end(JSON.stringify({ echo: raw, usage: { prompt_tokens: 123, completion_tokens: 7 } }));
       });
     });
     s.listen(0, '127.0.0.1', () => resolve(s));
@@ -213,3 +233,62 @@ describe('端到端转发对照', () => {
     expect(rs.estTotal).toBeGreaterThan(0);
   });
 });
+
+// 流式：codex 走 SSE，桥若把流攒成整块再吐，客户端会卡到超时。
+// 「内容对」不足以证明这件事，必须断言分块到达，所以单独一组。
+// 复用同一个 bridge 实例——UPSTREAM 是模块加载时常量，新建实例改 env 无效。
+describe('token-policy-bridge · 流式透传', () => {
+  test('extractUsageFromSSE：responses 与 chat 两种形状都能抽', () => {
+    expect(B.extractUsageFromSSE('event: response.completed\ndata: {"response":{"usage":{"input_tokens":456,"output_tokens":9}}}\n\n'))
+      .toEqual({ prompt_tokens: 456, completion_tokens: 9 });
+    expect(B.extractUsageFromSSE('data: {"usage":{"prompt_tokens":11,"completion_tokens":2}}\n\ndata: [DONE]\n\n'))
+      .toEqual({ prompt_tokens: 11, completion_tokens: 2 });
+  });
+
+  test('extractUsageFromSSE：抽不到返回 null，不填 0（0 会被读成「确实没用」）', () => {
+    expect(B.extractUsageFromSSE('data: {"nope":1}\n\n')).toBeNull();
+    expect(B.extractUsageFromSSE('')).toBeNull();
+    expect(B.extractUsageFromSSE(null)).toBeNull();
+  });
+
+  test('pickRequestHeaders：放行鉴权/OpenAI 系/x- 头，剔除 hop-by-hop 与无关头', () => {
+    const h = B.pickRequestHeaders({
+      Authorization: 'Bearer sk-x', 'OpenAI-Organization': 'org-1', 'X-Title': 'codex',
+      Host: 'upstream.example', 'Content-Length': '12', Connection: 'keep-alive', Cookie: 'nope',
+    });
+    expect(h.Authorization).toBe('Bearer sk-x');
+    expect(h['OpenAI-Organization']).toBe('org-1');
+    expect(h['X-Title']).toBe('codex');
+    expect(h.Host).toBeUndefined();
+    expect(h.Cookie).toBeUndefined();
+  });
+
+  test('流式：content-type 保持 text/event-stream，且分块到达（不被攒成整块）', async () => {
+    const r = await postStream(bport, '/v1/responses', {
+      model: 'm', stream: true, instructions: 'SYS', input: [{ role: 'user', content: 'x' }],
+    });
+    expect(r.ctype).toMatch(/text\/event-stream/i);
+    expect(r.times.length).toBeGreaterThanOrEqual(2);
+    const span = r.times[r.times.length - 1] - r.times[0];
+    expect(span).toBeGreaterThanOrEqual(30);
+    expect(r.text).toContain('"delta":"A"');
+    expect(r.text).toContain('response.completed');
+  });
+});
+
+function postStream(port, urlPath, obj) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(obj);
+    const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (res) => {
+      const c = [];
+      const times = [];
+      const t0 = Date.now();
+      res.on('data', (d) => { c.push(d); times.push(Date.now() - t0); });
+      res.on('end', () => resolve({ status: res.statusCode, ctype: res.headers['content-type'] || '',
+        text: Buffer.concat(c).toString(), times }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}

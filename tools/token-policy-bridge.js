@@ -22,6 +22,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { Readable } = require('stream');
 
 const PORT = Number(process.env.PORT || 18794);
 const BINDING = process.env.BINDING || '127.0.0.1';
@@ -124,18 +125,93 @@ function replaceSystem(messages, text) {
 }
 
 // ---------- 转发 ----------
+
+// hop-by-hop 头不能透传（连接级语义，换一跳就失效；content-length 会因改写后的
+// body 长度对不上而挂死；content-encoding 也不能留——fetch 已解压，再透传会让
+// 客户端二次解压报错）
+const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
+  'te', 'trailer', 'transfer-encoding', 'upgrade', 'host', 'content-length', 'content-encoding']);
+
+/**
+ * 挑选要透传给上游的请求头。只放行鉴权、OpenAI 系与自定义 x- 头，
+ * 其余一律不带——带未知头等于赌上游容忍度，赢了没收益，输了直接 400。
+ */
+function pickRequestHeaders(src) {
+  const out = { 'Content-Type': 'application/json' };
+  for (const k of Object.keys(src || {})) {
+    const lk = String(k).toLowerCase();
+    if (HOP_BY_HOP.has(lk)) continue;
+    if (lk === 'authorization' || lk === 'api-key' || lk.startsWith('openai-') || lk.startsWith('x-')) {
+      out[k] = src[k];
+    }
+  }
+  return out;
+}
+
+function pickResponseHeaders(headers) {
+  const out = {};
+  try {
+    headers.forEach((v, k) => {
+      const lk = String(k).toLowerCase();
+      if (HOP_BY_HOP.has(lk)) return;
+      out[k] = v;
+    });
+  } catch { /* 极端情况下 headers 不可迭代，回退到只有 content-type */ }
+  if (!out['Content-Type'] && !out['content-type']) out['Content-Type'] = 'application/json';
+  return out;
+}
+
+/**
+ * 从 SSE 文本里抽 usage。流式下 provider 不给 JSON 响应体，usage 只在最后一个
+ * 事件里——拿不到它，实测轨（actualPromptTokens）在流式场景就全废了。
+ * 两种协议都认：responses 的 response.usage.input_tokens、chat 的 usage.prompt_tokens。
+ * 抽不到返回 null（绝不填 0，延续 C3 纪律）。
+ */
+function extractUsageFromSSE(text) {
+  if (typeof text !== 'string' || !text) return null;
+  let last = null;
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('data:')) continue;
+    const payload = t.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    let obj = null;
+    try { obj = JSON.parse(payload); } catch { continue; }
+    if (!obj || typeof obj !== 'object') continue;
+    const u = (obj.response && obj.response.usage) || obj.usage || null;
+    if (u && (Number.isFinite(u.input_tokens) || Number.isFinite(u.prompt_tokens))) last = u;
+  }
+  if (!last) return null;
+  return {
+    prompt_tokens: Number.isFinite(last.input_tokens) ? last.input_tokens : (last.prompt_tokens ?? null),
+    completion_tokens: Number.isFinite(last.output_tokens) ? last.output_tokens : (last.completion_tokens ?? null),
+  };
+}
+
 async function forward(req, bodyStr) {
   const started = Date.now();
   try {
     const res = await fetch(UPSTREAM + req.url, {
       method: req.method,
-      headers: { 'Content-Type': 'application/json', Authorization: req.headers.authorization || '' },
+      headers: pickRequestHeaders(req.headers),
       body: req.method === 'GET' ? undefined : bodyStr,
       signal: AbortSignal.timeout(120000),
     });
-    return { status: res.status, body: await res.text(), ms: Date.now() - started };
+    const headers = pickResponseHeaders(res.headers);
+    const ctype = res.headers.get('content-type') || '';
+    // 🔴 流式必须 pipe，不能 await 全部读完：codex 走 SSE，攒成整块再返回会把
+    //    首字节延迟顶到超时上限，表现为「codex 卡住不动」
+    if (/text\/event-stream/i.test(ctype) && res.body) {
+      return { status: res.status, headers, stream: res.body, ms: Date.now() - started };
+    }
+    return { status: res.status, headers, body: await res.text(), ms: Date.now() - started };
   } catch (e) {
-    return { status: 502, body: JSON.stringify({ success: false, error: `bridge upstream unreachable: ${e.message}` }), ms: Date.now() - started };
+    return {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ success: false, error: `bridge upstream unreachable: ${e.message}` }),
+      ms: Date.now() - started,
+    };
   }
 }
 
@@ -148,6 +224,7 @@ function logRecord(rec) {
 let loggedBoot = false;
 
 const server = http.createServer(async (req, res) => {
+  const tReq = Date.now();
   const chunks = [];
   for await (const c of req) chunks.push(c);
   const raw = Buffer.concat(chunks).toString('utf8');
@@ -220,23 +297,51 @@ const server = http.createServer(async (req, res) => {
 
   let out;
   if (STUB) {
-    out = { status: 200, ms: 0, body: JSON.stringify({ id: 'stub', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } }) };
+    out = { status: 200, ms: 0, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'stub', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } }) };
   } else {
     out = await forward(req, outBody);
   }
 
-  if (isChat) {
-    let usage = null;
-    try { usage = (JSON.parse(out.body) || {}).usage || null; } catch { /* 流式/非 JSON */ }
+  const finishRecord = (extra) => {
+    if (extra) Object.assign(rec, extra);
+    if (!isChat) return;
     rec.upstreamStatus = out.status;
     rec.upstreamMs = out.ms;
-    rec.actualPromptTokens = usage ? (usage.prompt_tokens ?? usage.input_tokens ?? null) : null;
-    rec.actualCompletionTokens = usage ? (usage.completion_tokens ?? usage.output_tokens ?? null) : null;
     console.log(`[bridge:${MODE}] ${req.url} model=${rec.model} est=${rec.estTotal ?? '-'} tok | saved=${rec.estSaved ?? '-'} (${rec.reported ?? 0} 条上报) | rewrote=${rec.rewrote ?? false} | bridge=${rec.bridgeMs}ms status=${out.status} ${out.ms}ms`);
     logRecord(rec);
+  };
+
+  if (out.stream) {
+    // 流式：先把响应头写出去（含上游的 text/event-stream），再 pipe。
+    // 同时累积文本只为事后抽 usage——不改变转发内容本身。
+    res.writeHead(out.status, out.headers);
+    let acc = '';
+    const src = Readable.fromWeb(out.stream);
+    src.on('data', (c) => { acc += Buffer.isBuffer(c) ? c.toString('utf8') : String(c); });
+    src.on('error', () => { try { res.end(); } catch { /* 已断开 */ } });
+    src.on('end', () => {
+      const u = extractUsageFromSSE(acc);
+      finishRecord({
+        streamed: true,
+        upstreamTotalMs: Date.now() - tReq,
+        actualPromptTokens: u ? u.prompt_tokens : null,
+        actualCompletionTokens: u ? u.completion_tokens : null,
+      });
+    });
+    src.pipe(res);
+    return;
   }
 
-  res.writeHead(out.status, { 'Content-Type': 'application/json' });
+  if (isChat) {
+    let usage = null;
+    try { usage = (JSON.parse(out.body) || {}).usage || null; } catch { /* 非 JSON */ }
+    finishRecord({
+      actualPromptTokens: usage ? (usage.prompt_tokens ?? usage.input_tokens ?? null) : null,
+      actualCompletionTokens: usage ? (usage.completion_tokens ?? usage.output_tokens ?? null) : null,
+    });
+  }
+
+  res.writeHead(out.status, out.headers);
   res.end(out.body);
 });
 
@@ -247,4 +352,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ctxFromRequest, mergeOutToRequest, server, MERGE_FIELDS };
+module.exports = { ctxFromRequest, mergeOutToRequest, server, MERGE_FIELDS, extractUsageFromSSE, pickRequestHeaders };

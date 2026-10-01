@@ -37,18 +37,56 @@ function post(port, urlPath, obj) {
   });
 }
 
-// echo 上游：把收到的原始 body 原样回显，用来断言「转发前包长什么样」
+// echo 上游：把收到的原始 body 原样回显，用来断言「转发前包长什么样」。
+// 请求体带 stream:true 时改回 SSE —— 用来断言桥是分块透传，而不是攒成整块再吐。
 function startEcho() {
   return new Promise((resolve) => {
     const s = http.createServer((req, res) => {
       const c = [];
       req.on('data', (d) => c.push(d));
       req.on('end', () => {
+        const raw = Buffer.concat(c).toString();
+        let body = {};
+        try { body = JSON.parse(raw); } catch { /* 非 JSON 一律按普通回显处理 */ }
+        if (body && body.stream) {
+          res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+          const parts = [
+            'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"A"}\n\n',
+            'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"B"}\n\n',
+            'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":456,"output_tokens":9}}}\n\n',
+          ];
+          let i = 0;
+          const tick = () => {
+            if (i < parts.length) { res.write(parts[i++]); setTimeout(tick, 60); }
+            else { res.end(); }
+          };
+          tick();
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ echo: Buffer.concat(c).toString(), usage: { prompt_tokens: 123, completion_tokens: 7 } }));
+        res.end(JSON.stringify({ echo: raw, usage: { prompt_tokens: 123, completion_tokens: 7 } }));
       });
     });
     s.listen(0, '127.0.0.1', () => resolve(s));
+  });
+}
+
+// 记录每个分块的到达时刻——「内容对」不够，还得证明是分块到达的。
+// 一次性吐出全部内容同样能通过内容断言，却会把 codex 卡到超时。
+function postStream(port, urlPath, obj) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(obj);
+    const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (res) => {
+      const c = [];
+      const times = [];
+      const t0 = Date.now();
+      res.on('data', (d) => { c.push(d); times.push(Date.now() - t0); });
+      res.on('end', () => resolve({ status: res.statusCode, ctype: res.headers['content-type'] || '',
+        text: Buffer.concat(c).toString(), times }));
+    });
+    req.on('error', reject);
+    req.end(body);
   });
 }
 
@@ -214,6 +252,70 @@ const CHAT = {
 
   ok('拿到了上游实测 prompt_tokens（实测轨通了）', () => {
     assert.strictEqual(pick('observe', 'chat-completions').actualPromptTokens, 123);
+  });
+
+  console.log('\n=== 四、流式：codex 走 SSE，不能被攒成整块 ===');
+
+  ok('extractUsageFromSSE：responses 形状（response.usage.input_tokens）', () => {
+    const sse = 'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":456,"output_tokens":9}}}\n\n';
+    const u = B.extractUsageFromSSE(sse);
+    assert.deepStrictEqual(u, { prompt_tokens: 456, completion_tokens: 9 });
+  });
+
+  ok('extractUsageFromSSE：chat 形状（usage.prompt_tokens）', () => {
+    const sse = 'data: {"usage":{"prompt_tokens":11,"completion_tokens":2}}\n\ndata: [DONE]\n\n';
+    assert.deepStrictEqual(B.extractUsageFromSSE(sse), { prompt_tokens: 11, completion_tokens: 2 });
+  });
+
+  ok('extractUsageFromSSE：抽不到返回 null，不填 0', () => {
+    assert.strictEqual(B.extractUsageFromSSE('data: {"nope":1}\n\n'), null);
+    assert.strictEqual(B.extractUsageFromSSE(''), null);
+    assert.strictEqual(B.extractUsageFromSSE(null), null);
+  });
+
+  ok('pickRequestHeaders：只放行鉴权 / OpenAI 系 / x- 头，hop-by-hop 一律剔除', () => {
+    const h = B.pickRequestHeaders({
+      Authorization: 'Bearer sk-x', 'Content-Type': 'application/json',
+      'OpenAI-Organization': 'org-1', 'X-Title': 'codex',
+      Host: 'upstream.example', 'Content-Length': '12', Connection: 'keep-alive',
+      Cookie: 'nope',
+    });
+    assert.strictEqual(h.Authorization, 'Bearer sk-x');
+    assert.strictEqual(h['OpenAI-Organization'], 'org-1');
+    assert.strictEqual(h['X-Title'], 'codex');
+    assert.strictEqual(h.Host, undefined, 'host 不能透传');
+    assert.strictEqual(h.Cookie, undefined, '无关头不带');
+  });
+
+  const sseResp = await postStream(bridge.address().port, '/v1/responses', {
+    model: 'demo-model', stream: true, instructions: '你是一个助手',
+    input: [{ role: 'user', content: '流式提问' }],
+  });
+
+  ok('流式：content-type 保持 text/event-stream（没被写死成 json）', () => {
+    assert.ok(/text\/event-stream/i.test(sseResp.ctype), `实际 ${sseResp.ctype}`);
+  });
+
+  ok('流式：分块透传——不是攒成整块一次性吐出', () => {
+    assert.ok(sseResp.times.length >= 2, `只收到 ${sseResp.times.length} 块，疑似被攒成整块`);
+    const span = sseResp.times[sseResp.times.length - 1] - sseResp.times[0];
+    assert.ok(span >= 30, `首块与末块间隔 ${span}ms，应跨越上游的分块间隔`);
+  });
+
+  ok('流式：内容一块不少（三块 delta/delta/completed 都在）', () => {
+    assert.ok(sseResp.text.includes('"delta":"A"'), '缺第一块');
+    assert.ok(sseResp.text.includes('"delta":"B"'), '缺第二块');
+    assert.ok(sseResp.text.includes('response.completed'), '缺结束事件');
+  });
+
+  await new Promise((r) => setTimeout(r, 120)); // 等 pipe end 后落盘
+
+  ok('流式：从 SSE 尾部抽到了 usage（实测轨在流式下不废）', () => {
+    const f2 = fs.readFileSync(path.join(LOG_DIR, logFile), 'utf8').trim().split('\n').map(JSON.parse);
+    const st = f2.find((l) => l.streamed === true);
+    assert.ok(st, '没有标记为 streamed 的记录');
+    assert.strictEqual(st.actualPromptTokens, 456);
+    assert.strictEqual(st.actualCompletionTokens, 9);
   });
 
   bridge.close();
