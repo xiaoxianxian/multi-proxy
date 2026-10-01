@@ -18,6 +18,10 @@ module.exports = function startMockH3web(port) {
     const jobs = {};
     let genCalls = 0;    // canary 计数用：下游到底被真打了几枪（新增，向后兼容）
     let statusCalls = 0;
+    // 记录最后一次 POST /api/gen 的 body：供单测断言「档位字段真的透传到了下游」。
+    // 没有这个，adapter 传错字段名（如 `size` 而非 `width`）也照样 200 done，是假绿灯。
+    let lastGenPayload = null;
+    let lastGenHeaders = null;
 
     const server = http.createServer((req, res) => {
         const u = new URL(req.url, 'http://localhost');
@@ -28,6 +32,8 @@ module.exports = function startMockH3web(port) {
             req.on('data', (c) => { body += c; });
             req.on('end', () => {
                 genCalls += 1;
+                try { lastGenPayload = JSON.parse(body || '{}'); } catch { lastGenPayload = null; }
+                lastGenHeaders = req.headers;
                 const job_id = 'job_' + Math.random().toString(36).slice(2, 8);
                 jobs[job_id] = { attempts: 0, prompt: 'unknown' };
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -69,6 +75,8 @@ module.exports = function startMockH3web(port) {
         getGenCalls: () => genCalls,
         getStatusCalls: () => statusCalls,
         getHttpCalls: () => genCalls + statusCalls,
+        getLastGenPayload: () => lastGenPayload,
+        getLastGenHeaders: () => lastGenHeaders,
         close: () => new Promise((res) => server.close(res)),
     };
 };

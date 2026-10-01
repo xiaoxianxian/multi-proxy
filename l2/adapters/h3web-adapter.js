@@ -19,6 +19,22 @@
 
 const http = require('http');
 
+// ---- 可透传给 h3web POST /api/gen 的字段白名单 ----
+// 对齐 h3web.py 的 build_args() 认的 key（2026-10-01 实测：代码默认宽高 512×512、steps 20、
+// seconds 5 —— 768×1344 是 UI 表单默认值，不是 API 默认）。
+// 为什么用白名单而不是「整个 task 全透传」：build_args 只从 p 里挑自己认的 key，
+// 传错名（比如写 `size` 而不是 `width`）**不会报错，会静默回落到 512×512 默认档**，
+// 出片看着「成功」但分辨率不对。白名单让拼错字段名在单测里立刻炸，而不是变成假成功。
+// 注意：gen_mode='draft' 会在 h3web 侧被强制改写为 steps≤16 / 384×672，
+// 与「要 768×1344 竖屏成片」互斥 —— 想竖屏成片必须走 final 档再显式给 width/height。
+const H3WEB_GEN_FIELDS = [
+    'gen_mode', 'steps', 'width', 'height', 'seconds', 'frames',
+    'layers', 'reuse', 'core_reuse',
+    'token_reduction', 'ssd_streaming', 'seed', 'int8',
+    'first_frame', 'last_frame', 'ref_images', 'ref_video', 'ref_audio',
+    'ratio', 'ir',
+];
+
 // ---- 动态端口探测（绝不写死）----
 function netPortFree(port) {
     return new Promise((res) => {
@@ -124,14 +140,25 @@ class H3webAdapter {
     }
 
     // 接口 3：任务接收（转发到 h3web /api/gen）
-    async submit(task) {
+    // task 里按 H3WEB_GEN_FIELDS 白名单透传档位；opts.genMode 是便捷开关
+    // （'draft' 档省时约 4 倍：h3web 侧强转 steps 16 / 384×672 / layers 40 / reuse 2）。
+    // 返回体里的 echo = 本次真正发出去的 payload，调用方可自证「我传的档位到了下游」。
+    async submit(task, opts = {}) {
         if (!task || !task.type) throw new Error('task.type required');
         const { host, port } = await this._resolveTarget();
-        const r = await httpPostJson(host, port, this.genPath, { prompt: task.prompt || '', type: task.type });
+        const payload = { prompt: task.prompt || '' };
+        for (const k of H3WEB_GEN_FIELDS) {
+            if (task[k] !== undefined && task[k] !== null) payload[k] = task[k];
+        }
+        if (opts.genMode) payload.gen_mode = opts.genMode;
+        if (opts.steps) payload.steps = opts.steps;
+        if (opts.width) payload.width = opts.width;
+        if (opts.height) payload.height = opts.height;
+        const r = await httpPostJson(host, port, this.genPath, payload);
         if (r.status !== 200) throw new Error(`h3web submit failed: HTTP ${r.status}`);
         const j = JSON.parse(r.body);
         if (!j.job_id) throw new Error('h3web /api/gen did not return job_id');
-        return { task_id: j.job_id, state: j.status || 'pending' };
+        return { task_id: j.job_id, state: j.status || 'pending', echo: payload };
     }
 
     // 接口 4：结果回传（转发到 h3web /api/status/:id）
