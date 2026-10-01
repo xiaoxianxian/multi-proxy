@@ -77,17 +77,20 @@ const ROUTING_BASE = {
     tierBindings: {
         small: {
             adapterId: 'agnes', defaultPorts: [18790], model: 'agnes-2.0-flash',
-            envName: 'PROXY_AGNES_PORTS', auth: 'proxy-auth',
+            envName: 'PROXY_AGNES_PORTS', auth: 'proxy-auth', maxTokens: 2048, timeoutMs: 120000,
             desc: 'Agnes（small · 免费档；经 codex-proxy 转发 apihub.agnes-ai.com）',
         },
         medium: {
             adapterId: 'deepseek', defaultPorts: [18790], model: 'deepseek-v4-pro',
-            envName: 'PROXY_DEEPSEEK_PORTS', auth: 'proxy-auth',
+            envName: 'PROXY_DEEPSEEK_PORTS', auth: 'proxy-auth', maxTokens: 2048, timeoutMs: 120000,
             desc: 'DeepSeek（medium · 中档；经 codex-proxy 转发 api.deepseek.com）',
         },
+        // 本地档 timeoutMs 给到 300s：实测 2048 token 上限下约 57s 完成，但**超时必须大于真实生成
+        // 耗时**——否则客户端断开、Ollama 侧继续跑完，runner 串行会把后续请求全堵住（雪崩）。
+        // 宁可把超时放宽，也不要制造僵尸请求。
         large: {
             adapterId: 'qwen', defaultPorts: [11434], model: 'qwen3.8:27b-mlx',
-            envName: 'PROXY_QWEN_PORTS', auth: 'none',
+            envName: 'PROXY_QWEN_PORTS', auth: 'none', maxTokens: 2048, timeoutMs: 300000,
             desc: 'Qwen3.8-27B（large · 本地 Ollama，无鉴权，0 成本）',
         },
     },
@@ -179,6 +182,12 @@ function resolveTierBindings() {
             envName: src.envName,
             auth: src.auth,
             desc: b.desc,
+            // ⚠️ maxTokens / timeoutMs 必须一并透出（2026-10-01 真跑踩坑）：
+            //   漏了 maxTokens → adapter 不传 max_tokens → 本地 27B 推理模型无上限生成 →
+            //   单次调用轻松超过 adapter 超时；而**超时断开后 Ollama 侧仍在继续跑完**，
+            //   runner 串行 → 后续请求全部排队，形成雪崩（实测一个超时请求能堵死整条队列数分钟）。
+            maxTokens: src.maxTokens,
+            timeoutMs: src.timeoutMs,
             localOnly,
         };
     }

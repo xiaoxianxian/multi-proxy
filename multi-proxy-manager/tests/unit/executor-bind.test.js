@@ -264,6 +264,26 @@ describe('executor-bind · 三档 text-tier（待办 6）', () => {
         }
     });
 
+    // ⚠️ 2026-10-01 真跑踩坑后的回归守卫：底座 tierBindings 里声明了 maxTokens / timeoutMs，
+    // 但 resolveTierBindings() 的**出口**漏了这两个字段 → adapter 从不传 max_tokens →
+    // 本地 27B 推理模型无上限生成 → 单次调用必然超时；而**超时断开后 Ollama 侧仍会跑完**
+    // （runner 串行）→ 后续请求全部排队，整条队列雪崩（实测等 195s 都排不空，只能重启进程）。
+    // 这条守住「底座声明了就必须透出」，防同类漏字段再犯。
+    test('底座出口必须透出 maxTokens/timeoutMs（漏了 → 本地档无上限生成 → 超时 + 队列雪崩）', () => {
+        cleanEnv();
+        process.env.PROXY_TIER_BIND = '1';
+        const t = rb.resolveTierBindings();
+        expect(typeof t.small.maxTokens).toBe('number');
+        expect(typeof t.large.timeoutMs).toBe('number');
+        expect(t.large.timeoutMs).toBeGreaterThan(t.small.timeoutMs); // 本地 27B 档必须更宽容
+        // LOCAL_ONLY 时三档要取本地档的预算与超时；否则「0 成本演练」会拿代理档的短超时去打本地大模型
+        process.env.PROXY_TIER_LOCAL_ONLY = '1';
+        const l = rb.resolveTierBindings();
+        expect(l.small.maxTokens).toBe(t.large.maxTokens);
+        expect(l.small.timeoutMs).toBe(t.large.timeoutMs);
+        expect(l.small.ports).toEqual(t.large.ports);
+    });
+
     test('底座单一事实源：update tierBindings → 档位 model 即刻生效；rollback 还原', async () => {
         cleanEnv();
         process.env.PROXY_TIER_BIND = '1';

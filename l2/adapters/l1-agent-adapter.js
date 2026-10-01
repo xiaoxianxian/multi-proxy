@@ -185,6 +185,12 @@ class L1AgentAdapter {
             model: task.model || adapterDefaults('l1-agent').defaultModel,
             messages: task.messages || [],
             ...(task.stream !== undefined ? { stream: task.stream } : {}),
+            // ⚠️ 实测坑（2026-10-01，本地 Ollama qwen3.8:27b-mlx 真跑）：推理型模型会把 token 预算
+            //   先喂给 thinking，`max_tokens` 给小了 → thinking 吃光预算、content 还没开始生成，
+            //   此时 Ollama 的 **/v1 兼容层不返回、一直挂起到调用方超时**（实测 200 → 挂满 180s；
+            //   同一请求给 512 → 1.76s 正常返回 content）。即"预算不足"不是快速失败而是静默挂起。
+            //   故显式带上限：不传时逐字保持原样（交给下游默认），传了就有确定天花板。
+            ...(task.maxTokens ? { max_tokens: task.maxTokens } : {}),
         };
         const r = await httpPostJson(host, port, this.chatPath, body, this._authHeaders(), this.timeoutMs);
         if (r.status === 401) throw new Error(`L1 agent auth failed: 401 (task ${taskId})`);

@@ -37,6 +37,11 @@
 //   node l2/step2-canary-run.js --no-mock-downstream             # 只跑 B/C（不起 mock，验证纯路由形态）
 //   node l2/step2-canary-run.js --corpus --with-bind --tier-bind  # D 场景含三档 text-tier（agnes/deepseek/qwen）
 //   node l2/step2-canary-run.js --corpus --with-bind --tier-bind --tier-local-only  # 三档全指本地档（0 成本）
+//   node l2/step2-canary-run.js --with-bind --tier-bind --real-local                # 三档**真连本地 Ollama**（见下）
+//
+// ⚠️ --real-local 是唯一会真调本地模型的一档（0 扣费，因为走本机 :11434）：不设三档端口 env →
+//    回退底座 tierBindings 默认端口；且**强制 LOCAL_ONLY**，否则 agnes/deepseek 会走 :18790 打到
+//    付费外网，与本脚本「0 扣费 · 0 外发」的隔离纪律冲突。codex/h3web 端口仍指 mock（不开口子）。
 
 const fs = require('fs');
 const path = require('path');
@@ -127,7 +132,11 @@ async function callOrchestrate(server, id, args) {
     // 三档 text-tier（待办 6）：--tier-bind 把三档也接进 D 场景的绑定表（端口仍指 mock，0 扣费）；
     // 再加 --tier-local-only 则三档全指本地档端口（PROXY_TIER_LOCAL_ONLY，0 成本演练）。
     const withTierBind = argv.includes('--tier-bind');
-    const tierLocalOnly = argv.includes('--tier-local-only');
+    // --real-local：三档**真连本地 Ollama**（不设端口 env → 走底座 tierBindings 默认端口）。
+    // 安全护栏：realLocal 直接把 LOCAL_ONLY 钉死 —— 真跑若不强制，agnes/deepseek 会走 :18790
+    // 打到**付费外网**，那就不是 0 成本演练了。宁可开关少一点自由度，也不要误触付费上游。
+    const realLocal = argv.includes('--real-local');
+    const tierLocalOnly = realLocal || argv.includes('--tier-local-only');
     const idx = argv.indexOf('--input');
     const singleInput = (idx >= 0 && argv[idx + 1]) ? argv[idx + 1] : DEFAULT_INPUT;
     const tasks = useCorpus ? CORPUS : [{ id: 'SINGLE', input: singleInput }];
@@ -239,11 +248,17 @@ async function callOrchestrate(server, id, args) {
             if (withTierBind) {
                 process.env.PROXY_TIER_BIND = '1';
                 if (tierLocalOnly) process.env.PROXY_TIER_LOCAL_ONLY = '1';
-                const localPort = String(await waitPort(() => mockLocal.getPort()));
-                const proxyPort = String(await waitPort(() => mockL1.getPort()));
-                process.env.PROXY_AGNES_PORTS = tierLocalOnly ? localPort : proxyPort;
-                process.env.PROXY_DEEPSEEK_PORTS = tierLocalOnly ? localPort : proxyPort;
-                process.env.PROXY_QWEN_PORTS = localPort;
+                if (realLocal) {
+                    // 真跑：三档端口 env **刻意不设** → 回退底座 tierBindings 的默认端口
+                    // （LOCAL_ONLY 下三档均取 large 档 = 本地 Ollama :11434 / qwen3.8:27b-mlx）。
+                    // codex / h3web 端口仍指 mock：本轮只验证三档落点，不给它们开口子。
+                } else {
+                    const localPort = String(await waitPort(() => mockLocal.getPort()));
+                    const proxyPort = String(await waitPort(() => mockL1.getPort()));
+                    process.env.PROXY_AGNES_PORTS = tierLocalOnly ? localPort : proxyPort;
+                    process.env.PROXY_DEEPSEEK_PORTS = tierLocalOnly ? localPort : proxyPort;
+                    process.env.PROXY_QWEN_PORTS = localPort;
+                }
             }
             const { createBoundExecutor } = require('./executor-bind.js');
             const bound = createBoundExecutor({ logger: { log: () => {}, warn: () => {} } });
@@ -252,11 +267,24 @@ async function callOrchestrate(server, id, args) {
             const before = { e: execCalls, h: downstreamCalls() };
             const server = new McpServer({ gate: '1', registry: reg, realGate: '1', executor: counted });
             const p = await callOrchestrate(server, 4, { input: c.input, quality: true, qualityThrow: true });
-            record('D 生产接线形态（executor-bind 真绑定 · 下游=mock）', p,
+            record(`D 生产接线形态（executor-bind 真绑定 · 下游=${realLocal ? '本地 Ollama 真模型' : 'mock'}）`, p,
                 `绑定=${bound.boundIds().join('/')} · executor 调用 ${execCalls - before.e} 次 / ` +
                 `下游 HTTP ${downstreamCalls() - before.h} 次` +
                 (withTierBind && mockLocal ? `（其中本地档 ${mockLocal.getChatCalls()} 次）` : '') + ' · ' +
                 `routedAdapterId=${(p.report.subtasks || []).map((s) => `${s.id}→${s.value && s.value.routedAdapterId}`).join(' ')}`);
+            // 真跑时 mock 计数器看不到本地调用，改用**产物**自证：真模型会回 content/contentSource/model
+            if (realLocal) {
+                for (const s of (p.report.subtasks || [])) {
+                    const v = s.value || {};
+                    if (!['agnes', 'deepseek', 'qwen'].includes(v.routedAdapterId)) continue;
+                    // _realExecutor 返回 base + { status, value }：executor 的产物在 value 里再包一层
+                    const inner = v.value || v;
+                    const c = String(inner.content || '').replace(/\s+/g, ' ').slice(0, 70);
+                    console.log(`     [真模型] ${s.id} → ${v.routedAdapterId} · model=${inner.model || '?'} · ` +
+                        `contentSource=${inner.contentSource || '?'} · len=${String(inner.content || '').length} · ` +
+                        `content="${c}${c.length >= 70 ? '…' : ''}"`);
+                }
+            }
             delete process.env.PROXY_EXECUTOR_BIND;
             delete process.env.PROXY_CODEX_PORTS;
             delete process.env.PROXY_H3WEB_PORTS;

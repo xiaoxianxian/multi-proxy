@@ -70,6 +70,8 @@ class UnboundAdapterError extends Error {
 function chatTask(subtask) {
     return {
         model: (subtask && subtask.params && subtask.params.model) || undefined,
+        // 同上：subtask 可自带 token 上限（params.maxTokens），否则由档位声明兜底（见 tierDefs）
+        maxTokens: (subtask && subtask.params && subtask.params.maxTokens) || undefined,
         messages: [{ role: 'user', content: (subtask && subtask.prompt) || '' }],
     };
 }
@@ -159,14 +161,20 @@ function tierDefs() {
             id: b.adapterId,
             portCandidates: b.ports,
             chatPath: '/v1/chat/completions',
+            // 超时也来自底座：本地 27B 档给 300s（真实生成耗时可能上百秒，
+            // 给小了会制造僵尸请求 → 串行 runner 被堵 → 后续全排队，见 routing-base 注释）
+            timeoutMs: b.timeoutMs || undefined,
             // 本地档（Ollama）无鉴权概念，不带 x-proxy-auth；代理档沿用 PROXY_AUTH_TOKEN
             token: b.auth === 'none' ? undefined : (process.env.PROXY_AUTH_TOKEN || undefined),
             capabilities: ['text', 'plan'],
         }),
         invoke: async (adapter, subtask) => {
             const t = chatTask(subtask);
-            // 档位默认 model 兜底：subtask.params.model 优先，否则用底座声明的档位模型
-            const r = await adapter.invoke({ ...t, model: t.model || b.model });
+            // 档位默认 model 兜底：subtask.params.model 优先，否则用底座声明的档位模型。
+            // maxTokens 同理（不给的话推理型模型会把预算喂给 thinking → /v1 层挂起，见 l1-agent-adapter 注释）
+            const r = await adapter.invoke({
+                ...t, model: t.model || b.model, maxTokens: t.maxTokens || b.maxTokens,
+            });
             return {
                 kind: 'chat', tier, agent: b.adapterId,
                 content: r.result && r.result.content,
