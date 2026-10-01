@@ -37,7 +37,15 @@ const CAPTURE_BODY = process.env.BRIDGE_LOG_BODY === '1';
 const AGENT_TYPE = process.env.BRIDGE_AGENT_TYPE || 'coding';
 // 只有这几个字段允许写回请求体。handler 返回别的字段一律忽略并计数——
 // 未知字段写进上游请求等于赌 provider 会容忍，赢了没收益、输了直接 400。
-const MERGE_FIELDS = ['messages', 'systemPrompt', 'history'];
+const MERGE_FIELDS = ['messages', 'systemPrompt', 'history', 'tools'];
+// curator pack 是否真正启用（BRIDGE_CURATOR=1 才打开）。
+// pack 自身默认关是非侵入铁律④，这里不替 pack 破例：注册始终发生，
+// 但只有显式开关才 enabled=true，apply() 才会跑到它。
+const CURATOR_ENABLED = process.env.BRIDGE_CURATOR === '1';
+// 工具类型归一化（BRIDGE_NORMALIZE_TOOLS=1 才生效）。
+// 落在 L1 转发路径上、会改真实发出去的工具 schema，默认关——需要显式开。
+// 见 normalizeTools() 上的成因说明，别关掉就当它是死开关。
+const NORMALIZE_TOOLS = process.env.BRIDGE_NORMALIZE_TOOLS === '1';
 // 请求侧要跑的 hook。🔴 不能只跑 onRequestAssemble——历史压缩挂在 onHistory，
 // 它是最大的那一档杠杆（实测 41 轮会话折叠 tool 输出省 53.7%），
 // 只跑一个 hook 等于把最值钱的策略晾在真实链路之外。
@@ -49,6 +57,27 @@ const CORPUS_PATH = path.join(LOG_DIR, `bridge-corpus-${new Date().toISOString()
 const TP = require('../l2/token-policy.js');
 const CF = require('../l2/context-fold.js');
 
+// curator pack 注册。packs/curator 目前没有 loader 入口（没有 pack.js / index.js），
+// 所以之前日志里 policies=[] 既不是「没 handler」也不是白名单问题——是压根没人注册过它。
+// 这里按 manifest 直接注册（applyPack 会把名字加 [curator] 前缀）。
+// 注意：apply() 给 handler 传的 io.budget 是它自己构造的 {remaining,max}，
+// 我们传不进去，所以 tools-lazyload 的阈值只认它自己的 env（CURATOR_MAX_HIDE_RATIO），别在这套 budget。
+if (CURATOR_ENABLED) {
+  try {
+    const LAZY = require('../packs/curator/policies/tools-lazyload.js');
+    const reg = TP.applyPack({
+      name: 'curator',
+      appliesTo: ['coding'],
+      enabled: true, // 仅此处受 BRIDGE_CURATOR 开关控制；pack 文件本身不动，默认关的约定未被破坏
+      priority: 10,
+      hooks: { [LAZY.hook]: [{ name: LAZY.name, handler: LAZY.handler }] },
+    });
+    console.log('[bridge] curator pack 已注册 ×' + reg.length + ':', LAZY.hook + '/' + LAZY.name);
+  } catch (e) {
+    console.error('[bridge] curator pack 注册失败:', e && e.message);
+  }
+}
+
 // ---------- 纯函数：协议归一（可独立测） ----------
 
 /**
@@ -56,6 +85,56 @@ const CF = require('../l2/context-fold.js');
  * 两种协议归一成同一形状：chat/completions 的 messages、responses 的 input/instructions。
  * @returns {{agentType:string, model:string, api:string, messages:Array, systemPrompt:string, history:Array, tools:Array}}
  */
+/**
+ * 工具类型归一化：把上游不认的 codex 工具 type 转成它认的那种。
+ *
+ * 成因（2026-10-01 用 ~/.codex/config.toml 真 key 直连 agnes 二分探针实测）：
+ * codex 0.159.3 走 responses 协议会发 `type:'namespace'`（multi_agent_v1 子代理容器）
+ * 与 `type:'web_search'` 两种工具，而 agnes 只认 function / web_search_preview /
+ * code_interpreter / mcp 四种 → 整包 400 `unknown variant namespace, expected one of ...`。
+ * 无工具的请求全 200，所以症状是「一装子代理就挂」，不是桥坏了。
+ *
+ * 两条规则，只动 type 不做能力阉割：
+ *   namespace → 把它的 function 子工具抬到顶层（摊平，能力不丢）；
+ *               没有子工具时退化成无参 function 壳，至少整包不发 400。
+ *   web_search → 改写成 web_search_preview，其余字段原样保留。
+ *
+ * @returns {{body:object, changed:boolean, from:string[]}} from = 命中改写的原始 type
+ */
+function normalizeTools(body) {
+  const list = body && Array.isArray(body.tools) ? body.tools : null;
+  if (!list) return { body, changed: false, from: [] };
+  const from = [];
+  const flat = [];
+  for (const t of list) {
+    if (!t || typeof t !== 'object') { flat.push(t); continue; }
+    if (t.type === 'namespace') {
+      from.push('namespace');
+      const inner = Array.isArray(t.tools) ? t.tools.filter((x) => x && typeof x === 'object' && x.type === 'function') : [];
+      if (inner.length) { flat.push(...inner); continue; }
+      // 无子工具：宁可给个空壳也别让整包 400——功能会退化，但请求还能打出去
+      flat.push({
+        type: 'function',
+        name: typeof t.name === 'string' && t.name ? t.name : 'subagent',
+        description: typeof t.description === 'string' ? t.description : '',
+        strict: false,
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+      });
+      continue;
+    }
+    if (t.type === 'web_search') {
+      from.push('web_search');
+      const { type, ...rest } = t; // eslint-disable-line no-unused-vars
+      flat.push({ type: 'web_search_preview', ...rest });
+      continue;
+    }
+    flat.push(t);
+  }
+  let changed = false;
+  try { changed = JSON.stringify(flat) !== JSON.stringify(list); } catch { changed = false; }
+  return { body: changed ? { ...body, tools: flat } : body, changed, from };
+}
+
 function ctxFromRequest(body, api) {
   const b = body || {};
   let messages = [];
@@ -129,6 +208,12 @@ function mergeOutToRequest(body, out, api, originBody) {
     put(api === 'responses' ? 'input' : 'messages', api === 'responses'
       ? merged
       : withSystem(body, merged));
+  }
+  // tools 写回（chat=completions 与 responses 都是顶层 tools 字段）。
+  // 语义同 messages：内容没变就不写——懒加载在首轮（无调用证据）必须原样全发，
+  // 写回等于把「没改的东西」标成已改写，日志会骗人。
+  if (Array.isArray(out.tools) && JSON.stringify(out.tools) !== JSON.stringify(Array.isArray(body.tools) ? body.tools : null)) {
+    put('tools', out.tools);
   }
   if (typeof out.systemPrompt === 'string') {
     if (api === 'responses') { put('instructions', out.systemPrompt); }
@@ -306,7 +391,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url.startsWith('/health')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok: true, mode: process.env.BRIDGE_MODE || DEFAULT_MODE, upstream: UPSTREAM, agentType: AGENT_TYPE, log: LOG_PATH }));
+    return res.end(JSON.stringify({ ok: true, mode: process.env.BRIDGE_MODE || DEFAULT_MODE, upstream: UPSTREAM, agentType: AGENT_TYPE, normalizeTools: NORMALIZE_TOOLS, log: LOG_PATH }));
   }
 
   let body = {};
@@ -337,6 +422,17 @@ const server = http.createServer(async (req, res) => {
       rec.toolsBySource = f.estimate.toolsBySource || {};
       if (body.usage) { rec.actualPrompt = body.usage.prompt_tokens ?? null; }
     } catch (e) { rec.foldError = String(e && e.message || e); }
+
+    // ②-a 工具类型归一化（默认关）。必须排在 apply 之前：
+    // 否则 rewrite 的 merge 以原始 tools 为基线，归一化改动会被算成
+    // 「pack 改的」记进 appliedFields，等于把上游兼容修复记到 token 策略账上。
+    let norm = { body, changed: false, from: [] };
+    if (NORMALIZE_TOOLS) {
+      try {
+        norm = normalizeTools(body);
+        if (norm.changed) { body = norm.body; rec.normalizedFrom = norm.from; }
+      } catch (e) { rec.normError = String(e && e.message || e); }
+    }
 
     // ② 执行：真正跑 apply()。出错不得影响转发——这是桥的底线
     try {
@@ -386,6 +482,16 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       rec.applyError = String(e && e.message || e);
     }
+    // ②-b 归一化改过 tools、但 rewrite 没产出新 outBody 时，必须把归一化后的
+    //     结果发出去，否则归一化等于白做。没改动就完全不碰 outBody——
+    //     宁可少序列化一次，也不能给普通 curl 请求平添字节差。
+    if (norm.changed && !rec.rewrote) {
+      try {
+        const s = JSON.stringify(body);
+        if (typeof s === 'string') { outBody = s; rec.bytesBefore = raw.length; rec.bytesAfter = s.length; }
+      } catch (e) { rec.normError = 'serialize-failed'; }
+    }
+
     rec.bridgeMs = Date.now() - t0;
   }
 
@@ -450,4 +556,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ctxFromRequest, mergeOutToRequest, mergeMany, server, MERGE_FIELDS, REQUEST_HOOKS, extractUsageFromSSE, pickRequestHeaders, joinUrl };
+module.exports = { ctxFromRequest, mergeOutToRequest, mergeMany, normalizeTools, server, MERGE_FIELDS, REQUEST_HOOKS, extractUsageFromSSE, pickRequestHeaders, joinUrl };

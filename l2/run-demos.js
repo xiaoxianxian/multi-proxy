@@ -18,6 +18,11 @@ const path = require('path');
 const { ROUTING_BASE } = require('./knowledge-base/routing-base.js');
 
 const L2_DIR = __dirname;
+// tools/ 下的 demo（桥、dry-run、归一化等）也要进全量回归。
+// 之前只 walk l2/，它们长期游离在 CI 之外——加了 demo 也不会被发现，
+// 表现就是「demo 本地跑得绿、run-demos 从来没跑过它」。
+const TOOLS_DIR = path.join(__dirname, '..', 'tools');
+const REPO_ROOT = path.join(__dirname, '..');
 
 // ---- 改动描述 → 影响标签 ----
 // 返回 { tags: Set<string>, reason: string }；tags 为空集表示全量（fail-closed）。
@@ -98,10 +103,11 @@ function collectDemos() {
             if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
             const p = path.join(dir, e.name);
             if (e.isDirectory()) walk(p);
-            else if (e.name.endsWith('.demo.js')) out.push(path.relative(L2_DIR, p));
+            else if (e.name.endsWith('.demo.js')) out.push(path.relative(REPO_ROOT, p));
         }
     };
     walk(L2_DIR);
+    walk(TOOLS_DIR);
     return out.sort();
 }
 
@@ -141,7 +147,7 @@ function main() {
 
     let failed = 0;
     for (const f of selected) {
-        const abs = path.join(L2_DIR, f);
+        const abs = path.join(REPO_ROOT, f);
         const r = spawnSync(node, [abs], { cwd: path.dirname(abs), encoding: 'utf8', timeout: 120000 });
         if (r.status !== 0) {
             failed++;
