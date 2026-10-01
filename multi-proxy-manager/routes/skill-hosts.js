@@ -40,10 +40,28 @@ router.get('/', (_req, res) => {
     }
 });
 
-// GET /:hostId/scan?project=<dir> → 只读扫描。不写任何文件。
+// GET /ledger → 全量扫描所有宿主 + token 汇总（只读，供 Web UI 一次拉全量）
+// 默认不开 tokens（要读一遍文件），显式 ?tokens=1 才量。
+router.get('/ledger', (req, res) => {
+    try {
+        const opts = {};
+        if (req.query.project) { opts.project = req.query.project; }
+        if (req.query.tokens === '1' || req.query.tokens === 'true') { opts.tokens = true; }
+        if (req.query.hosts) { opts.hosts = String(req.query.hosts).split(',').filter(Boolean); }
+        res.json(SH.scanLedger(opts));
+    } catch (e) {
+        res.status(e.message.includes('unknown host') ? 404 : 500)
+            .json({ error: 'skill-hosts-ledger-failed', detail: e.message });
+    }
+});
+
+// GET /:hostId/scan?project=<dir>&tokens=1 → 只读扫描。不写任何文件。
 router.get('/:hostId/scan', (req, res) => {
     try {
-        const r = SH.scan(req.params.hostId, req.query.project ? { project: req.query.project } : {});
+        const opts = {};
+        if (req.query.project) { opts.project = req.query.project; }
+        if (req.query.tokens === '1' || req.query.tokens === 'true') { opts.tokens = true; }
+        const r = SH.scan(req.params.hostId, opts);
         if (!r.exists) { return res.status(404).json({ error: 'host-not-installed', host: req.params.hostId, dir: r.dir }); }
         res.json(r);
     } catch (e) {

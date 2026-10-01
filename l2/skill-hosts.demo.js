@@ -126,5 +126,30 @@ check('estTokens 语义：null=没量过，绝不拿 0 冒充', () => {
     assert.ok(validateSkill({ ...base, estTokens: '42' }), '字符串被拒');
  });
 
+check('scanLedger：宿主/条目/token 三项自洽，且每条都带 host', () => {
+    const led = M.scanLedger();
+    assert.ok(Array.isArray(led.hosts) && led.hosts.length === 7, '7 个宿主都要在表');
+    assert.ok(led.entries.length > 0, '本机确有扫到条目');
+    assert.ok(led.entries.every((e) => e.host), '每条都要带 host（曾漏过导致 UI 显示 undefined）');
+    const sum = led.hosts.reduce((s, h) => s + h.total, 0);
+    assert.strictEqual(sum, led.entries.length, 'hosts.total 之和 == entries.length');
+    const tokSum = led.hosts.reduce((s, h) => s + h.tokens, 0);
+    assert.strictEqual(tokSum, led.totals.tokens, 'hosts.token 之和 == totals.tokens');
+    assert.ok(led.totals.measured + led.totals.skipped === led.totals.entries,
+        '已量 + 跳过 == 总条目（null 与 0 不能混）');
+});
+
+check('scan 默认不带 token（零开销），tokens=true 才量', () => {
+    const { home } = os;
+    const plain = M.scan('codex', { home });
+    assert.ok(plain.skills.length > 0 || plain.skills.length === 0);
+    assert.strictEqual(plain.estTokens, undefined, '默认不挂 estTokens');
+    assert.strictEqual(plain.tokens, undefined, '默认不汇总 token');
+    const withTok = M.scan('codex', { home, tokens: true });
+    assert.strictEqual(typeof withTok.tokens, 'number', 'tokens=true 才有汇总');
+    assert.ok(withTok.skills.every((s) => s.estTokens == null || Number.isInteger(s.estTokens)),
+        '每条 estTokens 要么 null 要么整数');
+});
+
 console.log(`\n[Skill-Hosts demo] PASS ${pass} / ${pass + fail}`);
 process.exit(fail === 0 ? 0 : 1);

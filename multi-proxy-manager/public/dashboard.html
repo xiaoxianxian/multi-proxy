@@ -437,6 +437,10 @@
       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
       知识库
     </div>
+    <div class="nav-item" data-page="skills" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg></span>
+      技能
+    </div>
   </nav>
 
   <div class="sidebar-footer">
@@ -1069,6 +1073,11 @@
     var pageId = navItem.dataset.page;
     if (pageId === 'knowledge') {
       window.location.href = '/knowledge';
+      closeMobileSidebar();
+      return;
+    }
+    if (pageId === 'skills') {
+      window.location.href = '/skills';
       closeMobileSidebar();
       return;
     }

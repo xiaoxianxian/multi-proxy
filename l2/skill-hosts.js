@@ -71,12 +71,29 @@ function classify(dir, name, entry) {
     return null;
 }
 
+// SKILL.md → 规范字段（去 frontmatter，供 measureSkillTokens 复用同一口径）
+// 本机两种形态都遇到过：claude/codex 有 `name:`/`description:`；cursor 的平铺 md 可能一个都没有。
+function readSkillMd(file) {
+    const raw = fs.readFileSync(file, 'utf8');
+    const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+    if (!m) return { name: '', description: '', content: raw };
+    const fm = m[1];
+    const nm = fm.match(/^name:\s*(.+?)\s*$/m);
+    const de = fm.match(/^description:\s*(.+?)\s*$/m);
+    return {
+        name: nm ? nm[1].replace(/^["']|["']$/g, '') : '',
+        description: de ? de[1].replace(/^["']|["']$/g, '') : '',
+        content: raw.slice(m[0].length),
+    };
+}
+
 // 扫描某宿主已装的 skill（只读，零副作用）。
-// depth=2 是为了 hermes 的「分类目录」：顶层无 SKILL.md 时下探一层。
+// opts.tokens=true 时给每条带 estTokens —— **默认不开**（126 条要读一次文件，别让 scan 变重）。
 function scan(hostId, opts = {}) {
     const h = getHost(hostId);
     const root = resolveDir(hostId, opts);
     if (!fs.existsSync(root)) { return { host: hostId, dir: root, exists: false, skills: [] }; }
+    const wantTokens = opts.tokens === true;
     const out = [];
     for (const name of fs.readdirSync(root)) {
         if (name.startsWith('.')) { continue; }                 // 隐藏项（.archive/.DS_Store）不算
@@ -84,8 +101,9 @@ function scan(hostId, opts = {}) {
         if (!fs.statSync(dir).isDirectory()) { continue; }      // 散文件（zip/json）不算
         const hit = classify(dir, name, h.entry);
         if (hit) {
-            out.push({ ...hit, scope: opts.project ? 'project' : 'global',
-                disabled: name.endsWith(DISABLE_SUFFIX) });
+            out.push({ ...hit, host: hostId, scope: opts.project ? 'project' : 'global',
+                disabled: name.endsWith(DISABLE_SUFFIX),
+                ...(wantTokens ? tokenize(hit) : {}) });
             continue;
         }
         for (const sub of fs.readdirSync(dir)) {                 // 分类目录下探一层
@@ -94,12 +112,65 @@ function scan(hostId, opts = {}) {
             if (!fs.existsSync(subDir) || !fs.statSync(subDir).isDirectory()) { continue; }
             const subHit = classify(subDir, sub, h.entry);
             if (subHit) {
-                out.push({ ...subHit, scope: opts.project ? 'project' : 'global',
-                    category: name, disabled: sub.endsWith(DISABLE_SUFFIX) });
+                out.push({ ...subHit, host: hostId, scope: opts.project ? 'project' : 'global',
+                    category: name, disabled: sub.endsWith(DISABLE_SUFFIX),
+                    ...(wantTokens ? tokenize(subHit) : {}) });
             }
         }
     }
-    return { host: hostId, dir: root, exists: true, skills: out };
+    return { host: hostId, dir: root, exists: true,
+        ...(wantTokens ? { tokens: out.reduce((s, x) => s + (x.estTokens || 0), 0) } : {}),
+        skills: out };
+}
+
+// 量一条磁盘上真实存在的 SKILL.md —— 直接量**它的全文**（frontmatter 也在内），
+// 这才是 agent 真正读进去的那份；和 measureSkillTokens 量的「规范条目 toSkillMd 后的文本」是
+// 两个口径，别混：measure 管"我们要装什么"，scan tokens 管"宿主里已经躺着什么"。
+function tokenize(hit) {
+    if (!hit.entry) { return { estTokens: null }; }              // 平铺 md 没有单体入口，量不了
+    try {
+        return { estTokens: estimateTokens(fs.readFileSync(hit.entry, 'utf8')) };
+    } catch (e) {
+        return { estTokens: null, tokenError: e.message };
+    }
+}
+
+// 全量扫描所有宿主 + token 汇总（给 tools/skill-ledger.js 与 UI 用；只读）
+function scanLedger(opts = {}) {
+    const hosts = opts.hosts ? opts.hosts.map(getHost) : Object.values(HOSTS);
+    const entries = [];
+    const byHost = [];
+    for (const h of hosts) {
+        const r = scan(h.id, { ...opts, tokens: true });
+        const row = {
+            host: h.id,
+            label: h.label,
+            exists: r.exists,
+            dir: r.dir,
+            skillSwitch: h.skillSwitch,
+            total: r.skills.length,
+            standard: r.skills.filter((s) => s.kind === 'skill').length,
+            nested: r.skills.filter((s) => s.category).length,
+            looseMd: r.skills.filter((s) => s.kind === 'loose-md').length,
+            disabled: r.skills.filter((s) => s.disabled).length,
+            tokens: r.tokens || 0,
+            measured: r.skills.filter((s) => s.estTokens != null).length,
+        };
+        byHost.push(row);
+        entries.push(...r.skills.map((s) => ({ ...s, skillSwitch: h.skillSwitch })));
+    }
+    const shaped = entries.filter((s) => s.estTokens != null);
+    return {
+        generatedAt: new Date().toISOString(),
+        hosts: byHost,
+        totals: {
+            entries: entries.length,
+            measured: shaped.length,
+            skipped: entries.length - shaped.length,
+            tokens: shaped.reduce((s, x) => s + x.estTokens, 0),
+        },
+        entries,
+    };
 }
 
 // 只回答「装下去会写什么」，不写任何东西（对齐 OpenShell prover 的 dry-run 思路）
@@ -157,6 +228,6 @@ function setEnabled(hostId, name, enabled, opts = {}) {
 
 module.exports = {
     HOSTS, DISABLE_SUFFIX,
-    listHosts, getHost, resolveDir, scan, planInstall, install, setEnabled, toSkillMd,
-    measureSkillTokens,
+    listHosts, getHost, resolveDir, scan, scanLedger, planInstall, install, setEnabled,
+    toSkillMd, readSkillMd, measureSkillTokens,
 };

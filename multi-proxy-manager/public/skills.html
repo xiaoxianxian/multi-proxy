@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Proxy Manager - 技能</title>
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+   <link rel="stylesheet" href="./colors_and_type.css">
+   <link rel="stylesheet" href="./shared-styles.css">
+</head>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-family); background: var(--color-bg-secondary); color: var(--color-text); display: flex; min-height: 100vh; overflow: hidden; }
+.mobile-menu-btn { display: none; position: fixed; top: 16px; left: 16px; z-index: 200; width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-bg); border: 1px solid var(--color-border); box-shadow: var(--shadow-md); cursor: pointer; align-items: center; justify-content: center; font-size: 18px; color: var(--color-text); }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); z-index: 90; }
+.sidebar { width: var(--sidebar-width); background: var(--color-bg); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; position: sticky; top: 0; overflow-y: auto; z-index: 100; }
+.sidebar-brand { padding: 20px 20px 16px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 12px; }
+.sidebar-brand .logo-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
+.sidebar-brand h1 { font-size: 16px; font-weight: 600; }
+.sidebar-nav { flex: 1; padding: 12px; overflow-y: auto; }
+.nav-section-label { font-size: 11px; font-weight: 600; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; color: var(--color-text-secondary); transition: all 0.15s ease; font-size: 14px; }
+.nav-item:hover { background: var(--color-bg-secondary); color: var(--color-text); }
+.nav-item.active { background: var(--color-primary-alpha); color: var(--color-primary); font-weight: 500; }
+.nav-icon { width: 20px; height: 20px; flex-shrink: 0; }
+.icon-svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--color-border); }
+.version-info { font-size: 12px; color: var(--color-text-tertiary); text-align: center; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.15s ease; text-decoration: none; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-outline { background: transparent; border-color: var(--color-border); color: var(--color-text); }
+.btn-outline:hover { background: var(--color-bg-secondary); }
+.btn-primary { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-danger { background: var(--color-danger); color: white; border-color: var(--color-danger); }
+.btn-danger:hover { opacity: 0.9; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.loading-bar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 9999; pointer-events: none; display: none; }
+.loading-bar.active { display: block; }
+.loading-bar::after { content: ''; position: absolute; top: 0; left: -40%; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, var(--color-primary), transparent); animation: loading-slide 1s ease-in-out infinite; }
+@keyframes loading-slide { from { left: -40%; } to { left: 100%; } }
+.page { flex: 1; overflow-y: auto; padding: 24px; }
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+.page-subtitle { font-size: 13px; color: var(--color-text-tertiary); }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-bar select, .filter-bar input { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font-size: 13px; }
+.filter-bar input { flex: 1; min-width: 150px; }
+.kb-card { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 12px; }
+.kb-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.kb-card-title { font-weight: 600; font-size: 14px; }
+.kb-card-meta { font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; }
+.kb-card-body { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 12px; white-space: pre-wrap; word-break: break-word; }
+.kb-card-footer { display: flex; gap: 8px; justify-content: flex-end; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; }
+.badge-success { background: var(--color-success-alpha); color: var(--color-success); }
+.badge-info { background: var(--color-info-alpha); color: var(--color-info); }
+.gate-closed { text-align: center; padding: 60px 24px; }
+.gate-closed .gate-icon { font-size: 40px; margin-bottom: 16px; color: var(--color-text-tertiary); }
+.gate-closed .gate-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.gate-closed .gate-body { font-size: 13px; color: var(--color-text-tertiary); max-width: 520px; margin: 0 auto 20px; line-height: 1.7; }
+.gate-closed code { background: var(--color-bg-secondary); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+.empty-state { text-align: center; padding: 40px; color: var(--color-text-tertiary); }
+.kb-stat { display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+.kb-stat-item { font-size: 13px; color: var(--color-text-tertiary); }
+.kb-stat-item b { color: var(--color-text); font-size: 16px; font-weight: 600; margin-right: 4px; }
+.retrieval-result { border-left: 3px solid var(--color-primary); padding: 10px 14px; margin: 8px 0; background: var(--color-bg-secondary); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.retrieval-score { font-size: 11px; color: var(--color-text-tertiary); float: right; }
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; box-shadow: var(--shadow-lg); animation: slideIn 0.2s ease; max-width: 320px; }
+.toast-success { background: var(--color-success); color: white; }
+.toast-error { background: var(--color-danger); color: white; }
+.toast-info { background: var(--color-info); color: white; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.sk-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--color-border); font-size: 13px; flex-wrap: wrap; }
+.sk-row.head { background: var(--color-bg-secondary); font-weight: 600; font-size: 12px; color: var(--color-text-tertiary); border-top: none; }
+.sk-row:not(.head):hover { background: var(--color-bg-secondary); }
+.sk-c { flex: 1 1 auto; min-width: 80px; word-break: break-word; }
+.sk-c.num { flex: 0 0 auto; min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+.sk-c.path { flex: 2 1 220px; min-width: 160px; color: var(--color-text-tertiary); font-size: 12px; }
+@media (max-width: 768px) { .mobile-menu-btn { display: flex; } .sidebar { position: fixed; left: -100%; transition: left 0.3s ease; } .sidebar.open { left: 0; } .sidebar-overlay.show { display: block; } }
+</style>
+<body>
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+   <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<aside class="sidebar" id="sidebar">
+   <div class="sidebar-brand">
+     <div class="logo-icon">P</div>
+     <h1>Proxy Manager</h1>
+   </div>
+   <nav class="sidebar-nav" id="sidebarNav">
+     <div class="nav-section-label">总览</div>
+     <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+       概览
+     </div>
+     <div class="nav-item" data-page="knowledge" data-tooltip="知识库" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+       知识库
+     </div>
+     <div class="nav-item" data-page="skills" data-tooltip="技能" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg></span>
+       技能
+     </div>
+     <div class="nav-section-label">系统</div>
+     <div class="nav-item" data-page="sessions" data-tooltip="任务" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+       任务
+     </div>
+     <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
+       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+       日志
+     </div>
+   </nav>
+   <div class="sidebar-footer">
+     <div class="version-info" id="sidebarVersion">v1.0.0</div>
+     <button class="btn btn-outline btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+       <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
+     </button>
+     <button class="btn btn-outline btn-sm" onclick="handleLogout()" title="退出登录" style="width:100%;margin-top:8px;">登出</button>
+   </div>
+</aside>
+
+<div class="loading-bar" id="loadingBar"></div>
+<main class="main" id="mainContent">
+   <div class="page active">
+     <div class="page-header">
+       <h1 class="page-title">技能</h1>
+       <p class="page-subtitle">各 agent 宿主已装 skill 的只读盘点 + 每条的 token 估算账本（不读改、不写盘）</p>
+     </div>
+
+     <!-- 门控关时：显示开启提示（routes/skill-hosts.js 门控 PROXY_L2_SKILLHOSTS 关 → 403） -->
+     <div class="gate-closed hidden" id="gateClosedView">
+       <div class="gate-icon">🔒</div>
+       <div class="gate-title">技能扫描功能未开启</div>
+       <div class="gate-body">
+         路由 <code>/api/skill-hosts</code> 由门控 <code>PROXY_L2_SKILLHOSTS</code> 控制（默认关 = 零副作用，与 knowledge/skill 同模式）。<br>
+         只暴露只读面：<code>scan</code> 纯读目录、<code>plan</code> dry-run；<code>install</code> / <code>setEnabled</code> **不上 HTTP**（非侵入④：内核绝不默认写 agent 目录）。<br>
+         开灰度：<code>PROXY_L2_SKILLHOSTS=1 node server.js</code>
+       </div>
+       <button class="btn btn-outline" onclick="checkGate()">重新检测</button>
+     </div>
+
+     <!-- 门控开时：账本统计 + 宿主分布 + 明细 -->
+     <div id="skillsView" style="display:none;">
+       <div class="kb-stat" id="ledgerStat"></div>
+
+       <div class="filter-bar">
+         <select id="hostFilter" title="宿主">
+           <option value="">全部宿主</option>
+         </select>
+         <input type="text" id="nameFilter" placeholder="按名称过滤（如：h3 / lark / archify）">
+         <select id="kindFilter" title="类型">
+           <option value="">全部类型</option>
+           <option value="skill">标准（有 SKILL.md）</option>
+           <option value="loose-md">平铺 md（无 SKILL.md）</option>
+           <option value="nested">嵌套分类里的</option>
+         </select>
+         <button class="btn btn-primary" id="refreshBtn">重新扫描</button>
+       </div>
+
+       <div class="kb-card">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">宿主分布</div>
+             <div class="kb-card-meta" id="hostMeta">加载中...</div>
+           </div>
+         </div>
+         <div id="hostTable"><div class="empty-state"><div class="loading-spinner" style="margin:0 auto 12px;"></div>加载中...</div></div>
+       </div>
+
+       <div class="kb-card">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">已装 skill 明细</div>
+             <div class="kb-card-meta" id="skillMeta"></div>
+           </div>
+         </div>
+         <div id="skillTable"><div class="empty-state"><div class="loading-spinner" style="margin:0 auto 12px;"></div>加载中...</div></div>
+       </div>
+
+       <div class="kb-card">
+         <div class="kb-card-header">
+           <div>
+             <div class="kb-card-title">口径与边界</div>
+             <div class="kb-card-meta">只读 + 只算，一个字节都不落</div>
+           </div>
+         </div>
+         <div class="kb-card-body">
+           • <b>token 是估算口径</b>（长度/3，复用 token-policy.estimateTokens），不是真实分词器、不是 provider usage；对外引用请标「估算」。<br>
+           • <b>null = 没量过</b>，绝不拿 0 冒充 —— 平铺 md 没有单体 SKILL.md，量不了就显示 <code>—</code>。<br>
+           • <b>SkillSwitch</b> 列是外部工具 DargonLee/skill-switch 的五件套（claude/codex/gemini/cursor/windsurf）覆盖范围；<code>否</code> = 它管不到，但这正是本机 skill 的大头。<br>
+           • 嵌套 = hermes / workbuddy 用分类目录（<code>skills/&lt;category&gt;/&lt;name&gt;/SKILL.md</code>），扫描已下探一层。<br>
+           • <code>.disabled</code> 后缀约定抄自 whale2002/skills-switch，<b>未在宿主上逐个验证生效</b>，此处只如实标出来。
+         </div>
+       </div>
+     </div>
+   </div>
+</main>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+(function() {
+   'use strict';
+
+   var authToken = sessionStorage.getItem('auth_token');
+
+   // ===== 转义（防御性渲染，仿 knowledge.html / logs.html） =====
+   function esc(str) {
+     if (str === null || str === undefined) return '';
+     var d = document.createElement('div');
+     d.textContent = str;
+     return d.innerHTML
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+   }
+   function num(n) { return typeof n === 'number' ? n.toLocaleString('en-US') : '-'; }
+
+   // ===== fetch 拦截器：注入 x-auth-token + 全局 401 跳转 =====
+   (function() {
+     var origFetch = window.fetch;
+     window.fetch = function(url, options) {
+       if (options === undefined) options = {};
+       if (typeof url === 'string' && url.indexOf('/api/') === 0 && authToken) {
+         if (!options.headers) options.headers = {};
+         if (typeof options.headers === 'object') {
+           options.headers['x-auth-token'] = authToken;
+         }
+       }
+       var p = origFetch(url, options);
+       if (typeof url === 'string' && url.indexOf('/api/') === 0
+            && url.indexOf('/api/auth/') !== 0) {
+         p.then(function(res) {
+           if (res.status === 401) {
+             sessionStorage.removeItem('auth_token');
+             window.location.href = 'login.html';
+           }
+         }).catch(function() {});
+       }
+       return p;
+     };
+   })();
+
+   // ===== Toast / Loading =====
+   function showToast(msg, type, duration) {
+     duration = duration || 3000;
+     var container = document.getElementById('toastContainer');
+     var toast = document.createElement('div');
+     toast.className = 'toast toast-' + (type || 'info');
+     toast.textContent = msg;
+     container.appendChild(toast);
+     setTimeout(function() { toast.style.opacity = '0'; setTimeout(function() { toast.remove(); }, 200); }, duration);
+   }
+   function showLoading() { var b = document.getElementById('loadingBar'); if (b) b.classList.add('active'); }
+   function hideLoading() { var b = document.getElementById('loadingBar'); if (b) b.classList.remove('active'); }
+
+   // ===== 账本（只读全量扫描结果） =====
+   var ledger = null;
+
+   function setGate(open) {
+     var gateView = document.getElementById('gateClosedView');
+     var view = document.getElementById('skillsView');
+     if (open) {
+       gateView.classList.add('hidden');
+       view.style.display = 'block';
+       render();
+     } else {
+       gateView.classList.remove('hidden');
+       view.style.display = 'none';
+     }
+   }
+
+   // 门控检测：/api/skill-hosts/ledger 403=门控关，200=门控开
+   function checkGate() {
+     showLoading();
+     fetch('/api/skill-hosts/ledger?tokens=1')
+        .then(function(res) {
+          if (res.status === 403) {              // 门控关
+            setGate(false);
+          } else if (res.ok) {
+            return res.json().then(function(d) { ledger = d; setGate(true); });
+          } else {
+            setGate(false);
+          }
+          hideLoading();
+        })
+        .catch(function() {
+          setGate(false);
+          hideLoading();
+        });
+   }
+
+   function render() {
+     if (!ledger) { checkGate(); return; }
+     renderStat();
+     renderHosts();
+     renderSkills();
+   }
+
+   function renderStat() {
+     var t = ledger.totals || {};
+     var notCovered = (ledger.hosts || []).filter(function(h) { return !h.skillSwitch && h.exists; });
+     document.getElementById('ledgerStat').innerHTML =
+        '<div class="kb-stat-item"><b>' + num(t.entries) + '</b>条目</div>' +
+        '<div class="kb-stat-item"><b>' + num(t.measured) + '</b>已量 token</div>' +
+        '<div class="kb-stat-item"><b>' + num(t.skipped) + '</b>跳过(null)</div>' +
+        '<div class="kb-stat-item"><b>' + num(t.tokens) + '</b>token(估)</div>' +
+        '<div class="kb-stat-item"><b>' + num((ledger.hosts || []).filter(function(h) { return h.exists; }).length) + '</b>宿主已装</div>' +
+        '<div class="kb-stat-item"><b>' + num(notCovered.length) + '</b>不在 SkillSwitch</div>';
+   }
+
+   function renderHosts() {
+     var box = document.getElementById('hostTable');
+     var hosts = ledger.hosts || [];
+     var meta = document.getElementById('hostMeta');
+     if (!hosts.length) { box.innerHTML = '<div class="empty-state">无宿主数据</div>'; meta.textContent = ''; return; }
+     meta.textContent = hosts.length + ' 个宿主（含未安装）';
+     var rows = ['<div class="sk-row head"><div class="sk-c">宿主</div><div class="sk-c num">条目</div>' +
+        '<div class="sk-c num">标准</div><div class="sk-c num">嵌套</div><div class="sk-c num">平铺</div>' +
+        '<div class="sk-c num">禁用</div><div class="sk-c">SkillSwitch</div><div class="sk-c num">token(估)</div></div>'];
+     rows = rows.concat(hosts.map(function(h) {
+       return '<div class="sk-row">' +
+          '<div class="sk-c">' + esc(h.label || h.host) + ' <span style="color:var(--color-text-tertiary);">(' + esc(h.host) + ')</span></div>' +
+          '<div class="sk-c num">' + num(h.total) + '</div>' +
+          '<div class="sk-c num">' + num(h.standard) + '</div>' +
+          '<div class="sk-c num">' + num(h.nested) + '</div>' +
+          '<div class="sk-c num">' + num(h.looseMd) + '</div>' +
+          '<div class="sk-c num">' + num(h.disabled) + '</div>' +
+          '<div class="sk-c"><span class="badge ' + (h.skillSwitch ? 'badge-success' : 'badge-info') + '">' +
+             (h.skillSwitch ? '覆盖' : '未覆盖') + '</span></div>' +
+          '<div class="sk-c num">' + num(h.tokens) + '</div>' +
+        '</div>';
+     }));
+     box.innerHTML = rows.join('');
+     fillHostFilter();
+   }
+
+   function fillHostFilter() {
+     var sel = document.getElementById('hostFilter');
+     if (!sel) return;
+     var cur = sel.value;
+     var installed = (ledger.hosts || []).filter(function(h) { return h.exists; });
+     sel.innerHTML = '<option value="">全部宿主</option>' + installed.map(function(h) {
+        return '<option value="' + esc(h.host) + '">' + esc(h.label || h.host) + ' (' + num(h.total) + ')</option>';
+     }).join('');
+     sel.value = cur;
+   }
+
+   function renderSkills() {
+     var entries = (ledger.entries || []).slice();
+     var hostF = document.getElementById('hostFilter') ? document.getElementById('hostFilter').value : '';
+     var nameF = (document.getElementById('nameFilter').value || '').trim().toLowerCase();
+     var kindF = document.getElementById('kindFilter') ? document.getElementById('kindFilter').value : '';
+     if (hostF) { entries = entries.filter(function(e) { return e.host === hostF; }); }
+     if (nameF) { entries = entries.filter(function(e) { return String(e.name || e.path || '').toLowerCase().indexOf(nameF) >= 0; }); }
+     if (kindF === 'nested') { entries = entries.filter(function(e) { return !!e.category; }); }
+     else if (kindF) { entries = entries.filter(function(e) { return e.kind === kindF; }); }
+
+     entries.sort(function(a, b) { return (b.estTokens || 0) - (a.estTokens || 0); });
+
+     var box = document.getElementById('skillTable');
+     var meta = document.getElementById('skillMeta');
+     meta.textContent = entries.length + ' 条（按 token 估算降序；全量 ' + ((ledger.entries || []).length) + ' 条）';
+     if (!entries.length) { box.innerHTML = '<div class="empty-state">没有匹配的 skill（换个过滤条件）</div>'; return; }
+
+     var rows = ['<div class="sk-row head"><div class="sk-c">宿主</div><div class="sk-c">名称</div>' +
+        '<div class="sk-c">类型</div><div class="sk-c">分类</div><div class="sk-c path">目录</div>' +
+        '<div class="sk-c num">token(估)</div><div class="sk-c">状态</div></div>'];
+     rows = rows.concat(entries.map(function(e) {
+       var kind = e.kind === 'skill' ? '标准' : '平铺md';
+       var badgeKind = e.kind === 'skill' ? 'badge-success' : 'badge-info';
+       return '<div class="sk-row">' +
+          '<div class="sk-c">' + esc(e.host) + '</div>' +
+          '<div class="sk-c">' + esc(e.name || '(无 name)') + '</div>' +
+          '<div class="sk-c"><span class="badge ' + badgeKind + '">' + kind + '</span></div>' +
+          '<div class="sk-c">' + esc(e.category || '-') + '</div>' +
+          '<div class="sk-c path">' + esc(e.path || '-') + '</div>' +
+          '<div class="sk-c num">' + (e.estTokens == null ? '<span title="没量过，不是 0">—</span>' : num(e.estTokens)) + '</div>' +
+          '<div class="sk-c">' + (e.disabled ? '<span class="badge badge-info">已禁用</span>' : '') + '</div>' +
+        '</div>';
+     }));
+     box.innerHTML = rows.join('');
+   }
+
+   // ===== 事件绑定 =====
+   document.getElementById('refreshBtn').addEventListener('click', function() {
+     showLoading();
+     fetch('/api/skill-hosts/ledger?tokens=1')
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(d) {
+          hideLoading();
+          if (!d) { showToast('扫描失败或门控未开', 'error'); return; }
+          ledger = d;
+          render();
+          showToast('已重新扫描 ' + (d.totals ? d.totals.entries : 0) + ' 条', 'success');
+        })
+        .catch(function(err) { hideLoading(); showToast('扫描失败: ' + err.message, 'error'); });
+   });
+   document.getElementById('nameFilter').addEventListener('input', renderSkills);
+   document.getElementById('kindFilter').addEventListener('change', renderSkills);
+   document.getElementById('hostFilter').addEventListener('change', function() {
+     // 宿主下拉由 ledger 回来后填充；切换只影响明细表
+     renderSkills();
+   });
+
+   // ===== Sidebar =====
+   var mobileMenuBtn = document.getElementById('mobileMenuBtn');
+   var sidebar = document.getElementById('sidebar');
+   var sidebarOverlay = document.getElementById('sidebarOverlay');
+
+   mobileMenuBtn.addEventListener('click', function() {
+     sidebar.classList.toggle('open');
+     sidebarOverlay.classList.toggle('show');
+   });
+   sidebarOverlay.addEventListener('click', function() {
+     sidebar.classList.remove('open');
+     sidebarOverlay.classList.remove('show');
+   });
+
+   // nav：本页高亮 skills；其余跳转独立页 / dashboard
+   var activeItem = document.querySelector('.nav-item[data-page="skills"]');
+   if (activeItem) activeItem.classList.add('active');
+   document.querySelectorAll('.nav-item').forEach(function(item) {
+     item.addEventListener('click', function() {
+       var page = this.dataset.page;
+       if (page === 'skills') return; // 本页
+       if (page === 'dashboard') window.location.href = '/';
+       else if (page === 'knowledge') window.location.href = '/knowledge';
+       else if (page === 'sessions') window.location.href = '/sessions';
+       else if (page === 'logs') window.location.href = '/logs';
+       else window.location.href = '/';
+       closeMobileSidebar();
+     });
+    });
+   function closeMobileSidebar() {
+     sidebar.classList.remove('open');
+     sidebarOverlay.classList.remove('show');
+   }
+
+   // ===== Logout =====
+   window.handleLogout = function() {
+     sessionStorage.removeItem('auth_token');
+     window.location.href = 'login.html';
+   };
+
+   // ===== Dark Mode =====
+   function initDarkMode() {
+     var toggle = document.getElementById('darkModeToggle');
+     var isDark = localStorage.getItem('darkMode') === 'true';
+     var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+     var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+     if (isDark) {
+       document.documentElement.classList.add('dark');
+       document.documentElement.classList.remove('light');
+       if (toggle) toggle.innerHTML = moonSvg + ' 亮色模式';
+     }
+     if (toggle) {
+       toggle.addEventListener('click', function() {
+         var html = document.documentElement;
+         var isNowDark = html.classList.contains('dark');
+         if (isNowDark) {
+           html.classList.remove('dark');
+           html.classList.add('light');
+           localStorage.setItem('darkMode', 'false');
+           toggle.innerHTML = sunSvg + ' 暗色模式';
+         } else {
+           html.classList.add('dark');
+           html.classList.remove('light');
+           localStorage.setItem('darkMode', 'true');
+           toggle.innerHTML = moonSvg + ' 亮色模式';
+         }
+       });
+     }
+   }
+
+   // ===== Init =====
+   initDarkMode();
+   checkGate();
+})();
+</script>
+</body>
+</html>
