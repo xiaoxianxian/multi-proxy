@@ -318,6 +318,49 @@ const CHAT = {
     assert.strictEqual(st.actualCompletionTokens, 9);
   });
 
+  console.log('\n=== 五、桥跑的不止一个 hook：历史压缩不能被晾在链路外 ===');
+  // 历史压缩挂在 onHistory，而桥最初只跑 onRequestAssemble——
+  // 那样最大的一档杠杆永远不会被真实流量触发。
+  const TP2 = require('../l2/token-policy.js');
+  TP2.registerPolicy({
+    hook: 'onHistory',
+    name: '__demo_fold_tool',
+    enabled: true,
+    priority: 100,
+    handler(ctx) {
+      const before = JSON.stringify(ctx.history || []).length;
+      const h = (ctx.history || []).map((m) => (m && m.role === 'tool'
+        ? Object.assign({}, m, { content: '[工具输出已折叠 · 演示]' }) : m));
+      return { history: h, netTokenDelta: JSON.stringify(h).length - before };
+    },
+  });
+
+  process.env.BRIDGE_MODE = 'rewrite';
+  const CHAT2 = {
+    model: 'demo-model',
+    messages: [
+      { role: 'tool', content: 'L'.repeat(300), name: 'grep' },
+      { role: 'user', content: '最后一条提问' },
+    ],
+  };
+  const r5 = await post(bport, '/v1/chat/completions', CHAT2);
+  const up5 = JSON.parse(r5.text).echo;
+
+  ok('onHistory 确实被跑了（hook 列表里有两个）', () => {
+    const f2 = fs.readFileSync(path.join(LOG_DIR, logFile), 'utf8').trim().split('\n').map(JSON.parse);
+    const last = f2[f2.length - 1];
+    const hooks = (last.policies || []).map((p) => p.hook);
+    assert.ok(hooks.includes('onHistory'), `hook 列表: ${JSON.stringify(hooks)}`);
+    assert.ok(hooks.includes('onRequestAssemble'), `hook 列表: ${JSON.stringify(hooks)}`);
+  });
+
+  ok('历史压缩没被后一个 hook 的原样 messages 盖掉', () => {
+    // prompt-assemble 这类 passthrough policy 会原样吐回 ctx.messages，
+    // 若照写就会把 onHistory 刚折叠好的内容整个覆盖——压缩白算且日志看不出来
+    assert.ok(up5.includes('已折叠'), '上游收到的包里应有折叠标记');
+    assert.ok(up5.includes('最后一条提问'), '当前这轮输入不能被吞掉');
+  });
+
   bridge.close();
   echo.close();
   fs.rmSync(LOG_DIR, { recursive: true, force: true });

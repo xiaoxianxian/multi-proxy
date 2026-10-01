@@ -33,6 +33,10 @@ const AGENT_TYPE = process.env.BRIDGE_AGENT_TYPE || 'coding';
 // 只有这几个字段允许写回请求体。handler 返回别的字段一律忽略并计数——
 // 未知字段写进上游请求等于赌 provider 会容忍，赢了没收益、输了直接 400。
 const MERGE_FIELDS = ['messages', 'systemPrompt', 'history'];
+// 请求侧要跑的 hook。🔴 不能只跑 onRequestAssemble——历史压缩挂在 onHistory，
+// 它是最大的那一档杠杆（实测 41 轮会话折叠 tool 输出省 53.7%），
+// 只跑一个 hook 等于把最值钱的策略晾在真实链路之外。
+const REQUEST_HOOKS = ['onHistory', 'onRequestAssemble'];
 const LOG_DIR = process.env.BRIDGE_LOG_DIR || path.join(__dirname, '..', 'logs');
 const LOG_PATH = path.join(LOG_DIR, `token-policy-bridge-${new Date().toISOString().slice(0, 10)}.jsonl`);
 
@@ -81,10 +85,11 @@ function ctxFromRequest(body, api) {
  * 把 handler 的输出合并回原请求体（仅白名单字段）。
  * @returns {{body:object, applied:string[], ignored:string[], changed:boolean}}
  */
-function mergeOutToRequest(body, out, api) {
+function mergeOutToRequest(body, out, api, originBody) {
   const applied = [];
   const ignored = [];
   if (!out || typeof out !== 'object') return { body, applied, ignored, changed: false };
+  const origin = originBody || body; // 「原始请求体」参照：多次合并时必须传最原始那个
   for (const k of Object.keys(out)) {
     if (k === 'netTokenDelta' || k === 'ok') continue;
     if (!MERGE_FIELDS.includes(k)) { ignored.push(k); continue; }
@@ -92,7 +97,21 @@ function mergeOutToRequest(body, out, api) {
   let next = body;
   const put = (field, value) => { next = { ...next, [field]: value }; applied.push(field); };
 
-  if (Array.isArray(out.messages) && out.messages.length) {
+  // 🔴 handler 原样返回 messages 时**不写回**。
+  //    这不是洁癖：passthrough 型 policy（如 curator 的 prompt-assemble）会把
+  //    ctx.messages 原样吐回来，一旦写回就把前一个 hook（onHistory 历史压缩）
+  //    刚改好的内容整个盖掉——压缩完全失效，且日志上看不出异常。
+  //    「没改的东西就不写」才是正确语义。
+  //
+  //    比的对象必须是**原始请求体**，不是中间态：handler 拿到的 ctx 来自原始包，
+  //    拿中间态比会因为「前一个 hook 已改动」而误判成有变化，覆盖照旧发生。
+  const originalMsgs = api === 'responses' ? (origin.input || []) : (origin.messages || []);
+  const unchangedMessages = (candidate) => {
+    if (!Array.isArray(originalMsgs) || originalMsgs.length !== candidate.length) return false;
+    try { return JSON.stringify(originalMsgs) === JSON.stringify(candidate); } catch { return false; }
+  };
+
+  if (Array.isArray(out.messages) && out.messages.length && !unchangedMessages(out.messages)) {
     put(api === 'responses' ? 'input' : 'messages', api === 'responses'
       ? out.messages
       : (body.systemPrompt != null || systemCount(body) ? withSystem(body, out.messages) : out.messages));
@@ -110,6 +129,26 @@ function mergeOutToRequest(body, out, api) {
     else { next = { ...next, messages: replaceSystem(next.messages || [], out.systemPrompt) }; if (!applied.includes('messages')) applied.push('messages'); }
   }
   return { body: next, applied, ignored, changed: applied.length > 0 };
+}
+
+/**
+ * 依次应用多个 hook 的输出。每个 hook 单独走一次白名单合并，不叠加。
+ * 为什么要支持多个：历史压缩（onHistory）与请求组装（onRequestAssemble）改的是
+ * 请求体的不同部分，只应用后者会让前者白算。
+ */
+function mergeMany(body, outs, api) {
+  const origin = body; // 后面每次合并都以它为「原始」参照，不能用中间态
+  let cur = body;
+  const applied = [];
+  const ignored = [];
+  for (const out of outs || []) {
+    if (!out || typeof out !== 'object') continue;
+    const m = mergeOutToRequest(cur, out, api, origin);
+    cur = m.body;
+    if (m.applied && m.applied.length) applied.push(...m.applied);
+    if (m.ignored && m.ignored.length) ignored.push(...m.ignored);
+  }
+  return { body: cur, applied, ignored, changed: applied.length > 0 };
 }
 
 function systemCount(body) {
@@ -278,22 +317,40 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { rec.foldError = String(e && e.message || e); }
 
     // ② 执行：真正跑 apply()。出错不得影响转发——这是桥的底线
-    let applied = null;
     try {
       rec.ctxMsgs = ctx.messages.length;
       rec.ctxHistory = ctx.history.length;
       rec.ctxTools = ctx.tools.length;
-      applied = TP.apply('onRequestAssemble', ctx);
-      rec.policies = (applied.results || []).map((r) => ({ p: r.policy, ok: r.ok, d: r.netTokenDelta }));
-      rec.estSaved = applied.estSaved;
+
+      // 🔴 必须链式喂回：把上一个 hook 的输出并进 ctx 再喂给下一个。
+      //    否则后一个 hook 拿到的还是原始 ctx，它返回的 messages 会把前一个 hook
+      //    刚压缩好的历史整个盖掉——压缩白算，日志上却看不出来。
+      const runs = [];
+      let chained = ctx;
+      for (const hook of REQUEST_HOOKS) {
+        const res = TP.apply(hook, chained);
+        runs.push({ hook, res });
+        const top = (res.results || [])[0];
+        if (top && top.out && typeof top.out === 'object') {
+          const next = { ...chained };
+          if (Array.isArray(top.out.history)) next.history = top.out.history;
+          if (Array.isArray(top.out.messages)) next.messages = top.out.messages;
+          if (typeof top.out.systemPrompt === 'string') next.systemPrompt = top.out.systemPrompt;
+          chained = next;
+        }
+      }
+      rec.policies = runs.flatMap((x) => (x.res.results || [])
+        .map((r) => ({ hook: x.hook, p: r.policy, ok: r.ok, d: r.netTokenDelta })));
+      rec.estSaved = runs.reduce((a, x) => (Number.isFinite(x.res.estSaved) ? a + x.res.estSaved : a), 0);
       // estSaved 是各 policy 自报净增量之和；policy 没上报时该项为 null，
-      // 累加时会跳过——所以这里可能是 0 条上报而非「确实没省」，口径要标清
-      rec.reported = (applied.results || []).filter((r) => Number.isFinite(r.netTokenDelta)).length;
+      // 累加时会跳过——所以 0 可能是「没人上报」而非「确实没省」，口径要标清
+      rec.reported = runs.reduce((a, x) => a
+        + (x.res.results || []).filter((r) => Number.isFinite(r.netTokenDelta)).length, 0);
 
       if (MODE === 'rewrite') {
-        // 只有一条 policy 主导改写，取优先级最高（results[0]）的 out，不叠加多个
-        const top = (applied.results || [])[0];
-        const m = mergeOutToRequest(body, top && top.out, api);
+        // 每个 hook 取优先级最高那条（results[0]）主导改写，不叠加同 hook 内的多条
+        const outs = runs.map((x) => (x.res.results || [])[0]).filter(Boolean).map((r) => r.out);
+        const m = mergeMany(body, outs, api);
         rec.rewrote = m.changed;
         rec.appliedFields = m.applied;
         rec.ignoredFields = m.ignored;
@@ -371,4 +428,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ctxFromRequest, mergeOutToRequest, server, MERGE_FIELDS, extractUsageFromSSE, pickRequestHeaders, joinUrl };
+module.exports = { ctxFromRequest, mergeOutToRequest, mergeMany, server, MERGE_FIELDS, REQUEST_HOOKS, extractUsageFromSSE, pickRequestHeaders, joinUrl };

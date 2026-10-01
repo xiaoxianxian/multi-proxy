@@ -1,25 +1,72 @@
 'use strict';
 // Curator pack handler · Memory 面（onHistory）
-// 初始 passthrough：保留全部历史，Curator 后续可改 keepLastN 参数（M6 受限变更集）。
-// 映射：Raven Memory 面（轮可见记忆）→ token-policy onHistory hook。
-// 06-curator-pack.md §3。
+// 映射：Raven Memory 面（轮可见记忆）→ token-policy onHistory hook。06-curator-pack.md §3。
+//
+// 两种压缩，语义不同，别混为一谈：
+//   ① keepLastN：活跃窗口，超出的整条**丢弃**（既有语义，既有测试钉死了「只剩 N 条」）
+//   ② maxMsgChars / foldToolOutput：**压缩内容本身，不改条数**（本次新增）
+// ① 会丢线索（早期的约定被切掉就再也找不回来），② 保留线索且更省——
+// 工具输出（role=tool）通常是单条最长的那类，折叠它收益最高。
 
-const { measureMessages } = require('../ledger.js');
+const { measureMessages, measureText, headTail, textOf, setText } = require('../ledger.js');
 
 // 参数对象（M6 仅允许改这里的数值，不改结构；校验见 curator-engine.validateChange）。
-const params = { keepLastN: null }; // null = 全部保留（passthrough）
+// 默认全关 = passthrough，零行为变更（非侵入铁律④）。
+const params = {
+  keepLastN: null,       // null = 不切条数
+  maxMsgChars: null,     // null = 不压缩单条内容
+  foldToolOutput: false, // true = role=tool 的输出折叠成占位符
+};
 
-// passthrough handler：不改 ctx，返回等价对象。
 function handler(ctx, io) {
   if (!ctx || !Array.isArray(ctx.history)) return { history: ctx ? ctx.history : [] };
-  if (params.keepLastN == null) return { history: ctx.history };
-  const kept = ctx.history.slice(-params.keepLastN);
-  const dropped = ctx.history.slice(0, Math.max(0, ctx.history.length - params.keepLastN));
-  const trimmed = measureMessages(dropped);
+  const hist = ctx.history;
+
+  // ① 活跃窗口：超出的整条丢弃。
+  //    计量口径沿用既有——省的是「被丢弃那部分」，不是前后差
+  //    （既有测试断言 delta === 被裁掉部分的 tokens，改口径会让它失败）。
+  let droppedTokens = 0;
+  let kept = hist;
+  if (Number.isInteger(params.keepLastN) && params.keepLastN > 0 && hist.length > params.keepLastN) {
+    const cut = hist.length - params.keepLastN;
+    droppedTokens = measureMessages(hist.slice(0, cut));
+    kept = hist.slice(cut);
+  }
+
+  // ② 内容级压缩：逐条算真实差额，走 ledger 同一把秤（不自报、不另起估算口径）
+  let compressedTokens = 0;
+  let out = kept;
+  const doFold = params.foldToolOutput === true;
+  const doTruncate = Number.isInteger(params.maxMsgChars) && params.maxMsgChars > 0;
+  if (doFold || doTruncate) {
+    out = kept.map((m) => {
+      if (!m || typeof m !== 'object') return m; // 非消息对象（如测试里的数字）原样透传
+      const before = textOf(m);
+
+      if (doFold && m.role === 'tool' && typeof before === 'string' && before.length > 0) {
+        const name = m.name || m.toolName || '-';
+        const folded = `[工具输出已折叠 · 原 ${before.length} 字符 · 工具 ${name}]`;
+        compressedTokens += measureText(before) - measureText(folded);
+        return setText(m, folded);
+      }
+
+      if (doTruncate && typeof before === 'string') {
+        const r = headTail(before, params.maxMsgChars);
+        if (r.changed) {
+          compressedTokens += measureText(before) - measureText(r.text);
+          return setText(m, r.text);
+        }
+      }
+      return m;
+    });
+  }
+
+  const saved = droppedTokens + compressedTokens;
   return {
-    history: kept,
-    // C4：裁剪掉的历史是**节省**（负）。一段都没裁掉就不报数（null），不报 0。
-    netTokenDelta: trimmed > 0 ? -trimmed : null,
+    history: out,
+    // C4：裁剪是**节省**（负）。一段都没裁掉就报 null，不报 0——
+    // 0 会被下游读成「跑了但确实没省」，那是假数字换个字段重犯。
+    netTokenDelta: saved > 0 ? -saved : null,
   };
 }
 

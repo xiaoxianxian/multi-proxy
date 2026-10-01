@@ -60,6 +60,14 @@ const CHANGE_VALIDATORS = {
   // C4：scenePrefix 是 pack 唯一的注入口，必须走受限变更通道（有校验 + 有快照），
   // 不容许绕过 applyChange 直接改 params 后无人知晓——那样第七类就称不到它。
   scenePrefix: (s) => typeof s === 'string' && s.length <= 4000,
+
+  // ---- 真改写类变更（本轮新增）：只放开数值/枚举，不放开结构 ----
+  maxMsgChars: (n) => Number.isInteger(n) && n > 0 && n <= 20000,
+  foldToolOutput: (b) => typeof b === 'boolean',
+  headChars: (n) => Number.isInteger(n) && n > 0 && n <= 20000,
+  tailChars: (n) => Number.isInteger(n) && n > 0 && n <= 20000,
+  // 只认两种枚举值：更激进的精简会改变用户看到的内容，不给开口子
+  simplify: (s) => s === 'pass' || s === 'whitespace',
 };
 
 // C4：收集本 pack 各 policy 声明的注入，喂进 context-fold 的第七类。

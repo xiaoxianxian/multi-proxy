@@ -26,4 +26,53 @@ function measureMessages(msgs) {
   return _fold.fold({ messages: msgs }).estimate.total;
 }
 
-module.exports = { measureText, measureMessages };
+/**
+ * 头尾保留式截断。
+ * 为什么不是直接 slice(0, max)：工具输出里最有用的往往在**尾部**——错误堆栈、
+ * 命令的最后几行结果、日志的最新条目。只留头部会把真正要看的东西切掉，
+ * 省了 token 却让 agent 失去判断依据，那是负收益。
+ *
+ * @returns {{ text:string, changed:boolean, omitted:number }} 未超长时原样返回（changed=false）
+ */
+function headTail(s, maxChars) {
+  if (typeof s !== 'string') return { text: s, changed: false, omitted: 0 };
+  if (!(Number.isInteger(maxChars) && maxChars > 0)) return { text: s, changed: false, omitted: 0 };
+  if (s.length <= maxChars) return { text: s, changed: false, omitted: 0 };
+  const head = Math.ceil(maxChars * 0.6);
+  const tail = Math.max(0, maxChars - head);
+  const omitted = s.length - head - tail;
+  const mark = `\n…[已省略 ${omitted} 字符]…\n`;
+  const text = tail > 0 ? s.slice(0, head) + mark + s.slice(s.length - tail) : s.slice(0, head) + mark;
+  return { text, changed: true, omitted };
+}
+
+/**
+ * 取一条消息的文本。只认字符串 content 与 text part 数组；
+ * 图片等非文本 part 不参与压缩（压缩它们等于丢信息，且本 pack 无权决定）。
+ */
+function textOf(m) {
+  if (!m || typeof m !== 'object') return null;
+  if (typeof m.content === 'string') return m.content;
+  if (Array.isArray(m.content)) {
+    return m.content.filter((p) => p && p.type === 'text').map((p) => (p && p.text) || '').join('\n');
+  }
+  return null;
+}
+
+/** 写回文本，保留原消息的其他字段与非文本 part（只替换第一个 text part）。 */
+function setText(m, text) {
+  if (!m || typeof m !== 'object') return m;
+  if (typeof m.content === 'string') return Object.assign({}, m, { content: text });
+  if (Array.isArray(m.content)) {
+    let done = false;
+    const parts = m.content.map((p) => {
+      if (!done && p && p.type === 'text') { done = true; return Object.assign({}, p, { text }); }
+      return p;
+    });
+    if (!done) parts.push({ type: 'text', text });
+    return Object.assign({}, m, { content: parts });
+  }
+  return Object.assign({}, m, { content: text });
+}
+
+module.exports = { measureText, measureMessages, headTail, textOf, setText };
