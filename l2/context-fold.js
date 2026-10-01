@@ -85,6 +85,41 @@ function apportion(byCategory, actualTotal) {
     return out;
 }
 
+// ---- C2：帧差（纯函数，可独立测）----
+//
+// 为什么需要这一层：C1 只产出单帧。「上下文是不是在膨胀」「压缩到底压下去没有」
+// 这类问题单帧一个都答不了，而它们才是 dsh-context 真正值钱的地方（演进视图）。
+//
+// 诚实纪律：取数时实测优先、没有才用估算，且**必须把用的是哪一轨带回给调用方**。
+// 估算差被当成实测差报出去，就是 C0-3 假数字换个地方重犯。
+
+/** 取一帧的可比数值：实测优先，无实测才回落估算。 */
+function pickFrame(rec) {
+  if (!rec) { return null; }
+  if (rec.actual) { return { byCategory: rec.actual.byCategory, total: rec.actual.total, source: 'actual' }; }
+  if (rec.estimate) { return { byCategory: rec.estimate.byCategory, total: rec.estimate.total, source: 'estimate' }; }
+  return null;
+}
+
+/**
+ * 两帧逐类差值（后 - 前）。任一帧不可比 → null。
+ * source 为 'mixed' 表示一边实测一边估算——是混血，不得当实测陈述。
+ */
+function diffFrames(from, to) {
+  const a = pickFrame(from);
+  const b = pickFrame(to);
+  if (!a || !b) { return null; }
+  const byCategory = emptyTally();
+  for (const c of CATEGORIES) { byCategory[c] = b.byCategory[c] - a.byCategory[c]; }
+  const bothActual = a.source === 'actual' && b.source === 'actual';
+  const anyActual = a.source === 'actual' || b.source === 'actual';
+  return {
+    byCategory,
+    total: b.total - a.total,
+    source: bothActual ? 'actual' : (anyActual ? 'mixed' : 'estimate'),
+  };
+}
+
 // ---- 工厂：每实例独立配置（测试隔离；延续 l2/ 工厂惯例）----
 function createContextFold(opts = {}) {
     const estimate = typeof opts.estimate === 'function' ? opts.estimate : estimateTokens;
@@ -178,7 +213,77 @@ function createContextFold(opts = {}) {
         return { estimate: estimateSide, actual, source, bySource, warnings };
     }
 
-    return { fold, CATEGORIES, _estimate: estimate, _imageTokens: imageTokens };
+    // ---- C2 状态层：per-request 记录 + Delta ----
+    // 设计上刻意：fold() 保持纯函数、状态只住在这一层。要无状态折叠就用 fold()，
+    // 要时间线就用 record()，两者互不污染。
+    // 只存内存、不写盘（本内核的定位是秤，落盘持久化是上层的事）。
+    const records = [];
+    const maxRecords = Number.isFinite(opts.maxRecords) ? opts.maxRecords : 500;
+
+    function lastOfSession(sid) {
+      for (let i = records.length - 1; i >= 0; i -= 1) {
+        if ((records[i].sessionId || null) === (sid || null)) { return records[i]; }
+      }
+      return null;
+    }
+
+    /**
+     * 折叠一次请求并记入时间线。
+     * @param {object} o  同 fold() 的 o，另可给 turn / sessionId / now
+     * @returns {object} 记录（含 delta：与**同会话**上一条的逐类差；首条为 null）
+     */
+    function record(request = {}, o = {}) {
+      const f = fold(request, o);
+      const prev = lastOfSession(o.sessionId);
+      const rec = {
+        ts: o.now != null ? o.now : Date.now(),
+        // turn 给了就用；否则同会话内递增，首条为 1
+        turn: Number.isFinite(o.turn) ? o.turn : (prev ? prev.turn + 1 : 1),
+        sessionId: o.sessionId || null,
+        estimate: f.estimate,
+        actual: f.actual,
+        source: f.source,
+        bySource: f.bySource,
+        warnings: f.warnings,
+        delta: null,
+      };
+      // 首条没有参照物 → delta 为 null，不是全 0（全 0 会被读成「确实没变」）
+      rec.delta = prev ? diffFrames(prev, rec) : null;
+      records.push(rec);
+      if (records.length > maxRecords) { records.shift(); }
+      return rec;
+    }
+
+    function list(sessionId) {
+      return (sessionId === undefined)
+        ? records.slice()
+        : records.filter((r) => r.sessionId === (sessionId || null));
+    }
+
+    /** 最近 windowMs 毫秒内的记录（无 ts 边界时返回全部）。 */
+    function window(windowMs, now) {
+      if (!Number.isFinite(windowMs)) { return records.slice(); }
+      const t = Number.isFinite(now) ? now : Date.now();
+      return records.filter((r) => r.ts >= t - windowMs);
+    }
+
+    function clear() { const n = records.length; records.length = 0; return n; }
+
+    return {
+      fold,
+      record,
+      list,
+      window,
+      clear,
+      diffFrames,
+      last: lastOfSession,
+      // 直接给引用：改它就是在改内核状态（token-policy 的 listPolicies 返副本曾让人踩坑，
+      // 见 MEMORY §四；这里反着来，暴露真身比给副本更难误用）
+      records,
+      CATEGORIES,
+      _estimate: estimate,
+      _imageTokens: imageTokens,
+    };
 }
 
 // ---- 模块级单例（默认配置）----
@@ -190,6 +295,14 @@ module.exports = {
     ROLE_MAP,
     createContextFold,
     apportion,
+    diffFrames,
+    pickFrame,
     // 单例转发
     fold: _fold.fold,
+    record: _fold.record,
+    list: _fold.list,
+    window: _fold.window,
+    clear: _fold.clear,
+    last: _fold.last,
+    records: _fold.records,
 };

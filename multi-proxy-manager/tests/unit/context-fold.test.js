@@ -128,3 +128,89 @@ describe('token-policy 账本记真数（l2/token-policy.js · 28 号文档 C3�
     expect(Array.isArray(TP._runHistory)).toBe(true);
   });
 });
+
+describe('context-fold · C2 per-request 记录 + Delta（时间线）', () => {
+  const exact = (s) => (typeof s === 'string' ? s.length : 0);
+  const mk = (o) => F.createContextFold({ estimate: exact, ...(o || {}) });
+  const MSG = (n) => ({ role: 'user', content: 'a'.repeat(n) });
+
+  test('首条 delta 为 null（不是全 0）—— 0 会被读成「确实没变」', () => {
+    const f = mk();
+    const r1 = f.record({ messages: [MSG(30)] }, { now: 1000 });
+    expect(r1.delta).toBeNull();
+    expect(r1.turn).toBe(1);
+    expect(r1.estimate.total).toBe(30);
+  });
+
+  test('第二条能看出历史膨胀，增量落在对应类别', () => {
+    const f = mk();
+    f.record({ messages: [MSG(30)] }, { now: 1000 });
+    const r2 = f.record({ messages: [MSG(30), { role: 'assistant', content: 'b'.repeat(30) }] }, { now: 2000 });
+    expect(r2.turn).toBe(2);
+    expect(r2.delta.total).toBe(30);
+    expect(r2.delta.byCategory.assistant).toBe(30);
+    expect(r2.delta.byCategory.user).toBe(0);
+  });
+
+  test('压缩生效 → delta 为负（这是「省没省」的判据）', () => {
+    const f = mk();
+    f.record({ messages: [MSG(300)] }, { now: 1000 });
+    const r2 = f.record({ messages: [MSG(30)] }, { now: 2000 });
+    expect(r2.delta.total).toBe(-270);
+  });
+
+  test('实测与估算混用 → delta.source=mixed，不得冒充实测', () => {
+    const f = mk();
+    f.record({ messages: [MSG(30)] }, { now: 1000 });
+    const r2 = f.record({ messages: [MSG(60)] }, { now: 2000, actuals: { prompt_tokens: 60 } });
+    expect(r2.delta.source).toBe('mixed');
+  });
+
+  test('两帧都实测 → source=actual', () => {
+    const f = mk();
+    f.record({ messages: [MSG(30)] }, { now: 1000, actuals: { prompt_tokens: 30 } });
+    const r2 = f.record({ messages: [MSG(60)] }, { now: 2000, actuals: { prompt_tokens: 60 } });
+    expect(r2.delta.source).toBe('actual');
+    expect(r2.delta.total).toBe(30);
+  });
+
+  test('sessionId 隔离：跨会话不互相算 delta', () => {
+    const f = mk();
+    f.record({ messages: [MSG(30)] }, { now: 1000, sessionId: 's1' });
+    const r2 = f.record({ messages: [MSG(30)] }, { now: 1000, sessionId: 's2' });
+    expect(r2.delta).toBeNull();
+    expect(f.list()).toHaveLength(2);
+    expect(f.list('s1')).toHaveLength(1);
+  });
+
+  test('turn 显式传入时以传入为准', () => {
+    const f = mk();
+    expect(f.record({ messages: [MSG(30)] }, { now: 1, turn: 7 }).turn).toBe(7);
+  });
+
+  test('window 按时间窗过滤；clear 清空并返回条数', () => {
+    const f = mk();
+    f.record({ messages: [MSG(30)] }, { now: 1000 });
+    f.record({ messages: [MSG(30)] }, { now: 5000 });
+    expect(f.window(1000, 5000)).toHaveLength(1);
+    expect(f.clear()).toBe(2);
+    expect(f.list()).toHaveLength(0);
+  });
+
+  test('maxRecords 上限保护：超量丢弃最老，不无限涨内存', () => {
+    const f = mk({ maxRecords: 3 });
+    for (let i = 1; i <= 5; i += 1) { f.record({ messages: [MSG(30)] }, { now: i * 1000, turn: i }); }
+    expect(f.list()).toHaveLength(3);
+    expect(f.list()[0].turn).toBe(3);
+  });
+
+  test('fold() 仍是纯函数：不写状态、不进时间线（加状态层不能打破这条）', () => {
+    const f = mk();
+    const req = { messages: [MSG(30)] };
+    const a = f.fold(req);
+    const b = f.fold(req);
+    expect(f.list()).toHaveLength(0);
+    expect(a.estimate.total).toBe(b.estimate.total);
+    expect(a).not.toBe(b);
+  });
+});

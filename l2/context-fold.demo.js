@@ -149,5 +149,81 @@ check('13. 默认估算器复用 token-policy.estimateTokens', () => {
     assert.strictEqual(r.estimate.byCategory.system, 10, '30 字符 /3 = 10');
 });
 
+// ---- C2：per-request 折叠 + Delta（时间线）----
+
+// 14. 首条没有参照物 → delta 必须是 null，不是全 0
+check('14. record 首条 delta=null（不是全 0）', () => {
+    const f = mk();
+    const r1 = f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 1000 });
+    assert.strictEqual(r1.delta, null, '首条无参照物，delta 必须是 null');
+    assert.strictEqual(r1.turn, 1, '首条 turn=1');
+    assert.strictEqual(r1.estimate.total, 30, '30 字符 = 30（本 demo 用精确估算器 1 字符 1 token）');
+});
+
+// 15. 第二条能看出膨胀：多出来的落在 assistant 类（历史在变长）
+check('15. delta 反映上下文演进（膨胀可量化）', () => {
+    const f = mk();
+    f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 1000 });
+    const r2 = f.record({
+        messages: [
+            { role: 'user', content: 'a'.repeat(30) },
+            { role: 'assistant', content: 'b'.repeat(30) },
+        ],
+    }, { now: 2000 });
+    assert.strictEqual(r2.turn, 2, 'turn 递增');
+    assert.strictEqual(r2.delta.total, 30, '总量 +30');
+    assert.strictEqual(r2.delta.byCategory.assistant, 30, '增量全落在 assistant（历史在膨胀）');
+    assert.strictEqual(r2.delta.byCategory.user, 0, 'user 没变');
+});
+
+// 16. 压缩生效时 delta 为负 —— 这条才是「省没省」的真正判据
+check('16. 压缩生效 → delta 为负（省没省看得见）', () => {
+    const f = mk();
+    f.record({ messages: [{ role: 'user', content: 'a'.repeat(300) }] }, { now: 1000 });
+    const r2 = f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 2000 });
+    assert.strictEqual(r2.delta.total, -270, '300 → 30，净省 270');
+});
+
+// 17. 一帧实测一帧估算 → 标 mixed，不许冒充实测
+check('17. 实测与估算混用 → delta.source=mixed', () => {
+    const f = mk();
+    f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 1000 });
+    const r2 = f.record(
+        { messages: [{ role: 'user', content: 'a'.repeat(60) }] },
+        { now: 2000, actuals: { prompt_tokens: 60 } },
+    );
+    assert.strictEqual(r2.delta.source, 'mixed', '混血不得标 actual');
+});
+
+// 18. sessionId 隔离：不同会话不互相算 delta
+check('18. sessionId 隔离（跨会话不串味）', () => {
+    const f = mk();
+    f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 1000, sessionId: 's1' });
+    const r2 = f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 1000, sessionId: 's2' });
+    assert.strictEqual(r2.delta, null, '新会话首条不应与 s1 比');
+    assert.strictEqual(f.list().length, 2, '两条都在时间线里');
+    assert.strictEqual(f.list('s1').length, 1, '按会话可筛');
+});
+
+// 19. window 时间窗过滤 + clear 可清空（测试隔离靠它）
+check('19. window 过滤 + clear', () => {
+    const f = mk();
+    f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 1000 });
+    f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: 5000 });
+    assert.strictEqual(f.window(1000, 5000).length, 1, '窗口内只留最近 1 条');
+    assert.strictEqual(f.clear(), 2, 'clear 返回清掉条数');
+    assert.strictEqual(f.list().length, 0, '清空后为空');
+});
+
+// 20. 上限保护：长会话不会无限涨内存
+check('20. maxRecords 上限保护（丢弃最老）', () => {
+    const f = mk({ maxRecords: 3 });
+    for (let i = 1; i <= 5; i += 1) {
+        f.record({ messages: [{ role: 'user', content: 'a'.repeat(30) }] }, { now: i * 1000, turn: i });
+    }
+    assert.strictEqual(f.list().length, 3, '只保留 3 条');
+    assert.strictEqual(f.list()[0].turn, 3, '最老的 1、2 被丢弃');
+});
+
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);
