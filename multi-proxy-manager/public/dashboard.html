@@ -423,6 +423,10 @@
       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
       Agent 注册表
     </div>
+    <div class="nav-item" data-page="floor" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+      代理面 Floor
+    </div>
 
     <div class="nav-section-label">管理</div>
     <div class="nav-item" data-page="sessions" tabindex="0">
@@ -1071,6 +1075,11 @@
       return;
     }
     var pageId = navItem.dataset.page;
+    if (pageId === 'floor') {
+      window.location.href = '/floor';
+      closeMobileSidebar();
+      return;
+    }
     if (pageId === 'knowledge') {
       window.location.href = '/knowledge';
       closeMobileSidebar();

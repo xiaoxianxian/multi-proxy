@@ -37,6 +37,41 @@ bash manage.sh status
 
 ---
 
+## 接入你的 agent(改一个环境变量)
+
+> 服务起来了,还得让 agent 的模型出口指向它,能力才有意义。**改 env,不写 agent 配置文件**(符合红线 2)。
+> 现状(2026-10-01 实测):**OpenAI 系 ✅ / Claude Code ❌(实施中)**。
+
+| agent / 客户端 | 环境变量 | 状态 | 说明 |
+|---|---|---|---|
+| Codex CLI、任何 OpenAI SDK 客户端、OpenAI 兼容工具 | `OPENAI_BASE_URL=http://127.0.0.1:18790/v1` | ✅ **实测通过** | 见下方验证 |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:18790` | ❌ **今天会 404** | 全仓无 Anthropic `/v1/messages` 服务端路由。实施计划见 `docs/10-initiatives/22-claude-code-anthropic-ingress实施计划-2026-09-30.md`(5.5d,未落地) |
+| Hermes | — | ⚠️ 不可作 chat 出口 | `hermes-proxy` **无** `/v1/chat/completions`(chat 由 Hermes 自身转发到 Ollama),见 `l2/adapters/l1-agent-adapter.js` 头部实测注释 |
+| Cursor | 在 Cursor 设置里改(不是 env) | ⚠️ 需手动配 | 走 `cursor-proxy` 18794 |
+
+**一行验证(改道是否生效)**:
+
+```bash
+# 1) 确认代理活着
+curl -s http://127.0.0.1:18790/v1/models | head -c 300      # → 200,返回 deepseek/kimi 等模型清单
+
+# 2) 改道(仅当前 shell 生效;禁止写 ~/.zshrc、禁止 launchctl setenv —— 见红线 3)
+export OPENAI_BASE_URL=http://127.0.0.1:18790/v1
+
+# 3) 用任意 OpenAI 客户端发一次请求
+#    返回 {"success":false,"code":"UNSUPPORTED_MODEL"} 即证明请求落在 multi-proxy(不是 OpenAI)
+#    这是 multi-proxy 自己的响应格式,OpenAI 不会这么回
+```
+
+### ⚠️ 鉴权坑(做跨机/公网前必读)
+
+`codex-proxy` 的鉴权**只认 `x-proxy-auth` 头,不认标准的 `Authorization: Bearer`**(`codex-proxy/proxy.js:31-36`)。
+当前本机 `PROXY_AUTH_TOKEN` 未设 = **fail-open**(全部放行),所以上面验证能过。
+**一旦设了 `PROXY_AUTH_TOKEN`(暴露到非本机时必须设),所有标准 agent 的 Bearer 请求会被 401。**
+代码自身也会打告警:`[SECURITY][fail-open] PROXY_AUTH_TOKEN unset — /api/* open to anyone reachable`。
+
+---
+
 ## 常用命令
 
 ```bash

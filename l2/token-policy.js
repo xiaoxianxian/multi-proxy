@@ -165,6 +165,9 @@ function createTokenPolicy(opts = {}) {
     return out;
   }
 
+  // 「最近命中」快照（供代理面 floor view 读取；无命中 → null，不编造）
+  let lastFired = null;
+
   // 核心执行：对某 agent 跑 5 hook 的 handler，受 budget 约束（§3.5 贪心）
   // ctx = { agentType?, messages?, systemPrompt?, toolSchemas?, history?, toolName?, rawOutput?, response?, taskMeta? }
   function apply(hookName, ctx = {}, io = {}) {
@@ -229,6 +232,18 @@ function createTokenPolicy(opts = {}) {
     }
     const run = { hook: hookName, ts: io.now != null ? io.now : Date.now(), agentType, results, remaining, estSaved };
     runHistory.push(run);
+
+    // 代理面 floor view：记最近一次「真有 policy 命中」的快照。
+    // 跨进程可见性靠 floor-feed（桥进程写、manager 进程读）；门控 PROXY_FLOOR_FEED 默认关 → 零开销、不写盘。
+    const fired = results.filter((r) => r.ok);
+    if (fired.length) {
+      lastFired = { hook: hookName, policy: fired[0].policy, agentType: agentType || null, ts: run.ts, firedCount: fired.length };
+      if (process.env.PROXY_FLOOR_FEED === '1' || process.env.PROXY_FLOOR_FEED === 'true') {
+        try {
+          require('./floor-feed').append({ kind: 'hook', ts: run.ts, hook: hookName, policy: fired[0].policy, agentType: agentType || null, firedCount: fired.length });
+        } catch { /* 非致命：热路径写盘失败不影响请求 */ }
+      }
+    }
     return run;
   }
 
@@ -288,6 +303,7 @@ function createTokenPolicy(opts = {}) {
     listPolicies,
     isGateOpen,
     isIntegration,
+    lastFired: () => lastFired,
     _policies: policies,
     _runHistory: runHistory,
   };
@@ -311,6 +327,8 @@ module.exports = {
   listPolicies: _policy.listPolicies,
   isGateOpen: _policy.isGateOpen,
   isIntegration: _policy.isIntegration,
+  // 代理面 floor view：最近一次 hook 命中快照（无 → null）
+  lastFired: _policy.lastFired,
   // 28 号文档 C3：透出执行留痕，让外部（context-fold / cost A 路）能读到每次 handler 的实际效果
   _runHistory: _policy._runHistory,
 };

@@ -305,6 +305,9 @@ describe('executor-bind · 三档 text-tier（待办 6）', () => {
         expect([va.tier, vd.tier, vq.tier]).toEqual(['small', 'medium', 'large']);
         expect([va.agent, vd.agent, vq.agent]).toEqual(['agnes', 'deepseek', 'qwen']);
         // 模型真按档位下发（不是同一个 model 打天下）
+        // 🔴 2026-10-02 维护者订正：small 档改 agnes-3.0-flash（2.0/2.5 是老型号，实测短
+        // max_tokens 下正文被 thinking 吃空；1.5 直接 503）。改这里也必须同步 routing-base
+        // 的 tierBindings.small.model —— 两者是一对。
         expect(mockProxy.getChatModels()).toEqual(['agnes-3.0-flash', 'deepseek-v4-pro']);
         expect(mockLocal.getChatModels()).toEqual(['qwen3.8:27b-mlx']);
         expect(va.content).toBe('mock-ok');

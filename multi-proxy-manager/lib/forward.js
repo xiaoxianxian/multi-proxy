@@ -172,6 +172,9 @@ async function forwardProxy(req, res) {
     console.log(`[FORWARD OK] ${method} ${proxyName}/${rest} -> ${response.status} (${elapsed}ms)`);
     appendLog('info', proxyName, `${method.toUpperCase()} ${rest} completed in ${elapsed}ms`, { status: response.status });
 
+    // 代理面 floor view：记录本次成功转发的耗时（门控 PROXY_COST_TRACK 关时零开销，见 cost-track.recordLatency）
+    try { require('./cost-track').recordLatency(proxyName, elapsed); } catch { /* 非致命 */ }
+
     // L2 P2 A路·token×单价埋点（门控 PROXY_COST_TRACK 关时零开销：只做 rest 字符串比较）
     //
     // 三模型字段在热路径怎么取（**两边都取，别只取一边**）：
