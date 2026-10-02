@@ -740,6 +740,66 @@ function pipeUpstreamBytes(res, response, tag) {
   });
 }
 
+// ===== Messages passthrough（Anthropic wire —— Claude Code / Claude Desktop）=====
+// 此前 18790 只有 OpenAI 两条 wire（/v1/chat/completions、/v1/responses），Claude Code
+// 发 /v1/messages 一律 404（见 docs/10-initiatives/62 号）。补上这条后 Claude 与 codex
+// 共用一个出口，路由 / 成本 / 上下文控制不必再各写一套。
+//
+// 与 responses 那条的**本质区别**：这不是协议翻译，是**同协议直通**——
+// 上游（DeepSeek / Kimi）官方都提供 Anthropic 兼容端点：
+//   DeepSeek: https://api.deepseek.com/anthropic   （api-docs.deepseek.com/quick_start/agent_integrations/claude_code）
+//   Kimi    : https://api.moonshot.cn/anthropic    （platform.moonshot.cn/docs/guide/claude-code-kimi）
+// 所以只需换 base 路径 + 换鉴权头，请求体原样透传。
+//
+// ⚠️ 配置约定：Claude Code 默认发 claude-* 模型名，而 provider 匹配按模型名做，
+// 因此需在 Claude Code 侧把 ANTHROPIC_MODEL 指到上游模型名（官方文档做法，
+// 如 deepseek-flash / kimi-k3），否则 model 匹配不到 provider → 400 UNSUPPORTED_MODEL。
+
+// OpenAI 面 baseUrl → Anthropic 兼容端点。显式规则（非臆测）：去掉尾部 /v1 再挂 /anthropic。
+// 自定义 provider 可在 providers.json 里显式给 anthropicBaseUrl 覆盖（agnes 等聚合网关
+// 是否有 anthropic 兼容面未核实，届时用该字段指路）。
+function anthropicBaseUrlOf(provider) {
+  if (provider.anthropicBaseUrl) return String(provider.anthropicBaseUrl).replace(/\/+$/, '');
+  return String(provider.baseUrl || '').replace(/\/v1\/?$/, '') + '/anthropic';
+}
+
+app.post('/v1/messages', requireAuth, async (req, res) => {
+  try {
+    const { model } = req.body;
+    const provider = findProvider(model);
+    if (!provider) {
+      return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
+    }
+
+    const upstreamUrl = `${anthropicBaseUrlOf(provider)}/v1/messages`;
+    // 鉴权：Anthropic 原生认 x-api-key；Claude Code 走 ANTHROPIC_AUTH_TOKEN 时发 Bearer。
+    // 上游兼容层两者取一，故两个头同值都带上（值相同不会冲突），避免错配 401。
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': provider.apiKey,
+      'anthropic-version': req.headers['anthropic-version'] || '2023-06-01',
+    };
+    if (req.headers['authorization']) headers['authorization'] = `Bearer ${provider.apiKey}`;
+
+    const response = await fetch(upstreamUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error(`[messages] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
+      return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
+    }
+    return pipeUpstreamBytes(res, response, '[messages]');
+  } catch (e) {
+    console.error(`[messages] error: ${e.message}`);
+    return res.status(500).json({ success: false, error: e.message, code: 'MESSAGES_ERROR' });
+  }
+});
+
 // ===== P0-E: 可测试性 =====
 //   把 app 导出，门禁测试可直接 supertest(app)，无需 require 时 listen 18790 撞端口。
 module.exports = { app, requireAuth, findConfigToml, parseConfigToml };
