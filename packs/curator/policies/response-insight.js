@@ -4,8 +4,19 @@
 // 这个 handler **不改上游响应的一个字节**，只做一件事：给「改写到底省没省」补一条对拍线。
 //
 // 为什么必须在响应侧看：请求侧所有 policy 自报的 netTokenDelta 都是**估算**（ledger 的
-// measureText 走 folds 估算器，跟上游真实 tokenizer 有偏差，实测同请求 est≈12860 vs
-// actual 11610 ≈ 高估 10%）。全部加起来得到一个「省了多少」，但没人知道这个数跟真实账单差多远。
+// measureText 走 folds 估算器，跟上游真实 tokenizer 有偏差）。全部加起来得到一个「省了多少」，
+// 但没人知道这个数跟真实账单差多远。onResponse 是代理层唯一能**白拿上游真实 usage** 的位置
+// （流式末 chunk、非流式 usage 字段），用它跟自报数对拍，才是「代理原生可观测」这句话的落点。
+//
+// ⚠️ 口径纠正（2026-10-02 晚，A/B 双发实测推翻过一条自己的结论）：
+//   早期注释写「est≈12860 vs actual 11610 ≈ 高估 10%」——那个对比把 **responses 协议的
+//   body.usage**（上游回给我们、属于**改写后**的请求）跟 **estTotal**（改写**前**基线）相减，
+//   口径本身就是错的，得出来的「估算高估」是假象。
+//   真·A/B 双发（logs/bridge-ab-2026-10-02.json：同一 payload 直连一次 + 过桥一次，8 次真请求）得到：
+//     · 估算器对「改写前整包」很准：加权 bias +5.6%（v1 +6.8% / v3 −2.8%）
+//     · 虚的是 **policy 自报 netTokenDelta**：高估真实净省 13~21%（小包更差，v2 达 120%）
+//   ⇒ 所以 realSaving 用 est 当「改写前真实」的代理是**可接受的近似**（差 ~5%），
+//     overclaimTokens 才是真正该盯的虚报源。别再把 estAfter 的低估算到估算器头上。
 // onResponse 是代理层唯一能**白拿上游真实 usage** 的位置（流式末 chunk、非流式 usage 字段），
 // 用它跟自报数对拍，才是「代理原生可观测」这句话的落点。
 //
@@ -26,6 +37,17 @@ const params = {
   // 最多保留几个样本进 rec（防止一条巨响应用把日志撑爆）
   maxCharsInspect: 200000,
 };
+
+// 🔴 「改写前真实」的代理值标定系数。
+//   estTotal 是改写**前**的估算，realSaving 需要「改写前真实」当分子——上游不给这个数，
+//   只能拿 est 当代理，而实测它相对真实高估 +5.6%（4 组真包 A/B，logs/bridge-ab-2026-10-02.json）。
+//   不标定的话 v1 那组会读成 real-saving-50.8%（真值 53.9%），一个静默的 ~5% 虚高。
+//   ⚠️ 没样本时保持 1（不修）——宁可差 5%，也不许拿没验证过的系数去「修」。
+//   参数只认自己的 env：`applyPack` 不转发 params（tools/token-policy-bridge.js:65）。
+const BIAS_BEFORE = (() => {
+  const v = Number(process.env.CURATOR_EST_BIAS_BEFORE ?? '');
+  return Number.isFinite(v) && v > 0 ? v : 1;
+})();
 
 function numOf(v) {
   const n = Number(v);
@@ -94,9 +116,12 @@ function handler(ctx, io) {
   // 🔴 ⚠️ overclaim 必须走 **token 数**对拍，绝不能把「自报的 token 数」跟「realSaving 的比例」
   //     相减——量纲都不一样。真实省了多少 token = 改写前基线 − 上游真实输入。
   const pct = (a, b) => (a != null && b != null && b !== 0 ? (a - b) / b : null);
-  const realSaving = (est != null && u.prompt != null && est !== 0) ? (est - u.prompt) / est : null;
+  // 「改写前真实」的代理。没标定（=1）时就是 est 本身，行为与旧版完全一致。
+  const proxyBefore = est != null && BIAS_BEFORE !== 1 ? est * BIAS_BEFORE : est;
+  const realSaving = (proxyBefore != null && u.prompt != null && proxyBefore !== 0)
+    ? (proxyBefore - u.prompt) / proxyBefore : null;
   const estBiasAfter = (estAfter != null && u.prompt != null) ? pct(u.prompt, estAfter) : null;
-  const estAfterRealSaving = (est != null && u.prompt != null && est !== 0) ? est - u.prompt : null;
+  const estAfterRealSaving = (proxyBefore != null && u.prompt != null) ? proxyBefore - u.prompt : null;
   const claimSavedTok = claimed != null ? -claimed : null; // netTokenDelta 负值=省，取正好读
   const overclaimTok = (claimSavedTok != null && estAfterRealSaving != null)
     ? claimSavedTok - estAfterRealSaving : null;
@@ -128,6 +153,8 @@ function handler(ctx, io) {
     actualHit: u.hit,
     actualMiss: u.miss,
     estTotal: est,
+    estTotalProxy: proxyBefore,   // 「改写前真实」的代理 = est × 标定系数（无标定=est）
+    estBiasBeforeCalibration: BIAS_BEFORE,
     estAfter,
     estSaved: claimed,
     realSaving,

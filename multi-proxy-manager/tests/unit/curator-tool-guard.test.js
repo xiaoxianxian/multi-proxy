@@ -133,3 +133,49 @@ describe('curator/response-insight（onResponse）', () => {
     expect(o.hitRatio).toBeCloseTo(900 / 950, 6);
   });
 });
+
+// 「改写前真实」没有上游可问（不改写那一版没人发），只能拿 estTotal 当代理；
+// 而 A/B 双发实测它相对真实高估 +5.6%（logs/bridge-ab-2026-10-02.json，4 组真包）。
+// 这条 describe 锁住「代理 + 标定系数」这套换算别被改坏。
+describe('curator/response-insight · 改写前真实代理与标定系数', () => {
+  const RI_PATH = require.resolve('../../../packs/curator/policies/response-insight.js');
+  const loadRI = (bias) => {
+    // 🔴 必须用 jest.resetModules()：jest 有自己的 module registry，清 require.cache
+    // （node:test 那套）对它无效 → 模块拿到的是上一份、标定的 env 根本没读到。
+    jest.resetModules();
+    if (bias == null) delete process.env.CURATOR_EST_BIAS_BEFORE;
+    else process.env.CURATOR_EST_BIAS_BEFORE = String(bias);
+    return require(RI_PATH);
+  };
+  afterAll(() => { delete process.env.CURATOR_EST_BIAS_BEFORE; jest.resetModules(); });
+
+  // 真包 v1 的实测数：estTotal=3125，上游真实改写后 prompt=1538，policy 自报省 2183
+  const RAW = { estTotal: 3125, estAfter: 942, estSaved: -2183, response: JSON.stringify({ usage: { prompt_tokens: 1538 } }) };
+
+  test('没设标定系数 → 代理就是 estTotal 本身（旧行为零变化）', () => {
+    const o = loadRI(null).handler(RAW, {});
+    expect(o.estBiasBeforeCalibration).toBe(1);
+    expect(o.estTotalProxy).toBe(3125);
+    expect(o.realSaving).toBeCloseTo((3125 - 1538) / 3125, 6); // 0.508
+  });
+
+  test('标定 1.056（A/B 实测）→ realSaving 从 50.8% 修正到 53.4%，overclaim 跟着落到 421 tok', () => {
+    const o = loadRI(1.056).handler(RAW, {});
+    expect(o.estTotalProxy).toBeCloseTo(3300, 6);
+    expect(o.realSavedTokens).toBe(1762);            // 3300 − 1538
+    expect(o.realSaving).toBeCloseTo(1762 / 3300, 6);
+    expect(o.claimSavedTokens).toBe(2183);
+    expect(o.overclaimTokens).toBe(421);            // 自报 2183 − 真实净省 1762
+    expect(o.overclaimRatio).toBeCloseTo(421 / 1762, 6);
+    expect(o.overclaimRatio).toBeGreaterThan(0.2);  // 自报确实虚报 >20%（A/B 实测 13~21%）
+  });
+
+  test('标定了但上游没 usage → 全 null，不许拿标定后的代理值凑一个实测评比', () => {
+    const o = loadRI(1.056).handler({ estTotal: 3125, estAfter: 942, estSaved: -2183, response: JSON.stringify({ id: 'x' }) }, {});
+    expect(o.actualPrompt).toBeNull();
+    expect(o.realSaving).toBeNull();
+    expect(o.realSavedTokens).toBeNull();
+    expect(o.overclaimTokens).toBeNull();
+    expect(o.note).toBe('usage-unavailable');
+  });
+});
