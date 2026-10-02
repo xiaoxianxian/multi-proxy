@@ -196,13 +196,13 @@ export const DEFAULT_ROUTE_CONFIG: RouteConfig = {
   // D5 对齐(2026-09-13, 维护者拍 ①): model 名改各上游 /v1/models 实测真名。
   //  上游真名(各 provider /v1/models 实探):
   //    deepseek   → deepseek-flash, deepseek-v4-pro   (api.deepseek.com)
-  //    agnes      → agnes-2.5-flash (+11 个 agnes-*)     (apihub.agnes-ai.com)
+  //    agnes      → agnes-3.0-flash (+11 个 agnes-*)     (apihub.agnes-ai.com)
   //    kimi       → kimi-k3, kimi-k2.6, kimi-k2.7-code   (api.moonshot.cn)
   //    ollama     → qwen3.8:27b-mlx                       (本地 127.0.0.1:11434)
   //  旧虚名 deepseek-v4.1-flash / qwen3.8-flash 上游不认(已删), override 一开即真 404。
-  fallbackChain: ['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-2.5-flash', 'kimi-k2.6'],
+  fallbackChain: ['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-3.0-flash', 'kimi-k2.6'],
    rules: [
-   { id: 'r-cheap',   condition: "taskType == 'cheap'",   targetProvider: 'agnes-2.5-flash' },
+   { id: 'r-cheap',   condition: "taskType == 'cheap'",   targetProvider: 'agnes-3.0-flash' },
    { id: 'r-coding',  condition: "taskType == 'coding'",  targetProvider: 'deepseek-v4-pro' },
    { id: 'r-writing', condition: "taskType == 'writing'", targetProvider: 'qwen3.8:27b-mlx' },
    { id: 'r-vision',  condition: "taskType == 'vision'",  targetProvider: 'qwen3.8:27b-mlx' },
@@ -223,7 +223,7 @@ export const DEFAULT_ROUTE_CONFIG: RouteConfig = {
      'qwen3.8:27b-mlx':        { input: 0,    output: 0,   cacheHit: 0,    currency: 'CNY', source: 'ollama/2026-09(本地免费·路由内最省)' },
      // deepseek 真实价(¥/1M tokens)。F1 回源修正 1/4/0.02 → 0.5/3/0.02。
      'deepseek-v4-pro':        { input: 0.5,  output: 3,   cacheHit: 0.02, currency: 'CNY', source: 'OpenRouter/官方·2025-11(F1·路由内主)' },
-     'agnes-2.5-flash':        { input: 0,    output: 0,   cacheHit: 0,    currency: 'CNY', source: 'agnes-ai/免费·路由内最省' },
+     'agnes-3.0-flash':        { input: 0,    output: 0,   cacheHit: 0,    currency: 'CNY', source: 'agnes-ai/免费·路由内最省' },
      // kimi 真实价(¥/1M tokens，回源 kimi-k2.com kimi-k2.7-code 档；k2.6 为旧虚名占位，
      //   现以真实 k2.7-code 价回填——DB models.name='kimi-k2.6' 即此 live key，不另改 key，
      //   避免 B1 式「pricing key ≠ DB model 名」失效）。k2.6 旧 key 弃用，由 k2.7-code 真实价取代。

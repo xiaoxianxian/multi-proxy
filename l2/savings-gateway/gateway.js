@@ -78,8 +78,10 @@ function resolvePricing(pricing, model, tier) {
     // C0-3 假成本数字：调用方**已登记 model 级价表**（p.models 非空）却拿不到这个 model 的
     // 有效价（压根没它 / 条目残缺）⇒ 单价未知，返回 source:'unknown'。
     // 绝不在此处回落 tier —— 那是用一个「像样的数」冒充实测价：
-    // 典型就是 agnes-3.0-flash（providers.json 里只有 agnes-2.0-flash），被 tier small 算成 ¥0，
-    // 看起来「免费」其实是推导出来的，不是查出来的。
+    // 典型就是 agnes-3.0-flash（旧口径里 providers.json 只登记了 agnes-2.0-flash），
+    // 被 tier small 算成 ¥0，看起来「免费」其实是推导出来的，不是查出来的。
+    // 🔴 2026-10-02：small 档模型已改 agnes-3.0-flash，若价表**没有**这一条（而不是只有 2.0）
+    // 仍要判 unknown —— 上面的 `m.input` 有限数判定已经覆盖，这里只是别再拿老型号当对照。
     // 例外：p.models 为空表 = 压根没有 model 级信息，此时允许 tier 估算并标注 source（向后兼容）。
     if (model && p.models && Object.keys(p.models).length > 0) {
         return { input: null, output: null, source: 'unknown', key: model };

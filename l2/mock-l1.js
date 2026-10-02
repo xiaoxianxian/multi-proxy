@@ -51,7 +51,8 @@ module.exports = function startMockL1(port, opts = {}) {
                 object: 'list',
                 data: [
                     { id: opts.model || 'deepseek-v4-pro', object: 'model', created: 1, owned_by: 'mock' },
-                    { id: 'agnes-2.5-flash', object: 'model', created: 1, owned_by: 'mock' },
+                    // 🔴 2026-10-02：2.5-flash 是老型号，实测短 max_tokens 下正文被 thinking 吃空，改用 3.0-flash
+                    { id: 'agnes-3.0-flash', object: 'model', created: 1, owned_by: 'mock' },
                 ],
              }));
         }

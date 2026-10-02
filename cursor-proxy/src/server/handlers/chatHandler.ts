@@ -211,8 +211,8 @@ export function findProviderConfig(modelName: string): ProviderConfig | null {
  * D4=C · D5 对齐 · 按模型名的"类型"选首个启用的 provider（override 专属 helper）。
  *
  * DEFAULT_ROUTE_CONFIG 的 model 名是各上游 /v1/models 的【真实名】(deepseek-v4-pro /
- * agnes-2.5-flash / kimi-k2.6 / qwen3.8:27b-mlx)，但 DB 的 provider.name 是【别名】
- * (DeepSeek-Test / agnes-2.5-flash / kimi / qwen3.8:27b-mlx)，两边对不齐——
+ * agnes-3.0-flash / kimi-k2.6 / qwen3.8:27b-mlx)，但 DB 的 provider.name 是【别名】
+ * (DeepSeek-Test / agnes-3.0-flash / kimi / qwen3.8:27b-mlx)，两边对不齐——
  * 所以 override 不靠 models 表(0 行)，改靠【模型名 → provider_id 类型 → 首个启用该类型】。
  *
  * 这是 ① 在真实数据下的忠实实现：复用 providers.provider_id 列(deepseek/openai/generic/ollama)，
@@ -223,7 +223,7 @@ export function findProviderConfig(modelName: string): ProviderConfig | null {
 const MODEL_NAME_TO_PROVIDER_TYPE: Record<string, string> = {
    'deepseek-v4-pro': 'deepseek',
    'deepseek-flash':  'deepseek',
-   'agnes-2.5-flash': 'generic',
+   'agnes-3.0-flash': 'generic',
    'kimi-k2.6':       'openai',
    'kimi-k3':         'openai',
    'qwen3.8:27b-mlx': 'ollama',

@@ -49,13 +49,6 @@
     "updated_at": "2026-09-10T00:00:00.000000",
     "models": [
       {
-        "id": "agnes-2.5-flash",
-        "name": "Agnes 2.5 Flash",
-        "type": "cloud",
-        "pricing": { "input": 0, "output": 0, "cacheHit": 0 },
-        "rateLimit": { "per5h": 1500, "perWeek": 15000 }
-      },
-      {
         "id": "agnes-3.0-flash",
         "name": "Agnes 3.0 Flash",
         "type": "cloud",

@@ -1,7 +1,7 @@
 // P0-1 capability profile — 能力画像（2026-09-30 路由能力矩阵 P0-1 交付）
 //
 // 问题：cost-optimization 只看价，不看「这个模型会不会做这个任务」。
-//   例：agnes-2.5-flash 最便宜，但不擅长 vision / high-quality writing，
+//   例：agnes-3.0-flash 最便宜，但不擅长 vision / high-quality writing，
 //   纯比价会把它选去做 vision 任务 → 质量翻车。
 //
 // 设计（§4.1 路由能力矩阵 P0-1）：
@@ -14,7 +14,7 @@
 // 默认 profile（4 模型，2026-09-30 依据路由能力矩阵 §3 + 实测经验）：
 //   qwen3.8:27b-mlx   — coding 强 / writing 强 / vision 中 / general 强
 //   deepseek-v4-pro   — coding 强 / writing 中 / vision 中 / general 中
-//   agnes-2.5-flash   — coding 弱 / writing 弱 / vision 弱 / general 中
+//   agnes-3.0-flash   — coding 弱 / writing 弱 / vision 弱 / general 中
 //   kimi-k2.6         — coding 中 / writing 强 / vision 中 / general 中
 //
 // 门控：PROXY_CAPABILITY_FILTER='0'（默认）→ 关闭，行为等同现状。
@@ -62,7 +62,7 @@ export const DEFAULT_CAPABILITY_PROFILES: Record<string, CapabilityProfile> = {
     vision: 1,  // 文本为主
     general: 2,
   },
-  'agnes-2.5-flash': {
+  'agnes-3.0-flash': {
     coding: 1,  // flash 类，轻任务
     writing: 1,
     vision: 0,  // 免费 flash 不擅长 vision

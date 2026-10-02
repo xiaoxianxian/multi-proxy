@@ -18,7 +18,8 @@ const request = require('supertest');
 const UPSTREAM_MODELS = [
   { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', apiKey: '', availableModels: ['deepseek-v4-pro', 'deepseek-v4-flash'] },
   { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', apiKey: '', availableModels: ['moonshot-v1-8k', 'kimi-k2.5', 'moonshot-v1-auto'] },
-  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', apiKey: '', availableModels: ['agnes-2.0-flash'] },
+  // 🔴 2026-10-02：旧 agnes-2.0-flash 下线（实测短 max_tokens 下正文被 thinking 吃空），改 3.0-flash
+  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', apiKey: '', availableModels: ['agnes-3.0-flash'] },
 ];
 
 function findProvider(modelName) {

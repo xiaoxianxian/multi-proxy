@@ -76,7 +76,9 @@ const ROUTING_BASE = {
     //   `PROXY_TIER_LOCAL_ONLY=1` → 三档全指本地 qwen 端口/模型（0 成本演练，绝不碰付费上游）。
     tierBindings: {
         small: {
-            adapterId: 'agnes', defaultPorts: [18790], model: 'agnes-2.0-flash',
+            // 🔴 2026-10-02 维护者订正：small 档不再打老型号 agnes-2.0-flash，改 agnes-3.0-flash
+            // （实测 2.0/2.5 在短 max_tokens 下会被 thinking 吃空正文，1.5 直接 503）。
+            adapterId: 'agnes', defaultPorts: [18790], model: 'agnes-3.0-flash',
             envName: 'PROXY_AGNES_PORTS', auth: 'proxy-auth', maxTokens: 2048, timeoutMs: 120000,
             desc: 'Agnes（small · 免费档；经 codex-proxy 转发 apihub.agnes-ai.com）',
         },

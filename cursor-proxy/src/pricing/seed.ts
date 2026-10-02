@@ -39,7 +39,7 @@ export const OFFICIAL_PRICING: Record<string, Pricing> = {
    input: 20, output: 100, cacheHit: 2.0,
    currency: 'CNY', source: 'official-kimi', _userSet: false, updatedAt: '2026-09-23',
   },
-  'agnes-2.5-flash': {
+  'agnes-3.0-flash': {
     input: 0, output: 0, cacheHit: 0,
     currency: 'CNY', source: 'official-agnes', _userSet: false, updatedAt: '2026-09',
   },

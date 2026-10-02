@@ -27,7 +27,8 @@ const UPSTREAM_MODELS = [
     name: 'Agnes',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     apiKey: 'mock-agnes-key',
-    availableModels: ['agnes-2.0-flash', 'agnes-1.5-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0'],
+    // 🔴 2026-10-02：旧 2.0/1.5 型号下线（2.0/2.5 短 max_tokens 正文被 thinking 吃空、1.5 直接 503），改 3.0-flash
+    availableModels: ['agnes-3.0-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0'],
   },
 ];
 

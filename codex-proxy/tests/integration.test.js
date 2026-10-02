@@ -25,7 +25,7 @@ const UPSTREAM_MODELS = [
     name: 'Agnes',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     apiKey: 'sk-test-agnes',
-    availableModels: ['agnes-2.0-flash', 'agnes-1.5-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0'],
+    availableModels: ['agnes-3.0-flash', 'agnes-1.5-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0'],
   }
 ];
 
@@ -255,7 +255,7 @@ describe('Codex Proxy — findProvider routing logic', () => {
   it('routes exact model matches', () => {
     expect(findProvider('deepseek-v4-pro').name).toBe('DeepSeek');
     expect(findProvider('kimi-k2.5').name).toBe('Kimi');
-    expect(findProvider('agnes-2.0-flash').name).toBe('Agnes');
+    expect(findProvider('agnes-3.0-flash').name).toBe('Agnes');
   });
 
   it('routes by pattern matching', () => {
@@ -278,7 +278,7 @@ describe('Codex Proxy — findProvider routing logic', () => {
   it('returns correct baseUrl for each provider', () => {
     expect(findProvider('deepseek-v4-pro').baseUrl).toBe('https://api.deepseek.com/v1');
     expect(findProvider('kimi-k2.5').baseUrl).toBe('https://api.moonshot.cn/v1');
-    expect(findProvider('agnes-2.0-flash').baseUrl).toBe('https://apihub.agnes-ai.com/v1');
+    expect(findProvider('agnes-3.0-flash').baseUrl).toBe('https://apihub.agnes-ai.com/v1');
   });
 
   it('counts correct number of models per provider', () => {
@@ -288,7 +288,14 @@ describe('Codex Proxy — findProvider routing logic', () => {
     const kimi = findProvider('moonshot-v1-8k');
     expect(kimi.availableModels.length).toBeGreaterThan(10);
 
-    const agnes = findProvider('agnes-2.0-flash');
-    expect(agnes.availableModels.length).toBe(5);
+    const agnes = findProvider('agnes-3.0-flash');
+    // 🔴 2026-10-02：旧 2.0/1.5 型号下线（2.0/2.5 短 max_tokens 正文被 thinking 吃空、1.5 503），改 3.0-flash。
+    // ⚠️ 别按 length 断言：findProvider 会优先命中 providers.json 的用户 provider，
+    // 那份的 agnes 条目数（含 image/video）与本文件的 fixture 不是一回事 ⇒ 只判语义。
+    expect(agnes.availableModels).toContain('agnes-3.0-flash');
+    expect(agnes.availableModels).not.toContain('agnes-2.0-flash');
+    // ⚠️ 这里**故意不断言 1.5-flash**：运行时 ~/.multi-proxy-manager/providers.json 的 agnes 条目
+    // 是 findProvider 的第一优先源，它仍带着过期的 agnes-1.5-flash（实测 503）。仓库代码已不引用它，
+    // 但那一份是运行时数据、由 manager 自动扫参维护 —— 要不要清掉属于运行时配置的决定。
   });
 });

@@ -22,7 +22,7 @@ const UPSTREAM_MODELS = [
     name: 'Agnes',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     apiKey: 'sk-agnes-test',
-    availableModels: ['agnes-2.0-flash', 'agnes-1.5-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0']
+    availableModels: ['agnes-3.0-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0']
   }
 ];
 
@@ -90,7 +90,7 @@ describe('findProvider', () => {
   it('finds by exact model name match', () => {
     expect(findProvider('deepseek-v4-pro').name).toBe('DeepSeek');
     expect(findProvider('kimi-k2.5').name).toBe('Kimi');
-    expect(findProvider('agnes-2.0-flash').name).toBe('Agnes');
+    expect(findProvider('agnes-3.0-flash').name).toBe('Agnes');
   });
 
   it('finds by pattern matching (deepseek)', () => {
@@ -219,7 +219,9 @@ describe('UPSTREAM_MODELS', () => {
     expect(UPSTREAM_MODELS[1].availableModels).toHaveLength(11);
   });
 
-  it('Agnes has 5 models', () => {
-    expect(UPSTREAM_MODELS[2].availableModels).toHaveLength(5);
+  it('Agnes has 4 models', () => {
+    // 🔴 2026-10-02：旧 agnes-2.0-flash / agnes-1.5-flash 是老型号（实测 2.0/2.5 短 max_tokens
+    // 下正文被 thinking 吃空、1.5 直接 503），一律换成 agnes-3.0-flash。
+    expect(UPSTREAM_MODELS[2].availableModels).toHaveLength(4);
   });
 });

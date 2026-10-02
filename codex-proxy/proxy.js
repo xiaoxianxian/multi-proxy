@@ -181,7 +181,11 @@ const UPSTREAM_MODELS = [
     name: 'Agnes',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     apiKey: process.env.AGNES_API_KEY,
-    availableModels: ['agnes-2.0-flash', 'agnes-1.5-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0']
+    // 🔴 2026-10-02 维护者订正：agnes-2.0-flash / agnes-1.5-flash 是老型号，官方不一定还收。
+    // 实测：agnes-2.0-flash 与 2.5-flash 在 max_tokens=16 下 16 token 全被 thinking 吃掉、
+    // body.content 恒为空（finish_reason=length）；agnes-1.5-flash 直接 503。
+    // agnes-3.0-flash 实测 finish_reason=stop、真出正文 ⇒ 一律用 3.0-flash。
+    availableModels: ['agnes-3.0-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0']
   }
 ];
 
