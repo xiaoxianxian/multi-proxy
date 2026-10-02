@@ -216,8 +216,9 @@ class H3webAdapter {
     // 接口 3b：多镜头故事板（转发到 h3web POST /api/storyboard）
     // shots 每项 = 一镜的完整 gen 参数（h3web 侧 build_args(dict(s)) 逐镜预校验，
     // 第 N 镜参数错会在提交阶段就 400，不会跑到一半才炸）。
-    // opts 与 submit 同构：perf 逐镜补位、opts.resumeJob 走断点续跑（opts.perf 的微调语义
-    // 与 submit 完全一致：只补空位，显式给的胜出）。
+    // opts 与 submit 同构：perf 逐镜补位、opts.resumeJob 走断点续跑、opts.chain 控制"链上镜"
+    // （h3web 默认 true：第 N 镜取上一镜末帧作首帧，会让多镜每镜递增 ~1min；传 false 则每镜
+    // 独立、耗时恒定，详见手册 §6.1）。opts.chain 不传时不动该字段，沿用 h3web 默认 true。
     // 返回 { task_id, state, echo }，echo.shots = 逐镜真正发出去的 payload，可自证每镜档位。
     async submitStoryboard(shots, opts = {}) {
         if (!Array.isArray(shots) || shots.length === 0) {
@@ -233,6 +234,7 @@ class H3webAdapter {
                 if (s[k] !== undefined && s[k] !== null) shot[k] = s[k];
             }
             applyPerf(shot, opts.perf);
+            if (opts.chain !== undefined) shot.chain = opts.chain; // 多镜"链上镜"开关：关掉→每镜独立、耗时恒定（手册 §6.1）
             assertReuseCompat(shot, `storyboard[${i}]`); // 逐镜独立判，一镜错了整单拒
             return shot;
         });

@@ -188,6 +188,28 @@ describe('h3web adapter contract', () => {
             expect(mock.getLastStoryboardPayload().resume_job).toBe('job_1790876828830');
         });
 
+        test('opts.chain=false 逐镜落到下游 chain:false（关链上镜→多镜耗时恒定，手册 §6.1）', async () => {
+            const r = await adapter.submitStoryboard(shots(), { chain: false });
+            const s = mock.getLastStoryboardPayload().shots;
+            expect(s[0].chain).toBe(false);
+            expect(s[1].chain).toBe(false);
+            expect(r.echo.shots[0].chain).toBe(false); // echo 同样可自证
+        });
+
+        test('opts.chain=true 逐镜落到下游 chain:true', async () => {
+            const r = await adapter.submitStoryboard(shots(), { chain: true });
+            const s = mock.getLastStoryboardPayload().shots;
+            expect(s[0].chain).toBe(true);
+            expect(s[1].chain).toBe(true);
+        });
+
+        test('⚠️ 反证：不传 opts.chain 时下游不带 chain 键 —— 沿用 h3web 默认 true，不偷偷改默认行为', async () => {
+            await adapter.submitStoryboard(shots());
+            const s = mock.getLastStoryboardPayload().shots;
+            expect(s[0].chain).toBeUndefined();
+            expect(s[1].chain).toBeUndefined();
+        });
+
         test('⚠️ 反证：shots 为空立刻抛错，不下发', async () => {
             await expect(adapter.submitStoryboard([])).rejects.toThrow(/非空/);
             await expect(adapter.submitStoryboard(null)).rejects.toThrow(/非空/);
