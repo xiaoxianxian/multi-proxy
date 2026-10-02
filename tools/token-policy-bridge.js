@@ -173,6 +173,18 @@ if (RESPONSE_OBSERVE) {
 // 退化成「少几个工具」比「整个请求死掉」好。
 const UPSTREAM_TOOL_TYPES = new Set(['function', 'web_search_preview', 'code_interpreter', 'mcp']);
 
+/**
+ * 🔴 上游 tools 形状的唯一真源（实测 2026-10-02，agnes / 18790 直连）：
+ *    agnes 只认**嵌套**形状 `{type:'function', function:{name, description, parameters}}`；
+ *    扁平形状 `{type:'function', name, description, parameters}` 一律
+ *    400 `{"success":false,"error":"Upstream error","code":"UPSTREAM_ERROR"}`。
+ *    本函数**只拆 namespace、不做形状互转**，且 normalizeTools 默认关 ⇒ 形状仍由客户端决定。
+ *    由此两条硬约束：
+ *      1. policy 侧（tools-summary-downgrade 的 targetOf）必须两种形状都认，
+ *         否则嵌形状下 description/parameters 读成 undefined，handler 静默返 null、桥照样记账；
+ *      2. 直连上游做 A/B / 失败率实验时，请求体的 tools 得自己摆成嵌套形状 ——
+ *         拿扁平 shape 去打，会把「400 全灭」误读成「模型不用工具」。
+ */
 function normalizeTools(body) {
   const list = body && Array.isArray(body.tools) ? body.tools : null;
   if (!list) return { body, changed: false, from: [] };
