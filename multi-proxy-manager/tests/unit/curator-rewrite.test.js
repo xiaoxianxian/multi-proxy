@@ -119,6 +119,44 @@ describe('Memory 面 · 内容级压缩（改内容，不改条数）', () => {
     expect(r.netTokenDelta).toBeLessThan(0);
   });
 
+  test('foldToolOutput：认 responses 协议的 function_call_output（codex 主力形态）', () => {
+    require(MEM).params.foldToolOutput = true;
+    const hist = [
+      { type: 'function_call', call_id: 'c9', name: 'shell', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'c9', output: 'y'.repeat(8000) },
+    ];
+    const r = run('onHistory', { history: hist });
+    const out = r.out.history[1];
+    // 该折的折掉：真省了 token
+    expect(r.netTokenDelta).toBeLessThan(0);
+    // 折了不能把协议换了：type 与 call_id 必须原样留着
+    expect(out.type).toBe('function_call_output');
+    expect(out.call_id).toBe('c9');
+    expect(out.output).toContain('已折叠');
+    expect(r.out.history).toHaveLength(2); // 不改条数
+  });
+
+  test('foldToolOutput：output 是 part 数组时保留 part 的 type', () => {
+    require(MEM).params.foldToolOutput = true;
+    const hist = [
+      { type: 'function_call_output', call_id: 'c2', output: [{ type: 'output_text', text: 'z'.repeat(5000) }] },
+    ];
+    const r = run('onHistory', { history: hist });
+    const parts = r.out.history[0].output;
+    expect(parts).toHaveLength(1);
+    expect(parts[0].type).toBe('output_text'); // 不是被改写成 text
+    expect(parts[0].text).toContain('已折叠');
+    expect(r.netTokenDelta).toBeLessThan(0);
+  });
+
+  test('foldToolOutput：output 无文本 part 时不硬塞一个 type 进去', () => {
+    require(MEM).params.foldToolOutput = true;
+    const hist = [{ type: 'function_call_output', call_id: 'c3', output: [{ type: 'input_image', image: 'x' }] }];
+    const r = run('onHistory', { history: hist });
+    expect(r.out.history[0].output).toEqual([{ type: 'input_image', image: 'x' }]);
+    expect(r.netTokenDelta).toBeNull(); // 没省，就不报节省
+  });
+
   test('压缩量是实测差额，不是拍脑袋的自报数', () => {
     require(MEM).params.maxMsgChars = 40;
     const before = 'z'.repeat(300);

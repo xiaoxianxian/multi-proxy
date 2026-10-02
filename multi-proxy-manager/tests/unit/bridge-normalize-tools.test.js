@@ -121,6 +121,31 @@ describe('normalizeTools 纯函数', () => {
     expect(() => B.normalizeTools({ model: 'x', input: 'hi' })).not.toThrow();
     expect(B.normalizeTools({ model: 'x', input: 'hi' }).changed).toBe(false);
   });
+
+  // 2026-10-02 抓到的真包：codex 0.159.3 会发 custom（apply_patch，freeform 编辑）
+  // 与 tool_search（客户端执行的工具发现器），上游两者都不认 → 之前整包 400。
+  // 规则是**剔除**而不是压成无参 function 壳：壳是给上游一个假工具，
+  // 而这两类本来就是 codex 本地执行的能力。
+  it('custom 被剔除（freeform 编辑工具映射不过去）', () => {
+    const r = B.normalizeTools({
+      tools: [FN('exec_command'), { type: 'custom', name: 'apply_patch', format: { type: 'grammar' } }],
+    });
+    expect(r.body.tools.map((t) => t.type)).toEqual(['function']);
+    expect(r.body.tools[0].name).toBe('exec_command');
+    expect(r.from).toEqual(['custom']);
+  });
+
+  it('tool_search 被剔除（客户端执行，且不能伪装成 function）', () => {
+    const r = B.normalizeTools({ tools: [{ type: 'tool_search', execution: 'client', description: 'd' }] });
+    expect(r.body.tools).toEqual([]);
+    expect(r.from).toEqual(['tool_search']);
+  });
+
+  it('白名单内的 mcp / code_interpreter 原样保留', () => {
+    const r = B.normalizeTools({ tools: [{ type: 'mcp', name: 'y' }, { type: 'code_interpreter' }] });
+    expect(r.changed).toBe(false);
+    expect(r.body.tools.map((t) => t.type)).toEqual(['mcp', 'code_interpreter']);
+  });
 });
 
 describe('接线：归一化真的改写转发出去的包', () => {

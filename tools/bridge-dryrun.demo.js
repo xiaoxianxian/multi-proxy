@@ -53,6 +53,21 @@ function responsesEntries() {
   }];
 }
 
+// 纯图片条目：history 里没有任何文本 part → 压缩器「不硬塞一个 type 进去」，
+// 于是 policy 写了回、字节却一字节没动，是 detector 的活靶子
+function imageEntries() {
+  return [{
+    ts: 'x', path: '/v1/responses', api: 'responses', model: 'demo-model',
+    body: {
+      model: 'demo-model',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_image', image_url: 'data:image/png;base64,AAAA' }] },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: '这张图里是什么' }] },
+      ],
+    },
+  }];
+}
+
 function writeCorpus(name, entries) {
   const p = path.join(DIR, name);
   fs.writeFileSync(p, entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
@@ -117,10 +132,25 @@ ok('② params 用完即还原（同进程多组对照不互相污染）', () =>
   assert.deepStrictEqual(mod.params, before, `params 被污染：${JSON.stringify(mod.params)}`);
 });
 
-// ---- 场景 3：写回但零变化 = 假节省 ----
+// ---- 场景 3：responses 内容块现在真会被压（textOf 静默失效已修）----
 
-ok('③ responses 内容块上 policy 写回了却零变化 → 判未命中并显式标注', () => {
+ok('③ responses 的 input_text 块现在真会命中（旧 textOf 只认 text 时这里是零变化）', () => {
   const p = writeCorpus('resp.jsonl', responsesEntries());
+  const rep = D.analyze(p, [{ hook: 'onHistory', change: 'maxMsgChars', value: 800 }], 0);
+  const e = rep.entries[0];
+  assert.ok(e.changed.length > 0, `应该命中，实际变化：${JSON.stringify(e.changed)}`);
+  assert.strictEqual(e.hit, true);
+  assert.ok(e.after.total < e.before.total, `token 应下降：${e.before.total}→${e.after.total}`);
+  assert.strictEqual(rep.summary.hit, 1);
+  assert.strictEqual(rep.summary.writtenNoChange, 0, '有真变化就不该被算成假节省');
+});
+
+// ---- 场景 4：写回但零变化 = 假节省（靶子换成纯图片条目）----
+// 为什么换靶子：此前用「responses 内容块」当靶子，那是因为旧 textOf 认不出 input_text
+// 才零变化——修复后那条会真压缩，零变化这条现在由「没有任何文本 part」的图片条目来代表。
+
+ok('④ 纯图片条目：policy 写回了却零变化 → 判未命中并显式标注', () => {
+  const p = writeCorpus('img.jsonl', imageEntries());
   const rep = D.analyze(p, [{ hook: 'onHistory', change: 'maxMsgChars', value: 800 }], 0);
   const e = rep.entries[0];
   assert.strictEqual(e.changed.length, 0, '请求体不应有任何字段变化');

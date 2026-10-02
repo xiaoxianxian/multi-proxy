@@ -72,6 +72,49 @@ function textOf(m) {
   return null;
 }
 
+// 工具输出的两种协议形态，长得完全不一样：
+//   chat 协议   = { role:'tool', name, content }            ← 老形态
+//   responses  = { type:'function_call_output', call_id, output }  ← codex 走的这条
+// responses 那条**既没有 role 也没有 content**，靠 textOf 只能拿到 null，
+// 于是「折叠工具输出」这条最肥的杠杆（实测省 53.7%）在 codex 链路上静默吃零。
+const TOOL_OUTPUT_TYPES = new Set(['function_call_output']);
+
+function isToolOutput(m) {
+  return !!m && typeof m === 'object' && (m.role === 'tool' || TOOL_OUTPUT_TYPES.has(m.type));
+}
+
+/** 工具输出里的文本。chat 走 content，responses 走 output（字符串或 part 数组）。 */
+function toolTextOf(m) {
+  if (!m || typeof m !== 'object') return null;
+  if (TOOL_OUTPUT_TYPES.has(m.type)) {
+    const v = m.output;
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) {
+      return v.filter(isTextPart).map((p) => (typeof p.text === 'string' ? p.text : '')).join('\n');
+    }
+    return null;
+  }
+  return textOf(m);
+}
+
+function setToolText(m, text) {
+  if (!m || typeof m !== 'object') return m;
+  if (TOOL_OUTPUT_TYPES.has(m.type)) {
+    if (typeof m.output === 'string') return Object.assign({}, m, { output: text });
+    if (Array.isArray(m.output)) {
+      let done = false;
+      const parts = m.output.map((p) => {
+        if (!done && isTextPart(p)) { done = true; return Object.assign({}, p, { text }); }
+        return p;
+      });
+      // 同 setText：没有文本 part 就不硬塞，宁可不压也别往请求体注入协议不认的 type
+      if (done) return Object.assign({}, m, { output: parts });
+    }
+    return m;
+  }
+  return setText(m, text);
+}
+
 /**
  * 写回文本，保留原消息的其他字段与非文本 part。
  *
@@ -95,4 +138,8 @@ function setText(m, text) {
   return Object.assign({}, m, { content: text });
 }
 
-module.exports = { measureText, measureMessages, headTail, textOf, setText };
+module.exports = {
+  measureText, measureMessages, headTail,
+  textOf, setText,
+  isToolOutput, toolTextOf, setToolText,
+};

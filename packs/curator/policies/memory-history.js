@@ -6,9 +6,10 @@
 //   ① keepLastN：活跃窗口，超出的整条**丢弃**（既有语义，既有测试钉死了「只剩 N 条」）
 //   ② maxMsgChars / foldToolOutput：**压缩内容本身，不改条数**（本次新增）
 // ① 会丢线索（早期的约定被切掉就再也找不回来），② 保留线索且更省——
-// 工具输出（role=tool）通常是单条最长的那类，折叠它收益最高。
+// 工具输出通常是单条最长的那类，折叠它收益最高。两种协议形态都认：
+// chat 的 { role:'tool', content } 与 responses 的 { type:'function_call_output', output }。
 
-const { measureMessages, measureText, headTail, textOf, setText } = require('../ledger.js');
+const { measureMessages, measureText, headTail, isToolOutput, toolTextOf, setToolText, setText } = require('../ledger.js');
 
 // 参数对象（M6 仅允许改这里的数值，不改结构；校验见 curator-engine.validateChange）。
 // 默认全关 = passthrough，零行为变更（非侵入铁律④）。
@@ -41,13 +42,15 @@ function handler(ctx, io) {
   if (doFold || doTruncate) {
     out = kept.map((m) => {
       if (!m || typeof m !== 'object') return m; // 非消息对象（如测试里的数字）原样透传
-      const before = textOf(m);
+      // 走 toolTextOf 而不是 textOf：responses 协议的工具输出既没 role 也没 content，
+      // 用 textOf 只能拿到 null → 折叠和截断在 codex 链路上双双静默吃零。
+      const before = toolTextOf(m);
 
-      if (doFold && m.role === 'tool' && typeof before === 'string' && before.length > 0) {
+      if (doFold && isToolOutput(m) && typeof before === 'string' && before.length > 0) {
         const name = m.name || m.toolName || '-';
         const folded = `[工具输出已折叠 · 原 ${before.length} 字符 · 工具 ${name}]`;
         compressedTokens += measureText(before) - measureText(folded);
-        return setText(m, folded);
+        return setToolText(m, folded);
       }
 
       if (doTruncate && typeof before === 'string') {

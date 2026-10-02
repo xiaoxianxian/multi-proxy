@@ -669,6 +669,77 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
   }
 });
 
+// ===== Responses passthrough（codex 客户端默认就走这条协议）=====
+// 此前 18790 只接 /v1/chat/completions，codex 发 /v1/responses 一律 404——
+// 也就是说这个「codex proxy」从来没真正服务过 codex 的默认流量。补上之后
+// codex 不必再依赖一个额外的桥进程，归一化也照旧（见下）。
+//
+// 归一化**复用** tools/token-policy-bridge.js 里已实测的那份（见 50 号文档 §一），
+// 不在这里复制第二份：两份实现必然漂移，代价就是「这条路工具类型不兼容、那条兼容」。
+const { normalizeTools } = require('../tools/token-policy-bridge.js');
+
+app.post('/v1/responses', requireAuth, async (req, res) => {
+  try {
+    const { model } = req.body;
+    const provider = findProvider(model);
+    if (!provider) {
+      return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
+    }
+
+    // 注意返回值是 { body, changed, from } 包装对象，不是 body 本身——直接 stringify
+    // 整个返回值会把 model 一起弄丢（上游报 "model name cannot be empty"）。
+    const { body } = normalizeTools(req.body);
+    // agnes 的 /v1/responses 不吃「没有 stream 字段」的包（50 号文档 §四）：漏带就按非流发，
+    // 否则上游必返 500。codex 自己发的包总是带 stream，这条只兜非 codex 来源。
+    if (!Object.prototype.hasOwnProperty.call(body, 'stream')) body.stream = false;
+
+    const upstreamUrl = `${provider.baseUrl}/responses`;
+    const response = await fetch(upstreamUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${provider.apiKey}`
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error(`[responses] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
+      return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
+    }
+    return pipeUpstreamBytes(res, response, '[responses]');
+  } catch (e) {
+    console.error(`[responses] error: ${e.message}`);
+    return res.status(500).json({ success: false, error: e.message, code: 'RESPONSES_ERROR' });
+  }
+});
+
+/**
+ * 把上游响应按原始字节转发出去。
+ * chat 那条不得不用 Readable.fromWeb 是因为 Web ReadableStream 与 Express 的 res 不兼容
+ * （B6 fix：直接 pipeTo 会抛 TypeError → 504）；responses 是同一个坑，所以共用这一份。
+ */
+function pipeUpstreamBytes(res, response, tag) {
+  if (!response.body) { res.end(); return; }
+  const ct = response.headers.get('content-type');
+  if (ct) res.setHeader('Content-Type', ct);
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  const readable = Readable.fromWeb(response.body);
+  readable.on('error', (err) => {
+    console.error(`[${tag}] stream error: ${err.message}`);
+    if (!res.headersSent) res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
+  });
+  return new Promise((resolve, reject) => {
+    readable.pipe(res);
+    res.on('close', resolve);
+    res.on('finish', resolve);
+    res.on('error', reject);
+  });
+}
+
 // ===== P0-E: 可测试性 =====
 //   把 app 导出，门禁测试可直接 supertest(app)，无需 require 时 listen 18790 撞端口。
 module.exports = { app, requireAuth, findConfigToml, parseConfigToml };

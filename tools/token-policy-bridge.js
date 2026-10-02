@@ -101,6 +101,11 @@ if (CURATOR_ENABLED) {
  *
  * @returns {{body:object, changed:boolean, from:string[]}} from = 命中改写的原始 type
  */
+// 上游 /v1/responses 认的工具类型（agnes 实测报的四个变体）。
+// 白名单之外的一律剔除，这样 codex 以后再冒出第五种类型也不会整包 400——
+// 退化成「少几个工具」比「整个请求死掉」好。
+const UPSTREAM_TOOL_TYPES = new Set(['function', 'web_search_preview', 'code_interpreter', 'mcp']);
+
 function normalizeTools(body) {
   const list = body && Array.isArray(body.tools) ? body.tools : null;
   if (!list) return { body, changed: false, from: [] };
@@ -108,6 +113,7 @@ function normalizeTools(body) {
   const flat = [];
   for (const t of list) {
     if (!t || typeof t !== 'object') { flat.push(t); continue; }
+
     if (t.type === 'namespace') {
       from.push('namespace');
       const inner = Array.isArray(t.tools) ? t.tools.filter((x) => x && typeof x === 'object' && x.type === 'function') : [];
@@ -126,6 +132,16 @@ function normalizeTools(body) {
       from.push('web_search');
       const { type, ...rest } = t; // eslint-disable-line no-unused-vars
       flat.push({ type: 'web_search_preview', ...rest });
+      continue;
+    }
+    // 走到这里的都是上游不认、且映射不过去的（实测：codex 0.159.3 的 custom =
+    // apply_patch，freeform 编辑工具；tool_search，客户端执行的工具发现器）。
+    // 为什么是**剔除**而不是压成无参 function 壳——壳是「给上游一个假工具」，
+    // 而这两类本来就是 codex 客户端执行的能力，上游不需要知道；与其让上游拿个
+    // 没参数定义的 function 去猜，不如不给（能力退化，但整包不死）。
+    // 只有 namespace 这种「装着 function 子工具的容器」才摊平/退壳。
+    if (!UPSTREAM_TOOL_TYPES.has(t.type)) {
+      from.push(t.type);
       continue;
     }
     flat.push(t);

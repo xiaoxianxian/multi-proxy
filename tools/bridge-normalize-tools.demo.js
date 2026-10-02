@@ -117,5 +117,37 @@ if (fs.existsSync(corpusPath)) {
   console.log('  (语料不在，跳过 ⑨⑩)');
 }
 
+// 2026-10-02 新抓的真包（tools 里带了 type:'custom' 与 type:'tool_search'）。
+// 这两类是**客户端执行**能力（apply_patch 是 freeform 编辑工具，tool_search 是工具发现器），
+// 上游不认 —— 压成无参 function 壳等于给上游一个假工具，所以规则是剔除。
+ok('⑪ custom / tool_search 被剔除，不是压成空壳（客户端执行能力不给上游看）', () => {
+  const body = {
+    tools: [
+      FN('exec_command'),
+      { type: 'custom', name: 'apply_patch', description: 'edit files', format: { type: 'grammar', syntax: 'lark', definition: '...' } },
+      { type: 'tool_search', execution: 'client', description: '# Tool discovery' },
+      FN('view_image'),
+    ],
+  };
+  const r = B.normalizeTools(body);
+  assert.deepStrictEqual(r.body.tools.map((t) => t.type), ['function', 'function']);
+  assert.deepStrictEqual(r.body.tools.map((t) => t.name), ['exec_command', 'view_image']);
+  assert.strictEqual(r.body.tools[1].format, undefined, '不该把 freeform 工具塞成 function 壳');
+  assert.deepStrictEqual(r.from, ['custom', 'tool_search']); // 剔除也要看得见，不能静默
+});
+
+ok('⑫ 上游认的 mcp / code_interpreter 原样保留（白名单不是「一律剔除」）', () => {
+  const r = B.normalizeTools({
+    tools: [
+      { type: 'mcp', server_label: 'x', name: 'y' },
+      { type: 'code_interpreter' },
+      { type: 'brand_new_type_we_ve_never_seen' },
+    ],
+  });
+  assert.strictEqual(r.body.tools[0].type, 'mcp');
+  assert.strictEqual(r.body.tools[1].type, 'code_interpreter');
+  assert.strictEqual(r.body.tools.length, 2, '白名单外的该剔除');
+});
+
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

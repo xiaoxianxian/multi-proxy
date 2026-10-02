@@ -37,6 +37,19 @@ const RESP = {
   api: 'responses',
 };
 
+// 纯图片条目：history 里一个文本 part 都没有 → 压缩器不硬塞 type，写了回却零变化。
+// 「假节省」detector 的活靶子（此前用 responses 内容块当靶子，那是旧 textOf 静默失效的产物）
+const IMAGE = {
+  body: {
+    model: 'demo',
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'input_image', image_url: 'data:image/png;base64,AAAA' }] },
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: '这张图里是什么' }] },
+    ],
+  },
+  api: 'responses',
+};
+
 describe('bridge-dryrun', () => {
   test('parseArgs 拒绝不合规的 --change', () => {
     expect(() => D.parseArgs(['--corpus', 'x', '--change', 'bad'])).toThrow(/hook:param=value/);
@@ -64,9 +77,16 @@ describe('bridge-dryrun', () => {
     expect(r.after.total).toBeLessThan(r.before.total);
   });
 
-  test('🔴 policy 写回但请求体零变化 → 判未命中，并记 writtenFields', () => {
-    // responses 的内容块不被现有技术识别：policy 会写回一次，但字节完全没动
+  test('responses 的 input_text 块现在真会命中（旧 textOf 只认 text 时这里是零变化）', () => {
     const r = D.runOne(RESP, [{ hook: 'onHistory', change: 'maxMsgChars', value: 800 }]);
+    expect(r.hit).toBe(true);
+    expect(r.after.total).toBeLessThan(r.before.total);
+  });
+
+  test('🔴 policy 写回但请求体零变化 → 判未命中，并记 writtenFields', () => {
+    // 靶子换成纯图片条目：没有任何文本 part，压缩器「不硬塞一个 type 进去」，
+    // 于是 policy 写了回、字节却一字节没动。
+    const r = D.runOne(IMAGE, [{ hook: 'onHistory', change: 'maxMsgChars', value: 800 }]);
     expect(r.changed).toHaveLength(0);
     expect(r.hit).toBe(false);
     expect(r.writtenFields.length).toBeGreaterThan(0);
