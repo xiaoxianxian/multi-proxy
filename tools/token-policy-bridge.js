@@ -27,6 +27,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
+const KE = require('./cache-k-estimator.js'); // k 自测器：白拿 usage 估「退回段是否按未命中价计」
 
 const PORT = Number(process.env.PORT || 18794);
 const BINDING = process.env.BINDING || '127.0.0.1';
@@ -343,9 +344,18 @@ function extractUsageFromSSE(text) {
     if (u && (Number.isFinite(u.input_tokens) || Number.isFinite(u.prompt_tokens))) last = u;
   }
   if (!last) return null;
+  const pick = (...vs) => { for (const v of vs) if (Number.isFinite(v)) return v; return null; };
+  const details = last.prompt_tokens_details || last.input_tokens_details || {};
   return {
-    prompt_tokens: Number.isFinite(last.input_tokens) ? last.input_tokens : (last.prompt_tokens ?? null),
-    completion_tokens: Number.isFinite(last.output_tokens) ? last.output_tokens : (last.completion_tokens ?? null),
+    prompt_tokens: pick(last.input_tokens, last.prompt_tokens),
+    completion_tokens: pick(last.output_tokens, last.completion_tokens),
+    // 🔴 必须连 hit/miss 一起抽：否则流式下 actualCacheMiss 恒 null → observeSample
+    //    直接 return，k 在 codex 主路径（全流式）永远测不到（55 号遗留下来的缺口）。
+    //    抽不到就是 null，绝不填 0。
+    // ⚠️ 口径照抄上游字段（miss = prompt_cache_miss_tokens）：该字段语义 ≠「未命中的
+    //    输入 token」——53 号实测裁工具后 miss 反而变少。只搬运，不做换算。
+    hit: pick(last.prompt_cache_hit_tokens, details.cached_tokens, details.cache_read),
+    miss: pick(last.prompt_cache_miss_tokens, details.cache_creation),
   };
 }
 
@@ -473,13 +483,32 @@ const server = http.createServer(async (req, res) => {
           chained = next;
         }
       }
+      // 🔴 reason 必须一起记。policy 各条 fallback 分支（no-usage-evidence /
+      // would-over-hide / tail-used-blocked / nothing-to-hide …）在账面上长得一模一样
+      // —— 都是 estSaved=0。不记 reason，只看 saved 分不清「跑了但被闸门挡住」和
+      // 「压根没算过」，只能靠离线直调 handler 反推（57 号就这么破的案）。
       rec.policies = runs.flatMap((x) => (x.res.results || [])
-        .map((r) => ({ hook: x.hook, p: r.policy, ok: r.ok, d: r.netTokenDelta })));
+        .map((r) => ({
+          hook: x.hook, p: r.policy, ok: r.ok, d: r.netTokenDelta,
+          reason: r.out && r.out.reason, kept: r.out && r.out.kept, hidden: r.out && r.out.hiddenTools,
+        })));
       rec.estSaved = runs.reduce((a, x) => (Number.isFinite(x.res.estSaved) ? a + x.res.estSaved : a), 0);
       // estSaved 是各 policy 自报净增量之和；policy 没上报时该项为 null，
       // 累加时会跳过——所以 0 可能是「没人上报」而非「确实没省」，口径要标清
       rec.reported = runs.reduce((a, x) => a
         + (x.res.results || []).filter((r) => Number.isFinite(r.netTokenDelta)).length, 0);
+
+      // 换挡观测要的两个输入：断点落在哪（policy 的 breakpointSchemaTokens）、藏掉了多少（saved）。
+      // 取不到就是 null —— k 宁可估不出来，也不许拿 0 当真值去改裁剪模式。
+      const lazy = runs.flatMap((x) => x.res.results || []).map((r) => r.out)
+        .find((o) => o && Number.isFinite(o.breakpointSchemaTokens));
+      if (lazy) {
+        rec.breakpointTokens = lazy.breakpointSchemaTokens;
+        rec.hiddenTokens = Number.isFinite(lazy.saved) ? lazy.saved : null;
+        rec.k = Number.isFinite(lazy.k) ? lazy.k : null;
+        rec.kStar = Number.isFinite(lazy.kStar) ? lazy.kStar : null;
+        rec.pruneReason = lazy.reason;
+      }
 
       if (MODE === 'rewrite') {
         // 每个 hook 取优先级最高那条（results[0]）主导改写，不叠加同 hook 内的多条
@@ -518,13 +547,38 @@ const server = http.createServer(async (req, res) => {
     out = await forward(req, outBody);
   }
 
+  const observeSample = (rec) => {
+    if (!Number.isFinite(rec.actualPromptTokens) || !Number.isFinite(rec.actualCacheMiss)) return;
+    const prev = kPrevByModel.get(rec.model) || null;
+    // round 必须推进：k 估算是「两轮做差」，前几轮是冷态（见 cache-k-estimator 的
+    // WARMUP_ROUNDS）——轮次不递增的话，永远停在同一轮重算一遍，冷态样本一个都丢不掉。
+    // ⚠️ prev 必须先于 cur 取：早先把它写在 cur 之后，这里撞 TDZ 直接 ReferenceError
+    //     把桥打崩（流式是主路径，而这条线没有任何单测走到，只能靠真起桥发现）。
+    const cur = {
+      prompt: rec.actualPromptTokens, hit: rec.actualCacheHit, miss: rec.actualCacheMiss,
+      breakpoint: Number.isFinite(rec.breakpointTokens) ? rec.breakpointTokens : null,
+      saved: Number.isFinite(rec.hiddenTokens) ? rec.hiddenTokens : null,
+      round: Number.isFinite(rec.round) ? rec.round
+        : (prev && Number.isFinite(prev.round) ? prev.round + 1 : 1),
+    };
+    const est = KE.observe(cur, prev);
+    console.log(`[k] r=${cur.round} miss=${cur.miss} bp=${cur.breakpoint} saved=${cur.saved} prevBp=${prev ? prev.breakpoint : '-'} prevSaved=${prev ? prev.saved : '-'} prune=${rec.pruneReason ?? '-'} est=${est ? JSON.stringify({ k: est.k, r: est.residual, why: est.reason }) : '-'}`);
+    kPrevByModel.set(rec.model, cur);
+    if (!est || est.k === null) return;
+    rec.kHat = est.k;
+    rec.kSamples = est.samples;
+    rec.suggestedPrune = est.mode;
+    KE.write(est);
+  };
+
   const finishRecord = (extra) => {
     if (extra) Object.assign(rec, extra);
     if (!isChat) return;
     rec.upstreamStatus = out.status;
     rec.upstreamMs = out.ms;
-    console.log(`[bridge:${MODE}] ${req.url} model=${rec.model} est=${rec.estTotal ?? '-'} tok | saved=${rec.estSaved ?? '-'} (${rec.reported ?? 0} 条上报) | rewrote=${rec.rewrote ?? false} | bridge=${rec.bridgeMs}ms status=${out.status} ${out.ms}ms`);
+    console.log(`[bridge:${MODE}] ${req.url} model=${rec.model} est=${rec.estTotal ?? '-'} tok | saved=${rec.estSaved ?? '-'} (${rec.reported ?? 0} 条上报) | rewrote=${rec.rewrote ?? false} | reason=${rec.pruneReason ?? '-'} | bridge=${rec.bridgeMs}ms status=${out.status} ${out.ms}ms`);
     logRecord(rec);
+    observeSample(rec);
   };
 
   if (out.stream) {
@@ -542,6 +596,8 @@ const server = http.createServer(async (req, res) => {
         upstreamTotalMs: Date.now() - tReq,
         actualPromptTokens: u ? u.prompt_tokens : null,
         actualCompletionTokens: u ? u.completion_tokens : null,
+        actualCacheHit: u ? u.hit : null,
+        actualCacheMiss: u ? u.miss : null,
       });
     });
     src.pipe(res);
@@ -554,6 +610,10 @@ const server = http.createServer(async (req, res) => {
     finishRecord({
       actualPromptTokens: usage ? (usage.prompt_tokens ?? usage.input_tokens ?? null) : null,
       actualCompletionTokens: usage ? (usage.completion_tokens ?? usage.output_tokens ?? null) : null,
+      // 流式路径的 usage 只抽到 prompt/completion 两个字段（见 extractUsageFromSSE），
+      // hit/miss 取不到 → observeSample 会直接 return，不编数。
+      actualCacheHit: usage ? (usage.prompt_cache_hit_tokens ?? (usage.prompt_tokens_details && usage.prompt_tokens_details.cached_tokens) ?? null) : null,
+      actualCacheMiss: usage ? (usage.prompt_cache_miss_tokens ?? null) : null,
     });
   }
 
@@ -571,5 +631,11 @@ if (require.main === module) {
     console.log(`[bridge] metrics → ${LOG_PATH}`);
   });
 }
+
+// k 观测的跨请求状态，按 model 分桶。
+// ⚠️ 必须活在每个请求回调**之外**：早先把它写在 createServer 回调里，每轮请求都重置成 null，
+//    换挡样本永远拿不到上一轮，实测现象是观测器一直打 no-sample、配置源文件永远不生成
+//    （能跑通但不产数，比报错更难发现）。
+const kPrevByModel = new Map();
 
 module.exports = { ctxFromRequest, mergeOutToRequest, mergeMany, normalizeTools, server, MERGE_FIELDS, REQUEST_HOOKS, extractUsageFromSSE, pickRequestHeaders, joinUrl };

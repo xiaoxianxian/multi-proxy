@@ -250,9 +250,25 @@ describe('token-policy-bridge · 流式透传', () => {
 
   test('extractUsageFromSSE：responses 与 chat 两种形状都能抽', () => {
     expect(B.extractUsageFromSSE('event: response.completed\ndata: {"response":{"usage":{"input_tokens":456,"output_tokens":9}}}\n\n'))
-      .toEqual({ prompt_tokens: 456, completion_tokens: 9 });
+      .toEqual({ prompt_tokens: 456, completion_tokens: 9, hit: null, miss: null });
     expect(B.extractUsageFromSSE('data: {"usage":{"prompt_tokens":11,"completion_tokens":2}}\n\ndata: [DONE]\n\n'))
-      .toEqual({ prompt_tokens: 11, completion_tokens: 2 });
+      .toEqual({ prompt_tokens: 11, completion_tokens: 2, hit: null, miss: null });
+  });
+
+  test('extractUsageFromSSE：cache hit/miss 也要抽得出来（k 自测的输入）', () => {
+    // codex 全走流式，usage 只在最后一个事件里；hit/miss 抽不到 →
+    // observeSample 直接 return → 裁剪模式永远停在未标定的默认值上，rewrite 亏不亏就成了猜的。
+    const r = B.extractUsageFromSSE('data: {"usage":{"prompt_tokens":456,"completion_tokens":9,'
+      + '"prompt_cache_hit_tokens":100,"prompt_cache_miss_tokens":356}}\n\n');
+    expect(r.hit).toBe(100);
+    expect(r.miss).toBe(356);
+    expect(r.prompt_tokens).toBe(456);
+  });
+
+  test('extractUsageFromSSE：.provider 只在 prompt_tokens_details 里给 cache 数时也能抽', () => {
+    const r = B.extractUsageFromSSE('data: {"usage":{"prompt_tokens":500,"prompt_tokens_details":{"cached_tokens":80}}}\n\n');
+    expect(r.hit).toBe(80);
+    expect(r.miss).toBeNull(); // 抽不到是 null，不是 0
   });
 
   test('extractUsageFromSSE：抽不到返回 null，不填 0（0 会被读成「确实没用」）', () => {

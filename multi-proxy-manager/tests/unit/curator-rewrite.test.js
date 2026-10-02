@@ -269,3 +269,65 @@ describe('受限变更通道：新参数必须能被校验、非法值必须被�
     }
   });
 });
+
+describe('工具调用证据：responses 协议的顶层调用条目必须被认到', () => {
+  // 成因：codex 走 wire_api=responses，工具调用写在 input[] 的**顶层**
+  // （{ type:'function_call', name }），不带 content 数组。此前 activeToolNames
+  // 只扫 tool_calls 与 content[]，usedNames 恒空 → handler 永远
+  // fallback('no-usage-evidence') → 重写模式在 codex 主链路上一次都不触发，
+  // 而「跑了但没省」和「压根没算过」在日志上长得一模一样。
+  const LAZY = require(path + 'packs/curator/policies/tools-lazyload.js');
+  // ⚠️ 至少 5 把：handler 先判 minTools（默认 4），3 把会被 below-min-tools 提前挡掉，
+  //    根本走不到「有没有调用证据」这一支——fixture 数写少了测的不是想测的东西。
+  const tools = [
+    { type: 'function', name: 'exec_command', parameters: { type: 'object', properties: {} } },
+    { type: 'function', name: 'write_stdin', parameters: { type: 'object', properties: {} } },
+    { type: 'function', name: 'apply_patch', parameters: { type: 'object', properties: {} } },
+    { type: 'function', name: 'view_image', parameters: { type: 'object', properties: {} } },
+    { type: 'function', name: 'update_goal', parameters: { type: 'object', properties: {} } },
+  ];
+  const withCall = (extra) => ({
+    agentType: 'coding',
+    api: 'responses',
+    messages: [
+      { type: 'function_call', id: 'fc1', name: 'exec_command', arguments: '{}' },
+      { type: 'function_call_output', id: 'fc1', output: 'ok' },
+    ].concat(extra || []),
+    tools,
+    history: [],
+  });
+
+  test('顶层 function_call 条目能被认成「用过」的证据', () => {
+    // ⚠️ 不断言具体 prune 模式：模式由自测的 k 决定（k=0 → mid），
+    //    断言模式等于把「k 估得准不准」混进这条用例；这里只钉「证据被认到、确实裁了」。
+    const r = LAZY.handler(withCall([{ type: 'message', role: 'user', content: 'x' }]), {});
+    expect(r.reason).toMatch(/^lazy-loaded/);
+    expect(r.kept).toBeLessThan(tools.length);
+    expect(r.activeTools).toEqual(['exec_command']);
+  });
+
+  test('没有调用证据时（首轮）依然不裁，避免模型先不知道能力全集', () => {
+    const r = LAZY.handler({ agentType: 'coding', api: 'responses', messages: [{ type: 'message', role: 'user', content: 'x' }], tools, history: [] }, {});
+    expect(r.reason).toBe('no-usage-evidence');
+    expect(r.kept).toBe(tools.length);
+  });
+
+  test('mcp_tool_call 走同一条证据通道', () => {
+    const r = LAZY.handler({
+      agentType: 'coding', api: 'responses', tools,
+      messages: [{ type: 'mcp_tool_call', id: 'mc1', name: 'update_goal', arguments: '{}' }, { type: 'message', role: 'user', content: 'x' }],
+      history: [],
+    }, {});
+    expect(r.reason).toMatch(/^lazy-loaded/);
+    expect(r.activeTools).toEqual(['update_goal']);
+  });
+
+  test('回应本体的 function_call_output 不当作调用证据（只有名字才算）', () => {
+    const r = LAZY.handler({
+      agentType: 'coding', api: 'responses', tools,
+      messages: [{ type: 'function_call_output', id: 'fc1', output: 'ok' }, { type: 'message', role: 'user', content: 'x' }],
+      history: [],
+    }, {});
+    expect(r.reason).toBe('no-usage-evidence');
+  });
+});

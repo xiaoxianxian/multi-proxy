@@ -259,12 +259,18 @@ const CHAT = {
   ok('extractUsageFromSSE：responses 形状（response.usage.input_tokens）', () => {
     const sse = 'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":456,"output_tokens":9}}}\n\n';
     const u = B.extractUsageFromSSE(sse);
-    assert.deepStrictEqual(u, { prompt_tokens: 456, completion_tokens: 9 });
+    assert.deepStrictEqual(u, { prompt_tokens: 456, completion_tokens: 9, hit: null, miss: null });
   });
 
   ok('extractUsageFromSSE：chat 形状（usage.prompt_tokens）', () => {
     const sse = 'data: {"usage":{"prompt_tokens":11,"completion_tokens":2}}\n\ndata: [DONE]\n\n';
-    assert.deepStrictEqual(B.extractUsageFromSSE(sse), { prompt_tokens: 11, completion_tokens: 2 });
+    assert.deepStrictEqual(B.extractUsageFromSSE(sse), { prompt_tokens: 11, completion_tokens: 2, hit: null, miss: null });
+  });
+
+  ok('extractUsageFromSSE：cache hit/miss 抽得出来（k 自测的输入）', () => {
+    const sse = 'data: {"usage":{"prompt_tokens":456,"prompt_cache_hit_tokens":100,"prompt_cache_miss_tokens":356}}\n\n';
+    const u = B.extractUsageFromSSE(sse);
+    assert.deepStrictEqual(u, { prompt_tokens: 456, completion_tokens: null, hit: 100, miss: 356 });
   });
 
   ok('extractUsageFromSSE：抽不到返回 null，不填 0', () => {
