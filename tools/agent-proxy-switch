@@ -106,7 +106,17 @@ DSH_PROVIDER="${DSH_PROVIDER:-agnes}"
 DSH_CURATOR_MODEL="${DSH_CURATOR_MODEL:-deepseek-v4-flash}"
 DSH_CFG="${DSH_PROFILE:-$HOME/.dsh/profiles/desktop}/cordis.patch.yml"
 # curator/off 的切换状态（off = undo 到这条记录的上一个 owner）
-SWITCH_STATE="${SWITCH_STATE:-$HOME/.multi-proxy-manager/curator-switch-state.json}"
+#
+# 🔴🔴 2026-10-02 改成**按 agent 分文件**：原来所有 agent 共用
+#     `curator-switch-state.json` 一个 JSON，后来者覆盖前者。踩到的现场：
+#     dsh 切了 curator（13:27）之后，再 `agent-proxy-switch codex` 报「codex 已开启
+#     curator」—— 其实 codex 从头到尾没动过一个字节；`codex off` 还被跨 agent 保护
+#     拦住，看着像坏了。2026-10-02 那版只在 status 里加了「记录属于谁」的显示层校验，
+#     但**根因没修**：共用一个文件就永远有后来者踩踏（两个会话并发必炸）。
+#     真正修法 = 每个 agent 一份 `curator-switch-state-<agent>.json`，
+#     老的单文件只作**回落读取**（给还没切过的老记录一个出口），新记录一律写 per-agent。
+STATE_DIR="${STATE_DIR:-$HOME/.multi-proxy-manager}"
+SWITCH_STATE="${SWITCH_STATE:-$STATE_DIR/curator-switch-state.json}"
 # ---- profile 目录（2026-10-02 改零写入后新增：CLI 型 agent 的 curator 配置放这里）----
 # 🔴 profile 是主配置的**完整拷贝**（隔离 home 后主配置不会被读），不是纯片段，
 #    否则 approval policy / mcp_servers / experimental_bearer_token 全丢。
@@ -164,7 +174,7 @@ set_codex() {
   local new_url="${1:-}"
   [ -z "$new_url" ] && { echo "  内部错误：未提供目标 URL" >&2; return 1; }
   local cur; cur="$(current_codex_url)"
-  [ "$cur" = "$new_url" ] && { echo "  当前 base_url 已是 $new_url，无需改动。"; return 0; }
+  [ "$cur" = "$new_url" ] && { echo "  当前 base_url 已是 ${new_url}，无需改动。"; return 0; }
   cp "$CODEX_CFG" "$CODEX_CFG.bak.$(date +%Y%m%d-%H%M%S)"
   NEW_URL="$new_url" python3 - "$CODEX_CFG" <<'PY'
 import sys, re, os
@@ -189,7 +199,7 @@ set_hermes() {
   local new_url="${1:-}"
   [ -z "$new_url" ] && { echo "  内部错误：未提供目标 URL" >&2; return 1; }
   local cur; cur="$(current_hermes_url)"
-  [ "$cur" = "$new_url" ] && { echo "  当前 model.base_url 已是 $new_url，无需改动。"; return 0; }
+  [ "$cur" = "$new_url" ] && { echo "  当前 model.base_url 已是 ${new_url}，无需改动。"; return 0; }
   cp "$HERMES_CFG" "$HERMES_CFG.bak.$(date +%Y%m%d-%H%M%S)"
   NEW_URL="$new_url" python3 - "$HERMES_CFG" <<'PY'
 import sys, re, os
@@ -510,20 +520,32 @@ EOF
 # $4=dsH 切前 provider（dsh 回滚要用真实 provider 名，不能取语义标签）
 # $5=mode —— "profile"=零写入 profile 注入（codex/hermes）；"config"=写全局配置（dsh/cursor）。
 #            off 靠它分流：profile 模式只删 profile 目录、一个字节都不碰主配置。
+# 该 agent 的状态文件：优先 per-agent；没有就**回落**到老的单文件（老记录不至于读不到）
+state_file_for() {
+  local per="$STATE_DIR/curator-switch-state-$1.json"
+  if [ -f "$per" ]; then echo "$per"; return; fi
+  if [ -f "$SWITCH_STATE" ]; then echo "$SWITCH_STATE"; return; fi
+  echo "$per"
+}
 record_switch() {
-  mkdir -p "$(dirname "$SWITCH_STATE")"
-  cat > "$SWITCH_STATE" <<EOF
+  mkdir -p "$STATE_DIR"
+  # 🔴 一律写 per-agent 文件，别再共用一行（并发会话互相覆盖就是这么来的）
+  cat > "$STATE_DIR/curator-switch-state-$1.json" <<EOF
 {"agent":"$1","from":"$2","fromUrl":"$3","fromModel":"$4","fromProv":"$5","mode":"${6:-config}","to":"curator","at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 EOF
+  # 🔴 刻意**不删**老的单文件：它是别的 agent（比如 dsh）最后一条记录的所在地，
+  #    record_switch 一删就会把那条记录带走，dsh 之后就 `off` 不动了。
+  #    老文件留着也读不串 —— state_file_for 永远优先 per-agent，只有 per-agent 不存在才回落。
 }
 # 输出格式 "agent|from|fromUrl|fromModel|fromProv|mode"（旧 state 没有后两个字段时退回 config）
+# $1 = 状态文件路径（由 state_file_for 算出，别直接传 SWITCH_STATE）
 last_switch() {
-  [ -f "$SWITCH_STATE" ] || return 1
+  [ -n "$1" ] && [ -f "$1" ] || return 1
   /usr/bin/python3 -c "
 import json,sys
 d=json.load(open(sys.argv[1]))
 print('%s|%s|%s|%s|%s|%s' % (d.get('agent',''), d.get('from',''), d.get('fromUrl',''), d.get('fromModel',''), d.get('fromProv',''), d.get('mode') or 'config'))
-" "$SWITCH_STATE" 2>/dev/null
+" "$1" 2>/dev/null
 }
 
 # ---- 识别当前所有者 ----
@@ -576,17 +598,16 @@ status_one() {
   # ---- curator 开关状态（所有 agent 共用一行）----
   # 🔴 必须把「profile 零写入」和「写配置」两种模式分开显示 —— 后者仍会动全局配置，
   #    用户有权知道自己现在是哪种（GUI 型 agent 没有零写入这条路，别给它假承诺）。
-  if [ -f "$SWITCH_STATE" ]; then
-    local st; st="$(last_switch 2>/dev/null || true)"
+  local stf; stf="$(state_file_for "$agent")"
+  if [ -f "$stf" ]; then
+    local st; st="$(last_switch "$stf" 2>/dev/null || true)"
     local st_mode="${st##*|}"; local st_agent="${st%%|*}"
-    # 🔴 状态文件是**所有 agent 共用一行的**（只有一个 JSON，后来者覆盖前者）。
-    #    直接照着它说「本 agent 已开启 curator」会张冠李戴 —— 2026-10-02 实测：
-    #    dsh 切了 curator 之后，再 `agent-proxy-switch codex` 会显示 codex 已开启
-    #    （其实 codex 从头到尾没动过）。先校验记录属于谁。
+    # 🔴 状态文件按 agent 分了（state_file_for），理论上不会串；这里再校验一次只是兜底，
+    #    真串了（老单文件回落 / 手改过）也别拿别人的记录当自己的开启信号。
     if [ -n "$st_agent" ] && [ "$st_agent" != "$agent" ]; then
       echo "  curator 开关状态       = 未开启（切换记录是 [$st_agent] 的，不是本 agent）"
-      echo "  ⚠️ 这个状态文件只记最后切的那一个 agent —— 请先"
-      echo "     \`agent-proxy-switch $st_agent off\` 回到干净态，再切 $agent。"
+      echo "  ⚠️ 这份状态文件被别 agent 的记录占着（${stf}）—— 先"
+      echo "     \`agent-proxy-switch $st_agent off\` 回到干净态，再切 ${agent}。"
       return 0
     fi
     case "$agent" in
@@ -673,7 +694,7 @@ switch_one() {
         ensure_codex_profile
         gen_shim codex "$HOME/.local/bin/codex-curator" "$(command -v codex)" CODEX_HOME "$CODEX_PROFILE"
         record_switch codex "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov" profile
-        echo "  ✅ codex 已切到 curator（$CURATOR_URL）"
+        echo "  ✅ codex 已切到 curator（${CURATOR_URL}）"
         echo "     生效方式：直接跑 \`codex-curator …\`（= CODEX_HOME=$CODEX_PROFILE codex …）"
         echo "     关闭：agent-proxy-switch codex off —— 只删 profile 与 shim，全局配置不动"
         return 0
@@ -684,7 +705,7 @@ switch_one() {
         ensure_hermes_profile
         gen_shim hermes "$HOME/.local/bin/hermes-curator" "$(command -v hermes)" HERMES_HOME "$HERMES_PROFILE"
         record_switch hermes "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov" profile
-        echo "  ✅ hermes 已切到 curator（$CURATOR_URL）"
+        echo "  ✅ hermes 已切到 curator（${CURATOR_URL}）"
         echo "     生效方式：直接跑 \`hermes-curator …\`（= HERMES_HOME=$HERMES_PROFILE hermes …）"
         echo "     关闭：agent-proxy-switch hermes off —— 只删 profile 与 shim，全局配置不动"
         return 0
@@ -696,7 +717,7 @@ switch_one() {
         cursor)
           echo "  [半自动] 请在 Cursor GUI 完成切换：Settings → Models → OpenAI Base URL = $CURATOR_URL" ;;
       esac
-      echo "  ✅ $agent 已切到 curator（$CURATOR_URL）。关闭时执行：agent-proxy-switch $agent off"
+      echo "  ✅ $agent 已切到 curator（${CURATOR_URL}）。关闭时执行：agent-proxy-switch $agent off"
       echo "  ⚠️ $agent 是 GUI 常驻型，环境变量注入不成立，只能走写配置这条路（mode=config）。"
       return 0 ;;
   esac
@@ -713,13 +734,14 @@ switch_one() {
   # DeepSeek 官方（且走 device-flow 登录态，不是 baseURL 能表达的）。猜错就是把
   # agent 送到一个没账本、甚至需要新 key 的地方。所以 off = undo 到记录值。
   if [ "$owner" = "off" ] || [ "$owner" = "curator-off" ]; then
-    [ -f "$SWITCH_STATE" ] || {
-      echo "  [错误] 没有 curator 切换记录（$SWITCH_STATE）。" >&2
+    local stf; stf="$(state_file_for "$agent")"
+    [ -f "$stf" ] || {
+      echo "  [错误] 没有 curator 切换记录（${stf}）。" >&2
       echo "         off 只能回滚到「切 curator 之前」，没有记录就只能手动改回。" >&2
       return 1
     }
     local rec ragent rfrom rurl rmodel rprov rmode
-    rec="$(last_switch)" || { echo "  [错误] 状态文件读不出来" >&2; return 1; }
+    rec="$(last_switch "$stf")" || { echo "  [错误] 状态文件读不出来" >&2; return 1; }
     IFS='|' read -r ragent rfrom rurl rmodel rprov rmode <<< "$rec"
     [ "$ragent" = "$agent" ] || {
       echo "  [错误] 记录里的切换对象是 [$ragent]，不是 [$agent]，拒绝跨 agent 回滚。" >&2
@@ -745,9 +767,11 @@ switch_one() {
           removed="profile=$HERMES_PROFILE + shim=~/.local/bin/hermes-curator" ;;
         *) echo "  [错误] profile 模式只支持 codex / hermes，[$agent] 请在 GUI 里手动改回。" >&2; return 1 ;;
       esac
-      rm -f "$SWITCH_STATE"
-      echo "  ✅ $agent 已回滚到 curator 之前（$rfrom）—— profile 零写入模式。"
-      echo "     删掉的只有：$removed。全局配置自始至终没被写过。"
+      # 只删本 agent 那份；老单文件仅在我们就是读它时才一并清（否则会带走别人的记录）
+      rm -f "$stf"
+      [ "$stf" = "$SWITCH_STATE" ] && rm -f "$SWITCH_STATE"
+      echo "  ✅ $agent 已回滚到 curator 之前（${rfrom}）—— profile 零写入模式。"
+      echo "     删掉的只有：${removed}。全局配置自始至终没被写过。"
       # 🔴 桥同样按需加载：curator 分支拉起来的桥，这里也要撤（profile 模式下 codex
       #    根本没指到桥，但 curator 那一步确实起了 ⇒ 不撤就是泄漏一个常驻进程）。
       maybe_stop_bridge
@@ -768,8 +792,8 @@ switch_one() {
         #    直接写回去 = dsh 里没有的 provider，回滚完 dsh 读不到 provider（2026-10-02 踩过）。
         set_dsh_default "${rprov:-$DSH_PROVIDER}" "${rmodel:-$DSH_CURATOR_MODEL}" ;;
     esac
-    rm -f "$SWITCH_STATE"
-    echo "  ✅ $agent 已回滚（切 curator 前 = $rfrom）。dsh/codex 若缓存在进程内，重启一次生效。"
+    rm -f "$stf"; rm -f "$SWITCH_STATE"
+    echo "  ✅ $agent 已回滚（切 curator 前 = ${rfrom}）。dsh/codex 若缓存在进程内，重启一次生效。"
     maybe_stop_bridge
     return 0
   fi
