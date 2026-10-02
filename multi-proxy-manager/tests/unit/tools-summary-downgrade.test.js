@@ -204,9 +204,11 @@ describe('tools-summary-downgrade · 剥参数说明只归 aggressive（59 号�
       'The expected format is a lark grammar.',
       'Use the file path to the resource, relative to the workspace root.',
     ];
-    for (const d of cases) expect(M_aggressive().isProtectedDesc(d)).toBe(true);
+    // 🔴 保护判据现在有「名字 + 文本」两维（见 67 号）：只给文本时第二个参数省略，
+    //    名字维度一律按普通名判 ⇒ 这里传个普通参数名，测的就是纯文本维度那条老路径。
+    for (const d of cases) expect(M_aggressive().isProtectedDesc('field', d)).toBe(true);
     for (const d of ['The command to execute.', 'Which key to look up.', 'Number of retries.'])
-      expect(M_aggressive().isProtectedDesc(d)).toBe(false);
+      expect(M_aggressive().isProtectedDesc('field', d)).toBe(false);
     function M_aggressive() { return load('aggressive'); }
   });
 
@@ -376,6 +378,51 @@ describe('tools-summary-downgrade · balanced 中间档（拿 aggressive 的省�
     expect(r.tools[0].parameters.properties.retries).not.toHaveProperty('description');
     expect(r.tools[0].parameters.properties.just).toHaveProperty('description');
     expect(r.tools[0].parameters.properties.just.description).toContain('sandbox permissions');
+  });
+
+  // 🔴 2026-10-02 真链路抓出来的破口（偷听器实锤，见 67 号）：
+  //    上面那条用例用的还是 59 号事故时的**旧文本**（带 “sandbox permissions” 关键词，命中保护名单），
+  //    真表上 justification 的说明原文是 “User-facing approval question for `require_escalated`; omit otherwise.”
+  //    —— 一个关键词都不带。旧实现只按**描述文本**判保护，于是 balanced 把它删成 {"type":"string"}
+  //    （真上游包 12/12 全中），保护名单名存实亡。
+  //    修法：加**参数名**维度的白名单（justification/sandbox*/permission*/approval/escalat），
+  //    名字命中就整条留着，不看措辞 —— 工具表作者自己定的参数名跟语义强绑定，比第三方措辞可靠得多。
+  const REAL_CAPTURED = [{
+    type: 'function', name: 'exec_command', description: 'Runs a command in a PTY, returning output or a session ID for ongoing interaction.',
+    parameters: { type: 'object', properties: {
+      cmd: { type: 'string', description: 'Shell command to execute.' },
+      justification: { type: 'string', description: 'User-facing approval question for `require_escalated`; omit otherwise.' },
+      sandbox_permissions: { type: 'string', description: 'Per-command sandbox override. Defaults to `use_default`.', enum: ['use_default', 'require_escalated'] },
+    }, required: ['cmd'] },
+  }];
+
+  test('🔴 真表原文（不含任何保护关键词）：balanced 也必须留下 justification 的说明', () => {
+    const r = load('balanced').handler({ tools: JSON.parse(JSON.stringify(REAL_CAPTURED)), messages: [], agentType: 'coding' }, {});
+    expect(r).not.toBeNull();                                   // 非保护那条得真的被剥了，否则这条用例什么也没测
+    const p = r.tools[0].parameters.properties;
+    expect(p.cmd).not.toHaveProperty('description');            // 普通参数照剥
+    // 名字维度白名单：justification 原文一个关键词都没有，也必须整句留着
+    expect(p.justification).toHaveProperty('description');
+    expect(p.justification.description).toBe(
+      'User-facing approval question for `require_escalated`; omit otherwise.');
+    expect(p.sandbox_permissions).toHaveProperty('description'); // 名字带 sandbox_* ⇒ 留
+    // 保护字段留着、可剥字段走了 ⇒ 省量必须 > 0（别把保护做成「整表没触发」）
+    expect(r.saved).toBeGreaterThan(0);
+  });
+
+  test('🔴 名字维度保护对 aggressive 同样成立（不能只在 balanced 上补洞）', () => {
+    const r = load('aggressive').handler({ tools: JSON.parse(JSON.stringify(REAL_CAPTURED)), messages: [], agentType: 'coding' }, {});
+    expect(r.tools[0].parameters.properties.justification).toHaveProperty('description');
+    expect(r.tools[0].parameters.properties.sandbox_permissions).toHaveProperty('description');
+    expect(r.tools[0].parameters.properties.cmd).not.toHaveProperty('description');
+  });
+
+  test('参数名维度不写成一刀切：普通名字（cmd/workdir/timeout）照样可以直接剥', () => {
+    const M = load('balanced');
+    expect(M.isProtectedDesc('justification', 'Anything at all.')).toBe(true);
+    expect(M.isProtectedDesc('sandbox_permissions', 'Whatever.')).toBe(true);
+    expect(M.isProtectedDesc('cmd', 'Shell command to execute.')).toBe(false);
+    expect(M.isProtectedDesc('workdir', 'Working directory for the command.')).toBe(false);
   });
 
   test('balanced 依然不删工具、不改 total（P3 相对于 lazyload 的全部价值都在「不变」上）', () => {

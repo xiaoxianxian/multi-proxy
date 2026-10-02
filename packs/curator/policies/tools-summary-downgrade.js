@@ -108,8 +108,18 @@ function trimDescription(text, maxChars) {
 //    但「权限 / 格式 / 必须」这些语义词的出现概率极高。
 const PARAM_DESC_KEEP = /permission|sandbox|justification|required|must not|cannot|only|format|syntax|grammar|absolute|relative|utf-?8|path to|specif/i;
 
-/** 这条参数说明属于「删了会出事」的那一类吗 */
-function isProtectedDesc(text) {
+// 🔴 参数**名**维度的名单（2026-10-02 真链路抓出来的破口，见下）。
+//    59 号那次事故后来补了 PARAM_DESC_KEEP，但它是拿**描述文本**去测的 ——
+//    真表上 justification 的说明原文是 “User-facing approval question for `require_escalated`; omit otherwise.”
+//    一个关键词都不带，于是 balanced 档照样把它删了（偷听器实锤：12/12 个真上游包里
+//    justification 只剩 {"type":"string"}）。文本措辞是第三方写的、不可控，
+//    但**参数名**是工具表作者自己定的、跟语义强绑定 ⇒ 名字命中就必须留，不看措辞。
+//    只收「授权/权限」这一类，别贪：贪多了 balanced 就省不动了。
+const PARAM_NAME_KEEP = /justification|sandbox|permission|permission|approval|escalat/i;
+
+/** 这条参数说明属于「删了会出事」的那一类吗（名字或文本任一命中即保护） */
+function isProtectedDesc(name, text) {
+  if (typeof name === 'string' && PARAM_NAME_KEEP.test(name)) return true;
   return typeof text === 'string' && PARAM_DESC_KEEP.test(text);
 }
 
@@ -122,11 +132,12 @@ function stripParamDescriptions(params) {
     for (const k of Object.keys(props)) {
       const p = props[k];
       if (p && typeof p === 'object') {
-        if (typeof p.description === 'string' && p.description && !isProtectedDesc(p.description)) {
+        // 🔴 传参数名（k）：名字命中授权类白名单就整条留着，不看它措辞里带不带关键词
+        if (typeof p.description === 'string' && p.description && !isProtectedDesc(k, p.description)) {
           delete p.description; touched = true;
         }
         if (p.items && typeof p.items === 'object' && typeof p.items.description === 'string'
-          && p.items.description && !isProtectedDesc(p.items.description)) {
+          && p.items.description && !isProtectedDesc(k, p.items.description)) {
           delete p.items.description; touched = true;
         }
       }
