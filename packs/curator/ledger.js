@@ -72,6 +72,43 @@ function textOf(m) {
   return null;
 }
 
+// /v1/messages（Anthropic wire）线上助手消息还多一种 part：**thinking**（推理痕迹）。
+// 它既占上下文也占输出预算，但**不是结论**（下面 TEXT_PART_TYPES 那三类才是）。
+// 2026-10-02 真付费上游实测：max_tokens=16 时，16 个 token 全被 thinking 吃掉，
+// 整条响应一个 text 块都没有；Kimi 一例 output=27 里 thinking 就占 23。
+// ⇒ 只认 TEXT_PART_TYPES 的后果：thinking 永远判不出「超长」⇒ 压不掉，
+//   就算压了 text，账本也少算一整块 —— 又一次静默少算，和 input_text 那条是同病。
+const THINKING_PART_TYPES = new Set(['thinking']);
+
+function isThinkingPart(p) {
+  return !!p && typeof p === 'object' && THINKING_PART_TYPES.has(p.type);
+}
+
+/** 一条消息里的推理痕迹文本（只取 thinking part）。 */
+function thinkingTextOf(m) {
+  if (!m || typeof m !== 'object') return null;
+  if (Array.isArray(m.content)) {
+    return m.content.filter(isThinkingPart)
+      .map((p) => (typeof p.thinking === 'string' ? p.thinking : ''))
+      .join('\n');
+  }
+  return null;
+}
+
+/** 写回 thinking part：保住 part 类型，text / 图片等其它 part 原样不动。 */
+function setThinkingText(m, text) {
+  if (!m || typeof m !== 'object') return m;
+  if (Array.isArray(m.content)) {
+    let done = false;
+    const parts = m.content.map((p) => {
+      if (!done && isThinkingPart(p)) { done = true; return Object.assign({}, p, { thinking: text }); }
+      return p;
+    });
+    if (done) return Object.assign({}, m, { content: parts });
+  }
+  return m;
+}
+
 // 工具输出的两种协议形态，长得完全不一样：
 //   chat 协议   = { role:'tool', name, content }            ← 老形态
 //   responses  = { type:'function_call_output', call_id, output }  ← codex 走的这条
@@ -141,5 +178,6 @@ function setText(m, text) {
 module.exports = {
   measureText, measureMessages, headTail,
   textOf, setText,
+  isThinkingPart, thinkingTextOf, setThinkingText,
   isToolOutput, toolTextOf, setToolText,
 };

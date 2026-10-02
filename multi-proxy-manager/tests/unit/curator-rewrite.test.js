@@ -85,6 +85,30 @@ describe('Memory 面 · 内容级压缩（改内容，不改条数）', () => {
     expect(r.netTokenDelta).toBeLessThan(0);
   });
 
+  // 2026-10-02 真付费上游实测（64 号 §七坑 6）：Anthropic 线上助手消息 content 可能是
+  // [{thinking:'…'},{text:'ok'}]，且 **thinking 能把 max_tokens 吃满**（max_tokens=16 时
+  // 整条响应没有 text 块；Kimi 一例 output=27 里 23 是 thinking）。
+  // 于是按「只认 text」的口径：thinking 判不出超长 ⇒ 压不掉；就算压了 text，
+  // 账本也只减 text 那部分 —— 又是一次静默少算。所以必须**按块类型分账**。
+  test('Anthropic thinking 块：必须被压缩、结论原样保住、账本算全', () => {
+    require(MEM).params.maxMsgChars = 40;
+    const hist = [{
+      type: 'message', role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: 'T:' + 't'.repeat(300) },
+        { type: 'text', text: 'ok' },
+      ],
+    }];
+    const r = run('onHistory', { history: hist });
+    const c = r.out.history[0].content;
+    expect(c).toHaveLength(2);              // 压缩内容，不切条/不删 part
+    expect(c[0].type).toBe('thinking');     // 写回保住 part 类型，别把请求体换成另一种协议
+    expect(c[0].thinking.length).toBeLessThan(300);
+    expect(c[1].type).toBe('text');
+    expect(c[1].text).toBe('ok');           // 结论（text）原样保留，不能跟着 thinking 一起被砍
+    expect(r.netTokenDelta).toBeLessThan(0);
+  });
+
   test('纯图片消息：不硬塞一个 text part 进请求体（宁可这条不压，也不能注入脏 type）', () => {
     require(MEM).params.maxMsgChars = 40;
     const hist = [{ type: 'message', role: 'user', content: [{ type: 'input_image', image_url: 'data:image/png;base64,x' }] }];

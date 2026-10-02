@@ -9,7 +9,7 @@
 // 工具输出通常是单条最长的那类，折叠它收益最高。两种协议形态都认：
 // chat 的 { role:'tool', content } 与 responses 的 { type:'function_call_output', output }。
 
-const { measureMessages, measureText, headTail, isToolOutput, toolTextOf, setToolText, setText } = require('../ledger.js');
+const { measureMessages, measureText, headTail, isToolOutput, toolTextOf, setToolText, setText, thinkingTextOf, setThinkingText } = require('../ledger.js');
 
 // 参数对象（M6 仅允许改这里的数值，不改结构；校验见 curator-engine.validateChange）。
 // 默认全关 = passthrough，零行为变更（非侵入铁律④）。
@@ -42,6 +42,22 @@ function handler(ctx, io) {
   if (doFold || doTruncate) {
     out = kept.map((m) => {
       if (!m || typeof m !== 'object') return m; // 非消息对象（如测试里的数字）原样透传
+
+      // ②-0 推理痕迹（Anthropic thinking）：**按块类型分账**。
+      // 它占上下文也占输出预算，但压它是压「过程」不是压「结论」——最安全的那一档，
+      // 而且模型 thinking 吃满输出预算时（真上游实测 max_tokens 全给 thinking、整条无 text 块），
+      // 压它能替结论腾出空间。只认 TEXT_PART_TYPES 的话，这类消息永远判不出超长 ⇒ 压不掉。
+      if (doTruncate) {
+        const th = thinkingTextOf(m);
+        if (typeof th === 'string' && th.length > params.maxMsgChars) {
+          const r = headTail(th, params.maxMsgChars);
+          if (r.changed) {
+            compressedTokens += measureText(th) - measureText(r.text);
+            m = setThinkingText(m, r.text);
+          }
+        }
+      }
+
       // 走 toolTextOf 而不是 textOf：responses 协议的工具输出既没 role 也没 content，
       // 用 textOf 只能拿到 null → 折叠和截断在 codex 链路上双双静默吃零。
       const before = toolTextOf(m);
