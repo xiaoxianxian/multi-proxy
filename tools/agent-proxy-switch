@@ -47,8 +47,32 @@
 #   off     = 回滚到「切 curator 之前」的那个 owner（状态记在 state 文件里）。
 #             不是猜「直连是谁」，而是 undo —— codex 的原生直连是 api.openai.com，
 #             本工具不知情，猜错就会把 agent 送到一个没账本的地方。
-#   ⇒ 未激活 curator 时对 agent 零打扰：桥可以常在，但 host 的 base_url 不动。
-#   ⚠️ 关掉 curator 不等于关掉桥；要彻底静默请 `tools/bridge-launchd.sh stop`。
+#   ⇒ 未激活 curator 时对 agent 零打扰：host 的 base_url 不动。
+# 🔴 桥的生命周期 = **按需加载，不常驻**（维护者 2026-10-02 定调：本机还跑着本地模型，
+#    对内存敏感，「不是随时需要用的服务，用的时候加载就够了」）：
+#      `curator` 自动把桥拉起来（没在跑才拉），拉不起来就拒绝写入，绝不留死链 502；
+#      `off`    回滚完配置后**自动把桥撤掉**，把内存还回来。
+#    ⇒ 「切 curator → off」全程零常驻。想留桥备用：CURATOR_AUTOSTOP=0 <off>。
+#    launchd 不再是桥的托管方式（本机 launchctl 对任何 plist 一律 EIO，且常驻与内存
+#    定调冲突）。桥的启停只走 tools/bridge-lifecycle.sh。
+#
+# 🔴🔴 2026-10-02 二次修订（维护者 20:57 拍板「改①」）：curator 对 **CLI 型 agent 改为
+#   「profile 注入 = 零写入」，不再改全局 config。
+#   根因：原实现 `curator` 写 `~/.codex/config.toml` / `~/.hermes/config.yaml`、`off` 靠
+#   备份回滚 —— 这台机器上 `~/.codex/` 已攒 10 个 config.toml 备份、`~/.dsh` 攒 6 个 patch
+#   备份、`~/.hermes` 有 .curator_backups，就是反复覆写的症状。**「零打扰」应该是零写入，
+#   不是写完再恢复。**
+#   机制（两个 agent 都是各自官方的 home 环境变量，不是我们发明的）：
+#     codex  : `CODEX_HOME`  —— 二进制里代码级读取（`failed to resolve CODEX_HOME:`、
+#              `allow_symlinked_codex_home`），2026-10-02 实测 md5+mtime 双零变更。
+#     hermes : `HERMES_HOME` —— hermes shim 里明写
+#              `os.environ['HERMES_HOME'] = os.environ.get('HERMES_HOME') or str(get_default_hermes_root())`。
+#   配套做法：把主配置**完整拷贝**一份进 profile 目录（隔离 home 后主配置根本不会被读，
+#   所以 profile 必须是完整副本，否则 approval policy / mcp / token 全丢），只在副本里追加
+#   `[model_providers.curator]` 段 + 改顶层 `model_provider`。
+#   ⚠️ 边界（如实说，不做假承诺）：**GUI 常驻型做不到零写入** —— dsh 桌面端（Electron）与
+#     cursor 由 Dock/launchd 起进程，外部注入不了环境变量。这两者仍走写配置路径（`mode:"config"`），
+#     状态行会标出来。治不掉的就别嘴上说治掉了。
 #
 # 给 dsh 接的注意点（实测自 ~/.dsh/profiles/desktop/cordis.patch.yml）：
 #   dsh 是「provider 注册表」型客户端，端点写在
@@ -66,6 +90,8 @@ HERMES_PORT=18793
 CURSOR_PORT=18794
 CC_SWITCH_PORT=15721
 
+TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ---- curator（token-policy-bridge，2026-10-02 加）----
 # 🔴 端口冲突已解（2026-10-02 维护者点头）：CURSOR_PORT 一直是 18794（manage.sh:26，产品既定），
 #    所以把 **桥挪到 18795**，cursor 的 18794 一个字节不动。
@@ -81,6 +107,12 @@ DSH_CURATOR_MODEL="${DSH_CURATOR_MODEL:-deepseek-v4-flash}"
 DSH_CFG="${DSH_PROFILE:-$HOME/.dsh/profiles/desktop}/cordis.patch.yml"
 # curator/off 的切换状态（off = undo 到这条记录的上一个 owner）
 SWITCH_STATE="${SWITCH_STATE:-$HOME/.multi-proxy-manager/curator-switch-state.json}"
+# ---- profile 目录（2026-10-02 改零写入后新增：CLI 型 agent 的 curator 配置放这里）----
+# 🔴 profile 是主配置的**完整拷贝**（隔离 home 后主配置不会被读），不是纯片段，
+#    否则 approval policy / mcp_servers / experimental_bearer_token 全丢。
+PROFILE_DIR="${PROFILE_DIR:-$HOME/.multi-proxy-manager/profiles}"
+CODEX_PROFILE="$PROFILE_DIR/codex-curator"
+HERMES_PROFILE="$PROFILE_DIR/hermes-curator"
 
 # ---- 各 owner 的目标 URL ----
 CC_SWITCH_URL="http://127.0.0.1:15721/v1"
@@ -90,7 +122,8 @@ PR_CURSOR_URL="http://127.0.0.1:18794/v1"
 DIRECT_HERMES_URL="https://apihub.agnes-ai.com/v1"
 
 # ---- 配置文件 ----
-CODEX_CFG="$HOME/.codex/config.toml"
+# 🔴 允许 env 覆盖：写单元测试/冒烟时用假路径跑，避免误改真 agent 配置。
+CODEX_CFG="${CODEX_CFG:-$HOME/.codex/config.toml}"
 HERMES_CFG="$HOME/.hermes/config.yaml"
 
 port_listening() {
@@ -326,21 +359,140 @@ set_dsh() {
   DSH_URL="$new_url" dsh_patch_scan write
 }
 
+# =====================================================================
+# profile 生成（2026-10-02 新增，零写入路径）
+# ---------------------------------------------------------------------
+# 🔴 核心约束：隔离 home 之后，**主配置一个字节都不会被读**（codex 只认 $CODEX_HOME/config.toml，
+#    hermes 只认 $HERMES_HOME/config.yaml）。所以 profile 必须是主配置的**完整拷贝**，
+#    不能只写「provider + base_url」那几行 —— 否则 approval policy / mcp_servers /
+#    experimental_bearer_token / projects 信任级别会全丢，profile 跑起来像换了个人。
+# 只改这几处：① 顶层/顶层块的 provider 指向；② 追加一个指向桥的 provider 段。
+# =====================================================================
+
+# codex：从主配置拷出 profile，追加 [model_providers.curator]
+ensure_codex_profile() {
+  mkdir -p "$CODEX_PROFILE"
+  cp "$CODEX_CFG" "$CODEX_PROFILE/config.toml"
+  CURATOR_URL_ENV="$CURATOR_URL" PROFILE_IN="$CODEX_PROFILE/config.toml" python3 - <<'PY'
+import os, re, sys
+url = os.environ['CURATOR_URL_ENV']; path = os.environ['PROFILE_IN']
+lines = open(path).read().split('\n')
+
+# 1) 顶层 model_provider = （第一个 [table] 之前叫顶层）
+in_sec = False; done = False
+for i, l in enumerate(lines):
+    if re.match(r'^\s*\[', l):
+        in_sec = True; continue
+    if not in_sec and re.match(r'^model_provider\s*=', l):
+        lines[i] = 'model_provider = "curator"'; done = True; break
+if not done:
+    lines.insert(0, 'model_provider = "curator"')
+
+# 2) 从 custom 段继承凭据（profile 隔离后拿不到主配置的 token，必须跟着拷贝走）
+tok = ''
+for i, l in enumerate(lines):
+    if re.match(r'^\s*\[model_providers\.custom\]\s*$', l):
+        for j in range(i + 1, min(i + 30, len(lines))):
+            m = re.match(r'^\s*experimental_bearer_token\s*=\s*"([^"]+)"', lines[j])
+            if m: tok = m.group(1)
+            if re.match(r'^\s*\[', lines[j]): break
+        break
+
+# 3) 追加 / 更新 curator 段（追加到文件末尾，toml 不要求 table 顺序）
+block = ['', '[model_providers.curator]', 'name = "curator"', 'wire_api = "responses"']
+if tok: block.append('experimental_bearer_token = "%s"' % tok)
+block.append('base_url = "%s"' % url)
+lines.extend(block)
+open(path, 'w').write('\n'.join(lines))
+print('  已生成 %s（主配置完整拷贝 + curator 段）' % path)
+PY
+}
+
+# hermes：从主配置拷出 profile，追加 providers.curator
+ensure_hermes_profile() {
+  mkdir -p "$HERMES_PROFILE"
+  cp "$HERMES_CFG" "$HERMES_PROFILE/config.yaml"
+  CURATOR_URL_ENV="$CURATOR_URL" PROFILE_IN="$HERMES_PROFILE/config.yaml" python3 - <<'PY'
+import os, re, sys
+url = os.environ['CURATOR_URL_ENV']; path = os.environ['PROFILE_IN']
+lines = open(path).read().split('\n')
+
+# 1) 顶层 model: 块里的 provider → curator（唯一一处「用哪个 provider」的开关）
+section = None; done = False
+for i, l in enumerate(lines):
+    m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*):\s*$', l)
+    if m:
+        section = m.group(1); continue
+    if section == 'model':
+        m2 = re.match(r'^(\s*provider:\s*).*$', l)
+        if m2:
+            lines[i] = m2.group(1) + 'curator'; done = True; section = None; continue
+        # model 块内其它键不碰（base_url / default / key_env 原样继承）
+        if re.match(r'^\S', l): section = None
+if not done:
+    sys.stderr.write('未在 model: 块里找到 provider 行，profile 生成失败：%s\n' % path)
+    sys.exit(4)
+
+# 2) 继承主配置的 key_env（profile 隔离后主配置的变量声明读不到）
+key_env = ''
+for i, l in enumerate(lines):
+    if re.match(r'^\s*model:\s*$', l):
+        for j in range(i + 1, min(i + 12, len(lines))):
+            m = re.match(r'^\s*key_env:\s*(\S+)\s*$', lines[j])
+            if m: key_env = m.group(1)
+            if re.match(r'^\S', lines[j]): break
+        break
+
+# 3) 在 providers: 块下追加 curator（跟 custom 同级缩进 2 空格）
+block = []
+if key_env: block.append('    key_env: %s' % key_env)
+block.append('    base_url: %s' % url)
+block.append('    discover_models: true')
+# 找到最后一个 2 空格缩进的 provider 键，插到它后面
+idx = -1
+for i, l in enumerate(lines):
+    if re.match(r'^  [A-Za-z_][A-Za-z0-9_]*:\s*$', l): idx = i
+if idx < 0:
+    sys.stderr.write('未在 providers: 块里找到 provider 条目\n'); sys.exit(4)
+lines[idx + 1:idx + 1] = ['  curator:', '    name: Curator (multi-proxy bridge)'] + block
+open(path, 'w').write('\n'.join(lines))
+print('  已生成 %s（主配置完整拷贝 + providers.curator）' % path)
+PY
+}
+
+# profile 模式的 shim：装一个独立可执行文件，跑它就自动带 CODEX_HOME/HERMES_HOME。
+# 🔴 刻意**不**覆盖 PATH 上的 `codex` / `hermes` 本体 —— 劫持全局入口等于把侵入从
+#    config 挪到 PATH，没治根，还会让 WorkBuddy 等宿主 spawn codex 时被动改道。
+gen_shim() {
+  local agent="$1" shim="$2" real="$3" env_name="$4" profile="$5"
+  mkdir -p "$(dirname "$shim")"
+  cat > "$shim" <<EOF
+#!/bin/sh
+# 由 agent-proxy-switch 生成：$agent curator（profile 注入，零写入主配置）
+exec env $env_name="$profile" "$real" "\$@"
+EOF
+  chmod +x "$shim"
+  echo "  已装 shim: $shim"
+}
+
 # ---- 切换状态：curator → 记住上一个 owner，off → undo ----
 # $1=agent  $2=切前 owner 名  $3=切前实际 URL（off 靠它还原，光有 owner 名不够）
+# $4=dsH 切前 provider（dsh 回滚要用真实 provider 名，不能取语义标签）
+# $5=mode —— "profile"=零写入 profile 注入（codex/hermes）；"config"=写全局配置（dsh/cursor）。
+#            off 靠它分流：profile 模式只删 profile 目录、一个字节都不碰主配置。
 record_switch() {
   mkdir -p "$(dirname "$SWITCH_STATE")"
   cat > "$SWITCH_STATE" <<EOF
-{"agent":"$1","from":"$2","fromUrl":"$3","fromModel":"$4","to":"curator","at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+{"agent":"$1","from":"$2","fromUrl":"$3","fromModel":"$4","fromProv":"$5","mode":"${6:-config}","to":"curator","at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 EOF
 }
-# 输出格式 "agent|from|fromUrl|fromModel"（dsh 靠 fromModel 精确回滚到切前的 model）
+# 输出格式 "agent|from|fromUrl|fromModel|fromProv|mode"（旧 state 没有后两个字段时退回 config）
 last_switch() {
   [ -f "$SWITCH_STATE" ] || return 1
   /usr/bin/python3 -c "
 import json,sys
 d=json.load(open(sys.argv[1]))
-print('%s|%s|%s|%s|%s' % (d.get('agent',''), d.get('from',''), d.get('fromUrl',''), d.get('fromModel',''), d.get('fromProv','')))
+print('%s|%s|%s|%s|%s|%s' % (d.get('agent',''), d.get('from',''), d.get('fromUrl',''), d.get('fromModel',''), d.get('fromProv',''), d.get('mode') or 'config'))
 " "$SWITCH_STATE" 2>/dev/null
 }
 
@@ -392,12 +544,41 @@ status_one() {
       echo "  curator 桥(18795) 监听 = $(port_listening $CURATOR_PORT && echo 是 || echo 否)" ;;
   esac
   # ---- curator 开关状态（所有 agent 共用一行）----
+  # 🔴 必须把「profile 零写入」和「写配置」两种模式分开显示 —— 后者仍会动全局配置，
+  #    用户有权知道自己现在是哪种（GUI 型 agent 没有零写入这条路，别给它假承诺）。
   if [ -f "$SWITCH_STATE" ]; then
-    echo "  curator 开关状态       = 已开启（切前：$(last_switch)）"
+    local st; st="$(last_switch 2>/dev/null || true)"
+    local st_mode="${st##*|}"
+    case "$agent" in
+      codex|hermes)
+        if [ "$st_mode" = "profile" ]; then
+          echo "  curator 开关状态       = 已开启（profile 注入 · 零写入，全局配置未改动）"
+          echo "  生效方式               = 跑 codex-curator / hermes-curator（shim 已装）"
+        else
+          echo "  curator 开关状态       = 已开启（写配置模式，会改全局配置）"
+        fi ;;
+      *)
+        echo "  curator 开关状态       = 已开启（写配置模式，GUI 常驻型没有零写入这条路）" ;;
+    esac
+    echo "  切换记录               = ${st%|*}"
     echo "  关闭方法               = agent-proxy-switch $1 off"
   else
     echo "  curator 开关状态       = 关（未切过 curator）"
   fi
+}
+
+# ---- 桥按需加载：用完就地撤 ----
+# 🔴 桥不常驻（维护者 2026-10-02 定调：本机还跑着本地模型，内存敏感 ⇒ 「用的时候加载
+#    就够了，不要常驻」）。agent 的 base_url 回滚 ⇒ 桥没人用了，就地撤掉把内存还回来。
+#    想留着桥备用（比如马上还要再切）：CURATOR_AUTOSTOP=0 <switch off>
+maybe_stop_bridge() {
+  if [ "${CURATOR_AUTOSTOP:-1}" != "1" ]; then
+    echo "  （CURATOR_AUTOSTOP=0 ⇒ 桥按你的要求留着没撤）"
+    return 0
+  fi
+  port_listening $CURATOR_PORT || return 0
+  echo "  撤桥（按需加载：不用就不占内存）..."
+  "$TOOLS_DIR/bridge-lifecycle.sh" off
 }
 
 switch_one() {
@@ -409,13 +590,20 @@ switch_one() {
   # ---------------------------------------------------------------------
   case "$owner" in
     curator)
+      # 桥不常驻（维护者 2026-10-02 定调：本地还跑着模型，内存敏感 ⇒ 按需加载）。
+      # 🔴 所以这里**必须自己把桥拉起来**，而不是报一句「桥没起，你自己去起」——
+      #    那样会留下「base_url 已指到 18795，但桥不在」的死链，agent 一发请求就 502。
+      #    起不起来（比如沙箱内跨调用回收）才拒绝写入，宁可不动配置也不能指个死端口。
       if ! port_listening $CURATOR_PORT; then
-        echo "  [错误] curator 桥(18795)未监听 —— 拒绝写入，避免死链。" >&2
-        echo "         桥由 launchd 托管，先起它：" >&2
-        echo "         launchctl kickstart -k gui/$(id -u)/com.multi-proxy.token-policy-bridge" >&2
-        return 1
+        echo "  curator 桥($CURATOR_PORT)未监听 —— 按需拉起中（不常驻，用完 ./agent-proxy-switch $agent off 自动撤）..."
+        if ! "$TOOLS_DIR/bridge-lifecycle.sh" on >/tmp/bridge-on.out 2>&1; then
+          cat /tmp/bridge-on.out >&2
+          echo "  [错误] 桥拉不起来，拒绝写入 base_url（避免死链 502）。" >&2
+          return 1
+        fi
+        cat /tmp/bridge-on.out
       fi
-      local prev prev_url prev_model="" prev_prov=""
+      local prev prev_url prev_model="" prev_prov="" mode="config"
       case "$agent" in
         codex)  prev_url="$(current_codex_url)";    prev="$(detect_owner codex "$prev_url")" ;;
         hermes) prev_url="$(current_hermes_url)";   prev="$(detect_owner hermes "$prev_url")" ;;
@@ -432,21 +620,124 @@ switch_one() {
         cursor) prev="(Cursor 的 base_url 在 GUI 里，读不到)"; prev_url="";;
       esac
       [ -n "$prev_url" ] && [ "$prev_url" != "$CURATOR_URL" ] || prev_url=""
-      record_switch "$agent" "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov"
+
+      # ---------------------------------------------------------------
+      # 2026-10-02 改：CLI 型 agent（codex / hermes）走 **profile 注入 = 零写入**。
+      # 用各自官方的 home 环境变量（codex=CODEX_HOME / hermes=HERMES_HOME），把手写
+      # 全局配置的路径整个绕开。dsh 桌面端与 cursor 是 GUI 常驻、注入不了环境变量，
+      # 只能继续写配置（mode=config），如实分流，不一刀切炫技。
+      # ---------------------------------------------------------------
+      if [ "$agent" = "codex" ]; then
+        mode="profile"
+        echo "  [零写入] codex 走 profile 注入 —— ~/.codex/config.toml 一个字节都不动。"
+        ensure_codex_profile
+        gen_shim codex "$HOME/.local/bin/codex-curator" "$(command -v codex)" CODEX_HOME "$CODEX_PROFILE"
+        record_switch codex "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov" profile
+        echo "  ✅ codex 已切到 curator（$CURATOR_URL）"
+        echo "     生效方式：直接跑 \`codex-curator …\`（= CODEX_HOME=$CODEX_PROFILE codex …）"
+        echo "     关闭：agent-proxy-switch codex off —— 只删 profile 与 shim，全局配置不动"
+        return 0
+      fi
+      if [ "$agent" = "hermes" ]; then
+        mode="profile"
+        echo "  [零写入] hermes 走 profile 注入 —— ~/.hermes/config.yaml 一个字节都不动。"
+        ensure_hermes_profile
+        gen_shim hermes "$HOME/.local/bin/hermes-curator" "$(command -v hermes)" HERMES_HOME "$HERMES_PROFILE"
+        record_switch hermes "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov" profile
+        echo "  ✅ hermes 已切到 curator（$CURATOR_URL）"
+        echo "     生效方式：直接跑 \`hermes-curator …\`（= HERMES_HOME=$HERMES_PROFILE hermes …）"
+        echo "     关闭：agent-proxy-switch hermes off —— 只删 profile 与 shim，全局配置不动"
+        return 0
+      fi
+
+      record_switch "$agent" "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov" "$mode"
       case "$agent" in
-        codex)  set_codex  "$CURATOR_URL" ;;
-        hermes) set_hermes "$CURATOR_URL" ;;
         dsh)    set_dsh_default curator "$DSH_CURATOR_MODEL" ;;
         cursor)
           echo "  [半自动] 请在 Cursor GUI 完成切换：Settings → Models → OpenAI Base URL = $CURATOR_URL" ;;
       esac
       echo "  ✅ $agent 已切到 curator（$CURATOR_URL）。关闭时执行：agent-proxy-switch $agent off"
+      echo "  ⚠️ $agent 是 GUI 常驻型，环境变量注入不成立，只能走写配置这条路（mode=config）。"
       return 0 ;;
   esac
 
-  # 🔴 各 agent 的原生 owner 分支执行完必须 return 0，否则会一路穿到下面的兜底，
-  #    在“明明写成功了”之后又补一句「未知的 owner: x」（2026-10-02 实测：切 codex
-  #    到 proxy-rebuild 时 base_url 确实写入了，但命令末尾照样报错，看着像失败）。
+  # ---- off：回滚到「切 curator 之前」----
+  # 🔴🔴 位置很关键：必须排在**原生 owner 分支之前**。两个坑叠一起会静默吃掉 off：
+  #    ① 原生 case 里 owner=off 会落进 `*)`，被判成「未知的 owner」直接 return 1；
+  #    ② 下面原生分支后面那个 `return 0`（原第 653 行）插在 curator 与原生 case 之间，
+  #       导致 off 根本走不到这段代码 —— 实测：`. codex off` 无任何输出、shim 没删、
+  #       桥没撤，而且**原生 owner（cc-switch/proxy-rebuild/direct）也一起被吞**，
+  #       命令静默返回成功但配置一个字节没动。2026-10-02 修：off 提到原生 case 之前，
+  #       原生分支的 return 0 挪到原生 case 之后。
+  # 🔴 刻意不猜 agent 的原生直连是谁：codex 原生是 api.openai.com、dsh 原生是
+  # DeepSeek 官方（且走 device-flow 登录态，不是 baseURL 能表达的）。猜错就是把
+  # agent 送到一个没账本、甚至需要新 key 的地方。所以 off = undo 到记录值。
+  if [ "$owner" = "off" ] || [ "$owner" = "curator-off" ]; then
+    [ -f "$SWITCH_STATE" ] || {
+      echo "  [错误] 没有 curator 切换记录（$SWITCH_STATE）。" >&2
+      echo "         off 只能回滚到「切 curator 之前」，没有记录就只能手动改回。" >&2
+      return 1
+    }
+    local rec ragent rfrom rurl rmodel rprov rmode
+    rec="$(last_switch)" || { echo "  [错误] 状态文件读不出来" >&2; return 1; }
+    IFS='|' read -r ragent rfrom rurl rmodel rprov rmode <<< "$rec"
+    [ "$ragent" = "$agent" ] || {
+      echo "  [错误] 记录里的切换对象是 [$ragent]，不是 [$agent]，拒绝跨 agent 回滚。" >&2
+      return 1
+    }
+    [ -n "$rfrom" ] || { echo "  [错误] 记录里没有『切前 owner』，无法回滚" >&2; return 1; }
+
+    # -----------------------------------------------------------------
+    # 🔴 profile 零写入模式：关掉 curator = 删掉我们生成的 profile 目录与 shim。
+    #    一条都不碰全局配置 —— 这就是「零打扰」该有的样子，不是写完再恢复。
+    #    （profile 可以随时由 agent-proxy-switch curator 重新生成，删的是可再生品。）
+    # -----------------------------------------------------------------
+    if [ "${rmode:-config}" = "profile" ]; then
+      local removed=""
+      case "$agent" in
+        codex)
+          rm -rf "$CODEX_PROFILE"
+          rm -f "$HOME/.local/bin/codex-curator"
+          removed="profile=$CODEX_PROFILE + shim=~/.local/bin/codex-curator" ;;
+        hermes)
+          rm -rf "$HERMES_PROFILE"
+          rm -f "$HOME/.local/bin/hermes-curator"
+          removed="profile=$HERMES_PROFILE + shim=~/.local/bin/hermes-curator" ;;
+        *) echo "  [错误] profile 模式只支持 codex / hermes，[$agent] 请在 GUI 里手动改回。" >&2; return 1 ;;
+      esac
+      rm -f "$SWITCH_STATE"
+      echo "  ✅ $agent 已回滚到 curator 之前（$rfrom）—— profile 零写入模式。"
+      echo "     删掉的只有：$removed。全局配置自始至终没被写过。"
+      # 🔴 桥同样按需加载：curator 分支拉起来的桥，这里也要撤（profile 模式下 codex
+      #    根本没指到桥，但 curator 那一步确实起了 ⇒ 不撤就是泄漏一个常驻进程）。
+      maybe_stop_bridge
+      return 0
+    fi
+
+    case "$agent" in
+      codex)
+        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_codex "$CURATOR_URL"
+        else set_codex "$rurl"; fi ;;
+      hermes)
+        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_hermes "$CURATOR_URL"
+        else set_hermes "$rurl"; fi ;;
+      dsh)
+        # 切 curator 时动的是 agent-default-model，回滚也只动这一处。
+        # 🔴 provider 必须取记录里的 rprov（agnes/curator…），不能取 rfrom：
+        #    detect_owner 对 agnes 原生 baseURL 返回的是语义标签 direct，
+        #    直接写回去 = dsh 里没有的 provider，回滚完 dsh 读不到 provider（2026-10-02 踩过）。
+        set_dsh_default "${rprov:-$DSH_PROVIDER}" "${rmodel:-$DSH_CURATOR_MODEL}" ;;
+    esac
+    rm -f "$SWITCH_STATE"
+    echo "  ✅ $agent 已回滚（切 curator 前 = $rfrom）。dsh/codex 若缓存在进程内，重启一次生效。"
+    maybe_stop_bridge
+    return 0
+  fi
+
+  # 🔴 原生 owner（cc-switch / proxy-rebuild / direct）分支走完在这里统一 return。
+  #    curator 在前面已 return，off 在前面已 return ⇒ 走到这的都执行成功了。
+  #    少了这行会一路穿到下面兜底，在“明明写成功了”之后又补一句「未知的 owner」
+  #    （2026-10-02 实测：切 codex 到 proxy-rebuild 时 base_url 确实写入了，但末尾照样报错）。
   return 0
 
   case "$agent" in
@@ -500,43 +791,6 @@ switch_one() {
       esac ;;
   esac
 
-  # ---- off：回滚到「切 curator 之前」----
-  # 🔴 刻意不猜 agent 的原生直连是谁：codex 原生是 api.openai.com、dsh 原生是
-  # DeepSeek 官方（且走 device-flow 登录态，不是 baseURL 能表达的）。猜错就是把
-  # agent 送到一个没账本、甚至需要新 key 的地方。所以 off = undo 到记录值。
-  if [ "$owner" = "off" ] || [ "$owner" = "curator-off" ]; then
-    [ -f "$SWITCH_STATE" ] || {
-      echo "  [错误] 没有 curator 切换记录（$SWITCH_STATE）。" >&2
-      echo "         off 只能回滚到「切 curator 之前」，没有记录就只能手动改回。" >&2
-      return 1
-    }
-    local rec ragent rfrom rurl rmodel rprov
-    rec="$(last_switch)" || { echo "  [错误] 状态文件读不出来" >&2; return 1; }
-    IFS='|' read -r ragent rfrom rurl rmodel rprov <<< "$rec"
-    [ "$ragent" = "$agent" ] || {
-      echo "  [错误] 记录里的切换对象是 [$ragent]，不是 [$agent]，拒绝跨 agent 回滚。" >&2
-      return 1
-    }
-    [ -n "$rfrom" ] || { echo "  [错误] 记录里没有『切前 owner』，无法回滚" >&2; return 1; }
-    case "$agent" in
-      codex)
-        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_codex "$CURATOR_URL"
-        else set_codex "$rurl"; fi ;;
-      hermes)
-        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_hermes "$CURATOR_URL"
-        else set_hermes "$rurl"; fi ;;
-      dsh)
-        # 切 curator 时动的是 agent-default-model，回滚也只动这一处。
-        # 🔴 provider 必须取记录里的 rprov（agnes/curator…），不能取 rfrom：
-        #    detect_owner 对 agnes 原生 baseURL 返回的是语义标签 direct，
-        #    直接写回去 = dsh 里没有的 provider，回滚完 dsh 读不到 provider（2026-10-02 踩过）。
-        set_dsh_default "${rprov:-$DSH_PROVIDER}" "${rmodel:-$DSH_CURATOR_MODEL}" ;;
-    esac
-    rm -f "$SWITCH_STATE"
-    echo "  ✅ $agent 已回滚（切 curator 前 = $rfrom）。dsh/codex 若缓存在进程内，重启一次生效。"
-    return 0
-  fi
-  echo "  [错误] 未知的 owner: $owner" >&2; return 1
 }
 
 usage() {
