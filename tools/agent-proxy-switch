@@ -578,7 +578,17 @@ status_one() {
   #    用户有权知道自己现在是哪种（GUI 型 agent 没有零写入这条路，别给它假承诺）。
   if [ -f "$SWITCH_STATE" ]; then
     local st; st="$(last_switch 2>/dev/null || true)"
-    local st_mode="${st##*|}"
+    local st_mode="${st##*|}"; local st_agent="${st%%|*}"
+    # 🔴 状态文件是**所有 agent 共用一行的**（只有一个 JSON，后来者覆盖前者）。
+    #    直接照着它说「本 agent 已开启 curator」会张冠李戴 —— 2026-10-02 实测：
+    #    dsh 切了 curator 之后，再 `agent-proxy-switch codex` 会显示 codex 已开启
+    #    （其实 codex 从头到尾没动过）。先校验记录属于谁。
+    if [ -n "$st_agent" ] && [ "$st_agent" != "$agent" ]; then
+      echo "  curator 开关状态       = 未开启（切换记录是 [$st_agent] 的，不是本 agent）"
+      echo "  ⚠️ 这个状态文件只记最后切的那一个 agent —— 请先"
+      echo "     \`agent-proxy-switch $st_agent off\` 回到干净态，再切 $agent。"
+      return 0
+    fi
     case "$agent" in
       codex|hermes)
         if [ "$st_mode" = "profile" ]; then
