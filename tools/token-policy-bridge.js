@@ -50,7 +50,7 @@ const NORMALIZE_TOOLS = process.env.BRIDGE_NORMALIZE_TOOLS === '1';
 // 请求侧要跑的 hook。🔴 不能只跑 onRequestAssemble——历史压缩挂在 onHistory，
 // 它是最大的那一档杠杆（实测 41 轮会话折叠 tool 输出省 53.7%），
 // 只跑一个 hook 等于把最值钱的策略晾在真实链路之外。
-const REQUEST_HOOKS = ['onHistory', 'onRequestAssemble'];
+const REQUEST_HOOKS = ['onHistory', 'onToolOutput', 'onRequestAssemble'];
 const LOG_DIR = process.env.BRIDGE_LOG_DIR || path.join(__dirname, '..', 'logs');
 const LOG_PATH = path.join(LOG_DIR, `token-policy-bridge-${new Date().toISOString().slice(0, 10)}.jsonl`);
 const CORPUS_PATH = path.join(LOG_DIR, `bridge-corpus-${new Date().toISOString().slice(0, 10)}.jsonl`);
@@ -76,6 +76,62 @@ if (CURATOR_ENABLED) {
     console.log('[bridge] curator pack 已注册 ×' + reg.length + ':', LAZY.hook + '/' + LAZY.name);
   } catch (e) {
     console.error('[bridge] curator pack 注册失败:', e && e.message);
+  }
+  // 58 号方案 P3（工具摘要降级）。默认 off：handler 直接返回 null，不产出 tools 字段，
+  // 桥的 MERGE_FIELDS 写不进东西 ⇒ 请求体一个字节都不动。
+  // 开法：CURATOR_SUMMARY_MODE=light|aggressive（与 tools-lazyload 互斥，见 policy 头注释）。
+  try {
+    const SD = require('../packs/curator/policies/tools-summary-downgrade.js');
+    const reg2 = TP.applyPack({
+      name: 'curator-summary',
+      appliesTo: ['coding'],
+      enabled: true,
+      priority: 11, // 略高于 lazyload(10)：同为 onRequestAssemble，让 P3 后写、覆盖掉 lazyload
+      hooks: { [SD.hook]: [{ name: SD.name, handler: SD.handler }] },
+    });
+    console.log('[bridge] curator-summary 已注册 ×' + reg2.length + ':', SD.hook + '/' + SD.name,
+      '(CURATOR_SUMMARY_MODE=' + (process.env.CURATOR_SUMMARY_MODE || 'off') + ')');
+  } catch (e) {
+    console.error('[bridge] curator-summary 注册失败:', e && e.message);
+  }
+}
+// onToolOutput：工具输出**只保留头尾**（与 onHistory 的 foldToolOutput「整条替身」分工，
+// 见该 policy 头注释——两者打的其实是同一批条目，同时开会重复记账，所以各自默认关）。
+// 接它的理由是补位不是重复：responses 协议的工具输出 { type:'function_call_output' }
+// 没有 role，早期 fold 的入口 `m.role==='tool'` 够不到它，只能靠 onToolOutput 这条路径。
+if (CURATOR_ENABLED && process.env.CURATOR_TOOL_GUARD === '1') {
+  try {
+    const TG = require('../packs/curator/policies/tool-output-guard.js');
+    const reg3 = TP.applyPack({
+      name: 'curator-tool-guard',
+      appliesTo: ['coding'],
+      enabled: true,
+      priority: 5, // 排在 onHistory(默认)/onRequestAssemble 之间：历史先压完，本 handler 再决定留头还是留尾
+      hooks: { [TG.hook]: [{ name: TG.name, handler: TG.handler }] },
+    });
+    console.log('[bridge] curator-tool-guard 已注册 ×' + reg3.length + ':', TG.hook + '/' + TG.name,
+      '(CURATOR_TOOL_GUARD=1)');
+  } catch (e) {
+    console.error('[bridge] curator-tool-guard 注册失败:', e && e.message);
+  }
+}
+// onResponse：只**记账**不改字节（见 response-insight.js 头注释的流式红线）。
+// 它的价值是把「各 policy 自报省了多少」跟上游真实 usage 对拍 —— 这是代理层唯一能白拿
+// 真实 usage 的位置，也是 est 高估（实测同请求 est≈12860 vs actual≈11610）唯一能校准的口子。
+const RESPONSE_OBSERVE = process.env.CURATOR_RESPONSE_INSIGHT === '1';
+if (RESPONSE_OBSERVE) {
+  try {
+    const RI = require('../packs/curator/policies/response-insight.js');
+    const reg4 = TP.applyPack({
+      name: 'curator-response-insight',
+      appliesTo: ['coding'],
+      enabled: true,
+      priority: 1,
+      hooks: { [RI.hook]: [{ name: RI.name, handler: RI.handler }] },
+    });
+    console.log('[bridge] curator-response-insight 已注册 ×' + reg4.length + ':', RI.hook + '/' + RI.name);
+  } catch (e) {
+    console.error('[bridge] curator-response-insight 注册失败:', e && e.message);
   }
 }
 
@@ -431,10 +487,15 @@ const server = http.createServer(async (req, res) => {
   let outBody = raw;
   const rec = { ts: new Date().toISOString(), path: req.url, mode: MODE, api, model: body.model || null, agentType: AGENT_TYPE };
 
+  // 🔴 ctx 必须在 if 外层：finishRecord（响应侧）要拿它构造 onResponse 的 rctx。
+  //    原先写成块内的 `const ctx`，响应侧引用直接 ReferenceError「ctx is not defined」
+  //    ——被 catch 吞成 rec.onResponseError，日志上看像「onResponse 没跑」而不是「它崩了」。
+  // （非 chat 路径恒为 null：ctxFromRequest 只在 chat 侧构造。）
+  let ctx = null;
   if (isChat) {
     if (CAPTURE_BODY) captureCorpus(req.url, api, body, body.model);
     const t0 = Date.now();
-    const ctx = ctxFromRequest(body, api);
+    ctx = ctxFromRequest(body, api);
     // ① 度量：真实请求体的七类组成。
     //    ⚠️ 必须先把 responses 的 input/instructions 归一成 messages 再喂 fold——
     //    fold 只认 messages，直接喂原包会让 responses 请求七类全 0，
@@ -576,6 +637,50 @@ const server = http.createServer(async (req, res) => {
     if (!isChat) return;
     rec.upstreamStatus = out.status;
     rec.upstreamMs = out.ms;
+    // onResponse：在落盘之前跑，让 response-insight 有机会把上游真实 usage 与
+    // 各 policy 自报的 estSaved 对拍。🔴 只记账不回写字节 —— 流式是 pipe 出去的，
+    // 任何「攒完再发」的改写会把首字节延迟拉到整段生成时间（codex 直接当卡死）。
+    if (RESPONSE_OBSERVE) {
+      try {
+        // 🔴 estTotal 是「改写前」基线（第 ① 步 fold 算的，早于 hook 链），
+        //     改写后的估算要另给：estTotal + Σ netTokenDelta（负值=省）。
+        //     只给基线会让 response-insight 把「真省了 52.5%」读成「估算高估 52.5%」——
+        //     同一个数读反，结论从「改写很值」变成「改写没意义」。
+        //     estSaved 为 null（没人上报）时 estAfter 也必须是 null，不许当 0。
+        const estAfter = Number.isFinite(rec.estSaved) && Number.isFinite(rec.estTotal)
+          ? rec.estTotal + rec.estSaved : null;
+        const rctx = {
+          ...ctx,
+          response: rec.responseText != null ? rec.responseText : (out.body || null),
+          estTotal: rec.estTotal != null ? rec.estTotal : null,
+          estAfter,
+          estSaved: Number.isFinite(rec.estSaved) ? rec.estSaved : null,
+          api, model: rec.model,
+        };
+        const r = TP.apply('onResponse', rctx);
+        const o = (r.results || [])[0] && (r.results || [])[0].out;
+        if (o) {
+          rec.onResponse = {
+            note: o.note || null,
+            reason: o.reason || null,
+            actualPrompt: o.actualPrompt != null ? o.actualPrompt : (rec.actualPromptTokens ?? null),
+            actualCompletion: o.actualCompletion != null ? o.actualCompletion : (rec.actualCompletionTokens ?? null),
+            hit: o.actualHit != null ? o.actualHit : (rec.actualCacheHit ?? null),
+            miss: o.actualMiss != null ? o.actualMiss : (rec.actualCacheMiss ?? null),
+            estTotal: o.estTotal != null ? o.estTotal : null,
+            estAfter: o.estAfter != null ? o.estAfter : null,
+            estSaved: o.estSaved != null ? o.estSaved : null,
+            realSaving: o.realSaving != null ? o.realSaving : null,
+            estBiasAfter: o.estBiasAfter != null ? o.estBiasAfter : null,
+            realSavedTokens: o.realSavedTokens != null ? o.realSavedTokens : null,
+            claimSavedTokens: o.claimSavedTokens != null ? o.claimSavedTokens : null,
+            overclaimTokens: o.overclaimTokens != null ? o.overclaimTokens : null,
+            overclaimRatio: o.overclaimRatio != null ? o.overclaimRatio : null,
+            hitRatio: o.hitRatio != null ? o.hitRatio : null,
+          };
+        }
+      } catch (e) { rec.onResponseError = String(e && e.message || e); }
+    }
     console.log(`[bridge:${MODE}] ${req.url} model=${rec.model} est=${rec.estTotal ?? '-'} tok | saved=${rec.estSaved ?? '-'} (${rec.reported ?? 0} 条上报) | rewrote=${rec.rewrote ?? false} | reason=${rec.pruneReason ?? '-'} | bridge=${rec.bridgeMs}ms status=${out.status} ${out.ms}ms`);
     logRecord(rec);
     observeSample(rec);

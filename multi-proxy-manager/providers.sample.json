@@ -54,6 +54,16 @@
         "type": "cloud",
         "pricing": { "input": 0, "output": 0, "cacheHit": 0 },
         "rateLimit": { "per5h": 1500, "perWeek": 15000 }
+      },
+      {
+        "id": "agnes-3.0-flash",
+        "name": "Agnes 3.0 Flash",
+        "type": "cloud",
+        "pricing": { "input": 0, "output": 0, "cacheHit": 0 },
+        "priceSource": "owner-declared-free@2026-10-02：维护者口述「当前免费」（并发那半句已被同日实测推翻，见 rateLimitObserved）。非网关方价格文档 —— apihub.agnes-ai.com/user/balance 被 Cloudflare 硬挡（补 UA 无效），查不到。零价必须带这条标注才不至于被当成实价去推导别的结论。",
+        "rateLimit": { "per5h": 1500, "perWeek": 15000 },
+        "rateLimitKind": "rate-window-request-count",
+        "rateLimitObserved": "🔴 2026-10-02 实测（/tmp/agnes429/discrimin.mjs + evid.mjs），推翻维护者口述的「只有并发量限制」：① 慢速串行 每 3s ×20 次（并发≈1，几乎不可能撞并发闸门）仍出 4 次 429 ⇒ 限制对象是速率窗口内的请求次数，不是并发数；② 瞬时并发 8 路=8×200，24 路=13×200/11×429，30 路=15×200/15×429，48 路=全 429；③ 429 后冷却：+1s 429、+22s 429、+45s 200 ⇒ 恢复窗口约 30~45s；  ④ 429 body 全文 \"You've reached the API rate limit for free users...\"，type=AgnesAI_error，无 concurrency 字段；⑤ ⚠️ confounder：本机 WorkBuddy/codex 可能与本 key 共享额度，绝对阈值未标定（别拿这些数字当配额上限用）。结论：免费档是「短时窗口请求次数」限制，并发只是让它更快撞上；per5h/perWeek 是总量口径，与实测的短时窗口不是一回事，别混用。"
       }
     ]
   },

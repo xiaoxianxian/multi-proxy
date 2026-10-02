@@ -67,7 +67,12 @@ function resolvePricing(pricing, model, tier) {
     if (model && p.models && p.models[model]) {
         const m = p.models[model];
         if (Number.isFinite(m.input) && Number.isFinite(m.output)) {
-            return { input: m.input, output: m.output, source: 'model', key: model };
+            const hit = { input: m.input, output: m.output, source: 'model', key: model };
+            // 价可能是「查出来的」也可能是「人说的」：agnes-3.0-flash 的 0 元来自维护者口述
+            // （免费档，只有并发/次数限制），不是网关方价格文档。元字段原样带出去，
+            // 免得零价被人当成实价ookup 去推导别的结论。
+            if (m.priceSource) hit.declared = m.priceSource;
+            return hit;
         }
     }
     // C0-3 假成本数字：调用方**已登记 model 级价表**（p.models 非空）却拿不到这个 model 的
@@ -209,6 +214,7 @@ function createSavingsGateway(opts = {}) {
             : (resolvePricing(pricing, null, 'medium') || DEFAULT_PRICING.medium);
         const pricingSource = resolvedAct ? resolvedAct.source : 'fallback';
         const pricingKey = resolvedAct ? resolvedAct.key : 'medium';
+        const pricingDeclared = resolvedAct ? (resolvedAct.declared || null) : null;
         const pPlan = resolvePricing(pricing, null, PLANNED_TIER) || DEFAULT_PRICING[PLANNED_TIER];
         const actualCost = unknownPrice
             ? null
@@ -231,6 +237,7 @@ function createSavingsGateway(opts = {}) {
             saved,
             pricingSource,   // 'model' = per-model 实价；'tier' = 档位估算；'fallback' = 连档位都没对上，兜底 medium；'unknown' = 该 model 单价查不到（actualCost 为 null，不凑数）
             pricingKey,
+            pricingDeclared: resolvedAct ? (resolvedAct.declared || null) : null,   // 价是谁给的（model 条目 priceSource），0 元也得分清是查的还是说的
             shadow: engine.shadowMode,
             tokensEstimated: !(reqBody && reqBody.usage),
         });
@@ -265,6 +272,7 @@ function createSavingsGateway(opts = {}) {
                 // 档位估的还是「未知」。只有数字不看来源 = 假数字照发不误（C0-3）。
                 pricingSource,
                 pricingKey,
+                pricingDeclared,
                 shadow: engine.shadowMode,
                 estimated: !(reqBody && reqBody.usage),
             },
