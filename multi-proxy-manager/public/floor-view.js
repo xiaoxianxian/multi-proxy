@@ -52,7 +52,7 @@
      *
      * @param {Object} input
      * @param {Object} input.cost      lib/cost-track.getAll() 的产出
-     *                                 { proxy: { totalTokens, cost, requestCount, latencyP50 } }
+     *                                 { proxy: { totalTokens, thinkingTokens, cost, requestCount, latencyP50 } }
      * @param {Object} input.health    { id: rec }（rec 见 lib/provider-health.js recordProbe 的形状）
      * @param {Array}  input.providers 额外要展示的 id（配置里有、但既无流量也无健康记录）
      * @param {Object} [input.recentHook] l2/floor-feed.readLastHook() 的产出，或 null
@@ -81,6 +81,10 @@
                 statusLabel: STATUS[st].label,
                 statusHint: STATUS[st].hint,
                 totalTokens: numOrNull(c && c.totalTokens),
+                // 推理 token（Anthropic 线 output_tokens_details.thinking_tokens）。**纯可观测**：
+                // cost-track 只计数不计费——上游 output_tokens 通常已含 thinking，再加一遍就是重复收钱。
+                // 上游不给这个字段（OpenAI 线）⇒ null 画「—」，绝不折算 0。
+                thinkingTokens: numOrNull(c && c.thinkingTokens),
                 cost: numOrNull(c && c.cost),
                 requestCount: numOrNull(c && c.requestCount),
                 // 真实 p50（来自 forward 成功转发的耗时中位数）；无样本 → null 画「—」
@@ -103,6 +107,7 @@
         // unavailable：**当前这批数据里**没有任何值的字段（页面据此画「—」并标注原因）。
         var unavailable = [];
         if (cells.length && cells.every(function (x) { return x.latencyMs === null; })) { unavailable.push('latencyMs'); }
+        if (cells.length && cells.every(function (x) { return x.thinkingTokens === null; })) { unavailable.push('thinkingTokens'); }
         if (!recentHook) { unavailable.push('recentHook'); }
 
         return {

@@ -116,6 +116,7 @@
         '<div class="kv"><span class="k">Requests</span>' + show(c.requestCount, nf) + '</div>' +
         '<div class="kv"><span class="k">Failures</span>' + show(c.failures, nf) + '</div>' +
         '<div class="kv"><span class="k">p50 Latency</span>' + show(c.latencyMs, msf) + '</div>' +
+        '<div class="kv"><span class="k">Thinking Tok</span>' + show(c.thinkingTokens, nf) + '</div>' +
         '<div class="kv"><span class="k">Last Probe</span>' + show(c.lastProbeAt, ts) + '</div>' +
       '</div>' +
     '</div>';
@@ -172,6 +173,7 @@
 
         var reasons = {
           latencyMs: '还没有成功转发的延迟样本（需 PROXY_COST_TRACK=1 且真跑过转发）',
+          thinkingTokens: '上游这一轮没回 thinking_tokens（OpenAI 线本就不给该字段，属正常；Anthropic 线才有）',
           recentHook: '本进程/桥还没命中过 policy（需 PROXY_FLOOR_FEED=1 且真跑过一条经桥的请求）',
         };
         var un = (d.unavailable || []);

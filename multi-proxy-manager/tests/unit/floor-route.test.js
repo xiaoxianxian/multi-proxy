@@ -30,7 +30,8 @@ describe('routes/floor（只读聚合）', () => {
   test('聚合 cost + health + feed → cells/recentHook/agents 正确', async () => {
     costTrack.enabled.mockReturnValue(true);
     costTrack.getAll.mockReturnValue({
-      agnes: { totalTokens: 1500, cost: 0.003, requestCount: 3, latencyP50: 812.5 },
+      // thinkingTokens 25：Anthropic 线才有这个字段，带上了 ⇒ 不该进 unavailable
+      agnes: { totalTokens: 1500, thinkingTokens: 25, cost: 0.003, requestCount: 3, latencyP50: 812.5 },
     });
     providerHealth.listIsolated.mockReturnValue([{ providerId: 'deepseek' }]);
     providerHealth.getProviderHealth.mockImplementation((id) =>
@@ -50,6 +51,7 @@ describe('routes/floor（只读聚合）', () => {
     expect(agnes.status).toBe('active');
     expect(agnes.totalTokens).toBe(1500);
     expect(agnes.latencyMs).toBe(812.5);            // 真实 p50 透传
+    expect(agnes.thinkingTokens).toBe(25);          // 推理 token 纯可观测透传（不计费口径）
 
     const ds = res.body.cells.find((c) => c.id === 'deepseek');
     expect(ds.status).toBe('isolated');

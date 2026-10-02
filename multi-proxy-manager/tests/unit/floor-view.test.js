@@ -46,15 +46,39 @@ describe('floor-view · buildFloorCells', () => {
   });
 
   test('unavailable 只在「整批都没值」时列出；有值就不列', () => {
-    const allNull = buildFloorCells({ cost: { x: { totalTokens: 1, cost: 0, requestCount: 1, latencyP50: null } }, health: {} });
-    expect(allNull.unavailable).toEqual(['latencyMs', 'recentHook']);
+    const allNull = buildFloorCells({
+      cost: { x: { totalTokens: 1, cost: 0, requestCount: 1, latencyP50: null, thinkingTokens: null } },
+      health: {},
+    });
+    expect(allNull.unavailable).toEqual(['latencyMs', 'thinkingTokens', 'recentHook']);
 
     const haveBoth = buildFloorCells({
-      cost: { x: { totalTokens: 1, cost: 0, requestCount: 1, latencyP50: 42 } },
+      cost: { x: { totalTokens: 1, cost: 0, requestCount: 1, latencyP50: 42, thinkingTokens: 23 } },
       health: {},
       recentHook: { kind: 'hook', hook: 'onHistory', policy: 'p' },
     });
     expect(haveBoth.unavailable).toEqual([]);
+  });
+
+  test('thinkingTokens：取自 cost.thinkingTokens；上游不给（OpenAI 线）→ null，绝不折算 0', () => {
+    const out = buildFloorCells({
+      cost: {
+        hasAnthropic: { totalTokens: 27, thinkingTokens: 23, cost: 0, requestCount: 1 }, // Kimi 真上游形态
+        explicitNull: { totalTokens: 30, thinkingTokens: null, cost: 0, requestCount: 1 },
+        openaiLine:   { totalTokens: 50, cost: 0, requestCount: 1 },                      // 字段整条缺失
+      },
+      health: {},
+    });
+    const by = {};
+    out.cells.forEach((c) => { by[c.id] = c.thinkingTokens; });
+    expect(by).toEqual({ hasAnthropic: 23, explicitNull: null, openaiLine: null });
+    // 有一个格有值 ⇒ thinkingTokens 不算「整批无源」（latencyMs / recentHook 本就无源，另算）
+    expect(out.unavailable).toEqual(['latencyMs', 'recentHook']);
+  });
+
+  test('thinkingTokens：整批都没有时进 unavailable，让页面画「—」并标原因', () => {
+    const out = buildFloorCells({ cost: { oai: { totalTokens: 50, cost: 0, requestCount: 1 } }, health: {} });
+    expect(out.unavailable).toContain('thinkingTokens');
   });
 
   test('排序：问题格在前（isolated < degraded < active < healthy < unknown），同档按 id', () => {
