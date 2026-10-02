@@ -37,9 +37,32 @@ describe('C6 per-model 价表（l2/savings-gateway/gateway.js）', () => {
     );
   });
 
-  test('价表条目残缺（只有 input 没有 output）→ 视为无效，不拿半截数据算钱', () => {
+  test('🔴 价表条目残缺（只有 input 没有 output）→ unknown，不拿半截数据也不拿 tier 凑数', () => {
     const pricing = { models: { bad: { input: 1 } }, tiers: { medium: { input: 1, output: 4 } } };
-    expect(GW.resolvePricing(pricing, 'bad', 'medium').source).toBe('tier');
+    const r = GW.resolvePricing(pricing, 'bad', 'medium');
+    expect(r.source).toBe('unknown');
+    expect(r.input).toBeNull();
+    expect(r.output).toBeNull();
+  });
+
+  test('🔴 C0-3：价表非空但查不到这个 model → unknown（绝不回落 tier 冒充实测价）', () => {
+    // 真实场景：providers.json 里 agnes provider 只登记了 agnes-2.0-flash，
+    // 而 codex 实际在跑 agnes-3.0-flash —— 它的单价未知，不该被 tier small 算成 ¥0。
+    const pricing = {
+      models: { 'agnes-2.0-flash': { input: 0, output: 0 } },
+      tiers: { small: { input: 0, output: 0 }, medium: { input: 1, output: 4 } },
+    };
+    const r = GW.resolvePricing(pricing, 'agnes-3.0-flash', 'small');
+    expect(r.source).toBe('unknown');
+    expect(r.key).toBe('agnes-3.0-flash');
+    expect(r.input).toBeNull();
+  });
+
+  test('价表空（没登记任何 model）→ 仍允许 tier 估算并标注 source（向后兼容）', () => {
+    const pricing = { tiers: { medium: { input: 1, output: 4 } } };
+    const r = GW.resolvePricing(pricing, 'some-unknown-model', 'medium');
+    expect(r.source).toBe('tier');
+    expect(r.key).toBe('medium');
   });
 
   test('默认 per-model 表为空：没有实测价就绝不冒充', () => {

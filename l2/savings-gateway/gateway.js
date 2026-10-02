@@ -70,6 +70,15 @@ function resolvePricing(pricing, model, tier) {
             return { input: m.input, output: m.output, source: 'model', key: model };
         }
     }
+    // C0-3 假成本数字：调用方**已登记 model 级价表**（p.models 非空）却拿不到这个 model 的
+    // 有效价（压根没它 / 条目残缺）⇒ 单价未知，返回 source:'unknown'。
+    // 绝不在此处回落 tier —— 那是用一个「像样的数」冒充实测价：
+    // 典型就是 agnes-3.0-flash（providers.json 里只有 agnes-2.0-flash），被 tier small 算成 ¥0，
+    // 看起来「免费」其实是推导出来的，不是查出来的。
+    // 例外：p.models 为空表 = 压根没有 model 级信息，此时允许 tier 估算并标注 source（向后兼容）。
+    if (model && p.models && Object.keys(p.models).length > 0) {
+        return { input: null, output: null, source: 'unknown', key: model };
+    }
     // 兼容扁平形状：新形状优先取 p.tiers[tier]
     const t = p.tiers && p.tiers[tier] ? p.tiers[tier] : p[tier];
     if (t && Number.isFinite(t.input) && Number.isFinite(t.output)) {
@@ -192,11 +201,18 @@ function createSavingsGateway(opts = {}) {
         // 档位/模型对不上时会拿 medium 的价算出个像样的数，那是假数字。
         const model = reqBody && reqBody.model ? reqBody.model : null;
         const resolvedAct = resolvePricing(pricing, model, actualTier);
-        const pAct = resolvedAct || resolvePricing(pricing, null, 'medium') || DEFAULT_PRICING.medium;
+        // 单价未知 ⇒ 这笔成本就是「未知」，不拿 medium 的价凑个数。账面上标 unknownCostCount，
+        // 宁可少一个数字，不要一个看起来体面的假数字（C0-3）。
+        const unknownPrice = !!resolvedAct && resolvedAct.source === 'unknown';
+        const pAct = (resolvedAct && !unknownPrice)
+            ? resolvedAct
+            : (resolvePricing(pricing, null, 'medium') || DEFAULT_PRICING.medium);
         const pricingSource = resolvedAct ? resolvedAct.source : 'fallback';
         const pricingKey = resolvedAct ? resolvedAct.key : 'medium';
         const pPlan = resolvePricing(pricing, null, PLANNED_TIER) || DEFAULT_PRICING[PLANNED_TIER];
-        const actualCost = round6(promptTokens / 1e6 * pAct.input + completionTokens / 1e6 * pAct.output);
+        const actualCost = unknownPrice
+            ? null
+            : round6(promptTokens / 1e6 * pAct.input + completionTokens / 1e6 * pAct.output);
         const plannedCost = round6(promptTokens / 1e6 * pPlan.input + completionTokens / 1e6 * pPlan.output);
         const saved = round6(Math.max(0, plannedCost - actualCost));
 
@@ -213,7 +229,7 @@ function createSavingsGateway(opts = {}) {
             plannedCost,
             actualCost,
             saved,
-            pricingSource,   // 'model' = per-model 实价；'tier' = 档位估算；'fallback' = 连档位都没对上，兜底 medium
+            pricingSource,   // 'model' = per-model 实价；'tier' = 档位估算；'fallback' = 连档位都没对上，兜底 medium；'unknown' = 该 model 单价查不到（actualCost 为 null，不凑数）
             pricingKey,
             shadow: engine.shadowMode,
             tokensEstimated: !(reqBody && reqBody.usage),
@@ -245,6 +261,10 @@ function createSavingsGateway(opts = {}) {
                 plannedCost,
                 actualCost,
                 saved,
+                // 定价来源一并向调用方暴露：看到 actualCost 的人必须同时知道它是实价、
+                // 档位估的还是「未知」。只有数字不看来源 = 假数字照发不误（C0-3）。
+                pricingSource,
+                pricingKey,
                 shadow: engine.shadowMode,
                 estimated: !(reqBody && reqBody.usage),
             },
@@ -271,10 +291,12 @@ function createSavingsGateway(opts = {}) {
             ? (savingsLog.length ? Math.max(...savingsLog.map((e) => e.ts)) : 0) - windowMs
             : 0;
         const rows = windowMs != null ? savingsLog.filter((e) => e.ts >= cutoff) : savingsLog;
-        let totalSaved = 0, totalActual = 0, totalPlanned = 0, reqCount = 0;
+        let totalSaved = 0, totalActual = 0, totalPlanned = 0, reqCount = 0, unknownCostCount = 0;
         const perTier = {};
         for (const e of rows) {
-            totalSaved += e.saved; totalActual += e.actualCost; totalPlanned += e.plannedCost;
+            totalSaved += e.saved; totalPlanned += e.plannedCost;
+            // 单价未知的笔不进合计（否则 null 会把总和冲成 NaN，或被迫填 0 冒充「没花钱」）
+            if (Number.isFinite(e.actualCost)) totalActual += e.actualCost; else unknownCostCount += 1;
             reqCount += 1;
             perTier[e.actualTier] = perTier[e.actualTier] || { requestCount: 0, saved: 0 };
             perTier[e.actualTier].requestCount += 1;
@@ -286,6 +308,8 @@ function createSavingsGateway(opts = {}) {
             totalSaved: round6(totalSaved),
             totalActualCost: round6(totalActual),
             totalPlannedCost: round6(totalPlanned),
+            // 「有多少笔压根没价」必须能跟总笔数对照看，否则 unknown 会被当成 0 一样读过去
+            unknownCostCount,
             perTier,
             shadow: engine.shadowMode,
         };

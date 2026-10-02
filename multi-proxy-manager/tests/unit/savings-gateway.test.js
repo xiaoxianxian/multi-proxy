@@ -104,6 +104,40 @@ describe('savings-gateway kernel (l2/savings-gateway/gateway.js)', () => {
     expect(r.x_savings.plannedCost).toBe(10 / 1e6 * 1000 + 20 / 1e6 * 500); // 0.02
   });
 
+  test('🔴 C0-3 端到端：model 单价查不到 → source=unknown、actualCost=null、报告计 unknownCostCount', () => {
+    // 真实场景：codex 现在跑 agnes-3.0-flash，但 providers 只登记了 agnes-2.0-flash。
+    // 改动前会被 tier small 兜成 ¥0（假数字），现在必须是「未知」且可数。
+    const g4 = G.createSavingsGateway({
+      pricing: {
+        models: { 'agnes-2.0-flash': { input: 0, output: 0 } },
+        tiers: { small: { input: 0, output: 0 }, medium: { input: 1, output: 4 } },
+      },
+    });
+    const r = g4.handleChatCompletions(
+      { model: 'agnes-3.0-flash', messages: [{ role: 'user', content: 'x' }], usage: USAGE },
+      { key: KEY },
+    );
+    expect(r.x_savings.pricingSource).toBe('unknown');
+    expect(r.x_savings.pricingKey).toBe('agnes-3.0-flash');
+    expect(r.x_savings.actualCost).toBeNull();
+    const rep = g4.savingsReport();
+    expect(rep.requestCount).toBe(1);
+    expect(rep.unknownCostCount).toBe(1);
+    expect(rep.totalActualCost).toBe(0); // 唯一那笔没价 → 不进合计，不是 0 冒充
+
+    // 对照：价表里有这个 model 就该正常算出实价
+    const g5 = G.createSavingsGateway({
+      pricing: { models: { 'agnes-3.0-flash': { input: 0.8, output: 2.8 } } },
+    });
+    const r5 = g5.handleChatCompletions(
+      { model: 'agnes-3.0-flash', messages: [{ role: 'user', content: 'x' }], usage: USAGE },
+      { key: KEY },
+    );
+    expect(r5.x_savings.pricingSource).toBe('model');
+    expect(r5.x_savings.actualCost).toBe(0.8 / 1e6 * 1000 + 2.8 / 1e6 * 500);
+    expect(g5.savingsReport().unknownCostCount).toBe(0);
+  });
+
   test('custom dummyKeys 注入（gateway 可签发任意多把 key，映射档位意图）', () => {
     const g3 = G.createSavingsGateway({ dummyKeys: { [G.DUMMY_KEY_PREFIX + 'a-low']: 'low' } });
     expect(g3.getDummyKeys()).toHaveProperty(G.DUMMY_KEY_PREFIX + 'a-low');
