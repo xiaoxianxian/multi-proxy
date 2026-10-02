@@ -14,7 +14,7 @@
 // 用法：
 //   node tools/token-policy-bridge.js                      # observe（默认，原样转发）
 //   BRIDGE_MODE=rewrite node tools/token-policy-bridge.js  # 改写后转发
-//   PORT=18794 UPSTREAM=http://127.0.0.1:18790 node tools/token-policy-bridge.js
+//   PORT=18795 UPSTREAM=http://127.0.0.1:18790 node tools/token-policy-bridge.js
 //   BRIDGE_STUB=1 node tools/token-policy-bridge.js        # 桩响应，不消耗 token
 //   BRIDGE_LOG_BODY=1 node tools/token-policy-bridge.js    # 额外把请求正文落成语料
 //
@@ -29,7 +29,9 @@ const path = require('path');
 const { Readable } = require('stream');
 const KE = require('./cache-k-estimator.js'); // k 自测器：白拿 usage 估「退回段是否按未命中价计」
 
-const PORT = Number(process.env.PORT || 18794);
+// 🔴 18794 是 cursor-proxy 的正式端口（manage.sh:26 CURSOR_PORT=18794，产品既定），
+//    桥不能抢。2026-10-02 起桥挪到 18795，与 cursor 彻底解耦（此前 status 会把桥显示成 cursor）。
+const PORT = Number(process.env.PORT || 18795);
 const BINDING = process.env.BINDING || '127.0.0.1';
 const UPSTREAM = (process.env.UPSTREAM || 'http://127.0.0.1:18790').replace(/\/$/, '');
 const DEFAULT_MODE = 'observe'; // observe | rewrite；运行时读 env，便于同一进程内切换做对照

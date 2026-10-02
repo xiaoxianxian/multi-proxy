@@ -5,7 +5,9 @@
   <key>Label</key>
   <string>com.multi-proxy.token-policy-bridge</string>
 
-  <!-- 旁挂桥：codex 的 base_url 指到 18794，本进程转发给 18790（codex-proxy），再出网。
+  <!-- 旁挂桥：agent 的 base_url 指到 18795，本进程转发给 18790（codex-proxy），再出网。
+       🔴 端口 2026-10-02 从 18794 挪到 18795：18794 是 cursor-proxy 的正式端口
+       （manage.sh:26 CURSOR_PORT=18794），桥抢它会跟 `manage.sh start` 打起来。
        codex-proxy/proxy.js 保持 0 diff；回滚 = 把 base_url 指回 18790。 -->
   <key>ProgramArguments</key>
   <array>
@@ -23,7 +25,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PORT</key>
-    <string>18794</string>
+    <string>18795</string>
     <key>BINDING</key>
     <string>127.0.0.1</string>
     <key>UPSTREAM</key>

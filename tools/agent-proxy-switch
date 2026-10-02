@@ -42,7 +42,7 @@
 #     dsh    : direct                    | curator | off   （dsh 无「直连」，closest 是官方 baseURL）
 #
 # 🔴 curator / off 是 2026-10-02 加的「省钱总开关」一对：
-#   curator = 把该 agent 的 base_url 指到 token-policy-bridge（18794），走 curator pack
+#   curator = 把该 agent 的 base_url 指到 token-policy-bridge（18795），走 curator pack
 #             （history 折叠 / tool-output 裁剪 / tools lazyload）真省钱。
 #   off     = 回滚到「切 curator 之前」的那个 owner（状态记在 state 文件里）。
 #             不是猜「直连是谁」，而是 undo —— codex 的原生直连是 api.openai.com，
@@ -67,14 +67,17 @@ CURSOR_PORT=18794
 CC_SWITCH_PORT=15721
 
 # ---- curator（token-policy-bridge，2026-10-02 加）----
-# 🔴🔴 端口冲突（实测）：CURSOR_PORT 与 CURATOR_PORT **都是 18794**。
-# manage.sh / agent-proxy-switch 一直把 18794 当 cursor-proxy 用；而 curator 桥
-# launchd 常驻也占 18794。当前 cursor 没启，所以相安无事；但一旦 `manage.sh start`
-# 起 cursor，必然 EADDRINUSE。这一条先记着，挪端口（建议桥换 18795）由维护者定。
-CURATOR_PORT=18794
-CURATOR_URL="http://127.0.0.1:18794/v1"
+# 🔴 端口冲突已解（2026-10-02 维护者点头）：CURSOR_PORT 一直是 18794（manage.sh:26，产品既定），
+#    所以把 **桥挪到 18795**，cursor 的 18794 一个字节不动。
+#    ⚠️ 改端口必须动三处并重启：tools/token-policy-bridge.js 默认值、tools/token-policy-bridge.plist、
+#       ~/Library/LaunchAgents/com.multi-proxy.token-policy-bridge.plist，然后 bridge-launchd.sh restart。
+CURATOR_PORT=18795
+CURATOR_URL="http://127.0.0.1:18795/v1"
 # dsh：provider 注册表里的目标 provider 名（可用 DSH_PROVIDER= 覆盖）
 DSH_PROVIDER="${DSH_PROVIDER:-agnes}"
+# 🔴 dsh 切 curator 时默认模型的落点：维护者要验的是「dsh + DeepSeek 自家模型」，
+#    所以默认给 deepseek-v4-flash（该名字必须已在 curator provider 的 models 白名单里）。
+DSH_CURATOR_MODEL="${DSH_CURATOR_MODEL:-deepseek-v4-flash}"
 DSH_CFG="${DSH_PROFILE:-$HOME/.dsh/profiles/desktop}/cordis.patch.yml"
 # curator/off 的切换状态（off = undo 到这条记录的上一个 owner）
 SWITCH_STATE="${SWITCH_STATE:-$HOME/.multi-proxy-manager/curator-switch-state.json}"
@@ -247,10 +250,75 @@ if mode == 'write' and idx >= 0:
     print("  已写入 providers.%s.baseURL = %s" % (prov, quoted))
     sys.exit(0)
 
+if mode == 'readdefault':
+    start = -1
+    for i, line in enumerate(lines):
+        if re.match(r'^\s*-\s*id:\s*agent-default-model\s*$', line):
+            start = i; break
+    if start < 0:
+        sys.stderr.write("未找到 agent-default-model entry\n"); sys.exit(4)
+    pv = mv = ''
+    for j in range(start, min(start + 12, len(lines))):
+        m = re.match(r'^\s*provider:\s*(.*?)\s*$', lines[j])
+        if m and not pv: pv = m.group(1)
+        m2 = re.match(r'^\s*model:\s*(.*?)\s*$', lines[j])
+        if m2 and not mv: mv = m2.group(1)
+    print('%s|%s' % (pv, mv)); sys.exit(0)
+
+if mode == 'default':
+    prov_new = os.environ['DSH_DEFAULT_PROV']; model_new = os.environ['DSH_DEFAULT_MODEL']
+    start = -1
+    for i, line in enumerate(lines):
+        if re.match(r'^\s*-\s*id:\s*agent-default-model\s*$', line):
+            start = i; break
+    if start < 0:
+        sys.stderr.write("未找到 agent-default-model entry\n"); sys.exit(4)
+    hp = hm = False
+    for j in range(start, min(start + 12, len(lines))):
+        m = re.match(r'^(\s*provider:\s*).*$', lines[j])
+        if m and not hp: lines[j] = m.group(1) + prov_new; hp = True
+        m2 = re.match(r'^(\s*model:\s*).*$', lines[j])
+        if m2 and not hm: lines[j] = m2.group(1) + model_new; hm = True
+        if hp and hm: break
+    if not (hp and hm):
+        sys.stderr.write("agent-default-model 下没找到 provider/model 行\n"); sys.exit(4)
+    open(path, 'w').write('\n'.join(lines))
+    print("  已写入 agent-default-model -> provider=%s model=%s" % (prov_new, model_new))
+    sys.exit(0)
+
 sys.stderr.write("未在 llm-pi-ai.providers.%s 下找到 baseURL，未修改：%s\n" % (prov, path)); sys.exit(4)
 PY
 }
 current_dsh_url() { dsh_patch_scan read; }
+# dsh 的开关是「换默认 provider」而不是改 baseURL：curator provider 的 baseURL 本来就是桥，
+# 所以 curator/off 只动 agent-default-model 这一个 entry 的 provider（+ model）字段。
+dsh_default_model() {
+  DSH_PATH="$DSH_CFG" python3 - <<'PY'
+import os, re, sys
+path = os.environ['DSH_PATH']
+try: lines = open(path).read().split('\n')
+except OSError as e:
+    sys.stderr.write("读取失败：%s\n" % e); sys.exit(3)
+start = -1
+for i, line in enumerate(lines):
+    if re.match(r'^\s*-\s*id:\s*agent-default-model\s*$', line):
+        start = i; break
+if start < 0:
+    sys.stderr.write("未找到 agent-default-model\n"); sys.exit(4)
+pv = mv = ''
+for j in range(start, min(start + 12, len(lines))):
+    m = re.match(r'^\s*provider:\s*(.*?)\s*$', lines[j])
+    if m and not pv: pv = m.group(1)
+    m2 = re.match(r'^\s*model:\s*(.*?)\s*$', lines[j])
+    if m2 and not mv: mv = m2.group(1)
+print('%s|%s' % (pv, mv))
+PY
+}
+set_dsh_default() {
+  [ -n "$1" ] && [ -n "$2" ] || { echo "  内部错误：dsh 默认模型需要 provider+model" >&2; return 1; }
+  cp "$DSH_CFG" "$DSH_CFG.bak.$(date +%Y%m%d-%H%M%S)"
+  DSH_DEFAULT_PROV="$1" DSH_DEFAULT_MODEL="$2" dsh_patch_scan default
+}
 set_dsh() {
   local new_url="${1:-}"
   [ -z "$new_url" ] && { echo "  内部错误：未提供目标 URL" >&2; return 1; }
@@ -263,16 +331,16 @@ set_dsh() {
 record_switch() {
   mkdir -p "$(dirname "$SWITCH_STATE")"
   cat > "$SWITCH_STATE" <<EOF
-{"agent":"$1","from":"$2","fromUrl":"$3","to":"curator","at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+{"agent":"$1","from":"$2","fromUrl":"$3","fromModel":"$4","to":"curator","at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 EOF
 }
-# 输出格式 "agent|from|fromUrl"
+# 输出格式 "agent|from|fromUrl|fromModel"（dsh 靠 fromModel 精确回滚到切前的 model）
 last_switch() {
   [ -f "$SWITCH_STATE" ] || return 1
   /usr/bin/python3 -c "
 import json,sys
 d=json.load(open(sys.argv[1]))
-print('%s|%s|%s' % (d.get('agent',''), d.get('from',''), d.get('fromUrl','')))
+print('%s|%s|%s|%s|%s' % (d.get('agent',''), d.get('from',''), d.get('fromUrl',''), d.get('fromModel',''), d.get('fromProv','')))
 " "$SWITCH_STATE" 2>/dev/null
 }
 
@@ -320,7 +388,8 @@ status_one() {
       echo "DSH (profile=${DSH_PROFILE:-desktop}, provider=$DSH_PROVIDER):"
       echo "  当前所有者            = $(detect_owner dsh "$url")"
       echo "  baseURL                = ${url:-（未读取到）}"
-      echo "  curator 桥(18794) 监听 = $(port_listening $CURATOR_PORT && echo 是 || echo 否)" ;;
+      echo "  默认模型(provider|model)= $(dsh_default_model 2>/dev/null || echo '(读不到)')"
+      echo "  curator 桥(18795) 监听 = $(port_listening $CURATOR_PORT && echo 是 || echo 否)" ;;
   esac
   # ---- curator 开关状态（所有 agent 共用一行）----
   if [ -f "$SWITCH_STATE" ]; then
@@ -341,30 +410,44 @@ switch_one() {
   case "$owner" in
     curator)
       if ! port_listening $CURATOR_PORT; then
-        echo "  [错误] curator 桥(18794)未监听 —— 拒绝写入，避免死链。" >&2
+        echo "  [错误] curator 桥(18795)未监听 —— 拒绝写入，避免死链。" >&2
         echo "         桥由 launchd 托管，先起它：" >&2
         echo "         launchctl kickstart -k gui/$(id -u)/com.multi-proxy.token-policy-bridge" >&2
         return 1
       fi
-      local prev prev_url
+      local prev prev_url prev_model="" prev_prov=""
       case "$agent" in
         codex)  prev_url="$(current_codex_url)";    prev="$(detect_owner codex "$prev_url")" ;;
         hermes) prev_url="$(current_hermes_url)";   prev="$(detect_owner hermes "$prev_url")" ;;
-        dsh)    prev_url="$(current_dsh_url 2>/dev/null || true)"; prev="$(detect_owner dsh "$prev_url")" ;;
+        dsh)    prev_url="$(current_dsh_url 2>/dev/null || true)"; prev="$(detect_owner dsh "$prev_url")"
+                # 🔴 dsh 的开关动的是 agent-default-model.provider，所以切前必须记**真实的
+                #    provider 名（agnes / curator / ollama…），不能记 detect_owner 的语义标签：
+                #    agnes 的原生 baseURL 匹配不上任何 known owner ⇒ detect_owner 返回 direct，
+                #    照它回滚就是写 `provider: direct`，而 dsh 里根本没这个 provider，
+                #    回滚完 dsh 直接读不到 provider（2026-10-02 实测踩到）。
+                local dm_tmp
+                dm_tmp="$(dsh_default_model 2>/dev/null || true)"
+                prev_prov="${dm_tmp%%|*}"
+                prev_model="${dm_tmp##*|}" ;;
         cursor) prev="(Cursor 的 base_url 在 GUI 里，读不到)"; prev_url="";;
       esac
       [ -n "$prev_url" ] && [ "$prev_url" != "$CURATOR_URL" ] || prev_url=""
-      record_switch "$agent" "${prev:-unknown}" "$prev_url"
+      record_switch "$agent" "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov"
       case "$agent" in
         codex)  set_codex  "$CURATOR_URL" ;;
         hermes) set_hermes "$CURATOR_URL" ;;
-        dsh)    set_dsh    "$CURATOR_URL" ;;
+        dsh)    set_dsh_default curator "$DSH_CURATOR_MODEL" ;;
         cursor)
           echo "  [半自动] 请在 Cursor GUI 完成切换：Settings → Models → OpenAI Base URL = $CURATOR_URL" ;;
       esac
       echo "  ✅ $agent 已切到 curator（$CURATOR_URL）。关闭时执行：agent-proxy-switch $agent off"
       return 0 ;;
   esac
+
+  # 🔴 各 agent 的原生 owner 分支执行完必须 return 0，否则会一路穿到下面的兜底，
+  #    在“明明写成功了”之后又补一句「未知的 owner: x」（2026-10-02 实测：切 codex
+  #    到 proxy-rebuild 时 base_url 确实写入了，但命令末尾照样报错，看着像失败）。
+  return 0
 
   case "$agent" in
     codex)
@@ -427,9 +510,9 @@ switch_one() {
       echo "         off 只能回滚到「切 curator 之前」，没有记录就只能手动改回。" >&2
       return 1
     }
-    local rec ragent rfrom rurl
+    local rec ragent rfrom rurl rmodel rprov
     rec="$(last_switch)" || { echo "  [错误] 状态文件读不出来" >&2; return 1; }
-    IFS='|' read -r ragent rfrom rurl <<< "$rec"
+    IFS='|' read -r ragent rfrom rurl rmodel rprov <<< "$rec"
     [ "$ragent" = "$agent" ] || {
       echo "  [错误] 记录里的切换对象是 [$ragent]，不是 [$agent]，拒绝跨 agent 回滚。" >&2
       return 1
@@ -443,8 +526,11 @@ switch_one() {
         if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_hermes "$CURATOR_URL"
         else set_hermes "$rurl"; fi ;;
       dsh)
-        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_dsh "$CURATOR_URL"
-        else set_dsh "$rurl"; fi ;;
+        # 切 curator 时动的是 agent-default-model，回滚也只动这一处。
+        # 🔴 provider 必须取记录里的 rprov（agnes/curator…），不能取 rfrom：
+        #    detect_owner 对 agnes 原生 baseURL 返回的是语义标签 direct，
+        #    直接写回去 = dsh 里没有的 provider，回滚完 dsh 读不到 provider（2026-10-02 踩过）。
+        set_dsh_default "${rprov:-$DSH_PROVIDER}" "${rmodel:-$DSH_CURATOR_MODEL}" ;;
     esac
     rm -f "$SWITCH_STATE"
     echo "  ✅ $agent 已回滚（切 curator 前 = $rfrom）。dsh/codex 若缓存在进程内，重启一次生效。"
@@ -468,7 +554,7 @@ usage() {
     dsh    : direct                    | curator | off
 
   curator / off 是「省钱总开关」一对：
-    agent-proxy-switch codex  curator   # 切到 curator 桥（18794），开始省
+    agent-proxy-switch codex  curator   # 切到 curator 桥（18795），开始省
     agent-proxy-switch codex  off       # 回滚到切 curator 之前（不是猜直连）
     agent-proxy-switch dsh    curator   # dsh 侧改 cordis.patch.yml 的 provider.baseURL
     agent-proxy-switch dsh    off       # 还原（用切换时记录的旧值）
