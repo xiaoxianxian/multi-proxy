@@ -367,16 +367,46 @@ set_dsh() {
 #    不能只写「provider + base_url」那几行 —— 否则 approval policy / mcp_servers /
 #    experimental_bearer_token / projects 信任级别会全丢，profile 跑起来像换了个人。
 # 只改这几处：① 顶层/顶层块的 provider 指向；② 追加一个指向桥的 provider 段。
+#
+# 🔴🔴 2026-10-02 实测踩坑（profile 方案唯一真正难搞的地方）：
+#   **主配置里的相对路径，解析基准是 CODEX_HOME，不是 cwd**。
+#   主配置第 3 行 `model_catalog_json = "cc-switch-model-catalog.json"` 这一句，
+#   裸跑时落在 `~/.codex/cc-switch-model-catalog.json`（46KB，存在）；
+#   一切到 profile，基准变成 profile 目录 ⇒ 文件不在 ⇒ codex 启动直接
+#   `Error: No such file or directory (os error 2)`、exit=1、连 --version 之后的第一个请求都发不出。
+#   排查路径：拿「一字不改的完整拷贝」当 CODEX_HOME 也照样炸 ⇒  proves 不是 curator 段的问题，
+#   是隔离本身。
+#   ⇒ 生成 profile 时，把顶层所有「相对路径字符串值」改写成 $HOME/.codex/ 下的绝对路径。
+#   ⚠️ 若将来主配置新增其它相对路径键，这条规则会一并兜住；若它把基准改成了别的 HOME，
+#      记得同步改下面 ORIGIN_HOME 的取值。
 # =====================================================================
 
 # codex：从主配置拷出 profile，追加 [model_providers.curator]
 ensure_codex_profile() {
   mkdir -p "$CODEX_PROFILE"
   cp "$CODEX_CFG" "$CODEX_PROFILE/config.toml"
-  CURATOR_URL_ENV="$CURATOR_URL" PROFILE_IN="$CODEX_PROFILE/config.toml" python3 - <<'PY'
+  CURATOR_URL_ENV="$CURATOR_URL" PROFILE_IN="$CODEX_PROFILE/config.toml" ORIGIN_HOME="$HOME/.codex" python3 - <<'PY'
 import os, re, sys
 url = os.environ['CURATOR_URL_ENV']; path = os.environ['PROFILE_IN']
+origin_home = os.environ['ORIGIN_HOME']
 lines = open(path).read().split('\n')
+
+# 0) 顶层相对路径 → 绝对路径（CODEX_HOME 变了，相对路径的落点也跟着变，见上面大坑说明）
+in_sec = False
+for i, l in enumerate(lines):
+    if re.match(r'^\s*\[', l):
+        in_sec = True; continue
+    if in_sec: continue
+    m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([^"]+)"\s*$', l)
+    if not m: continue
+    key, val = m.group(1), m.group(2)
+    # 排除表：这些键的值是「名字/枚举」，不是文件路径，按路径改写会写坏配置。
+    if key in ('model_provider', 'model', 'model_reasoning_effort', 'wire_api'):
+        continue
+    if val.startswith('/') or val.startswith('http://') or val.startswith('https://'):
+        continue
+    lines[i] = '%s = "%s/%s"' % (key, origin_home, val)
+    print('  相对路径改写：%s → %s/%s' % (key, origin_home, val))
 
 # 1) 顶层 model_provider = （第一个 [table] 之前叫顶层）
 in_sec = False; done = False
