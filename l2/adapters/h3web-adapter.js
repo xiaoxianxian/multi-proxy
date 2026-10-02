@@ -49,6 +49,26 @@ const H3WEB_GEN_FIELDS = [
 // 不会被 h3web 侧强转成 384×672。task 里显式给的同名 key 优先级更高（不会被覆盖）。
 const PERF_PRESET = Object.freeze({ layers: 40, reuse: 2, token_reduction: true, ssd_streaming: true });
 
+// ---- reuse / core_reuse 互斥（2026-10-02 实测，真跑撞出来的坑）----
+// h3gen 底层会判：core reuse 与 denoiser reuse 不能同时开。实测 engine.log 首行就是那句
+// "h3: core reuse and denoiser reuse cannot be combined"，引擎直接 **退出码 1 秒退**，
+// 而且 /api/gen 照样 200 返回 job_id —— 提交阶段看不出任何异常，要跑到 job log 才看见。
+// 问题在 h3web.py 只**各自**校验取值枚举（reuse 1/2/3 见 1634-1638、core_reuse 1/4/6 见
+// 1645-1650），两个一起传不报错、一路放行到引擎才炸。
+// 所以 adapter 侧补一道组合校验：同时显式给 reuse 和 core_reuse 就 fail-fast，
+// 别让调用方在几十分钟的跑批后才发现白跑。
+function assertReuseCompat(payload, where) {
+    const hasReuse = payload.reuse !== undefined && payload.reuse !== null;
+    const hasCore = payload.core_reuse !== undefined && payload.core_reuse !== null;
+    if (!hasReuse || !hasCore) return;
+    throw new Error(
+        `[${where}] reuse=${payload.reuse} 与 core_reuse=${payload.core_reuse} 不能同时传 —— ` +
+        'h3gen 会直接退出码 1（"core reuse and denoiser reuse cannot be combined"）。' +
+        'h3web.py 只各自校验取值枚举、组合合法性要到引擎才炸。二者取其一：要么 reuse 档位，' +
+        '要么 core_reuse 档位。'
+    );
+}
+
 // perf 补位：只往「没显式给过同名 key」的 payload 上填预设，显式值永不覆盖。
 // submit 与 submitStoryboard 共用（单镜 payload 与逐镜 payload 语义一致）。
 function applyPerf(payload, perfOpt) {
@@ -185,6 +205,7 @@ class H3webAdapter {
         if (opts.steps) payload.steps = opts.steps;
         if (opts.width) payload.width = opts.width;
         if (opts.height) payload.height = opts.height;
+        assertReuseCompat(payload, 'submit'); // 引擎层才判的互斥，提到提交前 fail-fast
         const r = await httpPostJson(host, port, this.genPath, payload);
         if (r.status !== 200) throw new Error(`h3web submit failed: HTTP ${r.status}`);
         const j = JSON.parse(r.body);
@@ -211,7 +232,9 @@ class H3webAdapter {
             for (const k of H3WEB_GEN_FIELDS) {
                 if (s[k] !== undefined && s[k] !== null) shot[k] = s[k];
             }
-            return applyPerf(shot, opts.perf);
+            applyPerf(shot, opts.perf);
+            assertReuseCompat(shot, `storyboard[${i}]`); // 逐镜独立判，一镜错了整单拒
+            return shot;
         });
         const payload = { shots: built };
         if (opts.resumeJob) payload.resume_job = opts.resumeJob;

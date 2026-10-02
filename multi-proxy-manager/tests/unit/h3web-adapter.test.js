@@ -200,5 +200,43 @@ describe('h3web adapter contract', () => {
             )).rejects.toThrow(/prompt 必填/);
             expect(mock.getLastStoryboardPayload()).toBeNull();
         });
+
+        test('⚠️ 反证：某镜 reuse 与 core_reuse 同时传 → 提交前拒 —— 否则引擎退出码 1 秒退', async () => {
+            mock.resetLastStoryboard();
+            await expect(adapter.submitStoryboard(
+                [{ prompt: 'A', reuse: 3 }, { prompt: 'B', reuse: 3, core_reuse: 6 }],
+            )).rejects.toThrow(/不能同时传/);
+            expect(mock.getLastStoryboardPayload()).toBeNull(); // 一镜错、整单不下发
+        });
+
+        test('只给 reuse 或只给 core_reuse 不误伤（二者本就互斥，单给合法）', async () => {
+            await expect(adapter.submit(
+                { type: 'generate-video', prompt: 'A', reuse: 3 },
+            )).resolves.toBeTruthy();
+            await expect(adapter.submit(
+                { type: 'generate-video', prompt: 'A', core_reuse: 6 },
+            )).resolves.toBeTruthy();
+        });
+    });
+
+    describe('reuse / core_reuse 互斥（h3gen 层限制，本 adapter 提前 fail-fast）', () => {
+        // 2026-10-02 真跑坑：同时传 → h3gen 直接退出码 1，
+        // 但 /api/gen 照样 200 返回 job_id，只有 job log / "{产物}.engine.log" 首行写着
+        // "h3: core reuse and denoiser reuse cannot be combined"。h3web.py 只各自校验取值
+        // 枚举（reuse 1/2/3 → :1634-1638；core_reuse 1/4/6 → :1645-1650），组合放行走引擎。
+        test('submit 同时给 reuse 与 core_reuse → 立即抛错，不发请求', async () => {
+            await expect(adapter.submit({
+                type: 'generate-video', prompt: 'A', reuse: 3, core_reuse: 6,
+            })).rejects.toThrow(/不能同时传/);
+        });
+
+        test('perf 预设不会自己引入 core_reuse（预设只有 reuse，不会撞上显式值）', async () => {
+            const r = await adapter.submit(
+                { type: 'generate-video', prompt: 'A', width: 512, height: 896 },
+                { perf: true },
+            );
+            expect(r.echo.reuse).toBe(2);
+            expect(r.echo.core_reuse).toBeUndefined();
+        });
     });
 });
