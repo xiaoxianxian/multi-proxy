@@ -11,8 +11,15 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
     expect(CT.enabled()).toBe(false);
     CT.setPricing('openai', { input: 10, output: 20 });
     CT.accumulate('openai', { prompt_tokens: 1000, completion_tokens: 500 });
-    // 门控关时 accumulate 不提取、不累计
-    expect(CT.getCost('openai')).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0, requestCount: 0 });
+    // 门控关时 accumulate 不提取、不累计。
+    // ⚠️ 逐字段显式校验，不用整对象 toEqual —— getCost() 后加字段（如 latencyP50）不该炸掉这条测试。
+    const c0 = CT.getCost('openai');
+    expect(c0.promptTokens).toBe(0);
+    expect(c0.completionTokens).toBe(0);
+    expect(c0.totalTokens).toBe(0);
+    expect(c0.cost).toBe(0);
+    expect(c0.requestCount).toBe(0);
+    expect(c0.latencyP50).toBeNull(); // 无样本 ⇒ null，绝不 0
    });
 
   test('门控开（=1/true/on）：enabled()=true', () => {
@@ -139,7 +146,13 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
     CT.accumulate('openai', { prompt_tokens: 100, completion_tokens: 50 });
      // 门控关 → 没创建 _state['openai']
     expect(CT.getAll()).toEqual({});
-    expect(CT.getCost('openai')).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0, requestCount: 0 });
+    const cz = CT.getCost('openai');
+    expect(cz.promptTokens).toBe(0);
+    expect(cz.completionTokens).toBe(0);
+    expect(cz.totalTokens).toBe(0);
+    expect(cz.cost).toBe(0);
+    expect(cz.requestCount).toBe(0);
+    expect(cz.latencyP50).toBeNull();
    });
 
   test('reset 全清（测试隔离 + 重启语义）', () => {
@@ -149,6 +162,41 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
     expect(CT.getCost('openai').cost).toBe(30);
     CT.reset();
     expect(CT.getAll()).toEqual({});
-    expect(CT.getCost('openai')).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0, requestCount: 0 });
+    const cz = CT.getCost('openai');
+    expect(cz.promptTokens).toBe(0);
+    expect(cz.completionTokens).toBe(0);
+    expect(cz.totalTokens).toBe(0);
+    expect(cz.cost).toBe(0);
+    expect(cz.requestCount).toBe(0);
+    expect(cz.latencyP50).toBeNull();
+   });
+
+  // ---- latencyP50（floor view 要读它；lib/cost-track.js 新增字段，此前零覆盖）----
+  // 只补测试、不动实现：在途改动还没入库，这里先钉住它的可观测契约，
+  // 免得实现侧改坏（比如把 null 写成 0）没人发现。
+  test('latencyP50：无样本返 null，绝不 0（0 会被 floor view 读成「零延迟」假数据）', () => {
+    CT.recordLatency('openai', 100);           // 门控默认关 ⇒ 直接返回，不进样本
+    expect(CT.latencyP50('openai')).toBeNull();
+    process.env.PROXY_COST_TRACK = '1';
+    CT.reset();
+    expect(CT.latencyP50('openai')).toBeNull();
+   });
+
+  test('latencyP50：门控开取中位数 + 环形窗口裁剪 + 非法输入不污染 + reset 清空', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.reset();
+    for (const ms of [10, 20, 30, 40, 50]) CT.recordLatency('p', ms);
+    expect(CT.latencyP50('p')).toBe(30);       // 中位数
+
+    for (let i = 0; i < 60; i++) CT.recordLatency('p', 7);  // 灌爆窗口
+    CT.recordLatency('p', 999);                             // 触发 splice，只留最近 50 条
+    expect(CT.latencyP50('p')).toBe(7);
+
+    for (const bad of [-1, NaN, Infinity, 'abc', undefined]) CT.recordLatency('p', bad);
+    CT.recordLatency('p');                     // 缺 ms 参数
+    expect(CT.latencyP50('p')).toBe(7);        // 非法值一律不进样本
+
+    CT.reset();
+    expect(CT.latencyP50('p')).toBeNull();
    });
 });
