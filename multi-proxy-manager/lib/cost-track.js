@@ -59,8 +59,12 @@ function latencyP50(proxyName) {
 
 // 从 env 读 pricing：PROXY_PRICING_<PROXY> = '{"input":10,"output":20,"cacheHit":3}'
 // 容错：非法 JSON → 默认 {input:0, output:0}；proxy 名大写化（env 键名大写）
+//
+// 🔴 连字符必须在键名里换成下划线：代理名都是 codex-proxy / hermes-proxy 这种带横杠的，
+// 而 shell 设不了 `PROXY_PRICING_CODEX-PROXY` 这种带横杠的环境变量 —— 不归一化，
+// 文档承诺的 `PROXY_PRICING_<proxy>` 对线上代理一个都配不上（cost 恒 0，静默）。
 function readPricingFromEnv(proxyName) {
-  const key = 'PROXY_PRICING_' + proxyName.toUpperCase();
+  const key = 'PROXY_PRICING_' + proxyName.toUpperCase().replace(/-/g, '_');
   const raw = process.env[key];
   if (!raw) return null;
   try {
@@ -82,7 +86,8 @@ function readPricingFromEnv(proxyName) {
 function loadPricingFromEnv() {
   for (const [key, val] of Object.entries(process.env)) {
     if (key.startsWith('PROXY_PRICING_')) {
-       const proxyName = key.slice('PROXY_PRICING_'.length).toLowerCase();
+       // 与 readPricingFromEnv 镜像：下划线还原成连字符（codex_proxy → codex-proxy）
+      const proxyName = key.slice('PROXY_PRICING_'.length).toLowerCase().replace(/_/g, '-');
       const p = readPricingFromEnv(proxyName);
       if (p) setPricing(proxyName, p);
      }
@@ -143,21 +148,45 @@ function extractTokens(usage) {
   return { prompt, completion, cacheHit, thinking };
 }
 
+// 单次落账的**唯一出口**：热路径 accumulate 与跨进程上报共用这一份成本公式，
+// 避免以后调价/改口径时两处漂移（此前 cost 公式只在 accumulate 里写了一份）。
+function applyTokens(proxyName, t, latencyMs) {
+  if (!enabled()) return;
+  const st = ensureState(proxyName);
+  const { input: pIn, output: pOut, cacheHit: pCache } = st.pricing;
+  const costDelta = (t.prompt - t.cacheHit) / 1e6 * pIn + t.completion / 1e6 * pOut +
+                    (pCache !== undefined ? t.cacheHit / 1e6 * pCache : 0);
+  st.promptTokens      += t.prompt;
+  st.completionTokens += t.completion;
+  st.totalTokens       += t.prompt + t.completion;
+  // 不进 totalTokens（保持 total = prompt + completion 的既有口径，既有测试钉死这个等式）
+  st.thinkingTokens   += t.thinking;
+  st.cost              += costDelta;
+  st.requestCount      += 1;
+  if (typeof latencyMs === 'number') recordLatency(proxyName, latencyMs);
+}
+
 // 热路径主入口：门控关时零开销，开时从 usage 提取 + 累计 cost
 function accumulate(proxyName, usage) {
   if (!enabled()) return;
-  const st = ensureState(proxyName);
-  const { prompt, completion, cacheHit, thinking } = extractTokens(usage || {});
-  const { input: pIn, output: pOut, cacheHit: pCache } = st.pricing;
-  const costDelta = (prompt - cacheHit) / 1e6 * pIn + completion / 1e6 * pOut +
-                    (pCache !== undefined ? cacheHit / 1e6 * pCache : 0);
-  st.promptTokens      += prompt;
-  st.completionTokens += completion;
-  st.totalTokens       += prompt + completion;
-  // 不进 totalTokens（保持 total = prompt + completion 的既有口径，既有测试钉死这个等式）
-  st.thinkingTokens   += thinking;
-  st.cost              += costDelta;
-  st.requestCount      += 1;
+  applyTokens(proxyName, extractTokens(usage || {}));
+}
+
+/**
+ * 跨进程上报入口（方案②：代理进程自己把 usage 报给 manager）。
+ *
+ * 为什么需要它：Anthropic 线（/v1/messages）由 codex-proxy 处理，而 floor 盘面读的是
+ * manager 进程的内存态 ⇒ 两进程不通，Anthropic 线在 manager 层**零采集**（10-02 实测）。
+ *
+ * 设计成「声明式、开盒即用」：接入方一行解析代码都不写，只要把上游原始 usage 原样带上
+ * （对象 or 流式 SSE 文本），由 lib/usage-probe 按 wire 自动归一。
+ * 今后新增 agent 的代理 / 新 provider，都走这条同样的上报路径。
+ */
+function reportUsage(opts) {
+  const o = opts || {};
+  const t = require('./usage-probe').toUsage(o.raw);
+  applyTokens(o.agent || o.proxy || 'gateway', t, o.latencyMs);
+  return t;
 }
 
 // 读 per-proxy 累计（对外快照，不暴露内部 timestamp）
@@ -195,6 +224,8 @@ module.exports = {
   setPricing,
   loadPricingFromEnv,
   accumulate,
+  reportUsage,
+  applyTokens,
   recordLatency,
   latencyP50,
   getCost,

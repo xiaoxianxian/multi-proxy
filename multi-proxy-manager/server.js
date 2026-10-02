@@ -7,12 +7,18 @@ const path = require('path');
 
 const pm = require('./lib/process-manager');
 
+const auth = require('./lib/auth');
 const authRoutes = require('./routes/auth');
 const controlRoutes = require('./routes/proxy-control');
 const registryRoutes = require('./routes/registry');
 const apiRoutes = require('./routes/proxy-api');
 const metaRoutes = require('./routes/meta');
 const sessionsRoutes = require('./routes/sessions');
+
+// 跨进程写账机器凭据：mint（或读回）~/.multi-proxy-manager/agent-token 并注入自身 env。
+// 关键在下文 —— process-manager 的 spawnProxy 用 `{ ...process.env }` 拉代理子进程，
+// 这行让所有经 manager 拉起的代理自动带上 x-agent-token，第三方代理复制同一串即可。
+process.env.MANAGER_AGENT_TOKEN = auth.getOrGenerateAgentToken();
 
 const app = express();
 const PORT = parseInt(process.env.PORT) || 18792;
@@ -90,6 +96,12 @@ app.use('/api/mcp', mcpRoutes);
 // 门控 PROXY_KNOWLEDGE_BASE 默认关（非侵入，与 skill/memory/mcp 同模式）；拉模式：读不鉴权、写鉴权（requireAuth）
 const knowledgeRoutes = require('./routes/knowledge-base');
 app.use('/api/knowledge', knowledgeRoutes);
+// 代理面 floor view：只读聚合（cost-track + provider-health），挂在代理 wildcard 之前。
+// 与 registry/provider-health/sessions 同模式；纯只读展示，零副作用、无门控。
+app.use('/api/floor', require('./routes/floor'));
+// 跨进程 usage 上报面：代理进程（如 codex-proxy）把上游 usage 报进来，与 floor 同挂此层。
+// 接入规范见 routes/cost-report.js 头注释 —— 接入方只需贴 raw + agent，解析由 usage-probe 自动做。
+app.use('/api/cost', require('./routes/cost-report'));
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
@@ -118,6 +130,7 @@ app.use((req, res, next) => {
       '/proxy-config': 'proxy-config.html',
       '/sessions': 'sessions.html',
       '/knowledge': 'knowledge.html',
+      '/floor': 'floor.html',
     };
     const page = routeMap[req.path] || 'dashboard.html';
     return res.sendFile(path.join(__dirname, 'public', page));

@@ -1,5 +1,5 @@
 const express = require('express');
-const { Readable } = require('stream');
+const { Readable, PassThrough } = require('stream');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -727,7 +727,7 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
  * chat 那条不得不用 Readable.fromWeb 是因为 Web ReadableStream 与 Express 的 res 不兼容
  * （B6 fix：直接 pipeTo 会抛 TypeError → 504）；responses 是同一个坑，所以共用这一份。
  */
-function pipeUpstreamBytes(res, response, tag) {
+function pipeUpstreamBytes(res, response, tag, onBytes) {
   if (!response.body) { res.end(); return; }
   const ct = response.headers.get('content-type');
   if (ct) res.setHeader('Content-Type', ct);
@@ -738,13 +738,64 @@ function pipeUpstreamBytes(res, response, tag) {
     console.error(`[${tag}] stream error: ${err.message}`);
     if (!res.headersSent) res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
   });
+
+  // usage 藏在**流末**（Anthropic 的 message_delta / 末 chunk），所以必须边 pipe 边攒字节，
+  // 等流走完再给出去 —— 攒一份副本换「流式体验不被破坏 + 账本不丢数」。
+  let acc = '';
+  const tee = new PassThrough();
+  tee.on('data', (c) => { acc += c.toString('utf8'); });
+
   return new Promise((resolve, reject) => {
-    readable.pipe(res);
-    res.on('close', resolve);
-    res.on('finish', resolve);
+    readable.pipe(tee).pipe(res);
+    // 🔴 close 与 finish **对同一次响应都会触发**，不加幂等守卫 onBytes 会被跑两次
+    // （2026-10-02 e2e 实测：requestCount 多 1、同一笔 usage 落两遍账，totalTokens 翻倍）。
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+      if (typeof onBytes === 'function') {
+        try { onBytes(acc); } catch (e) { /* 上报失败绝不能影响主路径 */ }
+      }
+    };
+    res.on('close', finish);
+    res.on('finish', finish);
     res.on('error', reject);
   });
 }
+
+/**
+ * 把这次转发的 usage 报给 manager 的 cost-track（POST /api/cost/report）。
+ *
+ * 接入面是**同一条**：任何 agent 的代理都报这个端点、都只贴 `raw`（上游 usage 原样），
+ * 解析/归一由 manager 侧 lib/usage-probe 自动生成 —— 接入方不写解析、不改 wire 知识。
+ * 详见 routes/cost-report.js 头注释。
+ *
+ * 🔴 纪律：上报是**旁路**，fire-and-forget + 全 catch。manager 挂了 / 格式认不出，
+ * 都不能让主路径（Claude Code 的请求）失败或变慢。
+ */
+function reportUsage(raw, latencyMs) {
+  if (!raw || typeof raw !== 'string') return;
+  const url = String(process.env.MANAGER_URL || 'http://127.0.0.1:18792').replace(/\/$/, '');
+  // 写端点不 fail-open：没 token 就不报，宁可少一笔账也不让陌生人灌假成本。
+  // manager 侧 lib/auth.js 的 requireAgentAuth 认这个头；MANAGER_AGENT_TOKEN 由
+  // manager 注入自身 env → spawnProxy 的 { ...process.env } 自动带进来（开盒即用）。
+  const agentToken = process.env.MANAGER_AGENT_TOKEN || process.env.PROXY_AUTH_TOKEN;
+  const headers = { 'content-type': 'application/json' };
+  if (agentToken) headers['x-agent-token'] = agentToken;
+  fetch(`${url}/api/cost/report`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ agent: 'codex-proxy', raw, latencyMs }),
+  }).catch((e) => {
+    // 全 catch（不拖累主路径），但**只警告一次** —— 静默吞掉会让"上报没生效"变成玄学。
+    if (!reportWarned) {
+      reportWarned = true;
+      console.warn('[cost] 上报 manager 失败（不影响主路径）:', (e && e.message) || e);
+    }
+  });
+}
+let reportWarned = false;
 
 // ===== Messages passthrough（Anthropic wire —— Claude Code / Claude Desktop）=====
 // 此前 18790 只有 OpenAI 两条 wire（/v1/chat/completions、/v1/responses），Claude Code
@@ -802,6 +853,7 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
       if (req.headers['authorization']) headers['authorization'] = `Bearer ${provider.apiKey}`;
     }
 
+    const t0 = Date.now();
     const response = await fetch(upstreamUrl, {
       method: 'POST',
       headers,
@@ -814,7 +866,11 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
       console.error(`[messages] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
       return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
-    return pipeUpstreamBytes(res, response, '[messages]');
+    // 流走完再上报：把攒到的字节（非流式是整份 JSON、流式是 SSE 拼接文本）原样交给
+    // manager 侧的 usage-probe 归一，这里不解析、不判 wire。
+    return pipeUpstreamBytes(res, response, '[messages]', (text) => {
+      reportUsage(text, Date.now() - t0);
+    });
   } catch (e) {
     console.error(`[messages] error: ${e.message}`);
     return res.status(500).json({ success: false, error: e.message, code: 'MESSAGES_ERROR' });

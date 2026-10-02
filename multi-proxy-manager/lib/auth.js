@@ -130,6 +130,48 @@ function requireAuth(req, res, next) {
   }
 }
 
+// ==================== 机器凭据（跨进程写账用） ====================
+// 场景：agent 的代理进程（codex-proxy 等）要把上游 usage 写进 manager 的 cost-track。
+// 这是**写端点**，不能 fail-open —— 谁能往里灌假成本，谁就能污染成本盘面。
+// 但与「开盒即用」冲突：要求代理先登录拿 JWT 太重。
+//
+// 解法 = 复用 auth.js 已有的「首次运行落盘生成」套路（见 getOrGenerateJwtSecret）：
+// manager 首次启动 mint 一个机器 token 落到 ~/.multi-proxy-manager/agent-token（0600），
+// 再注入自己的 process.env —— lib/process-manager.js 的 spawnProxy 用 `{ ...process.env }`
+// 拉起代理子进程，token 自动跟着走；第三方 agent 代理复制同一串进自己的 env 即可。
+//
+// 🔴 不是秘密的「秘密」：token 只在环回面防随手灌数。网络暴露前仍须走正经鉴权（界面 JWT / PROXY_AUTH_TOKEN）。
+const AGENT_TOKEN_FILE = path.join(os.homedir(), '.multi-proxy-manager', 'agent-token');
+
+function getOrGenerateAgentToken() {
+  if (process.env.MANAGER_AGENT_TOKEN && process.env.MANAGER_AGENT_TOKEN.length > 0) {
+    return process.env.MANAGER_AGENT_TOKEN;
+  }
+  try {
+    const stored = fs.readFileSync(AGENT_TOKEN_FILE, 'utf8').trim();
+    if (stored.length > 0) return stored;
+  } catch { /* 文件不存在 → 生成 */ }
+
+  const newToken = crypto.randomBytes(32).toString('hex');
+  try {
+    fs.mkdirSync(path.dirname(AGENT_TOKEN_FILE), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(AGENT_TOKEN_FILE, newToken, { mode: 0o600 });
+  } catch (e) {
+    console.error('[Auth] Failed to persist agent token:', e.message);
+  }
+  return newToken;
+}
+
+/**
+ * 写端点用的守卫：界面 JWT **或** 机器 token，二选一即放行。
+ * 只读端点不用它（继续用 requireAuth 或直接不挂）。
+ */
+function requireAgentAuth(req, res, next) {
+  const agentToken = req.headers['x-agent-token'];
+  if (agentToken && agentToken === process.env.MANAGER_AGENT_TOKEN) return next();
+  return requireAuth(req, res, next);
+}
+
 console.log('[Auth] Management auth ' + (needsPasswordSetup() ? 'disabled (first-run)' : 'enabled'));
 
 module.exports = {
@@ -142,5 +184,7 @@ module.exports = {
   needsPasswordSetup,
   verifyPassword,
   generateToken,
+  getOrGenerateAgentToken,
   requireAuth,
+  requireAgentAuth,
 };
