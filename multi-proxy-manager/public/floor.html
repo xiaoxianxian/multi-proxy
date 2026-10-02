@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Manager - Floor</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="stylesheet" href="./colors_and_type.css">
+  <link rel="stylesheet" href="./shared-styles.css">
+</head>
+<style>
+  /* 一屏 floor：一格 = 一个上游。纯 CSS/SVG 够，不引渲染引擎。 */
+  body { margin: 0; background: var(--color-bg-secondary, #f5f6f8); color: var(--color-text); font-family: var(--font-family, -apple-system, "Segoe UI", sans-serif); }
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; flex-shrink: 0; background: var(--color-bg); border-right: 1px solid var(--color-border); }
+  .sidebar-nav { padding: 12px; }
+  .sidebar-nav a { display: block; padding: 8px 12px; border-radius: 8px; color: var(--color-text); text-decoration: none; font-size: 13px; margin-bottom: 2px; }
+  .sidebar-nav a:hover { background: var(--color-bg-secondary, #eef0f3); }
+  .sidebar-nav a.active { background: var(--color-primary); color: #fff; font-weight: 600; }
+  .main { flex: 1; padding: 24px 28px; min-width: 0; }
+  .head { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+  .head h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .chip { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--color-border); color: var(--color-text-tertiary, #8a8f98); }
+  .chip.on { border-color: #22c55e; color: #16a34a; }
+  .toolbar { margin-left: auto; display: flex; gap: 8px; }
+  .btn-mini { font-size: 12px; padding: 5px 10px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 6px; cursor: pointer; }
+  .meta { font-size: 12px; color: var(--color-text-tertiary, #8a8f98); margin-bottom: 16px; }
+  .meta b { font-weight: 600; }
+  h3.sec { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--color-text-tertiary, #8a8f98); margin: 22px 0 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .cell { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .cell-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(0,0,0,.06); }
+  .cell-id { font-weight: 700; font-size: 14px; letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-status { margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; opacity: .75; }
+  .rows { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 12px; }
+  .kv { display: flex; flex-direction: column; gap: 1px; }
+  .kv .k { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--color-text-tertiary, #8a8f98); font-weight: 700; }
+  .kv .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .kv .v.na { color: var(--color-text-tertiary, #8a8f98); font-weight: 400; }
+  .empty { padding: 34px; text-align: center; color: var(--color-text-tertiary, #8a8f98); font-size: 13px; border: 1px dashed var(--color-border); border-radius: 12px; }
+  .empty code { font-size: 11px; background: var(--color-bg-secondary, #eef0f3); padding: 1px 5px; border-radius: 4px; }
+  .note { margin-top: 16px; font-size: 12px; color: var(--color-text-tertiary, #8a8f98); line-height: 1.6; }
+  .note code { font-size: 11px; background: var(--color-bg-secondary, #eef0f3); padding: 1px 5px; border-radius: 4px; }
+</style>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand"><div class="logo-icon">P</div><h1>Multi-Proxy</h1></div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html">概览</a>
+      <a href="floor.html" class="active">Floor（代理面）</a>
+      <a href="proxy-config.html">代理配置</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="skills.html">Skills</a>
+      <a href="knowledge.html">Knowledge</a>
+      <a href="logs.html">日志</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <div class="head">
+      <h2>Floor</h2>
+      <span class="chip" id="chip-hook">最近命中 hook: —</span>
+      <div class="toolbar">
+        <button class="btn-mini" id="btn-refresh">刷新</button>
+        <button class="btn-mini" id="btn-theme">主题</button>
+      </div>
+    </div>
+    <div class="meta" id="meta">正在加载…</div>
+
+    <h3 class="sec">上游 / 策略</h3>
+    <div class="grid" id="grid"></div>
+
+    <h3 class="sec">宿主 Agent（来自事件流）</h3>
+    <div class="grid" id="agents"></div>
+
+    <div class="note" id="note"></div>
+  </main>
+</div>
+
+<script src="./floor-view.js"></script>
+<script>
+(function () {
+  'use strict';
+  var grid = document.getElementById('grid');
+  var agentsBox = document.getElementById('agents');
+  var meta = document.getElementById('meta');
+  var note = document.getElementById('note');
+  var chipHook = document.getElementById('chip-hook');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  // null → 「—」（无数据源，绝不画 0）
+  function show(v, fmt) {
+    if (v === null || v === undefined) { return '<span class="v na">—</span>'; }
+    return '<span class="v">' + esc(fmt ? fmt(v) : v) + '</span>';
+  }
+  var nf = function (v) { return Number(v).toLocaleString(); };
+  var cf = function (v) { return '¥' + Number(v).toFixed(4); };
+  var msf = function (v) { return Number(v).toFixed(1) + ' ms'; };
+  function ts(t) { try { return t ? new Date(t).toLocaleTimeString() : '—'; } catch (e) { return '—'; } }
+
+  function cellHtml(c) {
+    return '<div class="cell">' +
+      '<div class="cell-top">' +
+        '<span class="dot" style="background:' + c.statusColor + '" title="' + esc(c.statusHint) + '"></span>' +
+        '<span class="cell-id" title="' + esc(c.id) + '">' + esc(c.id) + '</span>' +
+        '<span class="cell-status" style="color:' + c.statusColor + '">' + esc(c.statusLabel) + '</span>' +
+      '</div>' +
+      '<div class="rows">' +
+        '<div class="kv"><span class="k">Tokens</span>' + show(c.totalTokens, nf) + '</div>' +
+        '<div class="kv"><span class="k">Cost</span>' + show(c.cost, cf) + '</div>' +
+        '<div class="kv"><span class="k">Requests</span>' + show(c.requestCount, nf) + '</div>' +
+        '<div class="kv"><span class="k">Failures</span>' + show(c.failures, nf) + '</div>' +
+        '<div class="kv"><span class="k">p50 Latency</span>' + show(c.latencyMs, msf) + '</div>' +
+        '<div class="kv"><span class="k">Last Probe</span>' + show(c.lastProbeAt, ts) + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function agentHtml(a) {
+    return '<div class="cell">' +
+      '<div class="cell-top">' +
+        '<span class="dot" style="background:#3b82f6"></span>' +
+        '<span class="cell-id" title="' + esc(a.agentId) + '">' + esc(a.agentId) + '</span>' +
+        '<span class="cell-status" style="color:#3b82f6">' + esc(a.lastEvent || 'agent') + '</span>' +
+      '</div>' +
+      '<div class="rows">' +
+        '<div class="kv"><span class="k">Model</span>' + show(a.model) + '</div>' +
+        '<div class="kv"><span class="k">Ctx Tokens</span>' + show(a.tokens, nf) + '</div>' +
+        '<div class="kv"><span class="k">Input</span>' + show(a.input, nf) + '</div>' +
+        '<div class="kv"><span class="k">Output</span>' + show(a.output, nf) + '</div>' +
+        '<div class="kv"><span class="k">Cache Read</span>' + show(a.cacheRead, nf) + '</div>' +
+        '<div class="kv"><span class="k">Last Seen</span>' + show(a.at, ts) + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function load() {
+    fetch('/api/floor', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.ok) { throw new Error((d && d.error) || 'bad response'); }
+        meta.innerHTML = '上游格 <b>' + d.cellCount + '</b> · 宿主 agent <b>' + (d.agents || []).length +
+          '</b> · 成本采集 <b>' + (d.costTrackEnabled ? '开' : '关') + '</b> · 更新于 ' + esc(new Date(d.generatedAt).toLocaleTimeString());
+
+        // 最近命中 hook（跨进程经 floor-feed 落盘；无 → 「—」）
+        if (d.recentHook) {
+          chipHook.className = 'chip on';
+          chipHook.textContent = '最近命中 hook: ' + d.recentHook.hook + '/' + d.recentHook.policy;
+        } else {
+          chipHook.className = 'chip';
+          chipHook.textContent = '最近命中 hook: —';
+        }
+
+        if (!d.cells || d.cells.length === 0) {
+          grid.innerHTML = '<div class="empty">暂无上游数据：没有流量记录、也没有健康记录。<br>' +
+            '开成本采集（<code>PROXY_COST_TRACK=1</code>）跑一轮请求后再刷新；或看 <a href="proxy-config.html">代理配置</a>。</div>';
+        } else {
+          grid.innerHTML = d.cells.map(cellHtml).join('');
+        }
+
+        if (!d.agents || d.agents.length === 0) {
+          agentsBox.innerHTML = '<div class="empty">暂无宿主事件：把宿主（如 Munder）的 HIVE_SOCK 指到 ' +
+            '<code>tools/floor-ingest.js</code>（<code>node tools/floor-ingest.js</code>），事件即流入此处。</div>';
+        } else {
+          agentsBox.innerHTML = d.agents.map(agentHtml).join('');
+        }
+
+        var reasons = {
+          latencyMs: '还没有成功转发的延迟样本（需 PROXY_COST_TRACK=1 且真跑过转发）',
+          recentHook: '本进程/桥还没命中过 policy（需 PROXY_FLOOR_FEED=1 且真跑过一条经桥的请求）',
+        };
+        var un = (d.unavailable || []);
+        note.innerHTML = un.length
+          ? '🔴 诚实标注：' + un.map(function (k) { return '<code>' + esc(k) + '</code> ' + esc(reasons[k] || ''); }).join('；') +
+            '。拿不到就画「—」，<b>绝不折算 0</b>。'
+          : '';
+      })
+      .catch(function (e) {
+        meta.innerHTML = '加载失败：' + esc(e.message);
+        grid.innerHTML = '';
+        agentsBox.innerHTML = '';
+      });
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', load);
+  document.getElementById('btn-theme').addEventListener('click', function () {
+    document.documentElement.classList.toggle('dark');
+    document.documentElement.classList.toggle('light');
+  });
+
+  load();
+  setInterval(load, 5000);
+})();
+</script>
+</body>
+</html>
