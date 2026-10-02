@@ -31,6 +31,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ALIGN_DIR = path.join(ROOT, 'alignment');
 const TRIGGER_MARKERS = ['触发条件'];
 const LESSON_MARKERS = ['⚠️⛔', '血泪'];
+const TODO_HEADING_RE = /待办提醒/; // 节级识别：WB 两种写法都要认——全局 MEMORY 的条目带「触发条件」字样，项目 MEMORY 的待办节条目不一定带
 
 // ── 小工具 ──────────────────────────────────────────────────────────
 function expandHome(p) { return p ? p.replace(/^~/, os.homedir()) : p; }
@@ -66,13 +67,21 @@ function scanItems(md) {
     if (it) { flush(); cur = { num: it[1], heading, bullet: false, lines: [l] }; continue; }
 
     if (cur) {
-      // 编号项续行（补注/换行）；空行不切断，下一个编号/标题才切断
-      if (l.trim()) cur.lines.push(l);
+      // 在「⏳ 待办提醒」节内，行首（column-0）bullet 是独立触发器条目 → flush 后另起
+      // （否则会被吞进上一条编号项的续行；带缩进的 bullet 仍视为续行/子列表）
+      const nb = l.match(/^[-*+]\s+(.*)$/);
+      if (nb && TODO_HEADING_RE.test(heading)) {
+        flush();
+        cur = { num: '•', heading, bullet: true, lines: [l] };
+      } else if (l.trim()) {
+        // 编号项续行（补注/换行）；空行不切断，下一个编号/标题才切断
+        cur.lines.push(l);
+      }
       continue;
     }
 
     const b = l.match(/^\s*[-*+]\s+(.*)$/);
-    if (b && hasMarker(b[1])) {
+    if (b && (hasMarker(b[1]) || TODO_HEADING_RE.test(heading))) {
       cur = { num: '•', heading, bullet: true, lines: [l] };
     }
   }
@@ -81,9 +90,11 @@ function scanItems(md) {
   const out = [];
   for (const it of items) {
     const text = textOf(it.lines);
-    if (!hasMarker(text)) continue;
+    const inTodo = TODO_HEADING_RE.test(it.heading);
+    // 标记命中 OR 落在「⏳ 待办提醒」节内 → 进触发器池（两种写法兼容）
+    if (!inTodo && !hasMarker(text)) continue;
     it.text = text;
-    it.isTrigger = TRIGGER_MARKERS.some((m) => text.includes(m));
+    it.isTrigger = inTodo || TRIGGER_MARKERS.some((m) => text.includes(m));
     it.isLesson = !it.isTrigger && LESSON_MARKERS.some((m) => text.includes(m));
     it.id = (it.isTrigger ? 'T' : it.isLesson ? 'L' : 'I') + ':' + it.num + '|' + text.slice(0, 40);
     out.push(it);
