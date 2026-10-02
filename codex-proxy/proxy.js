@@ -193,12 +193,14 @@ function findProvider(modelName) {
   const userProviders = loadProviders().filter(p => p.enabled !== false);
   for (const p of userProviders) {
     if (Array.isArray(p.models) && p.models.includes(modelName)) {
-      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models };
+      // ⚠️ anthropicBaseUrl 必须一起带出：/v1/messages 的厂商规则对自定义上游未必适用，
+      // 漏了它 = 显式逃生口形同不存在（测试抓到的）。
+      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl };
     }
   }
   const userMatch = userProviders.find(p => p.provider_id && modelName.toLowerCase().includes(String(p.provider_id).toLowerCase()));
   if (userMatch) {
-    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [] };
+    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl };
   }
 
   // 2. Legacy built-in env-key providers (DeepSeek / Kimi / Agnes)
@@ -755,12 +757,23 @@ function pipeUpstreamBytes(res, response, tag) {
 // 因此需在 Claude Code 侧把 ANTHROPIC_MODEL 指到上游模型名（官方文档做法，
 // 如 deepseek-flash / kimi-k3），否则 model 匹配不到 provider → 400 UNSUPPORTED_MODEL。
 
-// OpenAI 面 baseUrl → Anthropic 兼容端点。显式规则（非臆测）：去掉尾部 /v1 再挂 /anthropic。
-// 自定义 provider 可在 providers.json 里显式给 anthropicBaseUrl 覆盖（agnes 等聚合网关
-// 是否有 anthropic 兼容面未核实，届时用该字段指路）。
-function anthropicBaseUrlOf(provider) {
-  if (provider.anthropicBaseUrl) return String(provider.anthropicBaseUrl).replace(/\/+$/, '');
-  return String(provider.baseUrl || '').replace(/\/v1\/?$/, '') + '/anthropic';
+// 各厂商把「Anthropic 兼容面」挂在**不同位置**，没有通用规律 —— 2026-10-02 逐个实测
+// （方法：空包看状态码 + 差分对照「不存在路径」的基线，再带认证发假 model 名避免生成 token）：
+//   DeepSeek  https://api.deepseek.com/anthropic/v1/messages   → 400 model-not-found（存在）；/v1/messages 是 404
+//   Kimi      https://api.moonshot.cn/anthropic/v1/messages    → 401（存在）；/v1/messages 是 404（基线同为 404）
+//   Agnes     https://apihub.agnes-ai.com/v1/messages          → 401（存在）；/anthropic/... 是 403（基线同为 403）
+//   Ollama    http://127.0.0.1:11434/v1/messages               → 400（存在）；/anthropic/... 是 404
+// ⇒ 三级判定：① provider 显式 anthropicBaseUrl 优先（自定义上游的逃生口）
+//             ② 已知「/anthropic 前缀型」厂商（deepseek / moonshot）
+//             ③ 其余按根路径（agnes / ollama 已验证属此形态）
+function anthropicMessagesUrl(provider) {
+  const strip = (s) => String(s || '').replace(/\/+$/, '');
+  if (provider.anthropicBaseUrl) return `${strip(provider.anthropicBaseUrl)}/v1/messages`;
+  const base = strip(provider.baseUrl);
+  if (/^https?:\/\/[^/]*(deepseek|moonshot)\./i.test(base)) {
+    return `${base.replace(/\/v1$/, '')}/anthropic/v1/messages`;
+  }
+  return `${base}/messages`;
 }
 
 app.post('/v1/messages', requireAuth, async (req, res) => {
@@ -771,15 +784,19 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
 
-    const upstreamUrl = `${anthropicBaseUrlOf(provider)}/v1/messages`;
+    const upstreamUrl = anthropicMessagesUrl(provider);
     // 鉴权：Anthropic 原生认 x-api-key；Claude Code 走 ANTHROPIC_AUTH_TOKEN 时发 Bearer。
     // 上游兼容层两者取一，故两个头同值都带上（值相同不会冲突），避免错配 401。
+    // ⚠️ 本地上游（Ollama）无 key：此时**不能**发 `x-api-key: undefined`（undici 会抛
+    // Invalid value），也不该把入站那份 Claude Code token 顶上去 —— 一律不带。
     const headers = {
       'Content-Type': 'application/json',
-      'x-api-key': provider.apiKey,
       'anthropic-version': req.headers['anthropic-version'] || '2023-06-01',
     };
-    if (req.headers['authorization']) headers['authorization'] = `Bearer ${provider.apiKey}`;
+    if (provider.apiKey) {
+      headers['x-api-key'] = provider.apiKey;
+      if (req.headers['authorization']) headers['authorization'] = `Bearer ${provider.apiKey}`;
+    }
 
     const response = await fetch(upstreamUrl, {
       method: 'POST',
