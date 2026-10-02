@@ -32,6 +32,31 @@ function enabled() {
 // { proxyName: { promptTokens, completionTokens, totalTokens, cost, requestCount, pricing } }
 const _state = {};
 
+// 代理面 floor view：per-proxy 最近延迟样本（ms，环形裁剪到最近 N 条）。
+// 用途：/api/floor 的格子显示 p50 延迟。门控与累计成本同源（PROXY_COST_TRACK）。
+// 注意：本表只由 forward.js 成功转发时喂数；不碰 _state（不改现有成本语义）。
+const _latency = {};
+const LATENCY_WINDOW = 50;
+
+// 记录一次成功转发的耗时。门控关时零开销（只做一次 env 判断）。永不抛。
+function recordLatency(proxyName, ms) {
+  if (!enabled()) return;
+  if (!proxyName || typeof ms !== 'number' || !isFinite(ms) || ms < 0) return;
+  const arr = _latency[proxyName] || (_latency[proxyName] = []);
+  arr.push(ms);
+  if (arr.length > LATENCY_WINDOW) arr.splice(0, arr.length - LATENCY_WINDOW);
+}
+
+// p50（中位数）。无样本 → null（**绝不折算 0**：0ms 会被读成「快得离谱」的假数据）。
+function latencyP50(proxyName) {
+  const arr = _latency[proxyName];
+  if (!arr || arr.length === 0) return null;
+  const s = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  const v = s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  return Math.round(v * 10) / 10;
+}
+
 // 从 env 读 pricing：PROXY_PRICING_<PROXY> = '{"input":10,"output":20,"cacheHit":3}'
 // 容错：非法 JSON → 默认 {input:0, output:0}；proxy 名大写化（env 键名大写）
 function readPricingFromEnv(proxyName) {
@@ -75,6 +100,7 @@ function setPricing(proxyName, pricing) {
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
+      thinkingTokens: 0,
       cost: 0,
       requestCount: 0,
       pricing: pricing || { input: 0, output: 0 },
@@ -90,6 +116,7 @@ function ensureState(proxyName) {
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
+      thinkingTokens: 0,
       cost: 0,
       requestCount: 0,
       pricing: p,
@@ -106,20 +133,29 @@ function extractTokens(usage) {
                      typeof usage?.output_tokens     === 'number' ? usage.output_tokens     : 0;
   const cacheHit   = typeof usage?.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens :
                      typeof usage?.cacheHit               === 'number' ? usage.cacheHit              : 0;
-  return { prompt, completion, cacheHit };
+  // 推理痕迹（**只计数不计费**）：上游 output_tokens 通常已含 thinking，再算一遍就是重复计费。
+  // 单列出来的理由是**可观测**——真付费上游实测（64 号 §七坑 6）：max_tokens 被 thinking 吃满时
+  // 整条响应一个 text 块都没有；盘面上只看得到「输出 27」，看不出「27 里 23 是空转的思考」。
+  // 这个数一旦黑着，代理层就对「钱烧在哪」彻底失明。
+  const td       = usage?.output_tokens_details;
+  const thinking = typeof td?.thinking_tokens === 'number' ? td.thinking_tokens :
+                   typeof usage?.thinking_tokens === 'number' ? usage.thinking_tokens : 0;
+  return { prompt, completion, cacheHit, thinking };
 }
 
 // 热路径主入口：门控关时零开销，开时从 usage 提取 + 累计 cost
 function accumulate(proxyName, usage) {
   if (!enabled()) return;
   const st = ensureState(proxyName);
-  const { prompt, completion, cacheHit } = extractTokens(usage || {});
+  const { prompt, completion, cacheHit, thinking } = extractTokens(usage || {});
   const { input: pIn, output: pOut, cacheHit: pCache } = st.pricing;
   const costDelta = (prompt - cacheHit) / 1e6 * pIn + completion / 1e6 * pOut +
                     (pCache !== undefined ? cacheHit / 1e6 * pCache : 0);
   st.promptTokens      += prompt;
   st.completionTokens += completion;
   st.totalTokens       += prompt + completion;
+  // 不进 totalTokens（保持 total = prompt + completion 的既有口径，既有测试钉死这个等式）
+  st.thinkingTokens   += thinking;
   st.cost              += costDelta;
   st.requestCount      += 1;
 }
@@ -127,13 +163,15 @@ function accumulate(proxyName, usage) {
 // 读 per-proxy 累计（对外快照，不暴露内部 timestamp）
 function getCost(proxyName) {
   const st = _state[proxyName];
-  if (!st) return { promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0, requestCount: 0 };
+  if (!st) return { promptTokens: 0, completionTokens: 0, totalTokens: 0, thinkingTokens: 0, cost: 0, requestCount: 0, latencyP50: latencyP50(proxyName) };
   return {
     promptTokens:     st.promptTokens,
     completionTokens: st.completionTokens,
     totalTokens:      st.totalTokens,
+    thinkingTokens:   st.thinkingTokens,
     cost:             Math.round(st.cost * 1e6) / 1e6,
     requestCount:     st.requestCount,
+    latencyP50:       latencyP50(proxyName),
   };
 }
 
@@ -149,6 +187,7 @@ function getAll() {
 // 测试/重启用
 function reset() {
   for (const k of Object.keys(_state)) delete _state[k];
+  for (const k of Object.keys(_latency)) delete _latency[k];
 }
 
 module.exports = {
@@ -156,6 +195,8 @@ module.exports = {
   setPricing,
   loadPricingFromEnv,
   accumulate,
+  recordLatency,
+  latencyP50,
   getCost,
   getAll,
   reset,

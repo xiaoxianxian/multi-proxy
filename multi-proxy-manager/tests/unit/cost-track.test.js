@@ -199,4 +199,28 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
     CT.reset();
     expect(CT.latencyP50('p')).toBeNull();
    });
+
+  // ---- thinking_tokens（纯可观测：单独计数，绝不重复计费）----
+  test('Anthropic 线：thinking_tokens 单列 + 不重复计费 + 不进 totalTokens', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('anthropic', { input: 25, output: 125 });
+    // Kimi 真上游形态（64 号 §七坑 6）：output 27 里 23 是思考
+    CT.accumulate('anthropic', { input_tokens: 20, output_tokens: 27, output_tokens_details: { thinking_tokens: 23 } });
+    const c = CT.getCost('anthropic');
+    expect(c.thinkingTokens).toBe(23);
+    expect(c.completionTokens).toBe(27);              // 上游已含，不额外累加
+    expect(c.totalTokens).toBe(47);                   // = input 20 + output 27，thinking 不另计
+    expect(c.cost).toBe(20 / 1e6 * 25 + 27 / 1e6 * 125); // 按 output 27 算一遍，不加第二遍
+   });
+
+  test('thinking_tokens 扁平形态（裸 usage.thinking_tokens）与缺失兜底', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.reset();
+    CT.accumulate('p', { prompt_tokens: 10, completion_tokens: 5, thinking_tokens: 3 });
+    expect(CT.getCost('p').thinkingTokens).toBe(3);
+    CT.accumulate('p', { prompt_tokens: 10, completion_tokens: 5 });   // OpenAI 线无该字段
+    const c = CT.getCost('p');
+    expect(c.thinkingTokens).toBe(3);                 // 缺字段 = 0 增量，不崩
+    expect(c.requestCount).toBe(2);
+   });
 });
