@@ -34,11 +34,29 @@
 #   agent-proxy-switch <agent>          # 查看单个 agent 的状态
 #   agent-proxy-switch <agent> <owner>  # 把 agent 的代理切到 owner
 #
-#   <agent> ∈ codex | hermes | cursor
+#   <agent> ∈ codex | hermes | cursor | dsh
 #   <owner> 取决于 agent：
-#     codex  : cc-switch | proxy-rebuild
-#     hermes : proxy-rebuild | direct        （direct = 直连真实服务商 agnes）
-#     cursor : proxy-rebuild | direct        （cursor 的 base_url 在 GUI 里，半自动）
+#     codex  : cc-switch | proxy-rebuild | curator | off
+#     hermes : proxy-rebuild | direct    | curator | off
+#     cursor : proxy-rebuild | direct    | curator | off   （GUI 里，半自动）
+#     dsh    : direct                    | curator | off   （dsh 无「直连」，closest 是官方 baseURL）
+#
+# 🔴 curator / off 是 2026-10-02 加的「省钱总开关」一对：
+#   curator = 把该 agent 的 base_url 指到 token-policy-bridge（18794），走 curator pack
+#             （history 折叠 / tool-output 裁剪 / tools lazyload）真省钱。
+#   off     = 回滚到「切 curator 之前」的那个 owner（状态记在 state 文件里）。
+#             不是猜「直连是谁」，而是 undo —— codex 的原生直连是 api.openai.com，
+#             本工具不知情，猜错就会把 agent 送到一个没账本的地方。
+#   ⇒ 未激活 curator 时对 agent 零打扰：桥可以常在，但 host 的 base_url 不动。
+#   ⚠️ 关掉 curator 不等于关掉桥；要彻底静默请 `tools/bridge-launchd.sh stop`。
+#
+# 给 dsh 接的注意点（实测自 ~/.dsh/profiles/desktop/cordis.patch.yml）：
+#   dsh 是「provider 注册表」型客户端，端点写在
+#   `- id: llm-pi-ai / config: providers: <名字>: { api, baseURL, apiKeyEnv, models }`。
+#   patch 是 id-targeted 合并（2026-10-02 读 dsh 内置包确认：deepseek / pi-ai /
+#   api-key / account 是四个独立 entry），所以加一条 provider 不会把 deepseek 干掉。
+#   ⚠️ 但 provider 里的 `models:` 是显式白名单，只改 baseURL 不够 —— 模型不列进去，
+#      dsh 的上下文里就选不到它。用 dsh 请一并补 models。
 #
 set -eo pipefail
 
@@ -47,6 +65,19 @@ CODEX_PORT=18790
 HERMES_PORT=18793
 CURSOR_PORT=18794
 CC_SWITCH_PORT=15721
+
+# ---- curator（token-policy-bridge，2026-10-02 加）----
+# 🔴🔴 端口冲突（实测）：CURSOR_PORT 与 CURATOR_PORT **都是 18794**。
+# manage.sh / agent-proxy-switch 一直把 18794 当 cursor-proxy 用；而 curator 桥
+# launchd 常驻也占 18794。当前 cursor 没启，所以相安无事；但一旦 `manage.sh start`
+# 起 cursor，必然 EADDRINUSE。这一条先记着，挪端口（建议桥换 18795）由维护者定。
+CURATOR_PORT=18794
+CURATOR_URL="http://127.0.0.1:18794/v1"
+# dsh：provider 注册表里的目标 provider 名（可用 DSH_PROVIDER= 覆盖）
+DSH_PROVIDER="${DSH_PROVIDER:-agnes}"
+DSH_CFG="${DSH_PROFILE:-$HOME/.dsh/profiles/desktop}/cordis.patch.yml"
+# curator/off 的切换状态（off = undo 到这条记录的上一个 owner）
+SWITCH_STATE="${SWITCH_STATE:-$HOME/.multi-proxy-manager/curator-switch-state.json}"
 
 # ---- 各 owner 的目标 URL ----
 CC_SWITCH_URL="http://127.0.0.1:15721/v1"
@@ -64,10 +95,16 @@ port_listening() {
 }
 
 # ---- 读取当前 base_url ----
+# 🔴 2026-10-02 修：section 名写死 `[model_providers.custom]` 会读不到值。
+#    实测本机 codex 的 section 叫 `[model_providers.bridge]`（19:32 被另一个进程
+#    改过：model=deepseek-v4-flash / model_provider=bridge / base_url=:18799）。
+#    ⇒ 改成通用匹配任意 `model_providers.*` 子节，子节名变化不再读不出。
+# 🔴 另：调用方 `local url; url="$(...)"` 在 set -e 下，若这里返回非 0 会
+#    静默杀掉整个 status 输出（表现为「只打了个标题就退出」）。故加 `|| true`。
 current_codex_url() {
-  grep -A20 '\[model_providers\.custom\]' "$CODEX_CFG" 2>/dev/null \
+  grep -A20 '\[model_providers\.[^]]*\]' "$CODEX_CFG" 2>/dev/null \
     | grep -E '^[[:space:]]*base_url' | head -1 \
-    | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/'
+    | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' || true
 }
 current_hermes_url() {
   # 取顶层 model: 块内的 2 空格缩进 base_url。
@@ -99,7 +136,7 @@ path = sys.argv[1]; new_url = os.environ['NEW_URL']
 lines = open(path).read().split('\n')
 in_sec = False; replaced = False
 for i, line in enumerate(lines):
-    if re.match(r'^\s*\[model_providers\.custom\]\s*$', line):
+    if re.match(r'^\s*\[model_providers\.[^]]*\]\s*$', line):
         in_sec = True; continue
     if in_sec and re.match(r'^\s*\[', line):
         in_sec = False
@@ -145,16 +182,115 @@ PY
   echo "  已写入 model.base_url 与 providers.custom.base_url = $new_url"
 }
 
+# ---- dsh：读 / 写 cordis.patch.yml 里 llm-pi-ai.provider 的 baseURL ----
+# 结构（实测 ~/.dsh/profiles/desktop/cordis.patch.yml）：
+#   - id: llm-pi-ai
+#     name: "@deepseek-ai/dsh-llm-pi-ai"
+#     config:
+#       providers:
+#         agnes:                       ← DSH_PROVIDER（默认 agnes）
+#           apiKeyEnv: AGNES_API_KEY
+#           api: openai-completions
+#           baseURL: https://apihub.agnes-ai.cn/v1   ← 我们动这一行
+#           models:
+dsh_patch_scan() {
+  DSH_PATH="$DSH_CFG" DSH_PROV="$DSH_PROVIDER" DSH_MODE="$1" python3 - <<'PY'
+import os, re, sys
+path = os.environ['DSH_PATH']; prov = os.environ['DSH_PROV']; mode = os.environ['DSH_MODE']
+try:
+    lines = open(path).read().split('\n')
+except OSError as e:
+    sys.stderr.write("无法读取 %s：%s\n" % (path, e)); sys.exit(3)
+
+in_llm = False; in_prov = False; idx = -1; val = ''
+for i, line in enumerate(lines):
+    if not in_llm:
+        if re.match(r'^\s*-\s*id:\s*llm-pi-ai\s*$', line):
+            in_llm = True
+        continue
+    if re.match(r'^\s*-\s*id:\s*', line):
+        break                                  # 下一个 entry，停
+    if not in_prov and re.match(r'^\s*providers:\s*$', line):
+        in_prov = True
+        continue
+    if in_prov:
+        if re.match(r'^\S', line):
+            break                              # 顶层新键，超出 providers 块
+        m = re.match(r'^(\s*)(' + re.escape(prov) + r'):\s*$', line)
+        if not m:
+            continue
+        ind = len(m.group(1))
+        j = i + 1
+        while j < len(lines):
+            nl = lines[j]
+            if nl.strip() and (len(nl) - len(nl.lstrip(' '))) <= ind:
+                break                          # 该 provider 块结束
+            m2 = re.match(r'^(\s*)baseURL:\s*(.*?)\s*$', nl)
+            if m2 and len(m2.group(1)) > ind:
+                idx = j
+                val = m2.group(2).strip()
+                break
+            j += 1
+        break
+
+if mode == 'read':
+    if idx < 0:
+        sys.stderr.write("未在 llm-pi-ai.providers.%s 下找到 baseURL\n" % prov); sys.exit(4)
+    print(val)
+    sys.exit(0)
+
+if mode == 'write' and idx >= 0:
+    url = os.environ['DSH_URL']
+    quoted = '"%s"' % url if '"' in val else url
+    lines[idx] = re.sub(r'^(.*baseURL:\s*).*$', lambda mm: mm.group(1) + quoted, lines[idx])
+    open(path, 'w').write('\n'.join(lines))
+    print("  已写入 providers.%s.baseURL = %s" % (prov, quoted))
+    sys.exit(0)
+
+sys.stderr.write("未在 llm-pi-ai.providers.%s 下找到 baseURL，未修改：%s\n" % (prov, path)); sys.exit(4)
+PY
+}
+current_dsh_url() { dsh_patch_scan read; }
+set_dsh() {
+  local new_url="${1:-}"
+  [ -z "$new_url" ] && { echo "  内部错误：未提供目标 URL" >&2; return 1; }
+  cp "$DSH_CFG" "$DSH_CFG.bak.$(date +%Y%m%d-%H%M%S)"
+  DSH_URL="$new_url" dsh_patch_scan write
+}
+
+# ---- 切换状态：curator → 记住上一个 owner，off → undo ----
+# $1=agent  $2=切前 owner 名  $3=切前实际 URL（off 靠它还原，光有 owner 名不够）
+record_switch() {
+  mkdir -p "$(dirname "$SWITCH_STATE")"
+  cat > "$SWITCH_STATE" <<EOF
+{"agent":"$1","from":"$2","fromUrl":"$3","to":"curator","at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+EOF
+}
+# 输出格式 "agent|from|fromUrl"
+last_switch() {
+  [ -f "$SWITCH_STATE" ] || return 1
+  /usr/bin/python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+print('%s|%s|%s' % (d.get('agent',''), d.get('from',''), d.get('fromUrl','')))
+" "$SWITCH_STATE" 2>/dev/null
+}
+
 # ---- 识别当前所有者 ----
 detect_owner() {
   local agent="$1" url="$2"
   case "$agent" in
     codex)
       [ "$url" = "$CC_SWITCH_URL" ] && { echo cc-switch; return; }
+      [ "$url" = "$CURATOR_URL" ] && { echo curator; return; }
       [ "$url" = "$PR_CODEX_URL" ] && { echo proxy-rebuild; return; } ;;
     hermes)
+      [ "$url" = "$CURATOR_URL" ] && { echo curator; return; }
       [ "$url" = "$PR_HERMES_URL" ] && { echo proxy-rebuild; return; }
       [ "$url" = "$DIRECT_HERMES_URL" ] && { echo direct; return; } ;;
+    dsh)
+      [ "$url" = "$CURATOR_URL" ] && { echo curator; return; }
+      [ -n "$url" ] && { echo direct; return; } ;;
   esac
   echo "unknown ($url)"
 }
@@ -179,11 +315,57 @@ status_one() {
       echo "Cursor:"
       echo "  当前所有者            = 请在 Cursor GUI (Settings → Models) 查看 OpenAI Base URL"
       echo "  proxy-rebuild(18794) 监听 = $(port_listening $CURSOR_PORT && echo 是 || echo 否)" ;;
+    dsh)
+      local url; url="$(current_dsh_url 2>/dev/null || true)"
+      echo "DSH (profile=${DSH_PROFILE:-desktop}, provider=$DSH_PROVIDER):"
+      echo "  当前所有者            = $(detect_owner dsh "$url")"
+      echo "  baseURL                = ${url:-（未读取到）}"
+      echo "  curator 桥(18794) 监听 = $(port_listening $CURATOR_PORT && echo 是 || echo 否)" ;;
   esac
+  # ---- curator 开关状态（所有 agent 共用一行）----
+  if [ -f "$SWITCH_STATE" ]; then
+    echo "  curator 开关状态       = 已开启（切前：$(last_switch)）"
+    echo "  关闭方法               = agent-proxy-switch $1 off"
+  else
+    echo "  curator 开关状态       = 关（未切过 curator）"
+  fi
 }
 
 switch_one() {
   local agent="$1" owner="$2"
+
+  # ---------------------------------------------------------------------
+  # curator / off —— 2026-10-02 加的「省钱总开关」一对。
+  # 放在最前面统一处理，各 agent 的原生 set_* 完全复用，不复制粘贴。
+  # ---------------------------------------------------------------------
+  case "$owner" in
+    curator)
+      if ! port_listening $CURATOR_PORT; then
+        echo "  [错误] curator 桥(18794)未监听 —— 拒绝写入，避免死链。" >&2
+        echo "         桥由 launchd 托管，先起它：" >&2
+        echo "         launchctl kickstart -k gui/$(id -u)/com.multi-proxy.token-policy-bridge" >&2
+        return 1
+      fi
+      local prev prev_url
+      case "$agent" in
+        codex)  prev_url="$(current_codex_url)";    prev="$(detect_owner codex "$prev_url")" ;;
+        hermes) prev_url="$(current_hermes_url)";   prev="$(detect_owner hermes "$prev_url")" ;;
+        dsh)    prev_url="$(current_dsh_url 2>/dev/null || true)"; prev="$(detect_owner dsh "$prev_url")" ;;
+        cursor) prev="(Cursor 的 base_url 在 GUI 里，读不到)"; prev_url="";;
+      esac
+      [ -n "$prev_url" ] && [ "$prev_url" != "$CURATOR_URL" ] || prev_url=""
+      record_switch "$agent" "${prev:-unknown}" "$prev_url"
+      case "$agent" in
+        codex)  set_codex  "$CURATOR_URL" ;;
+        hermes) set_hermes "$CURATOR_URL" ;;
+        dsh)    set_dsh    "$CURATOR_URL" ;;
+        cursor)
+          echo "  [半自动] 请在 Cursor GUI 完成切换：Settings → Models → OpenAI Base URL = $CURATOR_URL" ;;
+      esac
+      echo "  ✅ $agent 已切到 curator（$CURATOR_URL）。关闭时执行：agent-proxy-switch $agent off"
+      return 0 ;;
+  esac
+
   case "$agent" in
     codex)
       case "$owner" in
@@ -234,6 +416,41 @@ switch_one() {
         *) echo "  cursor 的 owner 只能是 proxy-rebuild 或 direct" >&2; return 1 ;;
       esac ;;
   esac
+
+  # ---- off：回滚到「切 curator 之前」----
+  # 🔴 刻意不猜 agent 的原生直连是谁：codex 原生是 api.openai.com、dsh 原生是
+  # DeepSeek 官方（且走 device-flow 登录态，不是 baseURL 能表达的）。猜错就是把
+  # agent 送到一个没账本、甚至需要新 key 的地方。所以 off = undo 到记录值。
+  if [ "$owner" = "off" ] || [ "$owner" = "curator-off" ]; then
+    [ -f "$SWITCH_STATE" ] || {
+      echo "  [错误] 没有 curator 切换记录（$SWITCH_STATE）。" >&2
+      echo "         off 只能回滚到「切 curator 之前」，没有记录就只能手动改回。" >&2
+      return 1
+    }
+    local rec ragent rfrom rurl
+    rec="$(last_switch)" || { echo "  [错误] 状态文件读不出来" >&2; return 1; }
+    IFS='|' read -r ragent rfrom rurl <<< "$rec"
+    [ "$ragent" = "$agent" ] || {
+      echo "  [错误] 记录里的切换对象是 [$ragent]，不是 [$agent]，拒绝跨 agent 回滚。" >&2
+      return 1
+    }
+    [ -n "$rfrom" ] || { echo "  [错误] 记录里没有『切前 owner』，无法回滚" >&2; return 1; }
+    case "$agent" in
+      codex)
+        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_codex "$CURATOR_URL"
+        else set_codex "$rurl"; fi ;;
+      hermes)
+        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_hermes "$CURATOR_URL"
+        else set_hermes "$rurl"; fi ;;
+      dsh)
+        if [ "$rfrom" = "curator" ] || [ -z "$rurl" ]; then set_dsh "$CURATOR_URL"
+        else set_dsh "$rurl"; fi ;;
+    esac
+    rm -f "$SWITCH_STATE"
+    echo "  ✅ $agent 已回滚（切 curator 前 = $rfrom）。dsh/codex 若缓存在进程内，重启一次生效。"
+    return 0
+  fi
+  echo "  [错误] 未知的 owner: $owner" >&2; return 1
 }
 
 usage() {
@@ -243,11 +460,18 @@ usage() {
   agent-proxy-switch <agent>                # 单个 agent 状态
   agent-proxy-switch <agent> <owner>        # 切换代理所有者
 
-  <agent> ∈ codex | hermes | cursor
+  <agent> ∈ codex | hermes | cursor | dsh
   <owner>:
-    codex  : cc-switch | proxy-rebuild
-    hermes : proxy-rebuild | direct
-    cursor : proxy-rebuild | direct
+    codex  : cc-switch | proxy-rebuild | curator | off
+    hermes : proxy-rebuild | direct    | curator | off
+    cursor : proxy-rebuild | direct    | curator | off   (半自动)
+    dsh    : direct                    | curator | off
+
+  curator / off 是「省钱总开关」一对：
+    agent-proxy-switch codex  curator   # 切到 curator 桥（18794），开始省
+    agent-proxy-switch codex  off       # 回滚到切 curator 之前（不是猜直连）
+    agent-proxy-switch dsh    curator   # dsh 侧改 cordis.patch.yml 的 provider.baseURL
+    agent-proxy-switch dsh    off       # 还原（用切换时记录的旧值）
 EOF
 }
 
@@ -255,15 +479,16 @@ EOF
 agent="${1:-}"; owner="${2:-}"
 if [ -z "$agent" ]; then
   echo "===== 模型代理所有权总览 ====="
-  for a in codex hermes cursor; do status_one "$a"; echo; done
+  for a in codex hermes cursor dsh; do status_one "$a"; echo; done
   exit 0
 fi
 case "$agent" in
-  codex|hermes|cursor) ;;
+  codex|hermes|cursor|dsh) ;;
   *) echo "未知 agent: $agent" >&2; usage >&2; exit 1 ;;
 esac
 if [ -z "$owner" ]; then
   status_one "$agent"
   exit 0
 fi
+
 switch_one "$agent" "$owner"
