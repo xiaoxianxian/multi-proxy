@@ -39,6 +39,16 @@ const AGENT_TYPE = process.env.BRIDGE_AGENT_TYPE || 'coding';
 // 只有这几个字段允许写回请求体。handler 返回别的字段一律忽略并计数——
 // 未知字段写进上游请求等于赌 provider 会容忍，赢了没收益、输了直接 400。
 const MERGE_FIELDS = ['messages', 'systemPrompt', 'history', 'tools'];
+// 🔴 同一 hook 内「谁主导改写」的取条规则（68 号破案）：早先写死 results[0]，
+//    即固定取优先级最高那一条。priority 更高的 policy 一旦无改动（out=null，例如
+//    tools-summary-downgrade 在 mode=off 或有工具没被压到时直接 return null），
+//    results[0] 恒为 null，被 .filter(Boolean) 滤掉，同 hook 里**真正有改动的**
+//    低优先级 policy（tools-lazyload）就永远进不了 merge —— 可它的 netTokenDelta
+//    照样累加进 estSaved，账面虚报、实际一分没省。
+//    正解：「该 hook 里优先级最高、且确实产出了 out 的那条」。语义仍是
+//    「同 hook 内的多条不叠加」，只把「取第一条」改成「取第一条**有效的**」。
+const pickHighestResult = (results) => (Array.isArray(results) ? results : [])
+  .find((r) => r && r.out && typeof r.out === 'object');
 // curator pack 是否真正启用（BRIDGE_CURATOR=1 才打开）。
 // pack 自身默认关是非侵入铁律④，这里不替 pack 破例：注册始终发生，
 // 但只有显式开关才 enabled=true，apply() 才会跑到它。
@@ -572,8 +582,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (MODE === 'rewrite') {
-        // 每个 hook 取优先级最高那条（results[0]）主导改写，不叠加同 hook 内的多条
-        const outs = runs.map((x) => (x.res.results || [])[0]).filter(Boolean).map((r) => r.out);
+        // 每个 hook 取优先级最高**且真的产出了 out** 那条主导改写，不叠加同 hook 内的多条
+        const outs = runs.map((x) => pickHighestResult(x.res.results)).filter(Boolean).map((r) => r.out);
         const m = mergeMany(body, outs, api);
         rec.rewrote = m.changed;
         rec.appliedFields = m.applied;
@@ -743,4 +753,4 @@ if (require.main === module) {
 //    （能跑通但不产数，比报错更难发现）。
 const kPrevByModel = new Map();
 
-module.exports = { ctxFromRequest, mergeOutToRequest, mergeMany, normalizeTools, server, MERGE_FIELDS, REQUEST_HOOKS, extractUsageFromSSE, pickRequestHeaders, joinUrl };
+module.exports = { ctxFromRequest, mergeOutToRequest, mergeMany, normalizeTools, server, MERGE_FIELDS, pickHighestResult, REQUEST_HOOKS, extractUsageFromSSE, pickRequestHeaders, joinUrl };

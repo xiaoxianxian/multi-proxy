@@ -175,6 +175,48 @@ describe('改写合并 mergeOutToRequest', () => {
   });
 });
 
+describe('同 hook 取条 pickHighestResult（68 号 bug 的回归网）', () => {
+  const summaryNoop = { policy: 'tools-summary-downgrade', ok: true, out: null, netTokenDelta: 0 };
+  const ALL_TOOLS = [
+    { type: 'function', function: { name: 'mcp__heavy__search' } },
+    { type: 'function', function: { name: 'mcp__heavy__format' } },
+  ];
+  const lazyloadHit = {
+    policy: 'tools-lazyload', ok: true,
+    // 裁短到 1 把（另一把是真包里被 hidden 的那种形状）
+    out: { tools: [ALL_TOOLS[0]], reason: 'lazy-loaded' },
+    netTokenDelta: -56,
+  };
+
+  test('高优先级那条无改动（out=null）时，让位给同 hook 内真有改动的低优先级那条', () => {
+    const r = B.pickHighestResult([summaryNoop, lazyloadHit]);
+    expect(r.policy).toBe('tools-lazyload');
+  });
+
+  test('高优先级那条真有改动时，仍然它主导（同 hook 多条不叠加）', () => {
+    const r = B.pickHighestResult([lazyloadHit, summaryNoop]);
+    expect(r.policy).toBe('tools-lazyload');
+    const r2 = B.pickHighestResult([
+      { policy: 's', out: { tools: [] } },
+      { policy: 'l', out: { tools: [] } },
+    ]);
+    expect(r2.policy).toBe('s');
+  });
+
+  test('该 hook 整条都没有有效 out 时返回 undefined（不抛错）', () => {
+    expect(B.pickHighestResult([summaryNoop, { policy: 'x', out: null }])).toBeUndefined();
+    expect(B.pickHighestResult(undefined)).toBeUndefined();
+  });
+
+  test('端到端：只有 lazyload 产出行时，tools 真的写进上游包（旧代码 applied 里没有 tools）', () => {
+    const outs = [summaryNoop, lazyloadHit].map((r) => r.out).filter(Boolean);
+    expect(outs).toHaveLength(1);
+    const m = B.mergeOutToRequest({ ...CHAT, tools: ALL_TOOLS }, outs[0], 'chat-completions');
+    expect(m.changed).toBe(true);
+    expect(m.applied).toContain('tools');
+  });
+});
+
 describe('端到端转发对照', () => {
   test('observe：上游收到的包逐字节等于原包（零行为改变）', async () => {
     process.env.BRIDGE_MODE = 'observe';
