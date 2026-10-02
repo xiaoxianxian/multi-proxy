@@ -17,7 +17,17 @@
 //   真表 13 项、3,689 tok = description 1,184（32%）/ parameters 1,905（52%）/ 外壳 605（16%）。
 //   ↓ 说明「压 description 」这一档天花板只有 ~32%，真正的油在 parameters 里
 //     （每个参数字段自带一句 description，那才是 52% 的大头）。
-//   所以两档的取值范围是：light ≈ −25~30%，aggressive ≈ −45~53%，与 58 号扫参数字对得上。
+//   所以三档的取值范围是：light ≈ −25~30%（只压 description）、
+//   balanced ≈ −40~50%（不动 description、只剥非保护的参数说明）、
+//   aggressive ≈ −45~53%（description 也压到 55 字符）。与 58 号扫参数字对得上。
+//
+// 三档（065 号补的 balanced 是影子候选，真链路首选）：
+//   light     = 只压工具级 description，parameters 一个字符不动   —— 最保守，省得也最少
+//   balanced  = 不动 description，只剥「非保护」的参数字段说明      —— 油本来就在 parameters（52%）
+//   aggressive= balanced 之上再把 description 压到 55 字符          —— 省得最多，但踩过客户端拒调用的坑
+// balanced 的定位 = 拿 aggressive 那档的省量、避开它「整句说明被删」的失败模式：
+//   description 是给「要不要用这把工具」看的（工具级的），parameters 说明是给「参数怎么传」看的
+//   （调用级的）。多数省量来自调用级那层，而调用级那层的保护名单更窄、一旦删错直接 400/被拒。
 //
 // ⚠️ 铁律（动了就报错，不是省一点钱的问题）：
 //   - 不碰 name / type —— 工具身份与 wire 契约；
@@ -30,22 +40,26 @@
 // 默认 off（curator pack 的非侵入铁律：默认关，要开显式给 env）。
 
 const DEFAULTS = {
-  // off | light | aggressive
+  // off | light | balanced | aggressive
   mode: 'off',
-  lightMaxChars: 110,     // light 档 description 保留长度上限（英文一句 ≈ 60–90 字符够用）
-  aggressiveMaxChars: 55, // aggressive 档
-  minDescChars: 24,       // 短于这个就原样留着：砍不动，砍了反而丢信息
+  lightMaxChars: 110,      // light 档 description 保留长度上限（英文一句 ≈ 60–90 字符够用）
+  balancedMaxChars: Infinity, // balanced 档**不压 description**（默认 Infinity）
+  aggressiveMaxChars: 55,  // aggressive 档
+  minDescChars: 24,         // 短于这个就原样留着：砍不动，砍了反而丢信息
 };
 
-// 🔴 剥 parameters 字段说明这件事**只归 aggressive**，light 一律不动参数说明。
+// 🔴 剥 parameters 字段说明这件事**只归 balanced 以上**，light 一律不动参数说明。
 //    真链路上实测踩过（59 号）：开着 aggressive 跑真实 codex 任务，模型给 exec_command
 //    传了 justification 参数、被 codex 客户端拒（`justification` 需要显式 sandbox_permissions）——
 //    它就写在 justification 自己的 description 里，说明被删了模型当然不知道。
 //    light 只压工具级 description，模型仍看得到每个参数各自要求什么，风险面小得多。
-const STRIP_PARAM_DESC = { light: false, aggressive: true };
+//    balanced 也剥（这就是它的全部目的），但走 isProtectedDesc 名单 ——
+//    真出事那句（requires explicit sandbox permissions）在任何档位都留着，见 PARAM_DESC_KEEP。
+const STRIP_PARAM_DESC = { light: false, balanced: true, aggressive: true };
 
 if (process.env.CURATOR_SUMMARY_MODE) DEFAULTS.mode = String(process.env.CURATOR_SUMMARY_MODE).trim();
 if (process.env.CURATOR_SUMMARY_LIGHT_CHARS) DEFAULTS.lightMaxChars = Number(process.env.CURATOR_SUMMARY_LIGHT_CHARS);
+if (process.env.CURATOR_SUMMARY_BALANCED_CHARS) DEFAULTS.balancedMaxChars = Number(process.env.CURATOR_SUMMARY_BALANCED_CHARS);
 if (process.env.CURATOR_SUMMARY_AGGRESSIVE_CHARS) DEFAULTS.aggressiveMaxChars = Number(process.env.CURATOR_SUMMARY_AGGRESSIVE_CHARS);
 // 兜底：手动强制两档都剥（扫参/A-B 用），默认空 = 按档位走
 if (process.env.CURATOR_SUMMARY_STRIP_PARAM_DESC === '1') STRIP_PARAM_DESC.light = true;
@@ -121,20 +135,39 @@ function stripParamDescriptions(params) {
   return touched;
 }
 
+// 🔴 两种工具形状（真踩到，见 A/B 探针）：
+//   codex 扁平   = { type:'function', name, description, parameters, strict }   ← 真表就长这样
+//   OpenAI 嵌套  = { type:'function', function:{ name, description, parameters } }
+//   早期版本只认扁平的顶层字段 ⇒ 喂嵌套形状时 description/parameters 都是 undefined，
+//   一个字都不改、handler 返回 null，**桥照样记账、看起来像「这轮没触发」**。
+//   真链路上没炸是因为 codex 发扁平；一旦上游/客户端换成嵌套形状（或桥的 normalizeTools
+//   把扁平转成嵌套后再跑 policy），这条就静默失效。所以这里两套形状都要认。
+function targetOf(out) {
+  return out && typeof out === 'object' && out.function && typeof out.function === 'object' ? out.function : out;
+}
+
 function downgradeTool(t, maxChars, stripParams) {
   const out = clone(t);
   if (!out || typeof out !== 'object') return { tool: t, touched: false };
   let touched = false;
-  if (typeof out.description === 'string' && out.description) {
-    const t2 = trimDescription(out.description, maxChars);
-    if (t2 !== out.description) { out.description = t2; touched = true; }
+  const f = targetOf(out);                       // 嵌套形状下的 description/parameters 住在这层
+  const fDesc = typeof f.description === 'string' ? f.description : null;
+  const topDesc = typeof out.description === 'string' ? out.description : null;
+  const desc = fDesc !== null ? fDesc : topDesc;
+  if (typeof desc === 'string' && desc) {
+    const t2 = trimDescription(desc, maxChars);
+    if (t2 !== desc) { f.description = t2; touched = true; }
   }
+  // description 两头都不在（比如 web_search 这种连 name 都没有的裸条目）⇒ 不猜，**别创建字段**
+  if (f !== out && fDesc === null && topDesc === null) { /* 无 description 可压，照原样返回 */ }
+
+  const params = out.parameters || f.parameters;
   // 🔴 parameters 只在它是 plain object 时才动 —— 有 $ref/oneOf 这类组合子的 schema 结构复杂，
   //    「删字段说明」的遍历假设会失效，宁可跳过这一条也不瞎改（改坏了是 400，不是省点钱）。
-  if (stripParams && out.parameters && typeof out.parameters === 'object'
-    && !out.parameters.$ref && !out.parameters.oneOf && !out.parameters.anyOf
-    && !out.parameters.allOf && !out.parameters.$schema) {
-    if (stripParamDescriptions(out.parameters)) touched = true;
+  if (stripParams && params && typeof params === 'object'
+    && !params.$ref && !params.oneOf && !params.anyOf
+    && !params.allOf && !params.$schema) {
+    if (stripParamDescriptions(params)) touched = true;
   }
   return { tool: out, touched };
 }
@@ -146,15 +179,17 @@ function downgradeTool(t, maxChars, stripParams) {
  */
 function handler(ctx, io) {
   const cfg = Object.assign({}, DEFAULTS, (io && io.budget) || {});
-  // 🔴 off 与「拼错的 mode」都必须走 null。写成白名单判断（只放行 light/aggressive）
-  //    而不是「非三者之一就返回」：前者让拼错的字符串落进下面的压缩分支，
+  // 🔴 off 与「拼错的 mode」都必须走 null。写成白名单判断（只放行 light/balanced/aggressive）
+  //    而不是「非四者之一就返回」：前者让拼错的字符串落进下面的压缩分支，
   //    请求体被悄悄改了还以为是显式开的，出事时查谁都不知道改过。
-  if (cfg.mode !== 'light' && cfg.mode !== 'aggressive') return null;
+  if (cfg.mode !== 'light' && cfg.mode !== 'balanced' && cfg.mode !== 'aggressive') return null;
   const tools = Array.isArray(ctx && ctx.tools) ? ctx.tools : [];
   if (!tools.length) return null;
 
   const aggressive = cfg.mode === 'aggressive';
-  const maxChars = aggressive ? cfg.aggressiveMaxChars : cfg.lightMaxChars;
+  const maxChars = aggressive ? cfg.aggressiveMaxChars
+    : cfg.mode === 'balanced' ? cfg.balancedMaxChars
+      : cfg.lightMaxChars;
   // 🔴 档位开关（不是预算字段）：STRIP_PARAM_DESC 在**模块级**定义、不吃 cfg 合并，
   //    这里必须按 mode 回查，否则读 cfg.stripParamDesc 永远是 undefined（DEFAULTS 里已无此项）。
   //    当初写成 `Object.assign({}, DEFAULTS, {stripParamDesc})` 的旧版就是靠 DEFAULTS 带出来的，

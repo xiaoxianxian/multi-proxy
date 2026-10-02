@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.multi-proxy.token-policy-bridge</string>
+
+  <!-- 旁挂桥：codex 的 base_url 指到 18794，本进程转发给 18790（codex-proxy），再出网。
+       codex-proxy/proxy.js 保持 0 diff；回滚 = 把 base_url 指回 18790。 -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-3/bin/node</string>
+    <string>/Users/xiaota/Documents/AI项目/multi-proxy/tools/token-policy-bridge.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy</string>
+
+  <!-- 环境变量是桥的全部配置面：mode / 是否注册 curator pack / 上游 / 端口 / 日志目录，
+       以及 tools-lazyload 的裁剪参数（CURATOR_* 见 policies/tools-lazyload.js 的 ENV_OVERRIDE）。
+       ⚠️ BRIDGE_MODE 是运行时读 process.env 的（bridge.js:421），改这里必须 launchctl kickstart
+          重启进程才生效；不是改代码里的常量。 -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>
+    <string>18794</string>
+    <key>BINDING</key>
+    <string>127.0.0.1</string>
+    <key>UPSTREAM</key>
+    <string>http://127.0.0.1:18790</string>
+    <key>BRIDGE_MODE</key>
+    <string>rewrite</string>
+    <key>BRIDGE_CURATOR</key>
+    <string>1</string>
+    <!-- 裁剪模式显式钉成 suffix，不用 auto。
+         auto 在未标定 k 时会选 mid（cache-k-estimator.js:77：0 < kStar=0.111 → mid），
+         而 mid 的断点后退量 > 隐藏量，在 k 未知的上游上等于拿钱赌；
+         suffix 下 T' 是 T 的前缀，后退量 = 隐藏量，任何 k 都不亏。 -->
+    <key>CURATOR_PRUNE_MODE</key>
+    <string>suffix</string>
+    <!-- 默认 0.85 实测过猛：13 工具的 codex 会话里会藏掉 11 把（2,905 tok / 占 schema 78.7%），
+         模型只剩 2 把能用。0.3 只藏尾部 3 把（1,023 tok / 27.7%）。 -->
+    <key>CURATOR_MAX_HIDE_RATIO</key>
+    <string>0.3</string>
+    <key>BRIDGE_LOG_DIR</key>
+    <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs</string>
+
+    <!-- onToolOutput：tool-output-guard（补位 handler，打的是 onHistory 够不到的
+         responses 协议 function_call_output / role==='tool' 同一批条目）。
+         阈值见 policy 的 ENV_OVERRIDE；不开就整条 passthrough。
+
+         🔴 阈值 2026-10-02 按真分布重定（原 200/3 是拍脑袋，已证伪）：
+         真值取自 ~/.codex/sessions/**/rollout-*.jsonl（n=2032 条工具输出），
+         p50=245 / p75=1068 / p90=2750 / p95=5929 / max=40196 字符，
+         >200 字符占 55.0%、>600 占 33.5% ⇒ 200 会砍掉过半真实工具输出。
+         改 600/4 后 8 次真请求真实净省 6195→4108 tok（58.8%→39.0%），
+         且 v2（短而完整输出）从「砍完仍只省 8%」变成 0% 误伤。 -->
+    <key>CURATOR_TOOL_GUARD</key>
+    <string>1</string>
+    <key>CURATOR_TOOL_GUARD_MAX_CHARS</key>
+    <string>600</string>
+    <key>CURATOR_TOOL_GUARD_MAX_OUTPUTS</key>
+    <string>4</string>
+    <!-- onResponse：response-insight，只记账不改字节。它的价值是把各 policy 自报的省与
+         上游真实 usage 对拍，是 est 唯一能校准的口子。
+         🔴 2026-10-02 A/B 双发（同 payload 直连 18790 vs 过桥 18794 各发一次真请求）：
+         · 估算器对改写前整包 bias 仅 +5.6%（推翻此前「低估 66%」的假象——那个 66% 分母
+           混进了 policy 自报 saved，且没有真 A/B）
+         · 真·虚报源是 policy 自报 netTokenDelta，高估真实净省 13~21%（小包变体达 120%）
+         ⇒ BIAS_BEFORE 是「改写前真实」的标定代理（proxy = est × 1.056），用于算 realSaving。
+         无样本时 response-insight 内部保持 1（不修），别瞎填。 -->
+    <key>CURATOR_RESPONSE_INSIGHT</key>
+    <string>1</string>
+    <key>CURATOR_EST_BIAS_BEFORE</key>
+    <string>1.056</string>
+
+    <!-- onRequestAssemble：tools-summary-downgrade（P3，58 号方案里推荐度最高的一档 ★★★★★）。
+         三档取值，默认**不写这一项 = off**（curator 非侵入铁律：默认关，要开显式给）。
+         · light     —— 只压工具级 description（110 字符），parameters 一个字符不动。真链路 5 次工具调用 0 error。
+         · balanced  —— 不动 description，只剥「非保护」的参数字段说明。真链路上拿 aggressive 那档
+                        的省量大头（schema 构成 parameters 52% / description 32%，油在参数层），
+                        且不碰安全契约（justification 的 “requires explicit sandbox permissions”
+                        在 PARAM_DESC_KEEP 名单里，任何档位都不许删 —— 59 号真链路事故：
+                        aggressive 把那句删了，模型直接传 justification 被 codex 客户端拒）。
+         · aggressive—— 上述之上再把 description 压到 55 字符。省得最多，但整句说明被删的风险也最大。
+         🔴 与 tools-lazyload（同 hook）互斥：CURATOR_SUMMARY_MODE 非 off 时 lazyload 直接让位
+            （返回 reason='summary-mode-active'），否则桥会写两次 tools、记账算不清。
+            ⚠️ 杠杆都在参数层，改这里必须 launchctl kickstart 重启进程才生效。
+         （P3 的档位值由真链路 A/B 定稿，见 docs/10-initiatives/ 对应编号。） -->
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/token-policy-bridge.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/token-policy-bridge.launchd.err.log</string>
+</dict>
+</plist>
