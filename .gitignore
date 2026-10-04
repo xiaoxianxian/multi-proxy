@@ -93,4 +93,5 @@ l2/savings-gateway/PHASE2-SPEC.md
 # 含未发文章线索 / 项目代号 / 内部待办 / 本机绝对路径，属内部数据，永不进公开仓。
 # 例外只放纯协议文档（l2/adapter-protocol.md 同列，已在上方 ! 规则放行）。
 alignment/
-
+# macOS 原生客户端：源码入库，构建产物不入库（build.sh 一次编译出 build/MultiProxy.app）
+client/build/
