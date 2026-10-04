@@ -62,7 +62,7 @@ function inspectInbound(data) {
   const m = mode();
   console.log('[sandbox-egress] inbound tool-call inspection', m, proxyTag(), JSON.stringify(findings));
   if (m !== 'enforce') return { findings, action: 'observe', data };
-  return { findings, action: 'blocked', data: blockToolCalls(data, findings) };
+  return { findings, action: 'blocked', data: blockToolCalls(data) };
 }
 
 function scan(text) {
@@ -90,12 +90,23 @@ const BLOCK_NOTE = (ids) => ({
  * 两种响应形态都覆盖：Anthropic 的 data.content[]（assistant message）
  * 与 OpenAI 兼容的 data.choices[].message.{content|tool_calls}。
  */
-function blockToolCalls(data, findings) {
+function blockToolCalls(data) {
   const out = deepCopy(data);
 
+  // 🔴 说明文本只写「真被拦下的」规则 id，不写整包 findings：
+  // findings 是**整包**扫描出来的（响应正文里提一句 "curl ... | sh" 也算命中），
+  // 拿它当说明会写出「已拦截 A」但实际拦的是 B —— 排障时最坑的就是这种假线索。
+  const noteIds = [];
+  const mark = (ids) => { for (const id of ids) if (!noteIds.includes(id)) noteIds.push(id); };
+
   if (Array.isArray(out.content)) {
-    const kept = out.content.filter((b) => !isBlocked(b));
-    out.content = kept.length ? kept.concat([BLOCK_NOTE(findings.map((f) => f.id))]) : [BLOCK_NOTE(findings.map((f) => f.id))];
+    const kept = out.content.filter((b) => {
+      const ids = hitIdsOf(b);
+      if (!ids.length) return true;
+      mark(ids);
+      return false;
+    });
+    out.content = kept.length ? kept.concat([BLOCK_NOTE(noteIds)]) : [BLOCK_NOTE(noteIds)];
   }
 
   if (Array.isArray(out.choices)) {
@@ -103,16 +114,33 @@ function blockToolCalls(data, findings) {
       const m = c && c.message;
       if (!m) continue;
       if (Array.isArray(m.content)) {
-        m.content = m.content.filter((b) => !isBlocked(b));
-        m.content.push(BLOCK_NOTE(findings.map((f) => f.id)));
+        m.content = m.content.filter((b) => {
+          const ids = hitIdsOf(b);
+          if (!ids.length) return true;
+          mark(ids);
+          return false;
+        });
+        m.content.push(BLOCK_NOTE(noteIds));
       } else if (Array.isArray(m.tool_calls)) {
         m.tool_calls = m.tool_calls.filter((tc) => {
           const arg = tc && tc.function ? tc.function.arguments : tc;
-          return hitIds(arg).length === 0;
+          const ids = hitIds(arg).map((f) => f.id);
+          if (ids.length) mark(ids);
+          return ids.length === 0;
         });
-        // tool_calls 全被删 ⇒ 补一条 text，免得 message 里只剩一个空数组
-        if (!m.tool_calls.length && m.content != null && !Array.isArray(m.content)) {
-          m.content = typeof m.content === 'string' ? m.content + ' ' + BLOCK_NOTE(findings.map((f) => f.id)).text : BLOCK_NOTE(findings.map((f) => f.id));
+        // 🔴 tool_calls 被删光 ⇒ 必须补说明，且 content 可能是 null/''：
+        // 只写 `content != null` 的判断会让 agent 收到一个空 message，
+        // 既看不出被拦了、也不知道为什么工具没跑（2026-10-04 真 HTTP 回环抓到的）。
+        // content 非空数组 ⇒ 追加 text block（Anthropic 形态）；其余 ⇒ 落字符串，
+        // **不塞对象**：OpenAI 侧 message.content 只收 string|null，塞对象会被 SDK 拒。
+        if (!m.tool_calls.length) {
+          if (Array.isArray(m.content)) {
+            m.content = m.content.concat([BLOCK_NOTE(noteIds)]);
+          } else if (typeof m.content === 'string' && m.content) {
+            m.content = m.content + ' ' + BLOCK_NOTE(noteIds).text;
+          } else {
+            m.content = BLOCK_NOTE(noteIds).text;
+          }
         }
       }
     }
@@ -120,9 +148,10 @@ function blockToolCalls(data, findings) {
   return out;
 }
 
-function isBlocked(block) {
-  if (!block || block.type !== 'tool_use') return false;
-  return hitIds(block.input).length > 0;   // 非字符串由 hitIds 内部 stringify
+/** Anthropic content block（type=tool_use）实际命中的规则 id 列表。 */
+function hitIdsOf(block) {
+  if (!block || block.type !== 'tool_use') return [];
+  return hitIds(block.input).map((f) => f.id);   // 非字符串由 hitIds 内部 stringify
 }
 
 function deepCopy(v) {
