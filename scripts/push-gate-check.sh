@@ -81,7 +81,9 @@ def gitpat_to_re(p):
 
 rxs = [(p, re.compile(gitpat_to_re(p))) for p in pats]
 
-tree = subprocess.run(["git", "ls-tree", "-r", commit, "--name-only"],
+# -c core.quotePath=false：默认会把中文名输出成 "17-\345\274\200..."（行首是双引号），
+# 导致所有行首锚定规则（^17- / ^MEMORY\.md$ 等）对中文名全部失效、闸门静默放行。
+tree = subprocess.run(["git", "-c", "core.quotePath=false", "ls-tree", "-r", commit, "--name-only"],
                       capture_output=True, text=True, check=True).stdout.splitlines()
 
 hits = []
