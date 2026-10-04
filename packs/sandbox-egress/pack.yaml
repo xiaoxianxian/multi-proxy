@@ -1,0 +1,16 @@
+# packs/sandbox-egress/pack.yaml · 出站脱敏 + 入站工具调用检查 manifest
+# 引擎读 JS（index.js）不读 yaml；本 yaml 是设计/文档锚点（对齐 packs/curator/pack.yaml 的写法）。
+name: sandbox-egress
+enabled: false                       # 默认关 —— 对齐非侵入铁律④（门控默认关）
+curated: true                        # curated 不 crowdsource（03-token-control-plane.md:73）
+version: 1
+appliesTo:
+  agentTypes: [coding, aigc, research, general]
+description: >
+  sandbox-egress pack：请求体发出本机之前把 API key / 私钥 / JWT / 连接串密码 /
+  身份证号 / 银行卡号换成占位符（中继手里不留真值）；上游响应带回危险工具调用时拦截。
+  两种模式（PROXY_SANDBOX_EGRESS_MODE）：observe（默认，只记账不拦）／enforce（把命中的
+  tool_use / tool_calls 换成说明文本，危险入参到不了客户端，但响应不塌、agent 看得见拦了什么）。
+  诚实边界：本 pack 是控制面旁路，不做执行面沙箱、不做内核级强制（macOS 强制机制至今未核到）；
+  只管真过本跳的流量，客户端绕过 multi-proxy 直连上游时看不见、拦不住。
+  外部对照：ThinkWatchProject/ThinkWatch-Lite（MIT，2026-10-04 核证）→ docs/10-initiatives/75。

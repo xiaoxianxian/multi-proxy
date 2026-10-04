@@ -8,20 +8,49 @@
 //
 // 设计原则（与 l2/ 内核铁律一致）：
 //   - 非侵入：门控关时热路径零开销（只调 enabled() 做布尔判断，< 1μs）；
-//            门控开时只读 usage 字段（不改 response.data、不注入 header、不写盘）。
-//   - 门控 PROXY_COST_TRACK 默认关 = observe（热路径不提取），开 = 提取累计进内存。
+//            门控开时只读 usage 字段（不改 response.data、不注入 header）。
+//   - 门控 PROXY_COST_TRACK 默认关 = observe（热路径不提取），开 = 提取累计 + **落盘**。
 //   - pricing 注入：PROXY_PRICING_<proxy> env = JSON `{input, output, cacheHit?}`（每百万 tokens，CNY/USD）。
 //     与 PROVIDERS-README.md 的 pricing 字段对齐。无 env 时默认 {input:0, output:0}（本地模型 cost=0）。
 //   - pricing 可由 server 启动时调 `loadPricingFromEnv()` 注入，或调 `setPricing(name, pricing)` 显式设。
 //
 // 接入方式：
-//    1. server.js 启动：`require('./lib/cost-track').loadPricingFromEnv()`
-//    2. forward.js res.json 前：`require('./lib/cost-track').accumulate(proxy, response.data?.usage)`
-//    3. alert-route.js collect：`require('./lib/cost-track').getCost(proxy)` 拿累计花费
+//    1. server.js 启动：`loadPricingFromEnv()` + `loadLedger()`（读回上次进程的历史账）
+//    2. forward.js res.json 前：`accumulate(proxy, response.data?.usage, { model, requestModel })`
+//    3. alert-route.js collect：`getCost(proxy)` 拿累计花费
 //
 // 门控 env：
-//   PROXY_COST_TRACK=1/true/on  → 开（提取 usage 累计）
+//   PROXY_COST_TRACK=1/true/on  → 开（提取 usage 累计 + 落盘）
 //   PROXY_PRICING_<proxy>       → 每 proxy 的单价（JSON，每百万 tokens）
+//   PROXY_COST_LEDGER           → 账本文件路径（默认 ~/.multi-proxy-manager/cost-ledger.jsonl）
+//
+// ── 三模型字段（抄 CC Switch proxy_request_logs 的「记账三件套」；2026-10-03 补）──
+//   model          = **实际计费模型**（请求被 route-engine 重写后、上游真跑的那个）
+//   requestModel   = 请求里填的模型（宿主要的）
+//   pricingModel   = 本次按哪套价表算的账（默认 = model；价表改了，历史账单不能跟着漂）
+//
+// 🔴 为什么要记 model / requestModel 这一对：route-engine 天天做模型重写
+// （本机实测：`model=agnes-3.0-flash` ← `request_model=claude-haiku-4-5`）。
+// 只按 proxy 聚合的账本**永远答不出「那批 claude-haiku 的请求到底烧了多少」** ——
+// 而这正是成本归因唯一有价值的问题。没有这一对，账只能分到「codex-proxy 花了多少」。
+//
+// ── 持久账本（append-only jsonl；2026-10-03 补）──
+//   `lib/cost-track.js` 此前是 `const _state = {}` **全内存态**，进程一死账就没 ⇒
+// 多代理环境（WorkBuddy / Hermes / Codex 各起各的）里就是一堆孤岛，合账全靠上报端凑。
+// 现在每次落账往 `cost-ledger.jsonl` 追加一行；启动时 `loadLedger()` 读回合并。
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const upstreamCheck = require('./upstream-check');
+
+// 模型缺失时的兜底 key：宁可叫 <unknown>，也**绝不猜模型名**（猜错就是假数据）。
+const UNKNOWN = '<unknown>';
+
+// 已见 reqId（幂等窗口）：跨进程上报踩过 `on('close')` 与 `on('finish')` 双触发 ⇒
+// 同一次响应落两遍账（实测 252 = 126×2）。有 reqId 才去重；没有的照记（不猜）。
+const _seen = new Set();
+const SEEN_MAX = 50000;
 
 function enabled() {
   const v = String(process.env.PROXY_COST_TRACK ?? '').trim().toLowerCase();
@@ -97,6 +126,12 @@ function loadPricingFromEnv() {
 // 设置 per-proxy 单价（幂等：保留已累计的 tokens/cost，只换 pricing）
 // pricing: { input, output, cacheHit? } — 每百万 tokens，与 PROVIDERS-README.md 对齐
 // 无 pricing 时默认 0（本地模型 type='local' 单价全 0）
+// 按模型拆账的**空壳条目**（三模型字段的 store）。
+// 抽成函数是为了 setPricing / ensureState / _bump 三处共用一份定义，避免以后加字段漏改一处而漂移。
+function emptyModelEntry() {
+  return { requestCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0, requestModels: {} };
+}
+
 function setPricing(proxyName, pricing) {
   const existing = _state[proxyName];
   _state[proxyName] = existing
@@ -109,6 +144,8 @@ function setPricing(proxyName, pricing) {
       cost: 0,
       requestCount: 0,
       pricing: pricing || { input: 0, output: 0 },
+      models: {},
+      requestModels: {},
      };
 }
 
@@ -125,6 +162,8 @@ function ensureState(proxyName) {
       cost: 0,
       requestCount: 0,
       pricing: p,
+      models: {},
+      requestModels: {},
      };
   }
   return st;
@@ -150,12 +189,34 @@ function extractTokens(usage) {
 
 // 单次落账的**唯一出口**：热路径 accumulate 与跨进程上报共用这一份成本公式，
 // 避免以后调价/改口径时两处漂移（此前 cost 公式只在 accumulate 里写了一份）。
-function applyTokens(proxyName, t, latencyMs) {
+//
+// info（全部可选）：{ model, requestModel, pricingModel, reqId, agent }
+//   model / requestModel / pricingModel —— 三模型字段，见文件头注释。
+//   reqId —— 幂等键（跨进程上报的 tee 双触发会重报同一条账，见 _seen）。
+// givenCost —— 外部带的**已算好的 cost**（ledger 读回时用：账已按当时价表冻结，不许再用现价重算）。
+// 读回历史账本时置真：loadLedger 内部走的是 applyTokens（唯一落账出口），
+// 不设这个标志的话**读一遍就把整个历史账再追加一遍**（文件翻倍，且下次启动又翻倍）。
+let _loading = false;
+
+function applyTokens(proxyName, t, latencyMs, info, givenCost) {
   if (!enabled()) return;
+  const i = info || {};
+  // 幂等：只在拿到 reqId 时生效。没有 reqId 就照记 —— 不猜、不静默丢账。
+  if (i.reqId) {
+    const k = proxyName + '|' + i.reqId;
+    if (_seen.has(k)) return;      // 同一次响应重复上报 ⇒ 只记一笔
+    _seen.add(k);
+    if (_seen.size > SEEN_MAX) _seen.clear();   // 内存兜底：本机量级够用，不引入 LRU
+  }
+  // pricingModel 默认 = model（实际计费模型决定用哪套价）；都没有就 <unknown>（绝不猜模型名）
+  const pricingModel = i.pricingModel || i.model || UNKNOWN;
+  const requestModel = i.requestModel || UNKNOWN;
+
   const st = ensureState(proxyName);
   const { input: pIn, output: pOut, cacheHit: pCache } = st.pricing;
-  const costDelta = (t.prompt - t.cacheHit) / 1e6 * pIn + t.completion / 1e6 * pOut +
-                    (pCache !== undefined ? t.cacheHit / 1e6 * pCache : 0);
+  const costDelta = givenCost != null ? givenCost
+    : (t.prompt - t.cacheHit) / 1e6 * pIn + t.completion / 1e6 * pOut +
+      (pCache !== undefined ? t.cacheHit / 1e6 * pCache : 0);
   st.promptTokens      += t.prompt;
   st.completionTokens += t.completion;
   st.totalTokens       += t.prompt + t.completion;
@@ -163,13 +224,55 @@ function applyTokens(proxyName, t, latencyMs) {
   st.thinkingTokens   += t.thinking;
   st.cost              += costDelta;
   st.requestCount      += 1;
+
+  // 按模型拆账：成本归到**实际计费模型**上，requestModel 挂在其下回答「请求侧那个模型烧了多少」
+  const m = _bump(st.models, pricingModel, t, costDelta);
+  _bump(m.requestModels, requestModel, t, costDelta);
+  _bump(st.requestModels, requestModel, t, costDelta);
+
   if (typeof latencyMs === 'number') recordLatency(proxyName, latencyMs);
+  // 上游横向体检喂样本（与账同源：唯一落账出口 = 这里）。
+  // 🔴 必须挂在 `!_loading` 里：loadLedger() 读回历史账也走 applyTokens，
+  // 照记的话每次重启都会把历史账当成新样本，体检一开就叫满屏偏离（跟账本翻倍同坑）。
+  if (!_loading) {
+    upstreamCheck.sample({
+      model: pricingModel, upstream: proxyName,
+      prompt: t.prompt, cacheHit: t.cacheHit, reported: i.reportedModel,
+    });
+  }
+
+  if (!_loading) ledgerAppend({
+    ts: new Date().toISOString(),
+    proxy: proxyName,
+    agent: i.agent || proxyName,
+    model: pricingModel,
+    requestModel,
+    prompt: t.prompt,
+    completion: t.completion,
+    cacheHit: t.cacheHit || 0,
+    thinking: t.thinking || 0,
+    cost: costDelta,
+    latencyMs: typeof latencyMs === 'number' ? latencyMs : undefined,
+    reqId: i.reqId,
+  });
 }
 
-// 热路径主入口：门控关时零开销，开时从 usage 提取 + 累计 cost
-function accumulate(proxyName, usage) {
+// 往 { [model]: entry } 字典里累加一条（entry 结构见 emptyModelEntry）
+function _bump(bag, key, t, costDelta) {
+  const e = bag[key] || (bag[key] = emptyModelEntry());
+  e.requestCount      += 1;
+  e.promptTokens      += t.prompt;
+  e.completionTokens += t.completion;
+  e.totalTokens       += t.prompt + t.completion;
+  e.cost              += costDelta;
+  return e;
+}
+
+// 热路径主入口：门控关时零开销，开时从 usage 提取 + 累计 cost。
+// info 可选，透传给 applyTokens（model / requestModel 由 forward.js 从请求/响应体取）。
+function accumulate(proxyName, usage, info) {
   if (!enabled()) return;
-  applyTokens(proxyName, extractTokens(usage || {}));
+  applyTokens(proxyName, extractTokens(usage || {}), undefined, info);
 }
 
 /**
@@ -185,8 +288,96 @@ function accumulate(proxyName, usage) {
 function reportUsage(opts) {
   const o = opts || {};
   const t = require('./usage-probe').toUsage(o.raw);
-  applyTokens(o.agent || o.proxy || 'gateway', t, o.latencyMs);
+  applyTokens(o.agent || o.proxy || 'gateway', t, o.latencyMs, {
+    model:         o.model,          // 实际计费模型
+    requestModel:  o.requestModel,    // 请求里填的模型（route-engine 可能已经重写过）
+    pricingModel:  o.pricingModel,    // 用哪套价表算的（默认回落 model）
+    reqId:         o.reqId,           // 幂等键（跨进程 tee 双触发靠它去重）
+    agent:         o.agent,
+  });
   return t;
+}
+
+// ── 持久账本：append-only jsonl ──
+// 落点默认 ~/.multi-proxy-manager/cost-ledger.jsonl —— 那是既定的**运行时数据目录**
+// （providers.json / agent-token 都住那儿）；PROXY_COST_LEDGER 可覆盖（测试用 tmp 目录）。
+//
+// 为什么 append-only 而不用重写整个 JSON：代理进程被 kill / 崩的瞬间，重写文件可能写坏
+// 整个账本；追加一行最多丢最后一条（而且 appendFileSync 是同步的，一般连这条都保得住）。
+function ledgerFile() {
+  const env = process.env.PROXY_COST_LEDGER;
+  return env && env.trim() ? env.trim()
+    : path.join(os.homedir(), '.multi-proxy-manager', 'cost-ledger.jsonl');
+}
+
+function ledgerAppend(rec) {
+  try {
+    const file = ledgerFile();
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(file, JSON.stringify(rec) + '\n');
+  } catch {
+    // 记账失败绝不拖累热路径：可以少记一笔账，不能让请求挂在这。
+  }
+}
+
+/**
+ * 读回历史账本并合并进内存态（server.js 启动时调一次）。
+ * 返回读到的行数（0 = 无账本 / 门控关 / 读失败，三种都不算错）。
+ *
+ * 🔴 读回时用**行内冻结的 cost**，不用当前价表重算 —— 价表一改，历史账单就会跟着漂，
+ * 去年记的账今年自己变了，那账本就白记了。这正是 `pricingModel` 字段存在的理由。
+ */
+function loadLedger(fileOverride) {
+  const file = fileOverride || ledgerFile();
+  let text;
+  try {
+    if (!fs.existsSync(file)) return 0;
+    text = fs.readFileSync(file, 'utf8');
+  } catch { return 0; }
+
+  let n = 0;
+  _loading = true;                    // 见 _loading 注释：读回期间禁止回写账本
+  try {
+    for (const line of text.split('\n')) {
+      const s = line.trim();
+      if (!s) continue;
+      let r;
+      try { r = JSON.parse(s); } catch { continue; }   // 半行/损坏 → 跳过（append 写不会破坏前面的行）
+      if (!r || typeof r !== 'object') continue;
+      applyTokens(
+      r.proxy || UNKNOWN,
+      {
+        prompt: r.prompt || 0, completion: r.completion || 0,
+        cacheHit: r.cacheHit || 0, thinking: r.thinking || 0,
+      },
+      undefined,
+      { model: r.model, requestModel: r.requestModel, pricingModel: r.pricingModel, agent: r.agent },
+      r.cost,
+      );
+      n++;
+    }
+  } finally {
+    _loading = false;
+  }
+  return n;
+}
+
+// 按模型拆账的对外拷贝（**必须拷贝**：直接给引用会让调用方改到内部 _state，账就脏了）
+function cloneModels(bag) {
+  const out = {};
+  for (const k of Object.keys(bag)) {
+    const e = bag[k];
+    out[k] = {
+      requestCount:     e.requestCount,
+      promptTokens:     e.promptTokens,
+      completionTokens: e.completionTokens,
+      totalTokens:      e.totalTokens,
+      cost:             Math.round(e.cost * 1e6) / 1e6,
+      requestModels:    { ...e.requestModels },
+    };
+  }
+  return out;
 }
 
 // 读 per-proxy 累计（对外快照，不暴露内部 timestamp）
@@ -201,6 +392,9 @@ function getCost(proxyName) {
     cost:             Math.round(st.cost * 1e6) / 1e6,
     requestCount:     st.requestCount,
     latencyP50:       latencyP50(proxyName),
+    // 没按模型拆过 = null（与 latencyP50 同一口径：**绝不折算成空字典充数**）
+    models:           Object.keys(st.models).length ? cloneModels(st.models) : null,
+    requestModels:    Object.keys(st.requestModels).length ? cloneModels(st.requestModels) : null,
   };
 }
 
@@ -213,10 +407,11 @@ function getAll() {
   return result;
 }
 
-// 测试/重启用
+// 测试/重启用（**只清内存，不删账本文件** —— 账本是持久资产，reset 不该销毁历史）
 function reset() {
   for (const k of Object.keys(_state)) delete _state[k];
   for (const k of Object.keys(_latency)) delete _latency[k];
+  _seen.clear();
 }
 
 module.exports = {
@@ -228,7 +423,9 @@ module.exports = {
   applyTokens,
   recordLatency,
   latencyP50,
-  getCost,
+  getCost,      // → models / requestModels 两个按模型的拆账视图
   getAll,
+  loadLedger,
+  ledgerFile,
   reset,
 };

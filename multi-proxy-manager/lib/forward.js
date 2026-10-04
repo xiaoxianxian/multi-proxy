@@ -1,6 +1,8 @@
 // ==================== 供应商 API 转发辅助（fetch-models / test-connection / forward 白名单） ====================
 const axios = require('axios');
 const { appendLog } = require('./logger');
+// 路径纪律：本文件在 multi-proxy-manager/lib/ 下，packs 在 multi-proxy/packs/ ⇒ 两跳（不是三跳）
+const sandboxEgress = require('../../packs/sandbox-egress');
 
 /**
  * 把上游请求错误分类成用户可读文案。
@@ -150,7 +152,14 @@ async function forwardProxy(req, res) {
       axiosConfig.headers['x-proxy-auth'] = proxyAuthToken;
     }
     if (['post', 'put', 'patch'].includes(method) && req.body) {
-      axiosConfig.data = req.body;
+      // ── 出站脱敏（sandbox-egress pack · 门控 PROXY_PACK_SANDBOX_EGRESS，默认关）──
+      // 🔴 落点纪律：脱敏是「发给上游/中继前」的动作，**谁最后发谁负责** ⇒ 这里。
+      // 别跟 l2/route-engine.js 的 log_redaction 混：那脱的是我们自己写的日志（taskPrompt），
+      // 管不到出网站；这里脱的是真正离开本机的那份 body。
+      // 门控关 ⇒ redactOutbound 原样返回（不 copy、不 rewrite），热路径零副作用。
+      sandboxEgress.setProxy(proxyName);
+      const ro = sandboxEgress.inspectOutbound(req.body);
+      axiosConfig.data = ro.body;
     }
 
     appendLog('info', proxyName, `${method.toUpperCase()} ${rest}`, {
@@ -164,9 +173,27 @@ async function forwardProxy(req, res) {
     appendLog('info', proxyName, `${method.toUpperCase()} ${rest} completed in ${elapsed}ms`, { status: response.status });
 
     // L2 P2 A路·token×单价埋点（门控 PROXY_COST_TRACK 关时零开销：只做 rest 字符串比较）
+    //
+    // 三模型字段在热路径怎么取（**两边都取，别只取一边**）：
+    //   requestModel = req.body.model      —— 宿主要在的那个（可能是别名，route-engine 会重写）
+    //   model        = response.data.model —— 上游真跑的那个（重写后的实际计费模型）
+    // 只记 requestModel 会被别名冲淡（全是 claude-haiku 看不出钱）；只记 model 就答不出
+    // 「那批 haiku 请求烧了多少」。两个都要 —— 账记在 model 上，requestModel 挂在它下面。
     if (rest === '/v1/chat/completions' && response.data && response.data.usage) {
-        try { require('./cost-track').accumulate(proxyName, response.data.usage); } catch { /* 非致命 */ }
+        try {
+          require('./cost-track').accumulate(proxyName, response.data.usage, {
+            requestModel: req.body && req.body.model,
+            model:        response.data.model,
+          });
+        } catch { /* 非致命 */ }
     }
+
+    // ── 入站工具调用检查（sandbox-egress pack · 默认 Observe）──
+    // observe = 只记账；mode=enforce = 真切断（把高危 tool_use 换说明文本，回给客户端之前就拦）。
+    // ⚠️ 只能拦「真的过我们这一跳」的流量：客户端绕过 multi-proxy 直连上游 ⇒ 看不见，拦不住。
+    sandboxEgress.setProxy(proxyName);
+    const ri = sandboxEgress.inspectInbound(response.data);
+    if (ri.data && ri.data !== response.data) response.data = ri.data;
 
     res.json(response.data);
   } catch (error) {
