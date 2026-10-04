@@ -12,7 +12,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 
 | 场景 | 对应能力 |
 |------|---------|
-| 本机同时有 cc-switch、Cursor 自带代理等多个工具，base_url 打架 | **所有权冲突检测**：开代理前读各 agent 配置文件的 `base_url` 实际指向，被占用就拒开（第七节） |
+| 本机同时有 cc-switch、Cursor 自带代理等多个工具，base_url 打架 | **所有权冲突检测**：开代理前读各 agent 配置文件的 `base_url` 实际指向，被占用就拒开（第八节） |
 | 一个任务要拆给多个 agent 分头做，结果再汇合 | **编排引擎**：拆解 → 路由 → 执行 → 聚合，影子模式默认只记录不改真实路由（第五节） |
 | 多个 agent 共享同一份项目记忆 / 技能，但隔离个性 | **记忆服务 + 技能服务**：公共层跨 agent 复用，个性层 per-agent（第五节） |
 | 本地模型 / 本地视频产线（MiniMax H3）也要当「员工」调度 | **4 个适配器**：codex·hermes / h3web / aigc / claude，只读接入、绝不写回（第五节） |
@@ -116,11 +116,39 @@ bash tools/agent-proxy-switch codex              # 单 agent 状态
 bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双工具同时认领）
 ```
 
-> 这条能力来自一次真实事故：某次往全局 launchd 注入了带裸 `*` 的 `NO_PROXY`，导致本机所有走代理的 GUI 应用把「所有域名」判定为不走代理，全部直连超时。此后立下铁律（见第六节），冲突检测是把同一教训固化成代码。
+> 这条能力来自一次真实事故：某次往全局 launchd 注入了带裸 `*` 的 `NO_PROXY`，导致本机所有走代理的 GUI 应用把「所有域名」判定为不走代理，全部直连超时。此后立下铁律（见第七节），冲突检测是把同一教训固化成代码。
 
 ---
 
-## 六、四条非侵入铁律（贯穿全项目）
+## 六、本地模型接入（数据不出本机）
+
+云端 provider 和本地端点在这套东西里是**同一张路由表里的平等候选**。本地不是「另一套降级方案」，是路由条件里实打实的一档——差别只在什么时候派给谁，不在开关上。
+
+### 支持到哪一步
+
+| 环节 | 本地路径 | 代码位置 |
+|------|---------|---------|
+| 拉本地模型列表 | 供应商类型选 `ollama`，走 Ollama 原生 `/api/tags`，取 `m.name` 当模型 ID | `multi-proxy-manager/routes/proxy-api.js:102-121` |
+| 原生 provider 适配器 | `cursor-proxy/src/providers/ollama.ts`（`wireApi: 'ollama'`） | 同目录 `base.ts:2` |
+| Anthropic wire 转发（codex 侧） | 本地上游走根路径 `${base}/messages`，不走 `/anthropic/v1` | `codex-proxy/proxy.js:820-836` |
+| 本地上游无 key | 一律**不带** `x-api-key`：传 `undefined` 会让 undici 抛 Invalid value，也不该把入站 token 顶上去 | `codex-proxy/proxy.js:845-850` |
+| 推理链读取 | Ollama 系思维链在 `message.reasoning`、`content` 为空 → 兜底取 reasoning | `multi-proxy-manager/tests/unit/executor-bind.test.js:177` |
+| 真跑验证 | `node l2/step2-canary-run.js --real-local`，三档真连本地端点 | `l2/step2-canary-run.js:135` |
+
+### 什么时候该派给本地
+
+路由表里有一条 `privacy == true → 本地模型`，定位是「数据不出本机」。这是**架构性保证**——下游地址就是 `127.0.0.1`，不是调参数调出来的效果。路由规则一旦打上隐私条件，请求只落本机端点，不上云。
+
+（本地视频产线那一类走的是另一条路，走第四节的 4 个适配器，不在这张路由表里。）
+
+### 两个已经踩过的坑
+
+- **僵尸请求**：本地大模型推理慢，客户端 timeout 小于真实生成耗时会断连，但 Ollama 侧照样跑完，白烧 CPU。真连前给 `/v1/chat/completions` 带 `max_tokens`、把客户端 timeout 放大，别并发打本地大模型。出处 `l2/memory-alignment-protocol.md:151`
+- **Anthropic 兼容面的挂载位置**：各家把兼容层挂在路径上的位置不统一，2026-10-02 逐个实测（空包看状态码 + 与「不存在的路径」做差分基线）定了三级判定：`provider.anthropicBaseUrl` 显式指定优先 → `/anthropic` 前缀型（DeepSeek / moonshot）→ 根路径（Agnes / Ollama）。要换上游挂载位置，走 `anthropicBaseUrl` 这个逃生口。出处 `codex-proxy/proxy.js:815-836`
+
+---
+
+## 七、四条非侵入铁律（贯穿全项目）
 
 | 铁律 | 含义 |
 |------|------|
@@ -133,7 +161,7 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 
 ---
 
-## 七、安全机制
+## 八、安全机制
 
 - **认证鉴权** — JWT + bcrypt 密码哈希，首次访问引导设置
 - **进程沙箱** — spawn 路径/命令白名单校验，防命令注入
@@ -147,7 +175,7 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 
 ---
 
-## 八、DSH 生态接入
+## 九、DSH 生态接入
 
 `.dsh/skills/` 注册两个 Skill，使 DSH（**DeepSeek Harness**，官方 `dsh-plugin` 生态，"Everything is a Plugin"）的 Agent 能加载本项目：
 
@@ -160,7 +188,7 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 
 ---
 
-## 九、快速开始
+## 十、快速开始
 
 ```bash
 # 安装依赖（自动从 .env.example 生成各代理 .env）
@@ -185,7 +213,7 @@ bash manage.sh status
 
 ---
 
-## 十、3 分钟演示
+## 十一、3 分钟演示
 
 ```bash
 bash scripts/demo-tour.sh          # 全量（含测试基线，约 3 分钟）
@@ -196,7 +224,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十一、测试与验收（1180+11 全绿 · 2026-09-28 真跑）
+## 十二、测试与验收（1180+11 全绿 · 2026-09-28 真跑）
 
 | 模块 | 命令 | 结果 |
 |------|------|------|
@@ -211,7 +239,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十二、目录结构
+## 十三、目录结构
 
 ```
 multi-proxy/
@@ -241,7 +269,7 @@ multi-proxy/
 
 ---
 
-## 十三、已知问题与待修复
+## 十四、已知问题与待修复
 
 ### #1 〔历史·已规避〕裸 `*` 污染全局 NO_PROXY
 旧版部署脚本含 `launchctl setenv no_proxy "127.0.0.1,localhost,*"`，使所有走系统代理的 GUI 应用直连超时。当前源码已无此写法（autostart plist 仅设 `PATH` + 代理自身局部 env），修复写法 `*` → `::1`。
@@ -254,7 +282,7 @@ multi-proxy/
 
 ---
 
-## 十四、常见问题
+## 十五、常见问题
 
 - **代理显示"未运行"但实际在运行** — 管理器用 `lsof` 端口检测，确保 `/usr/sbin/lsof` 可用（Node 子进程 PATH 不含 `/usr/sbin` 会误判，必须完整路径）。
 - **代理启动失败** — `manage.sh logs <agent>` 看日志，或 `cd <agent>-proxy && node proxy.js` 手动启动看错误。
