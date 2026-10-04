@@ -540,6 +540,91 @@ app.delete('/api/providers/:id', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
+// ===== 客户端断开 → 上游一起停（L004 · 2026-10-04 修）=====
+//
+// 三处转发（/v1/chat/completions、/v1/responses、/v1/messages）原先只挂
+// AbortSignal.timeout(120000)：客户端 5 秒关掉连接（Ctrl-C、关窗口、agent 自己超时），
+// 上游 fetch 照样跑满 120 秒才收手，就是「僵尸请求」。卖接入交付之前必须先修掉，
+// 否则用户一次误操作就白烧一份长上下文的钱，长任务还能叠出十几个并行僵尸。
+//
+// 三个坑踩过才写成这样：
+//   ① 用单个 AbortController 管「客户端断」+「超时」两件事， abort 的 reason 自己给。
+//      用 AbortSignal.any() 合成虽然更短，但合成后的 signal 丢掉 reason，
+//      日志里分不清「用户走了」还是「上游慢」，排障时这个区别就是全部线索。
+//   ② res 的 'close' 事件在**正常写完**时同样会触发，只认 !res.writableEnded，
+//      否则每一笔正常请求都会把自己刚拿到的上游掐断。
+//   ③ setTimeout 必须 unref，不然每个在途请求都把事件循环拽住，进程退不出去。
+const UPSTREAM_TIMEOUT_MS = 120000;
+
+const CLIENT_GONE = new Error('client aborted');
+
+/**
+ * 判「客户端是不是已经走了」。
+ *
+ * 不能用 res.writableEnded 单独下结论：客户端拔线时 Node 常把这一轮响应顺手标成
+ * ended（L004 修的时候就被这个骗过一次，于是账还是照报）。真正硬的判据是** socket 死没死**，
+ * writableEnded 只在确认「是我们自己写完的」时才算数。
+ */
+function isClientGone(req) {
+  // 别拿 req.destroyed 单独立论：响应正常走完时 req 同样是 destroyed=true，
+  // 一判断就变成「每笔正常请求都判客户端走了」，上游会被自己掐掉。
+  if (!req) return false;
+  if (req.aborted) return true;
+  if (req.complete === false) return true;               // 请求体没收完就关
+  if (req.readableEnded && !req.complete) return true;   // 收不满就想走
+  return false;
+}
+
+function isResClosedEarly(res) {
+  // 只给 res 的 'close' 用：此时 res 已经关了，要么是我们写完（调用方先用
+  // selfFinished 挡掉），要么是客户端拔了。别拿去给 req 的 'close' 判。
+  if (!res) return false;
+  if (res.socket && res.socket.destroyed) return true;
+  if (res.destroyed) return true;
+  if (res.writableEnded || res.writableFinished) return false; // 是我们自己写完的
+  return true;
+}
+
+function createUpstreamSignal(req, res, timeoutMs = UPSTREAM_TIMEOUT_MS) {
+  const controller = new AbortController();
+  let settled = false;
+  const abort = (reason) => {
+    if (settled) return;
+    settled = true;
+    controller.abort(reason);
+  };
+
+  if (req && typeof req.on === 'function') {
+    req.on('aborted', () => abort(CLIENT_GONE)); // Node 16 起弃用，2026-10 实测仍生效
+    req.on('close', () => {                      // Node 18+ 兜底
+      if (isClientGone(req)) abort(CLIENT_GONE);
+    });
+  }
+  if (res && typeof res.on === 'function') {
+    // 🔴 res 的 'close' 在 keep-alive 下**可能早于 'finish'** 触发，
+    // 光看 writableEnded 会把「自己写完了、socket 顺手关掉」误判成「客户端拔了」，
+    // 结果每一笔正常请求都把刚拿到的上游掐掉。所以自己写完这件事得单独记一笔。
+    let selfFinished = false;
+    res.on('finish', () => { selfFinished = true; });
+    res.on('close', () => { if (!selfFinished && isResClosedEarly(res)) abort(CLIENT_GONE); });
+  }
+
+  const timer = setTimeout(() => abort(new Error('upstream timeout')), timeoutMs);
+  if (typeof timer.unref === 'function') timer.unref();
+
+  // 响应写完后（正常收尾）不再等这个定时器，别白挂着
+  controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+  return controller.signal;
+}
+
+/**
+ * 客户端都已经走了，就别再往 res 上写东西。
+ * 断连后 res.status(...).json(...) 会变成 write-after-end，日志里又是一堆假错误。
+ */
+function canWrite(res) {
+  return !!(res && !res.destroyed && !res.headersSent);
+}
+
 // ===== Balance Query =====
 
 // Known balance API endpoints per provider type
@@ -582,7 +667,8 @@ app.get('/api/balances', requireAuth, async (req, res) => {
       const response = await fetch(url, {
         method,
         headers: { 'Authorization': `Bearer ${provider.api_key}` },
-        signal: AbortSignal.timeout(10000)
+        // L004 同源：客户端关页面后这串余额查询不该还在跑到第 6 个上游
+        signal: createUpstreamSignal(req, res, 10000)
       });
       if (response.ok) {
         const data = await response.json();
@@ -617,6 +703,8 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     }
 
     const upstreamUrl = `${provider.baseUrl}/chat/completions`;
+    // L004：客户端一走，这份 signal 立刻让上游停下，不再空跑满 120 秒
+    const upstreamSignal = createUpstreamSignal(req, res);
     const response = await fetch(upstreamUrl, {
       method: 'POST',
       headers: {
@@ -624,7 +712,7 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
         'Authorization': `Bearer ${provider.apiKey}`
       },
       body: JSON.stringify(req.body),
-      signal: AbortSignal.timeout(120000),
+      signal: upstreamSignal,
     });
 
     if (!response.ok) {
@@ -632,6 +720,7 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       const err = await response.text();
       console.error(`Chat upstream error (status ${response.status}): ${err}`);
       // Sanitize: never leak provider diagnostic details to the client
+      if (!canWrite(res)) return;
       return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
 
@@ -649,21 +738,22 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
           console.error(`[Stream] Upstream read error: ${err.message}`);
           if (!res.headersSent) {
             res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
-          } else {
+          } else if (!res.destroyed) {
             res.end();
           }
         });
         await new Promise((resolve, reject) => {
           readable.pipe(res);
+          // L004 后 close 有两种来路：流式写完了（正常），客户端拔了（aborted）。
+          // 两种都该收手，区别只在日志里带不带 aborted，别再区别对待。
           res.on('close', resolve);
           res.on('finish', resolve);
           res.on('error', reject);
         });
       } catch (err) {
         console.error(`[Stream] Pipe error: ${err.message}`);
-        if (!res.headersSent) {
-          res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
-        }
+        if (!canWrite(res)) return;
+        res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
       }
     } else {
       const data = await response.json();
@@ -671,6 +761,8 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     }
   } catch (e) {
     console.error(`Chat error: ${e.message}`);
+    // 客户端断了才走到这里（L004 后的新路径）：不打日志刷屏，也不往死 socket 上写
+    if (!canWrite(res)) return;
     res.status(500).json({ success: false, error: e.message, code: 'CHAT_ERROR' });
   }
 });
@@ -700,6 +792,8 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
     if (!Object.prototype.hasOwnProperty.call(body, 'stream')) body.stream = false;
 
     const upstreamUrl = `${provider.baseUrl}/responses`;
+    // L004
+    const upstreamSignal = createUpstreamSignal(req, res);
     const response = await fetch(upstreamUrl, {
       method: 'POST',
       headers: {
@@ -707,17 +801,19 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
         'Authorization': `Bearer ${provider.apiKey}`
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120000),
+      signal: upstreamSignal,
     });
 
     if (!response.ok) {
       const err = await response.text();
       console.error(`[responses] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
+      if (!canWrite(res)) return;
       return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
-    return pipeUpstreamBytes(res, response, '[responses]');
+    return pipeUpstreamBytes(res, response, '[responses]', upstreamSignal);
   } catch (e) {
     console.error(`[responses] error: ${e.message}`);
+    if (!canWrite(res)) return;
     return res.status(500).json({ success: false, error: e.message, code: 'RESPONSES_ERROR' });
   }
 });
@@ -726,18 +822,18 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
  * 把上游响应按原始字节转发出去。
  * chat 那条不得不用 Readable.fromWeb 是因为 Web ReadableStream 与 Express 的 res 不兼容
  * （B6 fix：直接 pipeTo 会抛 TypeError → 504）；responses 是同一个坑，所以共用这一份。
+ *
+ * 返回 { outcome, acc }：outcome 取 'completed' / 'client-aborted' / 'stream-error'。
+ * 攒到的字节走 acc 交还调用方（用法见 /v1/messages），不再用回调——回调和返回值双轨
+ * 很容易一疏漏报两次账，跟 L004 是同一类问题。
  */
-function pipeUpstreamBytes(res, response, tag, onBytes) {
+function pipeUpstreamBytes(res, response, tag, signal) {
   if (!response.body) { res.end(); return; }
   const ct = response.headers.get('content-type');
   if (ct) res.setHeader('Content-Type', ct);
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   const readable = Readable.fromWeb(response.body);
-  readable.on('error', (err) => {
-    console.error(`[${tag}] stream error: ${err.message}`);
-    if (!res.headersSent) res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
-  });
 
   // usage 藏在**流末**（Anthropic 的 message_delta / 末 chunk），所以必须边 pipe 边攒字节，
   // 等流走完再给出去 —— 攒一份副本换「流式体验不被破坏 + 账本不丢数」。
@@ -745,21 +841,40 @@ function pipeUpstreamBytes(res, response, tag, onBytes) {
   const tee = new PassThrough();
   tee.on('data', (c) => { acc += c.toString('utf8'); });
 
+  // L004：客户端一走（signal abort）就地掐断上游字节流，不再等 120 秒慢慢跑。
+  //
+  // 🔴 判「是不是被客户端掐的」一律读 signal.aborted，**不要**在 abort 事件里设一个
+  // 闭包变量：2026-10-04 实测 abort 与 res 'close' 的相对顺序在 Node 里不保证，
+  // 用闭包变量会漏判，结果账照报（outcome 仍是 completed）。读标记位没有时序依赖。
+  const abortedByClient = () => !!(signal && signal.aborted);
+  if (signal && typeof signal.addEventListener === 'function') {
+    signal.addEventListener('abort', () => {
+      try { readable.destroy(); } catch { /* 已经死了就别再吵 */ }
+    }, { once: true });
+  }
+
   return new Promise((resolve, reject) => {
-    readable.pipe(tee).pipe(res);
     // 🔴 close 与 finish **对同一次响应都会触发**，不加幂等守卫 onBytes 会被跑两次
     // （2026-10-02 e2e 实测：requestCount 多 1、同一笔 usage 落两遍账，totalTokens 翻倍）。
     let done = false;
-    const finish = () => {
+    const settle = (outcome) => {
       if (done) return;
       done = true;
-      resolve();
-      if (typeof onBytes === 'function') {
-        try { onBytes(acc); } catch (e) { /* 上报失败绝不能影响主路径 */ }
-      }
+      // 主链断了，tee 别还攥着攒到的字节不撒手
+      try { tee.destroy(); } catch { /* ignore */ }
+      resolve({ outcome, acc });
     };
-    res.on('close', finish);
-    res.on('finish', finish);
+    readable.on('error', (err) => {
+      console.error(`[${tag}] stream error: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
+      }
+      // 原先这里只打日志不 settle ⇒ promise 永远挂着，客户端走了请求对象还留着（L004 附带修）
+      settle(abortedByClient() ? 'client-aborted' : 'stream-error');
+    });
+    readable.pipe(tee).pipe(res);
+    res.on('close', () => settle(abortedByClient() ? 'client-aborted' : 'completed'));
+    res.on('finish', () => settle(abortedByClient() ? 'client-aborted' : 'completed'));
     res.on('error', reject);
   });
 }
@@ -854,32 +969,46 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     }
 
     const t0 = Date.now();
+    // L004
+    const upstreamSignal = createUpstreamSignal(req, res);
     const response = await fetch(upstreamUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify(req.body),
-      signal: AbortSignal.timeout(120000),
+      signal: upstreamSignal,
     });
 
     if (!response.ok) {
       const err = await response.text();
       console.error(`[messages] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
+      if (!canWrite(res)) return;
       return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
     // 流走完再上报：把攒到的字节（非流式是整份 JSON、流式是 SSE 拼接文本）原样交给
     // manager 侧的 usage-probe 归一，这里不解析、不判 wire。
-    return pipeUpstreamBytes(res, response, '[messages]', (text) => {
-      reportUsage(text, Date.now() - t0);
-    });
+    // usage 藏在流末。客户端中途断开 ⇒ 这笔账「没跑完」⇒ 不上报：
+    // 半截 usage 报上去是虚账，比少报一笔更难看（L004）。
+    const { outcome, acc } = await pipeUpstreamBytes(res, response, '[messages]', upstreamSignal);
+    if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
+      reportUsage(acc, Date.now() - t0);
+    }
   } catch (e) {
     console.error(`[messages] error: ${e.message}`);
+    if (!canWrite(res)) return;
     return res.status(500).json({ success: false, error: e.message, code: 'MESSAGES_ERROR' });
   }
 });
 
 // ===== P0-E: 可测试性 =====
 //   把 app 导出，门禁测试可直接 supertest(app)，无需 require 时 listen 18790 撞端口。
-module.exports = { app, requireAuth, findConfigToml, parseConfigToml };
+module.exports = {
+  app,
+  requireAuth,
+  findConfigToml,
+  parseConfigToml,
+  createUpstreamSignal, // L004：测试直接打这个函数，别再靠「镜像一份代码」的假测试
+  canWrite,
+};
 
 // ===== P0-B: 默认绑 127.0.0.1（仅本机）=====
 //   暴露到网络前显式设 BIND_HOST=0.0.0.0；Docker 内可设 PROXY_BIND_HOST=0.0.0.0。
