@@ -55,23 +55,48 @@ router.get('/health-history', (req, res) => {
   res.json({ history: readRecentHealth(limit) });
 });
 
-// 版本信息
-router.get('/version', (_req, res) => {
+// ==================== 版本信息 ====================
+// 原先这里读 `../../..` + `package.json`：从 routes 上溯三级已经跑到仓库**外面**那一层了
+// （routes → manager → 仓库根 → 上一级目录），再加仓库根本来就没有 package.json，
+// 于是每次都 catch 到硬编码 1.0.0：概览页那个版本号从来就是假的，也没人发现。
+// 2026-10-04 收口：仓库根放 VERSION 当唯一版本源（上溯两级即到），子包各读各自的 package.json。
+// 读不到的写 'unknown'，不许拿一个像样的假数糊过去（跟 C0-3 那条假成本数字同一个毛病）。
+const ROOT_DIR = path.join(__dirname, '..', '..');
+
+function readRootVersion() {
   try {
-    const pkgPath = path.join(__dirname, '..', '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    res.json({
-      version: pkg.version || '1.0.0',
-      date: '2026-06-27',
-      proxies: {
-        codex: '1.0.0',
-        hermes: '1.0.0',
-        cursor: '1.0.0',
-      },
-    });
+    const lines = fs.readFileSync(path.join(ROOT_DIR, 'VERSION'), 'utf8')
+      .split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    if (!/^\d+\.\d+\.\d+/.test(lines[0] || '')) return { version: 'unknown', date: null };
+    return { version: lines[0], date: lines[1] || null };
   } catch (e) {
-    res.json({ version: '1.0.0', date: '2026-06-27', proxies: {} });
+    return { version: 'unknown', date: null };
   }
+}
+
+function readPackVersion(packDir) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, packDir, 'package.json'), 'utf8'));
+    return pkg.version || 'unknown';
+  } catch (e) {
+    // hermes-proxy 是 Python 项目，压根没有 package.json。一次发版是同一个版本号，
+    // 读不到就跟着仓库的 VERSION 走（比显示 unknown 更接近事实），
+    // 仓库 VERSION 也读不到时自然落到 'unknown'。
+    return readRootVersion().version;
+  }
+}
+
+router.get('/version', (_req, res) => {
+  const root = readRootVersion();
+  res.json({
+    version: root.version,
+    date: root.date,   // VERSION 第二行；以前是硬编码 2026-06-27，改一次版本就得记得改代码
+    proxies: {
+      codex: readPackVersion('codex-proxy'),
+      hermes: readPackVersion('hermes-proxy'),
+      cursor: readPackVersion('cursor-proxy'),
+    },
+  });
 });
 
 // 已安装的代理列表

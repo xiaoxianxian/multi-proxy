@@ -73,8 +73,12 @@ describe('POST /v1/messages', () => {
 
   test('🔴 DeepSeek 走 /anthropic 前缀型：{去/v1}/anthropic/v1/messages', async () => {
     await request(app).post('/v1/messages').send(send('deepseek-v4-pro'));
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    const sent = capture[0];
+    // 不能裸数 global.fetch：/v1/messages 跑完还会往 manager 报一次 usage
+    // （codex-proxy/proxy.js 的 reportUsage），那次也走 global.fetch。
+    // 只数打到 upstream 的那一次，否则这个断言永远飘。
+    const upstreamCalls = capture.filter((c) => !String(c.url).includes('/api/cost/report'));
+    expect(upstreamCalls).toHaveLength(1);
+    const sent = upstreamCalls[0];
     expect(sent.url).toBe('https://api.deepseek.com/anthropic/v1/messages');
     expect(sent.url).not.toContain('/chat/completions');
     expect(sent.url).not.toContain('/responses');

@@ -1,6 +1,6 @@
 {
   "name": "multi-proxy-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Multi-Proxy Manager — 共享 Web 管理后台，统一管理 Codex/Hermes/Cursor 多模型代理",
   "main": "main.js",
   "scripts": {
