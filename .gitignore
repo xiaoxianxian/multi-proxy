@@ -88,3 +88,9 @@ l2/OBSERVE-REPORT-2026-10-01.md
 l2/STEP2-CANARY-2026-10-01.md
 l2/HOT-PATH-RUNBOOK.md
 l2/savings-gateway/PHASE2-SPEC.md
+
+# 2026-10-05 对外可见性定规（维护者拍板）：alignment/ 是 agent 间【共享对齐水位】运行态，
+# 含未发文章线索 / 项目代号 / 内部待办 / 本机绝对路径，属内部数据，永不进公开仓。
+# 例外只放纯协议文档（l2/adapter-protocol.md 同列，已在上方 ! 规则放行）。
+alignment/
+
