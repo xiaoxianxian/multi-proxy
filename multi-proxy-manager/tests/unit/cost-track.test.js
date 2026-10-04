@@ -1,5 +1,20 @@
 'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const CT = require('../../lib/cost-track.js');
+
+// ⚠️ 账本落盘测试必须用 tmp 目录：ledgerFile() 每次读 PROXY_COST_LEDGER，
+// 不重定向的话测试会把假账写进 ~/.multi-proxy-manager/cost-ledger.jsonl（实测踩过：
+// 一次 jest 往真账本塞了 24 行假数据）。
+const LEDGER_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mp-cost-ledger-'));
+const LEDGER = path.join(LEDGER_DIR, 'cost-ledger.jsonl');
+
+// 🔴 必须在 beforeEach 里设，不能模块级设 —— jest.setup-afterenv.js 每个用例跑完会把
+// process.env 恢复成 worker 加载时的快照，删掉当时还不存在的新 key。模块级设的 env
+// 活不过第一个用例：ledgerFile() 在调用时读 env，读到 undefined 就静默回落到
+// ~/.multi-proxy-manager/cost-ledger.jsonl，假账直接写进真账本。
+beforeEach(() => { process.env.PROXY_COST_LEDGER = LEDGER; });
 
 // L2 P2 A路·token×单价埋点内核（热路径内存累计，门控 PROXY_COST_TRACK 默认关）
 describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
@@ -132,12 +147,17 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
    });
 
   // ---- 非侵入验证 ----
-  test('非侵入：模块不写盘（无 fs 操作，纯内存）', () => {
+  // （原这条只断言了 requestCount，从没真的校验「不写盘」——名不副实。
+  //   账本落盘后它的语义改为「门控带来的额外开销仍然只有一次 env 读 + 一次 append」。）
+  test('非侵入：门控开时热路径只多一次 append，不改写响应', () => {
     process.env.PROXY_COST_TRACK = '1';
     CT.setPricing('p', { input: 10, output: 10 });
+    fs.writeFileSync(LEDGER, '');        // 本 describe 前面的用例也落过账，先清空再数
     for (let i = 0; i < 10; i++) CT.accumulate('p', { prompt_tokens: 100, completion_tokens: 100 });
-    // 不写盘——cost-track 是纯内存累计器，持久化由 alert.js/persist 负责
     expect(CT.getCost('p').requestCount).toBe(10);
+    // 落盘 ≠ 改写：账本行数 = 落账次数，不多不少
+    const rows = fs.readFileSync(LEDGER, 'utf8').split('\n').filter(Boolean);
+    expect(rows).toHaveLength(10);
    });
 
   test('门控关时 accumulate 不创建 state（零副作用，不污染全局 _state）', () => {
@@ -222,5 +242,194 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
     const c = CT.getCost('p');
     expect(c.thinkingTokens).toBe(3);                 // 缺字段 = 0 增量，不崩
     expect(c.requestCount).toBe(2);
+   });
+});
+
+// ===== 持久账本 + 三模型字段（2026-10-03 补；抄 CC Switch proxy_request_logs 的记账三件套）=====
+describe('cost-track 持久账本 + 三模型字段', () => {
+  // LEDGER / readRows / clearLedger 见文件顶部（模块级，beforeEach 里重设 env）
+  const readRows = () => fs.readFileSync(LEDGER, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  // 截断而不是删文件：文件恒存在，readRows 才不会 ENOENT，toHaveLength 断言才有意义
+  const clearLedger = () => fs.writeFileSync(LEDGER, '');
+
+  beforeEach(() => {
+    CT.reset();
+    delete process.env.PROXY_COST_TRACK;
+    clearLedger();
+  });
+  afterEach(() => {
+    CT.reset();
+    delete process.env.PROXY_COST_TRACK;
+    clearLedger();
+  });
+
+  test('落账往账本追加一行（append-only，不重写整文件）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('codex-proxy', { input: 10, output: 20 });
+    CT.accumulate('codex-proxy', { prompt_tokens: 1000, completion_tokens: 500 });
+    CT.accumulate('codex-proxy', { prompt_tokens: 100, completion_tokens: 100 });
+    expect(readRows()).toHaveLength(2);
+    expect(readRows()[0].prompt).toBe(1000);          // 先写的那行还在 ⇒ 是 append 不是 rewrite
+    expect(readRows()[1].prompt).toBe(100);
+   });
+
+  test('账本路径默认在 ~/.multi-proxy-manager/，PROXY_COST_LEDGER 可覆盖', () => {
+    expect(CT.ledgerFile()).toBe(LEDGER);
+    delete process.env.PROXY_COST_LEDGER;              // 文件级 beforeEach 下个用例会重新设回来
+    expect(CT.ledgerFile()).toBe(path.join(os.homedir(), '.multi-proxy-manager', 'cost-ledger.jsonl'));
+   });
+
+  test('loadLedger 读回合并进内存态，返回行数', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 10 });
+    CT.accumulate('p', { prompt_tokens: 1000, completion_tokens: 500 });   // cost = 1000/1e6*10 + 500/1e6*10 = 0.015
+    expect(CT.getCost('p').cost).toBe(0.015);
+
+    // 模拟重启：只清内存（门控仍开 —— loadLedger 内部走 applyTokens，门控一关就全不记，
+    // 真实 server.js 也是 loadPricingFromEnv + 门控开的状态下调它）
+    CT.reset();
+    const n = CT.loadLedger();
+    expect(n).toBe(1);
+    expect(CT.getCost('p').cost).toBe(0.015);         // 历史账原样回来
+    expect(CT.getCost('p').promptTokens).toBe(1000);
+    expect(CT.getCost('p').requestCount).toBe(1);
+   });
+
+  test('🔴 读回期间不回写：loadLedger 不会把历史账再追加一遍', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 10 });
+    CT.accumulate('p', { prompt_tokens: 1000, completion_tokens: 500 });
+    const before = readRows().length;                   // = 1
+
+    CT.reset();
+    CT.loadLedger();
+    expect(readRows()).toHaveLength(before);           // 还是 1；不加倍（回归守卫：_loading）
+    CT.reset();
+    CT.loadLedger();
+    expect(readRows()).toHaveLength(before);           // 读两次也不涨
+   });
+
+  test('🔴 读回用行内冻结的 cost，不按现价重算（价表变了历史账单不漂）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 10 });
+    // 第一次记账按 input=10：1000000/1e6 × 10 = **10**（不是 0.01，别少看三个数量级）
+    CT.accumulate('p', { prompt_tokens: 1000000, completion_tokens: 0 });
+    CT.reset();
+
+    // 价表翻倍到 20/20 后重启
+    CT.setPricing('p', { input: 20, output: 20 });
+    CT.loadLedger();
+    expect(CT.getCost('p').cost).toBe(10);             // 仍是旧价算的 10，不是按新价 20
+   });
+
+  test('无账本 / 空行 / 半行损坏都不算错（跳过损坏行，不炸）', () => {
+    fs.writeFileSync(LEDGER, '{"proxy":"p","prompt":10}\n\n{"proxy":"p","prompt":20\nnot-json\n');
+    process.env.PROXY_COST_TRACK = '1';
+    expect(CT.loadLedger()).toBe(1);                   // 只有中间那行是完整 JSON
+    expect(CT.getCost('p').promptTokens).toBe(10);
+   });
+
+  test('reset 只清内存，不删账本（账本是持久资产）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 10 });
+    CT.accumulate('p', { prompt_tokens: 10, completion_tokens: 10 });
+    CT.reset();
+    expect(fs.existsSync(LEDGER)).toBe(true);          // 文件还在
+    expect(CT.loadLedger()).toBe(1);                   // 还能读回来
+   });
+
+  // ---- 三模型字段 ----
+  test('三模型字段入账：model=实际计费模型，requestModel=请求侧模型', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('codex-proxy', { input: 10, output: 10 });
+    CT.accumulate('codex-proxy', { prompt_tokens: 1000, completion_tokens: 0 }, {
+      model: 'agnes-3.0-flash', requestModel: 'claude-haiku-4-5',
+    });
+
+    const row = readRows()[0];
+    expect(row.model).toBe('agnes-3.0-flash');         // 账记在实际计费模型上
+    expect(row.requestModel).toBe('claude-haiku-4-5');
+
+    const c = CT.getCost('codex-proxy');
+    expect(Object.keys(c.models)).toEqual(['agnes-3.0-flash']);
+    expect(c.models['agnes-3.0-flash'].promptTokens).toBe(1000);
+    // 请求侧那个模型挂在下面，才答得出「那批 haiku 烧了多少」
+    expect(Object.keys(c.models['agnes-3.0-flash'].requestModels)).toEqual(['claude-haiku-4-5']);
+   });
+
+  test('route-engine 重写场景：多请求归到同一 model，各自的 requestModel 分开记', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 0 });
+    CT.accumulate('p', { prompt_tokens: 1000 }, { model: 'agnes-3.0-flash', requestModel: 'claude-haiku-4-5' });
+    CT.accumulate('p', { prompt_tokens: 2000 }, { model: 'agnes-3.0-flash', requestModel: 'gpt-4o' });
+    CT.accumulate('p', { prompt_tokens: 500 },  { model: 'deepseek-v3',     requestModel: 'claude-haiku-4-5' });
+
+    const c = CT.getCost('p');
+    expect(c.models['agnes-3.0-flash'].promptTokens).toBe(3000);   // 两个 haiku + gpt 都落在这
+    expect(Object.keys(c.models['agnes-3.0-flash'].requestModels).sort()).toEqual(['claude-haiku-4-5', 'gpt-4o']);
+    expect(c.models['agnes-3.0-flash'].requestModels['claude-haiku-4-5'].promptTokens).toBe(1000);
+    expect(c.models['deepseek-v3'].promptTokens).toBe(500);
+   });
+
+  test('🔴 模型缺失落 <unknown>，绝不猜模型名（猜错就是假数据）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 0 });
+    CT.accumulate('p', { prompt_tokens: 100 });        // 没给 model
+    expect(readRows()[0].model).toBe('<unknown>');
+    expect(Object.keys(CT.getCost('p').models)).toEqual(['<unknown>']);
+   });
+
+  test('pricingModel 可显式指定（价表切换留痕）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 0 });
+    CT.accumulate('p', { prompt_tokens: 100 }, { model: 'new-model', pricingModel: 'legacy-price' });
+    expect(readRows()[0].model).toBe('legacy-price');   // 按哪套价记的账
+   });
+
+  test('models 无数据时返回 null，不返回空字典（与 latencyP50 同口径）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 0 });
+    const c = CT.getCost('p');
+    expect(c.models).toBeNull();
+    expect(c.requestModels).toBeNull();
+   });
+
+  test('🔴 reqId 幂等：同一次响应重报只记一笔（tee 双触发实测 252=126×2）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 0 });
+    CT.applyTokens('p', { prompt: 100, completion: 0, cacheHit: 0, thinking: 0 }, 10, { reqId: 'r-1' });
+    CT.applyTokens('p', { prompt: 100, completion: 0, cacheHit: 0, thinking: 0 }, 10, { reqId: 'r-1' });
+    expect(CT.getCost('p').requestCount).toBe(1);
+    expect(readRows()).toHaveLength(1);
+   });
+
+  test('没有 reqId 就不去重（照记，不猜、不静默丢账）', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('p', { input: 10, output: 0 });
+    CT.applyTokens('p', { prompt: 100, completion: 0, cacheHit: 0, thinking: 0 }, 10, {});
+    CT.applyTokens('p', { prompt: 100, completion: 0, cacheHit: 0, thinking: 0 }, 10, {});
+    expect(CT.getCost('p').requestCount).toBe(2);
+   });
+
+  test('跨进程上报透传三模型字段 + reqId', () => {
+    process.env.PROXY_COST_TRACK = '1';
+    CT.setPricing('codex-proxy', { input: 10, output: 10 });
+    CT.reportUsage({
+      agent: 'codex-proxy', latencyMs: 10, reqId: 'r-9',
+      model: 'agnes-3.0-flash', requestModel: 'claude-haiku-4-5',
+      raw: { prompt_tokens: 1000, completion_tokens: 500 },
+    });
+    const row = readRows()[0];
+    expect(row.model).toBe('agnes-3.0-flash');
+    expect(row.requestModel).toBe('claude-haiku-4-5');
+    expect(row.reqId).toBe('r-9');
+   });
+
+  test('门控关时一切不落盘（含账本）', () => {
+    expect(CT.enabled()).toBe(false);
+    CT.setPricing('p', { input: 10, output: 10 });
+    CT.accumulate('p', { prompt_tokens: 100, completion_tokens: 100 });
+    expect(readRows()).toHaveLength(0);                 // 账本是空的（= 一行都没追加）
+    expect(CT.getCost('p').requestCount).toBe(0);
    });
 });

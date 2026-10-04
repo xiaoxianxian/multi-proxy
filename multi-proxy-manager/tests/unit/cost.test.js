@@ -176,9 +176,12 @@ describe('cost (P2 成本分析内核 · B 路余额趋势)', () => {
 
   test('非侵入：内核默认不往 process.env 注入 COST_* 键', () => {
     const s = C.createCostService({ store: { providers: [] } });
+    // 只对 record 前后做差：环境里本来就可能预置 PROXY_COST_*（如 jest.setup.js
+    // 重定向账本用的 PROXY_COST_LEDGER，等同运维在 shell 里设 env），那不是内核注入的。
+    const leakOf = () => Object.keys(process.env).filter((k) => k.startsWith('PROXY_COST') || k.startsWith('COST_TRACK'));
+    const before = leakOf();
     s.record('openai', 100, { now: 1, providerId: 'openai' });
     s.record('openai', 80, { now: 2, providerId: 'openai' });
-    const leaked = Object.keys(process.env).filter((k) => k.startsWith('PROXY_COST') || k.startsWith('COST_TRACK'));
-    expect(leaked).toEqual([]);
+    expect(leakOf()).toEqual(before);            // 零新增 = 内核没往 env 塞东西
     });
 });
