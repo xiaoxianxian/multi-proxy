@@ -133,6 +133,28 @@ class AgentRegistry {
         const set = new Set([...(cur.capabilityTags || []), ...tagsArray]);
         return this.update(id, { capabilityTags: [...set] });
     }
+    // ---- 记忆对齐注册面（D1 方案 A：扩 AgentRegistry 为第 5 注册面，与 4 类 agent profile 隔离）----
+    // 登记/覆盖 一个 reader->target 对齐水位 entry，不污染 AGENT_TYPES profile 列表、不走 create/validate。
+    registerAlignment(reader, target, entry = {}) {
+        const store = this._alignStorage || (this._alignStorage = new Map());
+        const key = `${reader}->${target}`;
+        const e = {
+            specVersion: SPEC_VERSION,
+            reader, target,
+            ts: entry.ts || new Date().toISOString(),
+            last_sync: entry.last_sync || null,
+            absorbed: entry.absorbed || [],
+            pending: entry.pending || [],
+            _mtimeSeen: entry._mtimeSeen || null,
+        };
+        store.set(key, e);
+        return e;
+    }
+    // 读回已登记的对齐水位列表（只读，供 dashboard/状态查询）。
+    listAlignments() {
+        if (!this._alignStorage) return [];
+        return [...this._alignStorage.values()];
+    }
     count() {
         return this.storage.size();
     }
@@ -182,10 +204,46 @@ function newFileStorage(dir) {
     };
 }
 
+// 记忆对齐存储（文件可注入 dir；绝不默认写 home，遵守非侵入④）。
+// 持久化 <dir>/<reader>-to-<target>.json，原子写 .tmp→rename + 0o600（与 newFileStorage 同构）。
+// 只读写注入的 dir，绝不触碰 ~/.workbuddy/ 或 ~/.hermes/（非侵入铁律）。
+function newMemoryAlignStorage(dir) {
+    let cache = new Map();
+    const fileFor = (r, t) => path.join(dir, `${r}-to-${t}.json`);
+    function load() {
+        if (!fs.existsSync(dir)) { cache = new Map(); return; }
+        for (const f of fs.readdirSync(dir)) {
+            if (!/^.*-to-.*\.json$/.test(f)) continue;
+            try {
+                const doc = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+                if (doc && doc.reader && doc.target) cache.set(`${doc.reader}->${doc.target}`, doc);
+            } catch { /* 跳过坏文件，不阻断 load */ }
+        }
+    }
+    function persist(reader, target) {
+        const doc = cache.get(`${reader}->${target}`);
+        if (!doc) return;
+        const file = fileFor(reader, target);
+        if (!fs.existsSync(path.dirname(file))) fs.mkdirSync(path.dirname(file), { recursive: true });
+        const tmp = file + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), { flag: 'w', encoding: 'utf8', mode: 0o600 });
+        fs.renameSync(tmp, file);
+    }
+    load();
+    return {
+        get: (r, t) => cache.get(`${r}->${t}`),
+        set: (r, t, e) => { cache.set(`${r}->${t}`, e); persist(r, t); return e; },
+        has: (r, t) => cache.has(`${r}->${t}`),
+        keys: () => [...cache.keys()],
+        size: () => cache.size,
+    };
+}
+
 module.exports = {
     AgentRegistry,
     newMemoryStorage,
     newFileStorage,
+    newMemoryAlignStorage,
     validate,
     AGENT_TYPES,
     MODEL_TYPES,

@@ -75,6 +75,7 @@ const DEMO_TAGS = {
     'mcp-orchestrate-real.demo.js': ['mcp'],
     'mcp-server.demo.js': ['mcp'],
     'memory-merge.demo.js': ['memory'],
+    'memory-align.demo.js': ['memory', 'align'],
     'plugin-runtime.demo.js': ['plugin', 'registry'],
     'prompt-cache.demo.js': ['cache'],
     'rate-limiter.demo.js': ['governance'],

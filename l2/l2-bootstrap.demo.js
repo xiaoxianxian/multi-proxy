@@ -55,4 +55,13 @@ bootstrapAdapters({ runtime: new PluginRuntime({ logger: { log: () => {} } }), l
 const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
 ok(`no network touched (elapsed ${elapsedMs.toFixed(1)}ms < 100ms)`, elapsedMs < 100);
 
+// 门控用例（D1 记忆对齐 gate 默认关 / 开）：
+ok('gate 默认关 → memory-align 被 gate（registered 仍 3）',
+    (report.gated || []).some((g) => g.name === 'memory-align' && g.gate === 'PROXY_L2_MCP'));
+process.env.PROXY_L2_MCP = 'true';
+const { report: gateOnR } = bootstrapAdapters({ runtime: new PluginRuntime({ logger: { log: () => {} } }), logger: { log: () => {} } });
+delete process.env.PROXY_L2_MCP;
+ok('gate 开 → memory-align 注册（PROXY_L2_MCP=true）',
+    gateOnR.registered.some((r) => r === 'memory-align'));
+
 console.log(`\nDEMO: ALL PASS    (${n} checks)`);

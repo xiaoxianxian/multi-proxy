@@ -210,6 +210,6 @@ function getAdapters() { return { ..._adapterStore }; }
 
 module.exports = {
     SPEC_VERSION, SHARED_SCOPE, DEFAULT_STRATEGY, DEFAULT_ENV_MAP,
-    merge, envInject, validateMemoryDoc,
+    merge, envInject, validateMemoryDoc, asDoc,
     registerAdapter, getAdapters, builtinAdapters,
 };

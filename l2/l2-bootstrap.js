@@ -27,6 +27,7 @@ const { PluginRuntime } = require('./plugin-runtime.js');
 const { AigcAdapter } = require('./adapters/aigc-adapter.js');
 const { H3webAdapter } = require('./adapters/h3web-adapter.js');
 const { L1AgentAdapter } = require('./adapters/l1-agent-adapter.js');
+const { MemoryAlignAdapter } = require('./adapters/memory-align-adapter.js');
 
 // 把 adapter 实例包装成一个合规的 PluginRuntime 插件对象。
 // 生命周期钩子全部为 no-op async：adapter 是纯能力声明型（无 init/start/stop 语义），
@@ -54,12 +55,22 @@ function wrapAdapterInstance(adapter, opts = {}) {
   };
 }
 
-// 默认 3 个 L2 adapter（与 l2/adapters/ 同构）。
+// 默认 3 个 L2 adapter（与 l2/adapters/ 同构，门控恒开，无条件注册）。
 const DEFAULT_ADAPTERS = [
-  { name: 'aigc', Adapter: AigcAdapter },
-  { name: 'h3web', Adapter: H3webAdapter },
-  { name: 'l1-agent', Adapter: L1AgentAdapter },
+   { name: 'aigc', Adapter: AigcAdapter },
+   { name: 'h3web', Adapter: H3webAdapter },
+   { name: 'l1-agent', Adapter: L1AgentAdapter },
+   // D1 记忆对齐（方案 A）：门控注册（gate 默认关），守「门控默认关 / 零回归」。
+   // 只有 PROXY_L2_MCP=true 时才注册进 plugin runtime；默认（env 不存在）跳过，DEFAULT 恒 3 项。
+   { name: 'memory-align', Adapter: MemoryAlignAdapter, gate: 'PROXY_L2_MCP' },
 ];
+
+// 门控判定：adapter.gate 存在且该 env 变量真值时注册；未声明 gate 视为默开（DEFAULT 3 项行为不变）。
+function gateEnabled(gate) {
+    if (!gate) return true;
+    const v = process.env[gate];
+    return v === '1' || v === 'true' || v === 'on' || v === 'yes';
+}
 
 // 把 3 个 adapter 注册进 PluginRuntime（默认 enable + start，使 listCapabilities() 非空）。
 // opts.runtime：传入则复用（生产 routes/mcp.js 把建好的 runtime 传进来，避免再 new），
@@ -74,9 +85,15 @@ function bootstrapAdapters(opts = {}) {
   const runtime = opts.runtime || new PluginRuntime({ logger: { log: () => {} } });
   const report = { registered: [], failed: [] };
 
-  for (const { name, Adapter } of adapters) {
+  for (const { name, Adapter, gate } of adapters) {
     try {
-      // 幂等：同名已注册则跳过（不覆盖、不报错）。
+       // 门控：声明 gate 且未开启则跳过注册（门控默认关，零回归）。
+      if (!gateEnabled(gate)) {
+        report.gated = report.gated || [];
+        report.gated.push({ name, gate });
+        continue;
+       }
+       // 幂等：同名已注册则跳过（不覆盖、不报错）。
       if (runtime.plugins.has(name)) {
         report.failed.push({ name, reason: 'already-registered' });
         continue;
