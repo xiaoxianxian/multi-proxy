@@ -12,6 +12,7 @@ This skill is a lightweight orientation layer for the `multi-proxy` repo. It tel
 ## When to use
 
 - Managing proxy lifecycle: start / stop / status / logs of Codex(18790) / Hermes(18793) / Cursor(18794) / Manager(18792).
+- Switching the **dsh** agent to curator/off via `tools/agent-proxy-switch dsh {direct|curator|off}` — dsh is a provider-registry client (~/.dsh/profiles/desktop/cordis.patch.yml, id-targeted merge), **not a port**; it is a managed agent like Codex/Hermes/Cursor but writes config (GUI常驻, no zero-write profile injection).
 - Diagnosing proxy liveness: when Manager shows "not running" but agents appear to work.
 - Adding new adapters to the L2 orchestration core.
 - Running the full test matrix.

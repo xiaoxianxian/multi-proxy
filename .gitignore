@@ -95,3 +95,8 @@ l2/savings-gateway/PHASE2-SPEC.md
 alignment/
 # macOS 原生客户端：源码入库，构建产物不入库（build.sh 一次编译出 build/MultiProxy.app）
 client/build/
+
+# 演示/录像产物（demo 视频，约 28MB 两个文件）：非源码、非发布物，永不进 git。
+# 历史曾靠 scripts/push-gate-check.sh 兜底扫到，但那是「事后扫」不是「事前挡」；显式 ignore 才是正解
+# （2026-10-05 审计订正：之前无 mp4 规则，两个 demo 处于 untracked，`git add -A` 会夹带上库）。
+*.mp4

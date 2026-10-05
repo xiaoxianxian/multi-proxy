@@ -14,6 +14,7 @@ Orientation into the `l2/` orchestration core: the 10 kernel modules, 3 adapter 
 - Adding or debugging a new L2 kernel module.
 - Implementing or fixing an adapter (h3web, AIGC, L1-chat).
 - Wiring L2 routes into `multi-proxy-manager/routes/` (`orchestration.js`, `alert.js`).
+- Mounting L2 under **dsh**: `@deepseek-ai/dsh-mcp-client` (stdio) → `l2/mcp-server.js` bridge, one `dsh plugin` entry, gate `PROXY_L2_MCP` (default 0; closed = 403/reject).
 - Running the L2 demo verification suite.
 
 ## L2 Module Map
