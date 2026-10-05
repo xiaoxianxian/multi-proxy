@@ -47,10 +47,10 @@ describe('P0-1 capability filtering', () => {
     delete process.env.PROXY_CAPABILITY_FILTER;
   });
 
-  test('vision 任务 + quality=high → 排除 agnes-2.5-flash (vision=0)', () => {
+  test('vision 任务 + quality=high → 排除 agnes-3.0-flash (vision=0)', () => {
     const filtered = filterByCapability(cands, 'vision', 'high');
     const ids = filtered.map((c) => c.id);
-    expect(ids).not.toContain('agnes-2.5-flash');
+    expect(ids).not.toContain('agnes-3.0-flash');
     // qwen3.8(kimi-k2.6 都有 vision=2) 应保留
     expect(ids).toContain('qwen3.8:27b-mlx');
   });
@@ -58,7 +58,7 @@ describe('P0-1 capability filtering', () => {
   test('cheap 任务（无 quality）→ agnes 保留（vision=0 不影响 general/basics）', () => {
     const filtered = filterByCapability(cands, 'coding', undefined);
     // agnes coding=1, 无 quality 需求 = basic(1) → 保留
-    expect(filtered.map((c) => c.id)).toContain('agnes-2.5-flash');
+    expect(filtered.map((c) => c.id)).toContain('agnes-3.0-flash');
   });
 
   test('门控 OFF (PROXY_CAPABILITY_FILTER=0) → 不过滤, 返回全部', () => {
@@ -99,6 +99,6 @@ describe('P0-1 capability filtering', () => {
       DEFAULT_ROUTE_CONFIG,
       { quality: 'high', messageLength: 100, candidates: cands },
      );
-    expect(result).not.toBe('agnes-2.5-flash'); // agnes vision=0 被排除
+    expect(result).not.toBe('agnes-3.0-flash'); // agnes vision=0 被排除
    });
 });

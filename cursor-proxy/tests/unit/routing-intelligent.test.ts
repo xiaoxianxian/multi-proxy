@@ -227,7 +227,7 @@ describe('M6-D 默认四层 RouteConfig', () => {
   it('默认配置结构完整', () => {
     expect(DEFAULT_ROUTE_CONFIG.id).toBe('default-four-tier');
     expect(DEFAULT_ROUTE_CONFIG.strategy).toBe('cost-optimization');
-    expect(DEFAULT_ROUTE_CONFIG.fallbackChain).toEqual(['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-2.5-flash', 'kimi-k2.6']);
+    expect(DEFAULT_ROUTE_CONFIG.fallbackChain).toEqual(['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-3.0-flash', 'kimi-k2.6']);
     expect(DEFAULT_ROUTE_CONFIG.pricing).toBeDefined();
     expect(Object.keys(DEFAULT_ROUTE_CONFIG.pricing!)).toContain('qwen3.8:27b-mlx');
    });
@@ -238,9 +238,9 @@ describe('M6-D 默认四层 RouteConfig', () => {
     expect(t).toBe('deepseek-v4-pro');
    });
 
-  it('cheap 任务命中 r-cheap → agnes-2.5-flash', () => {
+  it('cheap 任务命中 r-cheap → agnes-3.0-flash', () => {
     const eng = new RouteEngine();
-    expect(eng.getNextRoute('cheap', 'm', DEFAULT_ROUTE_CONFIG)).toBe('agnes-2.5-flash');
+    expect(eng.getNextRoute('cheap', 'm', DEFAULT_ROUTE_CONFIG)).toBe('agnes-3.0-flash');
    });
 
   it('privacy==true 命中 → 本地离线 qwen3.8:27b-mlx', () => {

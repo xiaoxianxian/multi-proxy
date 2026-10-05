@@ -20,7 +20,7 @@ const EXPECTED: Record<string, { input: number; output: number; cacheHit?: numbe
   'deepseek-flash': { input: 0.2, output: 1.6, cacheHit: 0.02, currency: 'CNY' },
   'kimi-k2.6': { input: 6.5, output: 27, currency: 'CNY' },
   'kimi-k3': { input: 20, output: 100, currency: 'CNY' },
-  'agnes-2.5-flash': { input: 0, output: 0, cacheHit: 0, currency: 'CNY' },
+  'agnes-3.0-flash': { input: 0, output: 0, cacheHit: 0, currency: 'CNY' },
   'qwen3.8:27b-mlx': { input: 0, output: 0, cacheHit: 0, currency: 'CNY' },
   'gpt-5.6-codex': { input: 12.5, output: 37.5, currency: 'USD' },
   'claude-opus-4.7': { input: 15, output: 75, currency: 'USD' },
@@ -68,7 +68,7 @@ describe('Q1 P2/P3 price-cache + drift alert', () => {
     expect(routePricing).toBeDefined();
    const rp = routePricing as Record<string, { input: number; output: number; currency: string }> && (
      routePricing as Record<string, { input: number; output: number; currency: string }>);
-   const CORE = ['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-2.5-flash', 'kimi-k2.6'];
+   const CORE = ['qwen3.8:27b-mlx', 'deepseek-v4-pro', 'agnes-3.0-flash', 'kimi-k2.6'];
    for (const m of CORE) {
       expect(rp[m]).toBeDefined(); // anti-silent-skip: routed core must exist
       expect(rp[m].input).toBe(EXPECTED[m].input);
