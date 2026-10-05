@@ -19,6 +19,12 @@ const { MODEL_TIERS, DEFAULT_TIER } = require('./agent-registry');
 const { mapTier, resolveNoCandidatePolicy } = require('./knowledge-base/routing-base.js');
 // 语义审阅层（质量工程 2.2）：route() 决策是否真能接这活（默认关，零行为变更）。
 const { reviewRouteDecision, assertSemantic } = require('./semantic-review.js');
+// LLM judge 复判（二期口子落地，2026-10-03）：Clef SystemOne 复判复杂度档位（默认关，只观测不改档）。
+const {
+    judgeComplexity,
+    judgeRisk,
+    DEFAULT_TIMEOUT_MS: DEFAULT_JUDGE_TIMEOUT,
+} = require('./decision-judge.js');
 
 const DEFAULT_LOG_CAPACITY = 100;
 
@@ -28,7 +34,8 @@ const DEFAULT_LOG_CAPACITY = 100;
 const DEFAULT_LOG_REDACTION = 'full';
 
 class RouteEngine {
-    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null, semanticReview = false, semanticThrow = false, noCandidateStrategy = null } = {}) {
+    constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null, semanticReview = false, semanticThrow = false, noCandidateStrategy = null, llmJudge = false, riskGate = false,
+        riskTimeoutMs = DEFAULT_JUDGE_TIMEOUT } = {}) {
         this.registry = registry;
         this.pluginRuntime = pluginRuntime || { listCapabilities: () => [] };
         this.shadowMode = shadowMode;
@@ -43,6 +50,21 @@ class RouteEngine {
         this.executor = executor;
         // 无候选兜底策略（质量工程 §四 待办②）：null = 走 env/底座默认值。
         this.noCandidateStrategy = noCandidateStrategy;
+        // LLM judge 复判（二期口子）：默认关，零行为变更。
+        // 开启后只把复判结果写进 decision.judge 供观测，**不改档位**——
+        // complexity 定价权归 Portico（Portico/02-架构设计.md 条款 5）。
+        this.llmJudge = llmJudge;
+        // 风险打标旁路（l2/decision-judge.js 的 judgeRisk）：一次前向同时出
+        // 「拦不拦」和「哪一类」，与复杂度 judge 是两个独立开关——
+        // 路由要观测档位，打标要观测类别，开一个是另一半人不需要的开销。
+        this.riskGate = riskGate;
+        // 打标超时默认沿用热路径的 1500ms；批处理/测试要放宽（serve idle 后冷启 8-12s，
+        // 撞上绝对被掐成 null，看着像模型废了其实是超时）。
+        this.riskTimeoutMs = riskTimeoutMs;
+        this._judgeCalls = new Set(); // 未落地的 judge promise，供 awaitJudges() 收口
+        // 风险旁路单独一份：二次确认（Portico 侧动作）只关心「哪一类、要不要复核」，
+        // 不该被 complexity judge 拖着一起等——两条旁路的收口粒度不同，分开存。
+        this._riskCalls = new Set();
       }
 
      // 按任务类型路由：返回候选 adapter 列表 + 路由决策日志
@@ -64,8 +86,39 @@ class RouteEngine {
         const expectedModelType = task.modelType || this._inferModelType(task.type);
 
          // 解析期望的模型档位（复杂度维度，complexity 路由的落点）
-         const expectedTier = this._mapTier(task.complexity);
-         decision.expectedTier = expectedTier; // 记录期望档位，供消费者/日志/审计
+        const expectedTier = this._mapTier(task.complexity);
+        decision.expectedTier = expectedTier; // 记录期望档位，供消费者/日志/审计
+
+        // LLM judge 异步旁路复判（默认关，l2/decision-judge.js）。
+        // 结果只写进 decision.judge 供观测/统计，**不改档位**：
+        // complexity 定价权归 Portico（Portico/02-架构设计.md 条款 5），这里不越权。
+        // 不 await —— 旁路不能阻塞热路径；judge 不可用时返回 null，零影响。
+        if (this.llmJudge && typeof task.prompt === 'string' && task.prompt.length > 0) {
+            decision.judgePending = true; // 同步标记：让消费者知道「在途」，不是没有
+            const p = judgeComplexity(task.prompt.slice(0, 2000))
+                // 无条件回填（失败为 null）：好让消费者分清「没跑」和「跑了没结果」。
+                .then((j) => { decision.judge = j; })
+                .catch(() => { /* 旁路失败不影响路由 */ })
+                .finally(() => {
+                    decision.judgePending = false;
+                    this._judgeCalls.delete(p);
+                });
+            this._judgeCalls.add(p);
+        }
+
+        // 风险打标旁路（同样只观测、不改档位；打标结论归审核侧，不进 Portico 定价）
+        // 无条件回填（失败为 null）：与 judge 一样，好让消费者分清「没跑」和「跑了没结果」。
+        if (this.riskGate && typeof task.prompt === 'string' && task.prompt.length > 0) {
+            decision.riskPending = true;
+            const pr = judgeRisk(task.prompt.slice(0, 2000), { timeoutMs: this.riskTimeoutMs })
+                .then((r) => { decision.risk = r; })
+                .catch(() => { /* 旁路失败不影响路由 */ })
+                .finally(() => {
+                    decision.riskPending = false;
+                    this._riskCalls.delete(pr);
+                });
+            this._riskCalls.add(pr);
+        }
 
          // 查询 Registry 中具备该能力的 agent profile
         const allProfiles = this.registry ? this.registry.list() : [];
@@ -301,6 +354,34 @@ class RouteEngine {
            this.setShadowMode(wasShadow);
         }
       }
+
+    /**
+     * 等所有在途 judge 落地（供测试 / 批处理收口用）。
+     * 热路径不 await —— judge 是旁路观测，路由结果不受它影响。
+     */
+    /// 收口**所有**旁路（complexity judge + 风险打标），供测试/批处理一次性拿全量结果。
+    /// 风险那条虽然单独存（见 awaitRisk），但这里的语义是「等全」，漏掉任何一路都是坑。
+    async awaitJudges(timeoutMs = DEFAULT_JUDGE_TIMEOUT) {
+        const pending = [...this._judgeCalls, ...this._riskCalls];
+        if (!pending.length) return;
+        await Promise.race([
+            Promise.allSettled(pending),
+            new Promise((r) => setTimeout(r, timeoutMs)),
+        ]);
+    }
+
+    /// 只收口风险旁路（decision.risk）。Portico 的二次确认动作要拿 needsConfirm，
+    /// 但那与「这条请求该走哪个档位」无关——不该等 complexity judge。
+    /// 没有开 riskGate 时立即返回（零等待），与 awaitJudges 的空集行为一致。
+    /// @param {number} [timeoutMs=DEFAULT_JUDGE_TIMEOUT] 收口超时，超时后按「跑了没结果」放行
+    async awaitRisk(timeoutMs = DEFAULT_JUDGE_TIMEOUT) {
+        const pending = [...this._riskCalls];
+        if (!pending.length) return;
+        await Promise.race([
+            Promise.allSettled(pending),
+            new Promise((r) => setTimeout(r, timeoutMs)),
+        ]);
+    }
 }
 
-module.exports = { RouteEngine };
+module.exports = { RouteEngine, DEFAULT_JUDGE_TIMEOUT };
