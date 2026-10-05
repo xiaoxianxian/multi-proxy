@@ -32,9 +32,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-print_status() { echo -e "${GREEN}[✓]${NC} $1"; }
-print_error() { echo -e "${RED}[✗]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
+# 用 printf 不用 echo -e：macOS 自带 bash 3.2 的 echo 在多字节场景下会吃字符，
+# 而且 printf 不会把消息里的反斜杠再解释一遍。
+print_status() { printf "${GREEN}[✓]${NC} %s\n" "$1"; }
+print_error()  { printf "${RED}[✗]${NC} %s\n" "$1"; }
+print_warning() { printf "${YELLOW}[!]${NC} %s\n" "$1"; }
 
 # 检查端口是否被占用
 is_port_in_use() {
