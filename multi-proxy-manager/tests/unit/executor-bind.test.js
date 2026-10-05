@@ -121,10 +121,10 @@ describe('executor-bind · 分发真跑（内联 mock 下游）', () => {
         cleanEnv();
         process.env.PROXY_CODEX_PORTS = String(l1Port);
         process.env.PROXY_AUTH_TOKEN = mockL1.token;
-        process.env.PROXY_CODEX_MODEL = 'agnes-2.0-flash';
-        expect(rb.resolveExecutorDefault('codex').model).toBe('agnes-2.0-flash');
+        process.env.PROXY_CODEX_MODEL = 'agnes-3.0-flash';
+        expect(rb.resolveExecutorDefault('codex').model).toBe('agnes-3.0-flash');
         await bound.executor('codex', { id: 's1o', type: 'code', prompt: 'x' });
-        expect(mockL1.getLastModel()).toBe('agnes-2.0-flash');
+        expect(mockL1.getLastModel()).toBe('agnes-3.0-flash');
     });
 
     test('h3web → /api/gen + /api/status 真走 job 状态机到终态', async () => {
@@ -264,7 +264,7 @@ describe('executor-bind · 三档 text-tier（待办 6）', () => {
     let localPort = null;
 
     beforeAll(async () => {
-        mockProxy = startMockL1(0, { model: 'agnes-2.0-flash' });
+        mockProxy = startMockL1(0, { model: 'agnes-3.0-flash' });
         mockLocal = startMockL1(0, { model: 'qwen3.8:27b-mlx', noAuth: true });
         proxyPort = await waitPort(() => mockProxy.getPort());
         localPort = await waitPort(() => mockLocal.getPort());
@@ -305,7 +305,7 @@ describe('executor-bind · 三档 text-tier（待办 6）', () => {
         expect([va.tier, vd.tier, vq.tier]).toEqual(['small', 'medium', 'large']);
         expect([va.agent, vd.agent, vq.agent]).toEqual(['agnes', 'deepseek', 'qwen']);
         // 模型真按档位下发（不是同一个 model 打天下）
-        expect(mockProxy.getChatModels()).toEqual(['agnes-2.0-flash', 'deepseek-v4-pro']);
+        expect(mockProxy.getChatModels()).toEqual(['agnes-3.0-flash', 'deepseek-v4-pro']);
         expect(mockLocal.getChatModels()).toEqual(['qwen3.8:27b-mlx']);
         expect(va.content).toBe('mock-ok');
     });
