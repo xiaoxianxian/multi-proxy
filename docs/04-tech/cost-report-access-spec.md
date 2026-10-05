@@ -67,6 +67,21 @@ content-type: application/json
 | `raw` | **是** | 上游 usage 原样。对象 or 文本。缺 → 400 |
 | `latencyMs` | 否 | 喂 floor 的 p50 延迟窗口 |
 | `wire` | 否 | **可以不声明**，由 `detectWire()` 自动认（见下表） |
+| `reqId` | 否 | 幂等键（见 §五） |
+| `model` / `requestModel` | 否 | 实际计费模型 / 宿主要求的模型，见 §三·模型三分格 |
+| `pricingModel` | 否 | 用哪套价表算的账，历史账单不随改价漂移 |
+
+### 模型三分格（route-engine 最直接有用的那一段）
+
+`model` = 请求真正落到的模型；`requestModel` = 宿主填的模型。两者不同就是**模型重写/别名**，
+这正是 route-engine 天天在做的事，而账本以前完全没记这一对 —— 没它永远答不出
+「那批 claude-haiku 的请求到底烧了多少」。
+
+```json
+{ "requestModel": "claude-haiku-4-5", "model": "agnes-3.0-flash", "pricingModel": "agnes-3.0-flash" }
+```
+
+三个都不传 = 只按 proxy 归总，不进模型层拆账（`byModel` 拿不到，也不报错）。
 
 返回 200 时回显归一结果，方便一眼对账：
 
@@ -101,6 +116,8 @@ content-type: application/json
 ## 五、口径纪律
 
 - **认不出就全 0 记空账，绝不猜、绝不折算 0 冒充有数**。返回的 `wire` 会如实告诉你「没接上」。
+- **`reqId` 幂等**：同 `reqId`（+proxy/agent）重放只记一笔。代理侧 `close` / `finish` 双事件
+  对同一次响应都会触发（见 §二·2），没这个键账会翻倍。实测：同 reqId POST 3 次 → 账本 1 行。
 - **thinking 只计数、不计费**：上游 `output_tokens` 通常已含 thinking，再加一遍是重复收钱；
   它只在盘面单独一格显示（floor view 的 `Thinking Tok`）。
 - `latencyMs` 不传就不进 p50，不编数。
@@ -134,3 +151,21 @@ export PROXY_PRICING_CODEX_PROXY='{"input":10,"output":20,"cacheHit":3}'   # 每
 ```
 
 31 + 71 = 102 ✔；thinking 61 ✔；一次请求一条账 ✔。
+
+## 八、持久账本（2026-10-03 补）
+
+`lib/cost-track.js` 原本全程内存（`const _state = {}`），进程一死账就没 —— 多代理环境下
+等于一堆孤岛。现在落 append-only JSONL：
+
+| 项 | 值 |
+|----|----|
+| 路径 | `~/.multi-proxy-manager/cost-ledger.jsonl`，`PROXY_COST_LEDGER` 可覆盖 |
+| 开关 | 跟门控 `PROXY_COST_TRACK` 绑死，**关时连文件都不建** |
+| 读回 | 启动时 `loadLedger()` 合并进内存态；行内 `cost` **冻结**，不按现价重算 |
+| 幂等 | `loadLedger` 期间临时禁写（`_loading` 守卫），读回不会把文件再追加一遍 |
+
+`PROXY_COST_LEDGER` 重定向不算「可选优化」：一次全量 jest 就会把几十行假账写进真账本
+（实测 24 行 + 14 行两轮），`jest.setup.js` 已统一重定向到 tmp。
+
+> 🔴 改价不能回改历史：`loadLedger` 走 `givenCost` 直取行内 cost，不是重新乘单价。
+> 这条有单测钉死（价表 10→20 后重启，历史账仍按旧价 0.01 而非 0.02）。

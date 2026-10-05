@@ -25,6 +25,11 @@ const costTrack = require('../lib/cost-track');
 
 const router = express.Router();
 
+// 三模型字段（详见 lib/cost-track.js 头注释）：
+//   model / requestModel / pricingModel —— 跨进程上报时原样带上，
+//   否则过代理的 Anthropic 线会退化成 model=<unknown>，按模型拆账直接没数据。
+//   reqId —— 幂等键。代理侧 tee 的 on('close')/on('finish') 双触发会把同一次响应报两遍
+//   （实测 252 = 126×2），有 reqId 才能去重；不带就照记，不猜。
 router.post('/report', requireAgentAuth, (req, res) => {
   const body = req.body;
   if (!body || typeof body !== 'object') {
@@ -34,7 +39,15 @@ router.post('/report', requireAgentAuth, (req, res) => {
     return res.status(400).json({ ok: false, error: 'missing raw (上游 usage 原样)' });
   }
   // 口径由 lib/usage-probe 归一；这里不做解析、不猜字段 —— 认不出来就全 0 记一笔空账。
-  const t = costTrack.reportUsage({ agent: body.agent, raw: body.raw, latencyMs: body.latencyMs });
+  const t = costTrack.reportUsage({
+    agent:         body.agent,
+    raw:           body.raw,
+    latencyMs:     body.latencyMs,
+    model:         body.model,
+    requestModel:  body.requestModel,
+    pricingModel:  body.pricingModel,
+    reqId:         body.reqId,
+  });
   res.json({
     ok: true,
     agent: body.agent || 'gateway',

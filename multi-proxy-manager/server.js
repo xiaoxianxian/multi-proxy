@@ -141,6 +141,9 @@ app.use((req, res, next) => {
 // L2 P2 cost 启动期接线（全非侵入，门控默认关 = 零副作用）：
 //   1. loadPricingFromEnv：读 PROXY_PRICING_<proxy> env 注入 cost-track 单价
 //      （无此 env 时 no-op；仅 PROXY_PRICING_* 存在时才建 state）。
+//   1b. loadLedger：读回上次进程落的历史账（cost-ledger.jsonl）合并进内存态，
+//       进程重启不丢账。读回用**行内冻结的 cost**，不按现价重算（价表改了历史账单不能漂）。
+//       必须在 loadPricingFromEnv 之后 —— 历史行里的模型要先有 pricing 才拆得出账。
 //   2. alertRoutes.startCostScheduler：PROXY_COST_SCHEDULE 门控（默认关 → 返回 null 不建 timer）；
 //     开 = 定时跑 runAllCollects（3 路：provider-health + error-patterns + cost × 预算）。
 //     unref 不阻塞进程退出；单次 tick 崩 best-effort 不影响后续。
@@ -153,6 +156,9 @@ const isolationExecutor = require('./lib/provider-isolation-executor');
 // 启动服务（跳过测试环境）
 if (process.env.NODE_ENV !== "test") {
   costTrack.loadPricingFromEnv();
+  // 持久账本：读回历史（无账本文件 / 门控关 / 读失败都返回 0，不算错，不阻塞启动）
+  const ledgerRows = costTrack.loadLedger();
+  if (ledgerRows) console.log(`[cost] ledger loaded: ${ledgerRows} rows from ${costTrack.ledgerFile()}`);
   // M2：门控开时把内置 writeMarkers 注册进活跃表 → 真执行写隔离 sidecar；门控关保持默认 observe（executors=[] 不真动作）。
   if (isolationExecutor.isolationEnabled()) {
     isolationExecutor.registerExecutor('writeMarkers');
