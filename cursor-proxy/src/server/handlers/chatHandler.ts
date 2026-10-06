@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { fetch } from 'undici';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { ProviderRegistry } from '../../providers/registry.js';
 import { ProviderAdapter, ProviderConfig } from '../../providers/base.js';
@@ -283,13 +284,79 @@ export function loadEnabledProviderConfigs(): ProviderConfig[] {
 }
 
 /**
+ * 质量层 capture（与 codex-proxy 同款 flag-gated 范式；参照 HF《multi-harness RL》的 capture proxy「观测半边」）。
+ * 默认关：不设 PROXY_TRACE_DIR ⇒ 整函数为 no-op，零行为变化。设了才把每次非流响应的
+ * requestedModel / resolvedModel / responseModel(上游实际返回) / usage / finish_reason / logprobs / 输出摘要
+ * 落到 TRACE_DIR 的 jsonl。不碰训练（守「不自训模型」铁律），纯观测；不落完整 body（与 Portico
+ * 审计「只落指针不落全文」对齐）。drift 信号：responseModel ≠ requestedModel 即上游静默换后端。
+ */
+const TRACE_DIR = process.env['PROXY_TRACE_DIR'] || '';
+const TRACE_FULL = process.env['PROXY_TRACE_FULL'] === '1';
+const TRACE_VERSION_LABEL = process.env['PROXY_TRACE_VERSION_LABEL'] || null;
+let _traceWarned = false;
+function captureTrace(opts: {
+  req: Request;
+  provider: { name?: string; providerId?: string; model?: string } | null;
+  requestedModel: string | null;
+  rawOrObj: any;
+  meta?: { agent?: string; stream?: boolean };
+}): void {
+  if (!TRACE_DIR) return;
+  if (opts.meta && opts.meta.stream) return; // 流式 = SSE 拼接，暂不入 trace
+  try {
+    const isObj = typeof opts.rawOrObj === 'object' && opts.rawOrObj !== null;
+    const text = isObj ? JSON.stringify(opts.rawOrObj) : String(opts.rawOrObj || '');
+    let parsed = isObj ? opts.rawOrObj : null;
+    if (!parsed) { try { parsed = JSON.parse(text); } catch { parsed = null; } }
+    const usage = parsed?.usage || null;
+    let outPreview = '', outDigest = '', logprobs: string | null = null, finishReason: string | null = null;
+    try {
+      const choice = parsed?.choices?.[0] || null;
+      const msg = choice?.message || (parsed?.output?.[0]?.content ? parsed.output[0] : null);
+      const content: any = msg?.content ?? parsed?.content?.[0]?.text ?? '';
+      if (typeof content === 'string') {
+        outPreview = content.slice(0, 200);
+        outDigest = crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
+      }
+      logprobs = parsed?.choices?.[0]?.logprobs ? JSON.stringify(parsed.choices[0].logprobs).slice(0, 4000) : null;
+      finishReason = parsed?.choices?.[0]?.finish_reason ?? parsed?.stop_reason ?? null;
+    } catch { /* 形态不识别就跳过 */ }
+    const rec = {
+      ts: Date.now(),
+      traceId: (opts.req.headers['x-request-id'] as string) || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sessionId: (opts.req.headers['x-session-id'] as string) || null,
+      agent: opts.meta?.agent,
+      path: opts.req.url,
+      requestedModel: opts.requestedModel,
+      resolvedModel: opts.provider?.model || opts.provider?.name || null,
+      responseModel: parsed?.model || null,
+      versionLabel: TRACE_VERSION_LABEL,
+      provider: opts.provider?.name || null,
+      usage,
+      finishReason,
+      logprobs,
+      outPreview: TRACE_FULL ? undefined : outPreview,
+      outDigest,
+      body: TRACE_FULL ? text : undefined,
+    };
+    try {
+      fs.mkdirSync(TRACE_DIR, { recursive: true });
+      fs.appendFileSync(path.join(TRACE_DIR, `trace-${new Date().toISOString().slice(0, 10)}.jsonl`), JSON.stringify(rec) + '\n');
+    } catch { /* 落盘失败静默吞，主链路优先 */ }
+  } catch (e: any) {
+    if (!_traceWarned) { _traceWarned = true; console.warn('[trace] capture 失败（不影响主路径）:', (e && e.message) || e); }
+  }
+}
+
+/**
  * 转发请求到上游 Provider
  */
 export async function forwardToProvider(
   reqBody: any,
   providerConfig: ProviderConfig,
   res: Response,
-  stream: boolean
+  stream: boolean,
+  req?: Request
 ): Promise<void> {
   const registry = ProviderRegistry.getInstance();
   const adapter = registry.get(providerConfig.providerId);
@@ -355,6 +422,10 @@ export async function forwardToProvider(
   } else {
    const data = await upstreamResponse.json();
    res.json(data);
+   // 质量层 capture（flag-gated：不设 PROXY_TRACE_DIR 不触发，零开销）
+   try {
+     captureTrace({ req: req as Request, provider: providerConfig, requestedModel: reqBody.model || null, rawOrObj: data, meta: { agent: 'cursor-proxy', stream: false } });
+   } catch { /* 观测旁路绝不阻塞主链路 */ }
    // Q3 P1-B 实采：非流转发出口提 usage → 精确 cost（含 cache）→ JSONL sidecar。
    // 门控 PROXY_CURSOR_COST 关 → costAccumulate 首行 enabled() 短路，零算价/零写盘/零 IO（仅一次布尔比较）。
    // 流式路径暂未埋点（SSE 逐块解析是 P1-B 独立项，见本函数末注释）；本处对齐 manager 已验证 A 路（非流 usage 捕获）。
@@ -442,7 +513,7 @@ export async function handleChatCompletion(req: Request, res: Response): Promise
     }
 
   try {
-    await forwardToProvider(req.body, providerConfig, res, stream);
+    await forwardToProvider(req.body, providerConfig, res, stream, req);
   } catch (e: any) {
     console.error(`[ChatHandler] Error: ${e.message}`);
     try {

@@ -20,7 +20,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
   }
 
   try {
-    await forwardToProvider(req.body, providerConfig, res, stream);
+    await forwardToProvider(req.body, providerConfig, res, stream, req);
   } catch (e: any) {
     res.status(502).json({ error: { message: `Proxy error: ${e.message}` } });
   }

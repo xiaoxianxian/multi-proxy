@@ -757,6 +757,7 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       }
     } else {
       const data = await response.json();
+      captureTrace({ req, provider, rawOrObj: data, meta: { agent: 'codex-proxy', stream: false } });
       res.json(data);
     }
   } catch (e) {
@@ -810,7 +811,10 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
       if (!canWrite(res)) return;
       return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
-    return pipeUpstreamBytes(res, response, '[responses]', upstreamSignal);
+    const { outcome, acc } = await pipeUpstreamBytes(res, response, '[responses]', upstreamSignal);
+    if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
+      captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'codex-proxy', stream: !!req.body.stream } });
+    }
   } catch (e) {
     console.error(`[responses] error: ${e.message}`);
     if (!canWrite(res)) return;
@@ -912,6 +916,72 @@ function reportUsage(raw, latencyMs) {
 }
 let reportWarned = false;
 
+// ===== 质量层观测 capture（flag-gated，默认关）=====
+// 服务于「模型漂移 / session 切换衔接 / 多 agent 轨迹质量」的量化：只在出口抓
+// 边界证据（usage + logprobs + 输出摘要 + 模型版本），**不碰训练**（铁律：不自训
+// 模型），也**不落完整 prompt/response body**（与 Portico 审计「只落指针不落全文」对齐）。
+// 启用：设 PROXY_TRACE_DIR 指向已存在目录；再设 PROXY_TRACE_FULL=1 才落完整 body
+// （仅本机 eval 用，含敏感内容）。**不设 PROXY_TRACE_DIR ⇒ 整函数为 no-op，零行为变化。**
+// 参照：HF《multi-harness RL》的 capture proxy 范式——这里只取它的「观测半边」。
+// 漂移/切换衔接信号源：
+//   - responseModel：上游实际返回的 model 字段（provider 静默换后端时 ≠ requestedModel，这是漂移的第一手证据）
+//   - sessionId：自 `x-session-id` 头；同 session 内 resolvedModel 变了＝切换衔接问题
+//   - versionLabel：PROXY_TRACE_VERSION_LABEL 打的稳版标签（如 qwen3.8-27b-mlx@2026-10-06），跨次回放比漂移用
+const TRACE_DIR = process.env.PROXY_TRACE_DIR || '';
+const TRACE_FULL = process.env.PROXY_TRACE_FULL === '1';
+const TRACE_VERSION_LABEL = process.env.PROXY_TRACE_VERSION_LABEL || null;
+let _traceWarned = false;
+function captureTrace({ req, provider, rawOrObj, meta }) {
+  if (!TRACE_DIR) return;
+  if (meta && meta.stream) return; // 流式 = SSE 拼接文本，暂不入 trace（后续按需补）
+  try {
+    const isObj = typeof rawOrObj === 'object' && rawOrObj !== null;
+    const text = isObj ? JSON.stringify(rawOrObj) : String(rawOrObj || '');
+    let parsed = isObj ? rawOrObj : null;
+    if (!parsed) { try { parsed = JSON.parse(text); } catch { parsed = null; } }
+
+    const reqBody = req.body || {};
+    const usage = parsed?.usage || null;
+    let outPreview = '', outDigest = '', logprobs = null, finishReason = null;
+    try {
+      const choice = parsed?.choices?.[0] || null;
+      const msg = choice?.message || (parsed?.output?.[0]?.content ? parsed.output[0] : null);
+      const content = msg?.content ?? parsed?.content?.[0]?.text ?? '';
+      if (typeof content === 'string') {
+        outPreview = content.slice(0, 200);
+        outDigest = require('crypto').createHash('sha256').update(content).digest('hex').slice(0, 16);
+      }
+      logprobs = parsed?.choices?.[0]?.logprobs ?? null;
+      finishReason = parsed?.choices?.[0]?.finish_reason ?? parsed?.stop_reason ?? null;
+    } catch { /* 形态不识别就跳过，不影响主路径 */ }
+
+    const rec = {
+      ts: Date.now(),
+      traceId: req.headers['x-request-id'] || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      agent: meta?.agent,
+      path: req.url,
+      sessionId: req.headers['x-session-id'] || null,
+      requestedModel: reqBody.model || null,
+      resolvedModel: provider?.model || provider?.name || null,
+      responseModel: parsed?.model || null,
+      versionLabel: TRACE_VERSION_LABEL,
+      provider: provider?.name || null,
+      usage,
+      finishReason,
+      logprobs: logprobs ? JSON.stringify(logprobs).slice(0, 4000) : null,
+      outPreview: TRACE_FULL ? undefined : outPreview,
+      outDigest,
+      body: TRACE_FULL ? text : undefined,
+    };
+    const fs = require('fs');
+    const p = require('path').join(TRACE_DIR, `trace-${new Date().toISOString().slice(0, 10)}.jsonl`);
+    // 异步落盘，不阻塞主路径
+    fs.promises.appendFile(p, JSON.stringify(rec) + '\n').catch(() => {});
+  } catch (e) {
+    if (!_traceWarned) { _traceWarned = true; console.warn('[trace] capture 失败（不影响主路径）:', (e && e.message) || e); }
+  }
+}
+
 // ===== Messages passthrough（Anthropic wire —— Claude Code / Claude Desktop）=====
 // 此前 18790 只有 OpenAI 两条 wire（/v1/chat/completions、/v1/responses），Claude Code
 // 发 /v1/messages 一律 404（见 docs/10-initiatives/62 号）。补上这条后 Claude 与 codex
@@ -991,6 +1061,7 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     const { outcome, acc } = await pipeUpstreamBytes(res, response, '[messages]', upstreamSignal);
     if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
       reportUsage(acc, Date.now() - t0);
+      captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'codex-proxy', stream: !!req.body.stream } });
     }
   } catch (e) {
     console.error(`[messages] error: ${e.message}`);
