@@ -213,7 +213,41 @@ bash manage.sh status
 
 ---
 
-## 十一、3 分钟演示
+## 十一、一次请求怎么走完（代码事实 · 2026-10-06 逐行核过）
+
+这一节写的是代码里真实跑的那条链，不是设计图。每一跳都给了文件路径与行号。
+
+| # | 跳 | 代码位置与行为 |
+|---|----|---------------|
+| 1 | 入站 | `codex-proxy/proxy.js:20` 端口 18790；`proxy.js:1015` 默认只 bind `127.0.0.1` |
+| 2 | 认证 | `proxy.js:31-36` `requireAuth` 只校 `x-proxy-auth`；未设 `PROXY_AUTH_TOKEN` 时 fail-open 并 WARN |
+| 3 | 选 provider | `proxy.js:192-218` `findProvider(model)` 三级：`providers.json` 精确命中 → `provider_id` 子串 → 内置 env-key 上游。**只选一个，没有重试** |
+| 4a | 转发（OpenAI wire） | `/v1/chat/completions` 与 `/v1/responses` 是同协议直通：`:698-768` 原样 `JSON.stringify` 转发，`:779-819` 仅 `normalizeTools` 解包工具参数 |
+| 4b | 转发（Anthropic wire） | `/v1/messages` 走 `anthropicMessagesUrl()`（`proxy.js:940-947`）三级挂载判定：`provider.anthropicBaseUrl` 显式指定优先 → `deepseek/moonshot` 走 `/anthropic/v1/messages` → 其余 `${base}/messages` |
+| 5 | 攒字节防丢账 | `pipeUpstreamBytes()`（`proxy.js:820-880`）`PassThrough` tee 一份副本，为的是流末 usage 不被丢掉 |
+| 6 | 报用量 | `reportUsage()`（`proxy.js:892-912`）旁路 POST 到 manager 的 `/api/cost/report`；manager 侧 `lib/usage-probe.js:113-125` 按 `wire` 自动归一 |
+| 7 | 归一 wire | `usage-probe.js:21-30` `detectWire()`：从 usage 字段形态认——有 `output_tokens_details` / `input_tokens` 是 Anthropic，有 `prompt_tokens` 是 OpenAI，有 `usage_metadata` 是 Gemini，都不是则兜底 `custom` |
+| 8 | 落账 | `lib/cost-track.js:217-219` 算钱（cacheHit 单独计价、thinking 只计数不计费）；`:302-310` 追加写 `~/.multi-proxy-manager/cost-ledger.jsonl` |
+
+**三条不能写死的边界**（2026-10-06 grep 核过）：
+
+- **18790 上没有 failover / 重试 / 熔断。** 三条转发路径都是单次 `fetch`，失败直透上游状态码。路由模式里的 `failover` 在 `cursor-proxy/src/server/handlers/chatHandler.ts:21-24`（18794，round-robin / failover 两档）；`l2/circuit-breaker.js` 目前唯一的消费者是 `codex-proxy/tests/circuit-integration.test.js`。
+- **「接入方不用写 parser」的准确含义是**：报告用量时只贴上游原样 `raw`，不必声明 `wire`，wire 由 manager 侧认。证据在 `usage-probe.js:8-13`、`proxy.js:988`、`routes/cost-report.js:41`。*`token-control-plane`* 是设计文档 `docs/03-token-control-plane.md` 的名字，不是模块；链路上的真实载体是 `l2/token-policy.js` 与 `tools/token-policy-bridge.js`。
+- **`0.06` 与 `28.7%` 不是实测值。** 前者出自 `l2/README.md:153` 的手喂冒烟算式，后者是 `tests/unit/cost-track.test.js:83-91` 的单测断言。真实流量下是多少，代码里没有产出点。别拿这两个数当效果数字。
+
+## 十二、为什么别人做不出来
+
+先说清楚什么不值钱：多模型路由聚合这件事本身不稀缺，LiteLLM / one-api / New-API 都在做；TierFlow 也在做（它 README 自述 "Self-hosted AI router"，配置里 `"ollama": { "baseUrl": "http://localhost:11434/v1", "auth": { "type": "none" } }` 直接当 primary）。**「支持本地模型」不是本项目的差异项，别拿它当卖点。**
+
+真正难抄的是三笔工程账，都是踩坑换来的：
+
+1. **用量归一的自动识别。** `lib/usage-probe.js:21-30` 只靠 usage 字段名形态就能认出三家供应商的记账口径，接入方贴一段上游原样 JSON 就够了。三家字段各不相同、Anthropic 的流式还在末事件里包一层，硬写三份解析器的写法在跨版本升级上会反复返工。
+2. **一个 agent 的 `base_url` 同一时刻只有一个所有者。** `lib/agent-owner.js` 读的是各 agent 自己配置里 `base_url` 的实际指向，而不是谁在听端口；cc-switch 占着 15721 时桌面壳开壳前先 `detectAll()`，撞了就把该 agent 的开关置关并提示，不抢、不覆写。这块来自一次真实事故（裸 `*` 污染 NO_PROXY 把本机所有走代理的 GUI 应用带崩，见第七节），上下文不在代码里。
+3. **本地是一档路由条件，不是一个开关。** 路由规则打上 `privacy == true → 本地模型`，下游地址就是 `127.0.0.1`，是架构性保证而不是调参调出来的效果。
+
+也讲一句该讲的：**如果只想省 API 的钱、要一个两分钟跑起来的网关，这个 repo 过重。** 它是为「本机多个 agent 同时在跑、数据不能出这台机器」这一层做重的；单端口轻量网关在满足前面那个需求上更合适。
+
+## 十三、3 分钟演示
 
 ```bash
 bash scripts/demo-tour.sh          # 全量（含测试基线，约 3 分钟）
@@ -224,7 +258,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十二、测试与验收（1180+11 全绿 · 2026-09-28 真跑）
+## 十四、测试与验收（1180+11 全绿 · 2026-09-28 真跑）
 
 | 模块 | 命令 | 结果 |
 |------|------|------|
@@ -239,7 +273,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十三、目录结构
+## 十五、目录结构
 
 ```
 multi-proxy/
@@ -269,7 +303,7 @@ multi-proxy/
 
 ---
 
-## 十四、已知问题与待修复
+## 十六、已知问题与待修复
 
 ### #1 〔历史·已规避〕裸 `*` 污染全局 NO_PROXY
 旧版部署脚本含 `launchctl setenv no_proxy "127.0.0.1,localhost,*"`，使所有走系统代理的 GUI 应用直连超时。当前源码已无此写法（autostart plist 仅设 `PATH` + 代理自身局部 env），修复写法 `*` → `::1`。
@@ -282,7 +316,9 @@ multi-proxy/
 
 ---
 
-## 十五、常见问题
+## 十七、常见问题
+
+### 排障（装完出事才查）
 
 - **代理显示"未运行"但实际在运行** — 管理器用 `lsof` 端口检测，确保 `/usr/sbin/lsof` 可用（Node 子进程 PATH 不含 `/usr/sbin` 会误判，必须完整路径）。
 - **代理启动失败** — `manage.sh logs <agent>` 看日志，或 `cd <agent>-proxy && node proxy.js` 手动启动看错误。
@@ -292,6 +328,12 @@ multi-proxy/
 - **nvm 用户** — plist 自动检测 nvm 路径，仍找不到则 `nano` plist 加路径。
 
 更多见 `docs/08-user/faq.md`。
+
+### 反质疑（没装之前先看这三问）
+
+- **不就是个转发 API 的中转？** — 转发那一段确实只有一路：`findProvider` 选 provider，单次 fetch，不重试。多出来的是成本记账这条旁路——报用量只贴上游原样 JSON，wire 由 manager 侧自动认（`lib/usage-probe.js`），账落 `cost-ledger.jsonl`，热路径与跨进程共用同一套公式（`cost-track.js:190-191`）。顺带把话说明白：`tests/unit/cost-track.test.js:83-91` 里的 28.7 与 `l2/README.md:153` 里的 0.06，都是喂固定 token 数算出来的，不是真实流量的实测值。
+- **跟 TierFlow 那种单端口网关比，多出来的值不值？** — 先说它做了什么：本地端点是一等公民（config 里 ollama 可以直接当 primary）、PII 清洗、8 类分类路由、约 2MB 零依赖。本项目多出来的是三块：agent 的 `base_url` 所有权检测（它不碰 agent 文件，所以根本不存在这一块面）、`privacy` 档位（下游地址写死 `127.0.0.1`）、四条非侵入铁律（见第七节）。只想要省钱的那一层，用前者；要的是「本机多个 agent 一起跑、数据不出这台机器」，这才是这个项目的位置。⚠️ 顺带核一个容易记错的：TierFlow 是 **MIT** 许可，不是 AGPL（2026-10-06 核 `frdaniel76/tierflow`）。
+- **本地模型路由跟云上网关差在哪？** — 在它那边，本地模型是分类表里「最便宜且干得动」那一档的首选（`categories.simple_chat.primary = ollama/llama3.2`），判据是钱；在这边，本地模型是 `privacy` 条件命中的唯一去处（见第六节），判据是数据去向，跟便宜不便宜无关。两个设计都站得住，答的是两个不同的问题，说「谁做不到谁」是错的。
 
 ---
 
