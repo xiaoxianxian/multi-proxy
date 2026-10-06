@@ -80,7 +80,7 @@
 | 拍 | 动作 | 风险 | 回退 |
 |----|------|------|------|
 | **A · key 处置** | 三选一：A1 轮换 3 家 key（写 providers 表加密 key，DB 写）/ A2 临时 `enabled=0` 三家（DB 写，路由显式收敛本地 qwen，避免 401 噪音，之后补 key）/ A3 维持现状（本地 only，观察期照跑） | 凭据/DB | A2 改回 1 即回；A1 覆盖回旧 key |
-| **B · D5 DB 对齐** | `UPDATE models SET name='agnes-3.0-flash' WHERE name='agnes-2.5-flash';`（1 行 UPDATE，可回滚）；**修正（10-06 18:24 回源）**：DB 改名后，`tests/unit/health-integration.test.ts:65` 的 m2u fixture（`['agnes-2.5-flash', 'PU_AG']`）+ `tests/unit/routing-intelligent.test.ts:76` 的 `model.contains('agnes')` 例（`model='agnes-2.5-flash'`）仍用旧 2.5 名——B=纯 DB 改，不碰测试 fixtures，测试仍通过但 fixture 与引擎 3.0 三态不一致（DB 3.0 / 引擎 3.0 / 测试 fixture 2.5），**B 改动面 > 1 行，需连带同步测试 fixtures（约 2 行）+ 跑 cursor 236 验证**。反向（引擎改回 2.5）需动 `routeEngine.ts` + 更多测试，不划算。DB 已备份 `~/.multi-proxy-manager/proxy.db.bak-pre-20261006-182437`（可回滚） | DB 写 | UPDATE + 2 文件 fixture 同步 + 236 回归 |
+| **B · D5 DB 对齐** | ✅ **已执行（10-06 19:40，实测可纯 DB 1 行）**：`UPDATE models SET name='agnes-3.0-flash' WHERE name='agnes-2.5-flash';`。执行前实测推翻上轮「需连带 2 fixture」判断：2 测试全绿且不读 DB（`database.test.ts` 才读 sqlite；`routing-intelligent:230` 断言 fallbackChain 已是 3.0 同向；`health-integration:65` 是 hermetic mock）、B 对 236 测试零影响（B 后重跑仍全绿）。DB 非 git tracked 无需 commit。备份 `~/.multi-proxy-manager/proxy.db.bak-pre-20261006-182437`。回滚=反向 UPDATE。**注**：models 表无 `updated_at` 列（仅 providers 有），UPDATE 只改 name | DB 写 | 1 行 UPDATE 反向 |
 | **C · D4 翻转** | `CURSOR_ROUTE_OVERRIDE=1 ./manage.sh start cursor`：先在隔离端口 18800 验证（9-16 先例），再上 18794。**前置 = A 完成（key 活）+ 0.2 观察数据足够** | 生产路由行为变更 | 去掉变量重启即回 shadow 稳态 |
 | D（C 后） | rules 是否接 health（`routeEngine.ts` evaluateRules 补健康判定 + 测试） | 代码变更 | 门控化（沿用 §3 非侵入：默认 shadow） |
 
