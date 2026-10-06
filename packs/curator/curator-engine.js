@@ -22,6 +22,7 @@ const POLICY_FILES = [
      { hook: 'onHistory',        file: 'memory-history' },
      { hook: 'onRoute',          file: 'planning-route' },
      { hook: 'onToolOutput',     file: 'capability-tool' },
+     { hook: 'onToolOutput',     file: 'tool-capability-gate' }, // 工具执行许可门禁（默认 enabled:false，见 policy 文件头部）
      { hook: 'onResponse',       file: 'action-response' },
      { hook: 'onRequestAssemble',file: 'prompt-assemble' },
    ];

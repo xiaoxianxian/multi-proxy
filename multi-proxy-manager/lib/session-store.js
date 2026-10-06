@@ -19,6 +19,14 @@
 //   - Session 持久 ≠ 工作目录永久：状态落盘 sessions.json，不依赖内存。
 //   - 恢复 ≠ 命令自动续跑：重连只读回状态，副作用动作需幂等 + checkpoint + 补偿。
 //   - 原子写：.tmp → rename（参考 providers.json P1 经验）。
+//
+// 幂等键（idempotencyKey）契约（对齐 l2/p3-sessions-checkpoint-design.md 的 STEP_CHECKPOINT）：
+//   - 调方在 addStep 时传入 idempotencyKey（形如 'edit:abc123:v1'），标识「这次副作用动作」。
+//   - 同 session 内若已存在相同 idempotencyKey 的 step，addStep 直接返回已存在 step，
+//     不新建、不落盘 —— 这是崩溃重放时「跳过已完成」的落地点（见 replayStep）。
+//   - 不传 idempotencyKey 时退化为原行为（不拦、不查重），保持向后兼容。
+//   - 真实挂点说明：本 store 记的是「已发生的 step」。幂等去重 + replayStep 比对
+//     覆盖的是「重放时跳过已完成」这一层；harness 内部工具执行的实时幂等仍归 harness 自身。
 
 const fs = require('fs');
 const path = require('path');
@@ -116,6 +124,13 @@ class SessionStore {
 
     addStep(sessionId, step) {
         const cur = this.get(sessionId);
+        const key = step && typeof step.idempotencyKey === 'string' && step.idempotencyKey ? step.idempotencyKey : null;
+        // 幂等去重：同 session 内已存在相同 idempotencyKey → 直接返回已存在 step，
+        // 不新建、不落盘（崩溃重放时「跳过已完成」的落地点）。
+        if (key) {
+            const existing = cur.steps.find((s) => s.idempotencyKey === key);
+            if (existing) return { ...cur, steps: cur.steps, _idempotent: true, _duplicateOf: key };
+        }
         const now = new Date().toISOString();
         const stepEntry = {
             step: step.step,
@@ -124,6 +139,7 @@ class SessionStore {
             output: step.output || null,
             status: step.status || 'pending',
             checkpoint: step.checkpoint || null,
+            idempotencyKey: key, // 落盘进 step（schema 对齐 STEP_CHECKPOINT.idempotency_key）
             timestamp: now,
         };
         const steps = [...cur.steps, stepEntry];
@@ -133,6 +149,14 @@ class SessionStore {
             status: step.status === 'failed' ? 'failed' : cur.status,
         });
         return updated;
+    }
+
+    // 崩溃恢复比对：按 idempotencyKey 查该 session 内是否已有已完成 step。
+    // 返回命中的 step（含 status），无命中返回 null。供重放逻辑判断「这步要不要跳过」。
+    replayStep(sessionId, idempotencyKey) {
+        if (!idempotencyKey || typeof idempotencyKey !== 'string') return null;
+        const cur = this.get(sessionId);
+        return cur.steps.find((s) => s.idempotencyKey === idempotencyKey) || null;
     }
 
     abort(sessionId, by = 'user') {

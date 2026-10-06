@@ -42,6 +42,44 @@ describe('SessionStore', () => {
         expect(updated.steps[0].status).toBe('done');
     });
 
+    test('addStep without idempotencyKey does not dedupe', () => {
+        store.create({ sessionId: 's-idem-1', proxy: 'codex', task: { type: 'coding', prompt: 'x' } });
+        store.addStep('s-idem-1', { step: 1, tool: 'edit', input: 'a', status: 'done' });
+        store.addStep('s-idem-1', { step: 2, tool: 'edit', input: 'a', status: 'done' });
+        expect(store.get('s-idem-1').steps).toHaveLength(2);
+    });
+
+    test('addStep dedupes by idempotencyKey and flags _idempotent', () => {
+        store.create({ sessionId: 's-idem-2', proxy: 'codex', task: { type: 'coding', prompt: 'x' } });
+        const first = store.addStep('s-idem-2', { step: 1, tool: 'edit', input: 'a', status: 'done', idempotencyKey: 'edit:file.txt:v1' });
+        expect(first.steps).toHaveLength(1);
+        expect(first.steps[0].idempotencyKey).toBe('edit:file.txt:v1');
+
+        const dup = store.addStep('s-idem-2', { step: 1, tool: 'edit', input: 'a', status: 'done', idempotencyKey: 'edit:file.txt:v1' });
+        expect(dup.steps).toHaveLength(1); // 不新建
+        expect(dup._idempotent).toBe(true);
+        expect(dup._duplicateOf).toBe('edit:file.txt:v1');
+    });
+
+    test('replayStep finds existing step by key, null when absent', () => {
+        store.create({ sessionId: 's-idem-3', proxy: 'codex', task: { type: 'coding', prompt: 'x' } });
+        store.addStep('s-idem-3', { step: 1, tool: 'edit', input: 'a', status: 'done', idempotencyKey: 'edit:file.txt:v1' });
+        const hit = store.replayStep('s-idem-3', 'edit:file.txt:v1');
+        expect(hit).not.toBeNull();
+        expect(hit.status).toBe('done');
+        expect(store.replayStep('s-idem-3', 'edit:missing:v1')).toBeNull();
+        expect(store.replayStep('s-idem-3', null)).toBeNull();
+    });
+
+    test('idempotencyKey survives persist across re-instantiation', () => {
+        store.create({ sessionId: 's-idem-4', proxy: 'codex', task: { type: 'coding', prompt: 'x' } });
+        store.addStep('s-idem-4', { step: 1, tool: 'edit', input: 'a', status: 'done', idempotencyKey: 'edit:file.txt:v1' });
+        const store2 = new SessionStore({ dir: tmpDir });
+        const hit = store2.replayStep('s-idem-4', 'edit:file.txt:v1');
+        expect(hit).not.toBeNull();
+        expect(hit.idempotencyKey).toBe('edit:file.txt:v1');
+    });
+
     test('abort session', () => {
         const s = store.create({ sessionId: 's2', proxy: 'cursor', task: { type: 'vision', prompt: 'x' } });
         const aborted = store.abort('s2', 'user');

@@ -1,0 +1,74 @@
+'use strict';
+
+// jest test for Curator tool-capability-gate policy
+// 放到 multi-proxy-manager 的 tests/unit 下，因为 manager 的 jest testMatch 只覆盖本目录；
+// curator 没有独立 test runner，policy 测试统一归这里跑（与 session-store 同包）。
+const mod = require('../../../packs/curator/policies/tool-capability-gate');
+const { handler, params } = mod;
+
+describe('tool-capability-gate (Curator onToolOutput)', () => {
+    const ctx = (toolName, rawOutput) => ({ toolName, rawOutput });
+
+    afterEach(() => {
+        params.mode = 'pass';
+        params.denyTools = '';
+        params.allowTools = '';
+    });
+
+    test('default pass mode is passthrough', () => {
+        const r = handler(ctx('edit', 'some output'));
+        expect(r.rawOutput).toBe('some output');
+        expect(r.blocked).toBeUndefined();
+        expect(r.reason).toBe('off');
+    });
+
+    test('deny mode blocks listed tool', () => {
+        params.mode = 'deny';
+        params.denyTools = 'edit,delete';
+        const r = handler(ctx('edit', 'some output'));
+        expect(r.blocked).toBe(true);
+        expect(r.rawOutput).toContain('未授权');
+        expect(r.reason).toBe('blocked:deny');
+    });
+
+    test('deny mode allows non-listed tool', () => {
+        params.mode = 'deny';
+        params.denyTools = 'delete';
+        const r = handler(ctx('edit', 'ok'));
+        expect(r.blocked).toBeUndefined();
+        expect(r.rawOutput).toBe('ok');
+        expect(r.reason).toBe('allowed');
+    });
+
+    test('allow mode blocks non-listed tool', () => {
+        params.mode = 'allow';
+        params.allowTools = 'read,search';
+        const r = handler(ctx('edit', 'some output'));
+        expect(r.blocked).toBe(true);
+        expect(r.reason).toBe('blocked:allow');
+    });
+
+    test('allow mode allows listed tool', () => {
+        params.mode = 'allow';
+        params.allowTools = 'edit,read';
+        const r = handler(ctx('edit', 'some output'));
+        expect(r.blocked).toBeUndefined();
+        expect(r.rawOutput).toBe('some output');
+    });
+
+    test('no toolName does not block', () => {
+        params.mode = 'deny';
+        params.denyTools = 'edit';
+        const r = handler(ctx('', 'x'));
+        expect(r.blocked).toBeUndefined();
+        expect(r.reason).toBe('no-tool-name');
+    });
+
+    test('malformed empty deny list does not block', () => {
+        params.mode = 'deny';
+        params.denyTools = '  ,  ';
+        const r = handler(ctx('edit', 'x'));
+        expect(r.blocked).toBeUndefined();
+        expect(r.reason).toBe('allowed');
+    });
+});
