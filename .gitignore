@@ -28,6 +28,13 @@ logs/
 # 子代理运行时 dump（ 的 17/17 测试结果 JSON，内容已存 IMPLEMENTATION_REPORT.md，非源码）
 l2/python-middleware/result.json
 
+# 质量层 capture 运行产物（2026-10-06 随 captureTrace 引入）：PROXY_TRACE_DIR 指向的落盘目录，
+# 非源码且含真实请求摘要；显式 ignore 防 `git add -A` 夹带（同 *.mp4 那次的教训）。
+codex-proxy/trace/
+cursor-proxy/trace/
+# 动手改源码前的人工备份（改完已进 git 即失活，不入库）
+*.bak-20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]
+
 # ===== 内部资产：永不提交（2026-09-28 公开化清理 + push 闸门配套）=====
 MEMORY.md
 MEMORY-*.md
