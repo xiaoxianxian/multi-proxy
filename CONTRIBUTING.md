@@ -1,6 +1,6 @@
 # 贡献 / 接入指引 — multi-proxy
 
-> 给外部开发者与合作方的接入入口。先读 `docs/INDEX.md`(文档总入口)+ `AGENTS.md`(AI 代理铁律)。
+> 给外部开发者与合作方的接入入口。先读 `README.md`(项目总览)+ `AGENTS.md`(AI 代理铁律)。
 
 ## 项目状态(2026-09-23)
 
@@ -19,10 +19,10 @@
 | 加新 agent adapter | `l2/adapter-protocol.md`(四类接口 + 能力声明 + 任务契约)|
 | 接 MCP(主流 agent 零改造)| `.dsh/skills/l2-orchestrator/SKILL.md` §MCP bridge |
 | 接 DSH 生态 | `docs/02-product/dsh-integration.md`(DS1 已落,DS2/DS3 等 DSH 0.2)|
-| 看开放 vs 闭源边界 | `docs/04-business/open-core-boundary.md` |
+| 看开放 vs 闭源边界 | `LICENSE-COMMERCIAL.md` |
 | 非侵入纪律 | `AGENTS.md` + `.dsh/skills/multi-proxy/SKILL.md` |
-| 竞品 backlog(I1 RAG / I2 圆桌 / I3 本地 LLM 一等公民)| `docs/04-business/vetarai-competitive-analysis.md` |
-| 已知风险与待修复 | `docs/09-review/risk-register.md` |
+| 竞品 backlog(I1 RAG / I2 圆桌 / I3 本地 LLM 一等公民)| 内部竞品分析(不进公开仓) |
+| 已知风险与待修复 | 见仓库 `QUEUE.md` 与各模块 README |
 
 ## 接入层贡献(开源)
 
@@ -62,10 +62,10 @@
 |---|---|---|---|
 | 加新 adapter(任意 agent) | P0 | `l2/adapter-protocol.md` | 无 |
 | DSH DS2/DS3 发 npm 包 | P0 | `docs/02-product/dsh-integration.md` | DSH 0.2 未发(外部)|
-| I1 RAG 知识库(P0)| P0 | `vetarai-competitive-analysis.md §八` | 草图已出,未开发 |
+| I1 RAG 知识库(P0)| P0 | 内部竞品分析(不进公开仓) | 草图已出,未开发 |
 |  failover middleware | P1 | `docs/octop-harness-failover-middleware-spec.md` | 跨语言(Python),维护者发话再做 |
-| 本地 LLM 一等公民(agent type:model)| P2 | vetarai-competitive i3 | 无 |
-| 圆桌共识 mode | P1 | vetarai-competitive i2 | 无 |
+| 本地 LLM 一等公民(agent type:model)| P2 | 内部竞品分析 i3(不进公开仓) | 无 |
+| 圆桌共识 mode | P1 | 内部竞品分析 i2(不进公开仓) | 无 |
 | 卸载 plist 清理(README §十二#2)| P2 | `install.sh --uninstall` | 无 |
 | CI 标签(PR 门禁)| P3 | 本文件「PR/issue」 | 无 |
 

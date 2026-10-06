@@ -337,6 +337,15 @@ multi-proxy/
 
 ---
 
+## 十八、企业版定位（多租户 / 网关层）
+
+个人是流量入口，企业版才是收入主体（含基于 savings-gateway 定价表的真实省钱测算与多租户缺口清单，归 Portico 企业版，内部价值主张文档不进公开仓）。一句话分工：
+
+- **multi-proxy = 数据面**：南北向网关、难度路由省钱、failover 续跑、计量、本地一档。企业化只需要在**边界变成租户感知**（入站带 tenant/account、出账按租户归因），内核保持无状态。
+- **Portico = 控制面**：租户管理、策略、审计、编排、配额、出网管控、SSO——正是企业化缺的那一大块，落在 Portico 的「三平面 + harness of harnesses」框架里。
+
+> 当前 multi-proxy 是单用户 / 单机 / 单成本池设计；企业化的多租户、网关层部署、审计留痕等能力**不在本仓库内核**，由 Portico 企业版承载，走商业授权（见 `LICENSE-COMMERCIAL.md`），不污染 AGPL 开源版。
+
 ## 项目状态
 
 | 里程碑 | 状态 |
@@ -347,6 +356,8 @@ multi-proxy/
 | DSH 接入通道（`.dsh/skills/`） | 完成 |
 | P0 安全修复（`P0-FIXES.md`：11 项） | 完成 |
 | 全量测试 1180 + bats 11 + L2 demo 29 全绿（2026-09-28 真跑） | 完成 |
+| **交付前最后一批功能集中开发** | **进行中（2026-10-06）** |
+| 企业版（多租户 / 网关层 / 审计） | 规划中，归 Portico 控制面，未动工 |
 
 > 对外定位：`docs/02-product/v1-positioning-declared.md` · 商业简介：`docs/02-product/business-intro.md` · 文档目录：`docs/00-codebase-map.md` · 架构：`docs/03-architecture/architecture.md` · 验收：`docs/06-test/acceptance.md`。
 
