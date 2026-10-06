@@ -39,7 +39,10 @@ function buildRule(r) { return { id: r.id, ph: r.ph, re: new RegExp(r.src.source
 
 function enabled() {
   const v = String(process.env.PROXY_REDACT ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'on';
+  // v1 提级（T7，2026-10-06 维护者拍 A）：默认开；显式 0/false/off 关（可回滚）。
+  // 任意非否定值（含 '1'/'true'/'on' 及其它）一律视为开——多数 gate 范式宽松接受非否定=开。
+  if (v === '0' || v === 'false' || v === 'off') return false;
+  return true;
 }
 
 /**

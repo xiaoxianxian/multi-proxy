@@ -21,6 +21,9 @@
 // enforce 只在命中高危模式时才深拷贝响应体，未命中一律返回原引用。
 
 const redact = require('../../multi-proxy-manager/lib/redact');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 // 危险工具调用模式（抄 ThinkWatch-Lite 的 tool-call inspection 清单，MIT；75 号文档 §三）
 // 只做**文本级**匹配：我们拿到的不是 shell 执行结果，是响应体里的 tool_use 参数 JSON。
@@ -33,7 +36,10 @@ const TOOL_RULES = [
 
 function enabled() {
   const v = String(process.env.PROXY_PACK_SANDBOX_EGRESS ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'on';
+  // T7 v1（2026-10-06 维护者拍板 A 全提）：默认开（observe，只记账不落刀）；显式 0/false/off 关（可回滚）。
+  // 非否定任意值视为开——gate 范式与 lib/redact、lib/upstream-check 对齐。
+  if (v === '0' || v === 'false' || v === 'off') return false;
+  return true;
 }
 
 /** enforce 模式（PROXY_SANDBOX_EGRESS_MODE=enforce|block）。默认 observe —— 改成真切断必须显式。 */
@@ -48,6 +54,7 @@ function inspectOutbound(body) {
   const r = redact.redactOutbound(body);
   if (r.changed) {
     console.log('[sandbox-egress] outbound redaction', proxyTag(), JSON.stringify(r.hits));
+    recordHit({ ts: Date.now(), proxy: _tag, kind: 'outbound-redact', hits: r.hits });
   }
   return r;
 }
@@ -61,6 +68,11 @@ function inspectInbound(data) {
 
   const m = mode();
   console.log('[sandbox-egress] inbound tool-call inspection', m, proxyTag(), JSON.stringify(findings));
+  recordHit({
+    ts: Date.now(), proxy: _tag, kind: 'inbound-tool-check', mode: m,
+    findings: findings.map((f) => f.id),
+    action: m === 'enforce' ? 'blocked' : 'observe',
+  });
   if (m !== 'enforce') return { findings, action: 'observe', data };
   return { findings, action: 'blocked', data: blockToolCalls(data) };
 }
@@ -172,4 +184,28 @@ let _tag = '';
 function proxyTag() { return _tag; }
 function setProxy(name) { _tag = name || ''; }
 
-module.exports = { enabled, mode, inspectOutbound, inspectInbound, setProxy, TOOL_RULES };
+// ── observe 命中落盘（T7 v1，2026-10-06）──
+// 仿 cost-track 的 jsonl 落盘范式（path.join(os.homedir(), ...) + env 覆盖 + 落盘前 mkdir）：
+// 门控开（enabled()）才 append 一行；门控关 ⇒ 零写盘（非侵入，测试用 fs.existsSync===false 断言）。
+// 只记「观察事件」，不改任何请求/响应（enforce 落刀仍由 mode() 独立控制，二者解耦）。
+let _hitsFile = '';
+function hitsFile() {
+  if (_hitsFile) return _hitsFile;
+  return process.env.PROXY_SANDBOX_EGRESS_HITS
+    || path.join(os.homedir(), '.multi-proxy-manager', 'sandbox-egress-hits.jsonl');
+}
+/** 测试注入缝（仿 provider-health.setHealthFile）：setHitsFile(tmp) 把命中落盘指到临时文件，防 jest 污染真实 ~/.multi-proxy-manager。传 '' 回到 env/默认。 */
+function setHitsFile(p) { _hitsFile = p || ''; }
+
+/** 命中记账：门控开则 append 一行 jsonl；best-effort try/catch 隔离（写盘失败不影响主流程，75号 §九 同款纪律）。 */
+function recordHit(entry) {
+  if (!enabled()) return;
+  try {
+    const file = hitsFile();
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(file, JSON.stringify(entry) + '\n');
+  } catch { /* best-effort：记账失败不上抛、不动流量 */ }
+}
+
+module.exports = { enabled, mode, inspectOutbound, inspectInbound, setProxy, recordHit, setHitsFile, TOOL_RULES };

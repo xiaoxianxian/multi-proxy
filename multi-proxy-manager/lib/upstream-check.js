@@ -21,7 +21,10 @@ const DEFAULTS = { minSamples: 3, ratio: 3, cacheRatio: 0.5 };
 
 function enabled() {
   const v = String(process.env.PROXY_UPSTREAM_CHECK ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'on';
+  // v1 提级（T7，2026-10-06 维护者拍 A）：默认开；显式 0/false/off 关（可回滚）。
+  // 体检纯内存、不打真实流量（落点 applyTokens 出口），默认开是观察态，无副作用放大。
+  if (v === '0' || v === 'false' || v === 'off') return false;
+  return true;
 }
 
 // _samples[model][upstream] = [{prompt, cacheHit, reported, ts}]

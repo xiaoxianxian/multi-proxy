@@ -15,6 +15,18 @@
  */
 
 const http = require('http');
+const os = require('os');
+const path = require('path');
+
+// 🔴 T7 v1（三门控默认开）后，门控开的用例会走 recordHit 命中落盘 ⇒ 必须指到 worker 隔离的 tmp 文件，
+// 绝不写真实 ~/.multi-proxy-manager/sandbox-egress-hits.jsonl（§13.30 jest 污染真实数据同款防线）。
+// 用 **env 注入缝**（PROXY_SANDBOX_EGRESS_HITS）而非 pack.setHitsFile(tmp)：本文件每个 call() 走
+// jest.isolateModules 重新 require forward.js，其内部 require(pack) 拿到的 pack 模块是**新实例**，
+// 顶层 setHitsFile 设的是旧实例、两者 _hitsFile 不通（10-06 14:42 全量跑曾因此写漏到真实目录一次）；
+// env 在 recordHit 调用时读，跨实例都生效。
+function hitsFileForWorker() {
+  return path.join(os.tmpdir(), `sandbox-egress-hits-wid-${process.env.JEST_WORKER_ID || 0}-${process.pid}.jsonl`);
+}
 
 const ANTHROPIC_UPSTREAM = {
   id: 'msg_1',
@@ -121,6 +133,10 @@ afterAll(() => { if (upstream) upstream.close(); });
 describe('sandbox-egress · 真 HTTP 回环（forwardProxy 整链）', () => {
 
   it('① 门控全关 = 零副作用：上游拿到原文，客户端拿到原响应', async () => {
+    // T7 v1 起三门控默认开，本用例须显式关（='' 已不成立，要用 '0'）
+    process.env.PROXY_PACK_SANDBOX_EGRESS = '0';
+    process.env.PROXY_REDACT = '0';
+    process.env.PROXY_UPSTREAM_CHECK = '0';
     await call('/v1/messages', SENSITIVE_BODY);
 
     expect(upstreamBodies).toHaveLength(1);
@@ -136,6 +152,7 @@ describe('sandbox-egress · 真 HTTP 回环（forwardProxy 整链）', () => {
       process.env.PROXY_REDACT = '1';
       delete process.env.PROXY_UPSTREAM_CHECK;
       delete process.env.PROXY_SANDBOX_EGRESS_MODE;
+      process.env.PROXY_SANDBOX_EGRESS_HITS = hitsFileForWorker();   // 🔴 命中落盘指 worker 隔离 tmp（env 缝，跨 isolateModules 新实例也生效）
     });
 
     it('② 出站真脱敏：上游收到的 body 里密钥与身份证已换占位符', async () => {
@@ -161,6 +178,7 @@ describe('sandbox-egress · 真 HTTP 回环（forwardProxy 整链）', () => {
       process.env.PROXY_PACK_SANDBOX_EGRESS = '1';
       process.env.PROXY_REDACT = '1';
       process.env.PROXY_SANDBOX_EGRESS_MODE = 'enforce';
+      process.env.PROXY_SANDBOX_EGRESS_HITS = hitsFileForWorker();   // 🔴 同上，命中落盘指 tmp（env 缝）
     });
 
     it('④ 高危 tool_use 在回给客户端之前被换掉（Anthropic 形态）', async () => {

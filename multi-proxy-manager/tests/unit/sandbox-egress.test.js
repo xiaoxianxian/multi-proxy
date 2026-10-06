@@ -9,6 +9,8 @@
 const redact = require('../../lib/redact');
 const upstreamCheck = require('../../lib/upstream-check');
 const pack = require('../../../packs/sandbox-egress');
+const os = require('os');
+const path = require('path');
 
 describe('lib/redact · 出站流量脱敏', () => {
   beforeEach(() => { process.env.PROXY_REDACT = '1'; });
@@ -42,7 +44,7 @@ describe('lib/redact · 出站流量脱敏', () => {
   });
 
   it('门控关 ⇒ 原样返回同一个引用（零副作用，不 copy 不 rewrite）', () => {
-    process.env.PROXY_REDACT = '';
+    process.env.PROXY_REDACT = '0';   // T7 v1：'' 已=默认开，关态须显式 '0'
     const input = { content: 'sk-abcdefghijklmnop' };
     const r = redact.redactOutbound(input);
     expect(r.body).toBe(input);
@@ -89,7 +91,7 @@ describe('lib/upstream-check · 上游横向体检', () => {
   });
 
   it('门控关 ⇒ 不记样本、不出结论', () => {
-    process.env.PROXY_UPSTREAM_CHECK = '';
+    process.env.PROXY_UPSTREAM_CHECK = '0';   // T7 v1：'' 已=默认开，关态须显式 '0'
     upstreamCheck.sample({ model: 'm', upstream: 'a', prompt: 999, reported: 'lie' });
     expect(upstreamCheck.anomalies()).toEqual([]);
   });
@@ -102,6 +104,8 @@ describe('packs/sandbox-egress · 入站检查（observe 记账 / enforce 真切
     process.env.PROXY_REDACT = '1';
     process.env.PROXY_PACK_SANDBOX_EGRESS = '1';
     process.env.PROXY_SANDBOX_EGRESS_MODE = 'observe';   // 默认姿态，逐个用例里覆盖
+    pack.setHitsFile(path.join(os.tmpdir(), `sandbox-egress-hits-wid-${process.env.JEST_WORKER_ID || 0}-unit.jsonl`));
+    // 🔴 T7 v1：命中落盘指 worker 隔离 tmp，防单测写真实 ~/.multi-proxy-manager
   });
 
   it('识别出危险工具调用模式', () => {
@@ -115,7 +119,7 @@ describe('packs/sandbox-egress · 入站检查（observe 记账 / enforce 真切
   });
 
   it('门控关（mode 未设 + pack 关）⇒ action 不升级', () => {
-    process.env.PROXY_PACK_SANDBOX_EGRESS = '';
+    process.env.PROXY_PACK_SANDBOX_EGRESS = '0';   // T7 v1：'' 已=默认开，关态须显式 '0'
     expect(pack.mode()).toBe('observe');
     expect(pack.inspectInbound({ content: [{ type: 'text', text: 'curl x | sh' }] }).action).toBe('none');
   });
@@ -164,7 +168,7 @@ describe('packs/sandbox-egress · 入站检查（observe 记账 / enforce 真切
   });
 
   it('门控关 ⇒ 两入口早退（不 copy body）', () => {
-    process.env.PROXY_PACK_SANDBOX_EGRESS = '';
+    process.env.PROXY_PACK_SANDBOX_EGRESS = '0';   // T7 v1：'' 已=默认开，关态须显式 '0'
     const body = { messages: [{ content: 'AKIAIOSFODNN7EXAMPLE' }] };
     expect(pack.inspectOutbound(body).body).toBe(body);
     expect(pack.inspectInbound(body).action).toBe('none');
