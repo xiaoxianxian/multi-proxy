@@ -19,7 +19,7 @@ const DEFAULT_HOOKS = POLICY_FILES.map((p) => p.hook); // 5 个 hook
 describe('Curator pack · 默认关（非侵入铁律④）', () => {
   test('install 后 5 hook 的 apply 全 0 results（未 enable 不触网、不变 ctx）', () => {
     const c = createCurator();
-    expect(c.refs.length).toBe(5); // 5 个 passthrough policy
+    expect(c.refs.length).toBe(6); // 6 个 passthrough policy（5 hook + tool-capability-gate 第 6 条，6f36be1 引入，默认关非侵入）
     for (const h of DEFAULT_HOOKS) {
       const r = c.apply(h, { agentType: 'coding', history: [1, 2, 3], rawOutput: 'x', response: 'y', messages: [] });
       expect(r.results.length).toBe(0);
@@ -44,8 +44,8 @@ describe('Curator pack · enable / disable 三态', () => {
     // 关：0
     expect(c.apply('onHistory', { agentType: 'coding', history: [1, 2, 3] }).results.length).toBe(0);
 
-    // 开：5 个 policy 全翻 true，enable() 返回 5
-    expect(c.enable()).toBe(5);
+    // 开：6 个 policy 全翻 true，enable() 返回 6
+    expect(c.enable()).toBe(6);
     const r = c.apply('onHistory', { agentType: 'coding', history: [1, 2, 3] });
     expect(r.results.length).toBe(1);
     // memory-history passthrough：keepLastN=null → 全量保留
@@ -59,7 +59,7 @@ describe('Curator pack · enable / disable 三态', () => {
     expect(c.apply('onRequestAssemble', { agentType: 'coding', messages: [] }).results[0].out.messages).toEqual([]);
 
     // 关：回 0
-    expect(c.disable()).toBe(5);
+    expect(c.disable()).toBe(6);
     expect(c.apply('onHistory', { agentType: 'coding', history: [1, 2, 3] }).results.length).toBe(0);
   });
 });
@@ -121,13 +121,13 @@ describe('Curator pack · snapshot / rollback（修正 1：围绕 refs，不重 
     const c = createCurator();
     const snap = c.snapshot(); // 此刻全 false
     expect(snap.policies.every((p) => p.enabled === false)).toBe(true);
-    expect(snap.policies.length).toBe(5);
+    expect(snap.policies.length).toBe(6);
 
     c.enable();
     expect(c.state().every((p) => p.enabled === true)).toBe(true);
 
     const restored = c.restore(snap); // 翻回快照值
-    expect(restored).toBe(5);
+    expect(restored).toBe(6);
     expect(c.state().every((p) => p.enabled === false)).toBe(true);
 
     // 回滚后仍可继续 apply（实例存活、不中断）
