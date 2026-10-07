@@ -25,6 +25,13 @@ const params = {
     rejectMessage: '[工具未授权 · 已被工具能力控制面拦截]',
 };
 
+// ⚠️ 参数只认自己的 env（与 tool-output-guard / tools-lazyload 的 ENV_OVERRIDE 同一套约定，
+// 见 tools/token-policy-bridge.js:65 的既有说明）。默认全关 = passthrough，零行为变更。
+if (process.env.CURATOR_TOOL_GATE_MODE) params.mode = String(process.env.CURATOR_TOOL_GATE_MODE).trim();
+if (process.env.CURATOR_TOOL_GATE_DENY) params.denyTools = String(process.env.CURATOR_TOOL_GATE_DENY).trim();
+if (process.env.CURATOR_TOOL_GATE_ALLOW) params.allowTools = String(process.env.CURATOR_TOOL_GATE_ALLOW).trim();
+if (process.env.CURATOR_TOOL_GATE_REJECT_MSG) params.rejectMessage = String(process.env.CURATOR_TOOL_GATE_REJECT_MSG).trim();
+
 function _parse(list) {
     if (!list || typeof list !== 'string') return [];
     return list.split(',').map((s) => s.trim()).filter(Boolean);

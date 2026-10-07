@@ -80,6 +80,11 @@ docs/02-product/v1-positioning-declared.md
 docs/05-design/DESIGN-MEMO-gaode-analysis-agent-L2.md
 docs/05-design/visual-design.md
 docs/06-methodology/IMPLEMENTATION-METHOD.md
+# 2026-10-07 增补：方法论 / 证据表 / 设计草案 / 未采纳实现规范 均属内部资产，不进公开仓
+docs/06-methodology/
+docs/12-evidence/
+docs/04-tech/savings-gateway-design.md
+docs/octop-harness-failover-middleware-spec.md
 docs/06-test/acceptance.md
 docs/06-test/test-cases.md
 docs/06-test/test-plan.md

@@ -152,6 +152,10 @@ const costTrack = require('./lib/cost-track');
 // 门控开 = 显式 opt-in：注册内置 writeMarkers 进活跃表 → runAllCollects 第 1b 路真写隔离 sidecar
 // （flippedEnabled 仍默认 null = 不 flip providers.json/路由，仅写 sidecar；.tmp→rename 原子+backup）。
 const isolationExecutor = require('./lib/provider-isolation-executor');
+// B 类副作用故障处置链路（门控 MULTI_PROXY_SIDE_EFFECT_GUARD 默认关 = 零副作用）。
+// 这里 require 只是为了启动时把门控状态打出来；**实际生效的实例由 routes/sessions.js
+// 自行 lazy 创建**，两者指向同一账本文件，不存在状态分裂。
+const { SideEffectGuard } = require('./lib/side-effect-guard');
 
 // 启动服务（跳过测试环境）
 if (process.env.NODE_ENV !== "test") {
@@ -163,6 +167,20 @@ if (process.env.NODE_ENV !== "test") {
   if (isolationExecutor.isolationEnabled()) {
     isolationExecutor.registerExecutor('writeMarkers');
     console.log('[isolation] M2 executor active: writeMarkers registered (PROXY_HEALTH_ISOLATE=on; flipEnabled=null → 不flip providers.json)');
+  }
+  // B 类链路启动自检：把门控状态打出来，避免「接线了但没人知道开没开」。
+  const guardProbe = new SideEffectGuard({ enabled: null });
+  if (guardProbe.enabled) {
+    console.log('[side-effect-guard] ACTIVE — step/resume 走权限门禁 + 幂等查证；对账端点 /api/sessions/reconcile*');
+    if (guardProbe.audit.enabled) {
+      console.log(`[side-effect-guard] audit ledger: ${guardProbe.audit.file}`);
+    } else {
+      // ⚠️ 配置陷阱：编排层开、账本关 → record 全部 no-op → 幂等查证永远查不到历史、
+      //    对账无据可查。链路看起来在跑，实际形同虚设，且不报错。必须显式喊出来。
+      console.log('[side-effect-guard] ⚠️ 账本未开（MULTI_PROXY_ACTION_AUDIT≠1）→ 幂等查证查不到历史、对账无据，链路形同虚设；请改开: MULTI_PROXY_ACTION_AUDIT=1');
+    }
+  } else {
+    console.log('[side-effect-guard] off（默认）— step/resume 与接线前一致；开: npm run start:guard');
   }
   const costScheduler = alertRoutes.startCostScheduler();
   // 管理面板默认只绑本回环 127.0.0.1（安全收紧：面板带 JWT 但不应全网卡可达）；

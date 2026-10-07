@@ -71,4 +71,30 @@ describe('tool-capability-gate (Curator onToolOutput)', () => {
         expect(r.blocked).toBeUndefined();
         expect(r.reason).toBe('allowed');
     });
+
+    // 铁律④：env 未设时绝不能意外开启门控。env 在模块加载时读取，
+    // 故用 resetModules + 重新 require 来验证「干净环境下的默认值」。
+    test('env unset leaves gate off (non-invasive default)', () => {
+        jest.resetModules();
+        delete process.env.CURATOR_TOOL_GATE_MODE;
+        delete process.env.CURATOR_TOOL_GATE_DENY;
+        delete process.env.CURATOR_TOOL_GATE_ALLOW;
+        const fresh = require('../../../packs/curator/policies/tool-capability-gate');
+        expect(fresh.params.mode).toBe('pass');
+        const r = fresh.handler({ toolName: 'edit', rawOutput: 'x' });
+        expect(r.blocked).toBeUndefined();
+        expect(r.reason).toBe('off');
+    });
+
+    test('env sets mode and deny list at module load', () => {
+        jest.resetModules();
+        process.env.CURATOR_TOOL_GATE_MODE = 'deny';
+        process.env.CURATOR_TOOL_GATE_DENY = 'edit,delete';
+        const fresh = require('../../../packs/curator/policies/tool-capability-gate');
+        expect(fresh.params.mode).toBe('deny');
+        const r = fresh.handler({ toolName: 'edit', rawOutput: 'x' });
+        expect(r.blocked).toBe(true);
+        delete process.env.CURATOR_TOOL_GATE_MODE;
+        delete process.env.CURATOR_TOOL_GATE_DENY;
+    });
 });

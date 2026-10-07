@@ -9,6 +9,7 @@
     "start:l2": "PROXY_L2_SKILL=1 PROXY_L2_SKILLHOSTS=1 node server.js",
     "start:l2:skill": "PROXY_L2_SKILLHOSTS=1 node server.js",
     "start:l2:policy": "PROXY_TOKEN_POLICY=1 node server.js",
+    "start:guard": "MULTI_PROXY_SIDE_EFFECT_GUARD=1 MULTI_PROXY_ACTION_AUDIT=1 node server.js",
     "test": "jest --verbose --forceExit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
