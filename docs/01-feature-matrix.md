@@ -1,8 +1,8 @@
 # docs/01-feature-matrix.md — 功能完成度矩阵
 
 > 本表所有数字必须来自真实运行，不可从文档摘录。
-> 最后验证：2026-09-28 全量真跑（jest 1144 + hermes 77 + l2 318/23demo + curator 15 = 1556 checks），main 分支。
-> （2026-09-28：manager 822/50、cursor 17/219、codex 62/6、hermes 77/4、l2 demo 23/318、curator-pack 15/15，0 测试回归；详见 `docs/10-initiatives/11-v1-readiness-and-v2-schedule-2026-09-28.md §二`。）
+> 最后验证：**2026-10-07 三路并行真跑**（l2 46 demo 全绿 + cursor 236/19 + codex 79/8 + hermes 77/4 + manager 1297 pass/3 fail/83 suites），main = `f10e0d2`。
+> （10-07 实测：l2 demo 23→**46** 全绿（10-01 起 35→42→46 递增）；manager 822→**1297**、cursor 17文件/219→**19文件/236**、codex 6/62→**8/79**；hermes 77/4 不变。**唯一红灯 = manager 3 fail**：curator-pack `policies.length` 断言 5 vs 实得 6（另一 agent 在途 WIP `side-effect-guard`/`cost-watchdog` 未 commit，测试期望未跟），非回归、非负载。详见 `MEMORY-2026-10-06.md §5.22`；09-28 历史见 §测试总计下历史快照。）
 
 ---
 
@@ -11,7 +11,7 @@
 | 层级 | 数量 | 测试 | 状态 |
 |------|------|------|------|
 | 代理模块 | 4 (codex/hermes/cursor/manager) | ✅ 全绿 | ✅ 上线 |
-| L2 核心模块 | 10 内核 + 3 adapter | 23 demo / 318 checks 全 PASS | ✅ 完成 |
+| L2 核心模块 | 10 内核 + 3 adapter（另增量 savings-gateway / context-fold / floor-feed 等） | **46 demo 全 PASS**（10-07 `run-demos.js` 实跑，10-01 起 35→42→46 递增）| ✅ 完成 |
 | L2 adapter | 3 (h3web/aigc/l1-agent) | demo 全 PASS | ✅ 完成 |
 | 文档缺口（旧） | — | ✅ 本次补齐 | ✅ 完成 |
 | DSH 接入 | — | 🟡 文档准备中 | ⏳ |
@@ -67,20 +67,18 @@
 
 ---
 
-## 测试总计（2026-09-18，全真跑）
+## 测试总计（2026-10-07，全真跑）
 
-| 模块 | 文件数 | 测试数 | 套件 |
+| 模块 | 文件/套件 | 测试数 | 状态 |
 |------|--------|--------|------|
-| multi-proxy-manager | 47 files（48 suites 含新增 curator-pack） | **822 tests**（09-28 实跑，含 curator-pack 15 + 其它增量；旧值 770 @ 09-26 / 807 @ 09-27） | 50 suites |
-| cursor-proxy | 17 files | 219 tests | 17 suites |
-| codex-proxy | 6 files | 62 tests | 6 suites |
-| hermes-proxy | 4 files | 77 pytest 项 | 4 suites |
-| L2 demo | 23 .demo.js（10 内核 + 3 adapter + 10 监控/mcp/route/省钱网关） | 318 checks 全 PASS | 各自独立运行 |
-| shell (bats) | 1 .bats | 11 tests（09-28 实跑 PASS；`bats-core` 1.14.0，修复后全绿） | — |
+| multi-proxy-manager | 83 suites | **1297 pass / 3 fail** | ❌ 3 fail（curator-pack `policies.length` 5 vs 6，另一 agent WIP 未 commit，见 §缺口）|
+| cursor-proxy | 19 files / 19 suites | **236 tests** | ✅ 全绿（须 `NODE_OPTIONS=--experimental-vm-modules`，直跑 `npx jest` 会 ESM 假崩误判）|
+| codex-proxy | 8 files / 8 suites | **79 tests** | ✅ 全绿 |
+| hermes-proxy | 4 files | 77 pytest 项 | ✅（1 urllib3 warning，非失败）|
+| L2 demo | 46 .demo.js（`run-demos.js` selected） | 全 PASS | ✅（10-01 起 35→42→46 递增）|
+| shell (bats) | 1 .bats | 11 tests（本机无 `bats` binary，沿用 09-28 历史值，不纳入合计）| 沿用 |
 
-**总计：1380 checks 全绿**（jest 1051 = 770+62+219 + pytest 77 + bats 11 + l2 demo 318 + codex-integration 2）。
-
-> **2026-09-21 task1 增量（历史快照，09-25 已更新上方主表）**：`savings-gateway` 落地 → `multi-proxy-manager` 全量 jest `719/719`（45 suites / 0 fail，相对 09-18 快照 +18 = 本轮 `savings-gateway.test.js`）；`l2/savings-gateway/savings-gateway.demo.js` 24/24 PASS；09-21 l2 实存 21 个 `.demo.js`（10 内核 + 3 adapter + 3 公共监控 + mcp 编排 2 + 省钱网关 1 + route-engine-orchestrator）。**09-25 现状**：jest 770 / 47、cursor 219 / 17、codex 62 / 6、hermes 77 / 4、l2 demo 23 / 318 checks（新增 cost-watchdog 等）；09-21 上行为历史快照，当前真值见上方主表（2026-09-25 真跑）。
+**10-07 现状：除 manager 3 fail 外全绿。** 历史快照：09-28 manager 822/50、cursor 17/219、codex 6/62、hermes 77/4、l2 23/318（合计 1380 checks）；增量轨迹 manager 770(09-26)→807(09-27)→822(09-28)→**1297(10-07)**、l2 demo 23→35→42→**46**、cursor 219→**236**、codex 62→**79**；中间 task1 `savings-gateway`、cost-watchdog 等增量已并入。
 
 ---
 
@@ -94,6 +92,12 @@
 | 4 | ~~codex-proxy 仅 2 test 文件~~ | ✅ 已补 3 文件 / 53 tests（auth+CRUD+switch+balances guard，2026-09-16） | — | ✅ 已闭环 |
 | 5 | ~~P5 GUI 看板~~ | 易用性 | ✅ 已闭环（`commit 2163ca9`：Electron 壳 `main.js` 117 行 + `launch-gui.sh` + `manage.sh gui` 子命令；启动脚本含 base_url 占用检测） | ✅ 已闭环（低） |
 | 6 | ~~DSH 生态（DS1 SKILL.md 待产）~~ | ✅ DS1 已落（2 SKILL + `docs/02-product/dsh-integration.md`）；DS2/DS3 暂缓（#1496） | ✅ 已闭环 |
+| 7 | **manager 3 测试 fail**（`curator-pack.test.js` `policies.length` 5 vs 6） | manager jest 非全绿（10-07 实测 1297/3fail/83）| 另一 agent 在途 WIP（`side-effect-guard.js`/`cost-watchdog.js`，git status 8M+7??）给 curator 加第 6 条 policy，测试期望未跟；**不擅修**（§5.6 属对方地盘），等其 commit 后自然修复 | P1（阻塞绿灯）|
+| 8 | **M6 D0 = 100 行真实 Cursor 样本** | M6 机制已条件性 signoff（`f10e0d2`），样本未达 | 18794 待维护者在 Cursor 实配 base_url + 实际 coding 攒 `routing_feedback`；脚本喂 = 污染拒用；18794 保持不动（重拉反伤 O1 env）| P1（待维护者 in-the-loop）|
+| 9 | **curator 对 codex responses 内容级压缩失效** | codex 路径 token 不省 | 补响应级折叠 | 中 |
+| 10 | **token 控制面 A 路**（`cost.js` token×单价进料管）+ 30 号基线 estimate→actual | 答不了"钱花在哪类 token" | 是否插队到 12 号既定序列前待维护者 | 中 |
+| 11 | **多租户 / Portico 控制面**（企业版 7 缺口） | 控制面未建 | 维持 multi-proxy 无状态数据面 / Portico P1 待维护者 | P2（待维护者）|
+| 12 | **`~/.multi-proxy-manager/providers.json` 10-07 18:09 被清成 `[]`** | manager 读不到 provider（下次重启才暴露，现 daemon 靠 launchd 独立起未崩）| 已从 10-02 备份恢复 4 provider 骨架（JSON 合法）；但 deepseek/moonshot key + agnes 名仍为 **10-02 旧值**（10-06 A1 轮换未同步到 manager 侧 json，db 侧为 `9f6250…`/`60fee3…`/`agnes-2.5-flash`）→ 需实测校准 | P1（凭据校准，待维护者）|
 
 ---
 
@@ -106,8 +110,8 @@ cd l2 && for d in *.demo.js adapters/*.demo.js; do [ -f "$d" ] && node "$d" 2>/d
 # manager jest
 cd multi-proxy-manager && npx --no-install jest --silent
 
-# cursor jest
-cd cursor-proxy && npx --no-install jest --silent
+# cursor jest（须 ESM flag，直跑 npx jest 会假崩误判）
+cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx --no-install jest --silent
 
 # hermes pytest
 cd hermes-proxy && python3 -m pytest tests/ -q
