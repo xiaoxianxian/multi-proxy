@@ -11,7 +11,7 @@
 //   回滚：rollback → 回到上一版，拆解行为恢复；空历史 rollback → null
 
 const assert = require('assert');
-const { ROUTING_BASE, mapTier, adapterDefaults, update, rollback, history } = require('./routing-base.js');
+const { ROUTING_BASE, mapTier, unknownTierStats, adapterDefaults, update, rollback, history } = require('./routing-base.js');
 const { templateDecompose, BUILTIN_TEMPLATES, FALLBACK_TEMPLATE } = require('../decomposer.js');
 
 let pass = 0, fail = 0;
@@ -35,6 +35,18 @@ ok("high → 'large'", mapTier('high') === 'large');
 ok("medium → 'medium'", mapTier('medium') === 'medium');
 ok("未知 complexity → 'medium'（保守默认）", mapTier('unknown') === 'medium' && mapTier(undefined) === 'medium');
 
+console.log('未知 complexity 计数留痕（P3-0a / 拍 #8=C 的前置，返回值不变只加观测）：');
+const _before = unknownTierStats()['bogus'] || 0;
+mapTier('bogus');
+ok('未知值调用后计数器 +1', unknownTierStats()['bogus'] === _before + 1, `got ${unknownTierStats()['bogus']}`);
+mapTier('bogus');
+ok('再调一次变 +2', unknownTierStats()['bogus'] === _before + 2, `got ${unknownTierStats()['bogus']}`);
+ok('已知三值不进计数器', unknownTierStats()['low'] === undefined &&
+    unknownTierStats()['high'] === undefined && unknownTierStats()['medium'] === undefined);
+ok('观测出口返回副本（改返回值不污染内部计数）', (() => {
+    const s = unknownTierStats(); s['bogus'] = 999;
+    return (unknownTierStats()['bogus'] || 0) !== 999;
+})());
 console.log('adapterDefaults（与原 adapter 硬编码逐字一致）：');
 const cd = adapterDefaults('claude');
 ok("claude.capabilities === ['code','writing']", cd && cd.capabilities.length === 2 &&

@@ -178,10 +178,28 @@ function _snapshotCurrent() {
     };
 }
 
+// 未知 complexity 计数器（仅内存）：{ [complexity 原值]: 次数 }。
+// 为什么要有它：见下方 mapTier——未知值静默降级 medium 会让「档位偏移率表」永远拿不到数据，
+// 而 #8（Portico 拍 C：定价归 Portico、执行侧仅可上调）的验收依赖那张表。
+const _unknownTier = Object.create(null);
+
 // 复杂度 → 档位（消费方：route-engine._mapTier 委托到此；未知 complexity 归 medium）
 function mapTier(complexity) {
     const m = ROUTING_BASE.complexityTierMap || {};
-    return m[complexity] || 'medium';
+    const v = m[complexity];
+    if (v) return v;                       // 与原 `m[complexity] || 'medium'` 逐字节等价
+    // 未知（或空）值：行为不变，仍归 medium，但**必须计数留痕**，不再静默。
+    const k = String(complexity);
+    _unknownTier[k] = (_unknownTier[k] || 0) + 1;
+    if (process.env.PROXY_TIER_TRACE === '1') {
+        console.warn(`[routing-base] unknown complexity "${k}" → medium (count=${_unknownTier[k]})`);
+    }
+    return 'medium';
+}
+
+// 观测出口：未知 complexity 的计数快照（只读副本，供 #8 偏移率表 / 验收断言取用）
+function unknownTierStats() {
+    return { ..._unknownTier };
 }
 
 // 无候选兜底策略解析：优先级 = 显式 override > env PROXY_L2_NOCANDIDATE > 底座默认值。
@@ -299,7 +317,7 @@ function history() {
 }
 
 module.exports = {
-    ROUTING_BASE, mapTier, adapterDefaults, resolveNoCandidatePolicy,
+    ROUTING_BASE, mapTier, unknownTierStats, adapterDefaults, resolveNoCandidatePolicy,
     resolveTierBindings, resolveTierBinding, envPorts,
     resolveExecutorDefaults, resolveExecutorDefault,
     update, rollback, history,
