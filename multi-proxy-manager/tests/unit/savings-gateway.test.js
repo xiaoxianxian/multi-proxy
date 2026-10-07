@@ -255,4 +255,30 @@ describe('savings-gateway server (l2/savings-gateway/server.js · thin HTTP, 端
     const r = await fetch(`${base}/v1/models`);
     expect(r.status).toBe(404);
   });
+
+  test('G1 hardCap：累计越过 → 429 budget_exceeded（独立 server + 独立 watchdog，门控开）', async () => {
+    process.env[G.GATE_ENV] = '1';
+    process.env.PROXY_COST_HARDCAP = '0.05'; // < 一笔 high 实际成本 0.096，第二笔即到限
+    const srv = S.createServer();            // 全新 server = 全新 gateway + 全新 watchdog（隔离）
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    const b = `http://127.0.0.1:${srv.address().port}`;
+    const req = (m) => fetch(`${b}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'x' }], complexity: 'high', usage: USAGE }),
+    });
+    try {
+      const first = await req();
+      expect(first.status).toBe(200);        // 第一笔 0.096 未越限，正常服务并记账
+      const blocked = await req();
+      expect(blocked.status).toBe(429);      // 第二笔前 pre-check：累计 0.096 >= 0.05 → 拒
+      const j = await blocked.json();
+      expect(j.error.type).toBe('budget_exceeded');
+      expect(j.error.message).toMatch(/hard cap/);
+    } finally {
+      delete process.env[G.GATE_ENV];
+      delete process.env.PROXY_COST_HARDCAP;
+      await new Promise((r) => srv.close(r));
+    }
+  });
 });

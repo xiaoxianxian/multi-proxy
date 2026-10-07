@@ -14,6 +14,7 @@ const registryRoutes = require('./routes/registry');
 const apiRoutes = require('./routes/proxy-api');
 const metaRoutes = require('./routes/meta');
 const sessionsRoutes = require('./routes/sessions');
+const guardBusinessRoutes = require('./routes/side-effect-guard');
 
 // 跨进程写账机器凭据：mint（或读回）~/.multi-proxy-manager/agent-token 并注入自身 env。
 // 关键在下文 —— process-manager 的 spawnProxy 用 `{ ...process.env }` 拉代理子进程，
@@ -73,6 +74,8 @@ const orchestrationRoutes = require('./routes/orchestration');
 app.use('/api/orchestration', orchestrationRoutes);
 // M7 Sessions：挂在代理 wildcard 之前，确保 /api/sessions/* 不被误捕获
 app.use('/api/sessions', sessionsRoutes);
+// B 类链路业务侧端点（独立存储 guard-business，供外部项目如审核平台经 HTTP 接入）
+app.use('/api/guard', guardBusinessRoutes);
 // M2 Provider Health：只读展示层，挂在代理 wildcard 之前（与 registry/sessions 同模式）
 app.use('/api/provider-health', require('./routes/provider-health'));
 // L2 P2 告警生产接线：/api/alert 把 alert.js 内核接上真实信号源（门控 PROXY_HEALTH_ALERT 默认关）
@@ -182,6 +185,8 @@ if (process.env.NODE_ENV !== "test") {
   } else {
     console.log('[side-effect-guard] off（默认）— step/resume 与接线前一致；开: npm run start:guard');
   }
+  // 业务侧端点总是挂载（before/record 受同一门控，pending/reconcile 只读不受控）
+  console.log(`[side-effect-guard-business] endpoints mounted at /api/guard（ledger: ${guardBusinessRoutes.BUSINESS_GUARD_DIR}；门控 MULTI_PROXY_SIDE_EFFECT_GUARD 同控）`);
   const costScheduler = alertRoutes.startCostScheduler();
   // 管理面板默认只绑本回环 127.0.0.1（安全收紧：面板带 JWT 但不应全网卡可达）；
   // Docker/跨机部署显式设 BIND_HOST=0.0.0.0，沿用 hermes-proxy 的 BIND_HOST 惯例。

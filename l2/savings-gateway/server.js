@@ -13,6 +13,7 @@
 
 const http = require('http');
 const { createSavingsGateway, gateOpen, GATE_ENV, SHADOW_ENV } = require('./gateway.js');
+const { createCostWatchdog } = require('./cost-watchdog.js');
 
 const DEFAULT_PORT = 18795;
 
@@ -43,6 +44,7 @@ function openaiError(res, status, message, type) {
 
 function createServer(opts = {}) {
     const gateway = opts.gateway || createSavingsGateway();
+    const watchdog = opts.watchdog || createCostWatchdog();   // G1：硬上限看门狗（默认 hardCap=0 不拦）
     return http.createServer(async (req, res) => {
         const url = req.url || '/';
         const pathname = url.split('?')[0];
@@ -77,8 +79,16 @@ function createServer(opts = {}) {
             }
             const auth = req.headers['authorization'] || '';
             const key = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+            // G1：硬上限到限暂停——累计成本越过 hardCap 直接在真实执行/模拟前拒绝
+            if (watchdog.state().block) {
+                return openaiError(res, 429, 'budget hard cap reached; requests paused until cap is raised', 'budget_exceeded');
+            }
             try {
                 const out = gateway.handleChatCompletions(body, { key });
+                // 喂 watchdog 累计成本（G1：到限即拒；default hardCap=0 不影响旧行为）
+                const entries = gateway.getSavingsLog();
+                const lastEntry = entries[entries.length - 1];
+                if (lastEntry) watchdog.record(lastEntry);
                 return json(res, 200, out);
             } catch (e) {
                 const status = e.httpStatus === 401 ? 401 : 400;

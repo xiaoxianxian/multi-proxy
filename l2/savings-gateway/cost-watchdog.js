@@ -24,6 +24,9 @@
 
 const path = require('path');
 const os = require('os');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 
 const GATE_ENV = 'PROXY_COST_WATCH';
 const DEFAULT_ALARM_FILE = path.join(os.homedir(), '.multi-proxy-manager', 'cost-watch-alarm.jsonl');
@@ -42,6 +45,9 @@ const TIER_COMPLEXITY = { small: 'low', medium: 'medium', large: 'high' };
 const DEFAULT_CONFIG = {
     warnBudget: 0,          // CNY；>0 才启用 warn 档（=0 不告警，与 alert.js「不设预算不触发」同义，YAGNI）
     criticalBudget: 0,      // CNY；>0 才启用 critical 档
+    hardCap: 0,             // CNY；>0 才启用 hard cap（G1 到限暂停/拒绝；=0 不拦，YAGNI）
+    alertRatios: [0.8, 0.95], // G2：累计达 hardCap 的该比例时发告警（仅 hardCap>0 生效）；空数组=不发
+    alertWebhook: '',       // G2：告警 webhook（http/https POST JSON），非空才发；默认不发（YAGNI）
     windowMs: 0,            // 0 = 全时累计；>0 = 滑动窗口
     cooldownMs: 0,          // 0 = 不复用去重（每次越级都 fire）；>0 = 同 level 窗口内只 fire 一次
     logCapacity: 1000,      // alarms[] 环形裁剪上限
@@ -51,6 +57,23 @@ const DEFAULT_CONFIG = {
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const coerceNum = (n) => { const v = parseFloat(n); return Number.isFinite(v) ? v : 0; };
+
+// G2：告警 webhook best-effort POST（http/https 均可，fire-and-forget，超时即弃；non-fatal）
+function postWebhook(urlStr, payload) {
+    try {
+        const u = new URL(urlStr);
+        const mod = u.protocol === 'https:' ? https : http;
+        const body = JSON.stringify(payload);
+        const req = mod.request(u, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        }, () => {});
+        req.on('error', () => {});
+        req.setTimeout(2000, () => req.destroy());
+        req.write(body);
+        req.end();
+    } catch { /* non-fatal，告警投递失败不影响主流程 */ }
+}
 
 function gateOpen() {
     const v = String(process.env[GATE_ENV] ?? '').trim().toLowerCase();
@@ -80,10 +103,17 @@ function createCostWatchdog(opts = {}) {
     if (process.env.PROXY_COST_CRITICAL_BUDGET != null && process.env.PROXY_COST_CRITICAL_BUDGET !== '') {
         const b = parseFloat(process.env.PROXY_COST_CRITICAL_BUDGET); if (Number.isFinite(b)) cfg.criticalBudget = b;
     }
+    if (process.env.PROXY_COST_HARDCAP != null && process.env.PROXY_COST_HARDCAP !== '') {
+        const b = parseFloat(process.env.PROXY_COST_HARDCAP); if (Number.isFinite(b)) cfg.hardCap = b;
+    }
+    if (process.env.PROXY_COST_ALERT_WEBHOOK != null && process.env.PROXY_COST_ALERT_WEBHOOK !== '') {
+        cfg.alertWebhook = process.env.PROXY_COST_ALERT_WEBHOOK;
+    }
     const activeFile = typeof opts.alarmFile === 'string' ? opts.alarmFile : DEFAULT_ALARM_FILE;
 
     const alarms = [];            // 已判级的越级事件（环形），供观测 / 落盘
     const lastEmit = {};          // level -> ts（cooldown 去重）
+    const firedRatios = new Set(); // G2：已触发的阈值档（回落到阈值以下自动 re-arm）
     let firedCount = 0;
     let dedupedCount = 0;
 
@@ -116,11 +146,13 @@ function createCostWatchdog(opts = {}) {
         const now = io.now != null ? io.now : (entry && entry.ts != null ? entry.ts : Date.now());
         const cost = cumulative(now);
         let level = 'ok';
-        if (cfg.criticalBudget > 0 && cost >= cfg.criticalBudget) level = 'critical';
+        if (cfg.hardCap > 0 && cost >= cfg.hardCap) level = 'blocked';
+        else if (cfg.criticalBudget > 0 && cost >= cfg.criticalBudget) level = 'critical';
         else if (cfg.warnBudget > 0 && cost >= cfg.warnBudget) level = 'warn';
         const breached = level !== 'ok';
+        const block = level === 'blocked';
         const fromTier = entry && entry.actualTier;
-        const downgradeTo = breached ? cheaperTier(fromTier) : null;
+        const downgradeTo = (breached && !block) ? cheaperTier(fromTier) : null;
 
         let deduped = false;
         let fired = false;
@@ -142,6 +174,33 @@ function createCostWatchdog(opts = {}) {
             ? round6(tierCost(fromTier, pTok, cTok) - tierCost(downgradeTo, pTok, cTok))
             : 0;
 
+        // G2：累计达 hardCap 的 alertRatios 比例时发阈值告警（事件型，每档只 fire 一次；回落到阈值以下自动 re-arm）
+        const thresholdAlerts = [];
+        if (cfg.hardCap > 0 && Array.isArray(cfg.alertRatios) && cfg.alertRatios.length) {
+            for (const r of cfg.alertRatios) {
+                const thr = cfg.hardCap * r;
+                const key = String(r);
+                const crossed = cost >= thr;
+                if (crossed && !firedRatios.has(key)) {
+                    firedRatios.add(key);
+                    thresholdAlerts.push({
+                        ratio: r,
+                        level: 'warn' + Math.round(r * 100),
+                        threshold: round6(thr),
+                        message: `累计成本达 hardCap 的 ${Math.round(r * 100)}%（¥${round6(thr)} / ¥${cfg.hardCap}）`,
+                    });
+                } else if (!crossed && firedRatios.has(key)) {
+                    firedRatios.delete(key);   // re-arm：窗口重置 / 成本回落后可再次告警
+                }
+            }
+        }
+        if (thresholdAlerts.length) {
+            for (const a of thresholdAlerts) {
+                if (cfg.alertWebhook) postWebhook(cfg.alertWebhook, { ...a, cumulative: round6(cost), providerId: cfg.providerId, currency: cfg.currency });
+                if (!observeOnly()) persist({ ts: now, type: 'threshold-alert', ...a, cumulative: round6(cost), providerId: cfg.providerId });
+            }
+        }
+
         const result = {
             ts: now,
             cumulative: round6(cost),
@@ -149,11 +208,13 @@ function createCostWatchdog(opts = {}) {
             breached,
             fromTier,
             downgradeTo,
+            block,
             downgradedComplexity: downgradeTo ? TIER_COMPLEXITY[downgradeTo] : null,  // 操作员按此 complexity 重发即落地
             perReqSaving,
+            thresholdAlerts,
             deduped,
             fired,
-            action: breached ? (downgradeTo ? 'downgrade' : 'hold-floor') : 'hold',
+            action: block ? 'block' : (breached ? (downgradeTo ? 'downgrade' : 'hold-floor') : 'hold'),
             warnBudget: cfg.warnBudget,
             criticalBudget: cfg.criticalBudget,
         };
@@ -164,7 +225,7 @@ function createCostWatchdog(opts = {}) {
                 source: 'cost',
                 providerId: cfg.providerId,
                 cost: round6(cost),
-                budget: level === 'critical' ? cfg.criticalBudget : cfg.warnBudget,
+                budget: level === 'blocked' ? cfg.hardCap : (level === 'critical' ? cfg.criticalBudget : cfg.warnBudget),
                 level,
                 fromTier,
                 downgradeTo,
@@ -194,19 +255,23 @@ function createCostWatchdog(opts = {}) {
         const now = io.now != null ? io.now : Date.now();
         const cost = cumulative(now);
         let level = 'ok';
-        if (cfg.criticalBudget > 0 && cost >= cfg.criticalBudget) level = 'critical';
+        if (cfg.hardCap > 0 && cost >= cfg.hardCap) level = 'blocked';
+        else if (cfg.criticalBudget > 0 && cost >= cfg.criticalBudget) level = 'critical';
         else if (cfg.warnBudget > 0 && cost >= cfg.warnBudget) level = 'warn';
         return {
             cumulative: round6(cost),
             level,
+            block: level === 'blocked',
             breached: level !== 'ok',
             firedCount,
             dedupedCount,
             alarmCount: alarms.length,
+            firedRatiosCount: firedRatios.size,
             activeDowngrade: level === 'ok' ? null : cheaperTier(alarms.length ? alarms[alarms.length - 1].fromTier : null),
             windowMs: cfg.windowMs,
             shadow: gateOpen(),     // observe/serve 语义（门控关=shadow 观测，不真发/不落）
             gateOpen: gateOpen(),
+            hardCap: cfg.hardCap,
             currency: cfg.currency,
         };
     }
@@ -216,12 +281,14 @@ function createCostWatchdog(opts = {}) {
         const now = io.now != null ? io.now : Date.now();
         const cost = round6(cumulative(now));
         let level = 'ok';
-        if (cfg.criticalBudget > 0 && cost >= cfg.criticalBudget) level = 'critical';
+        if (cfg.hardCap > 0 && cost >= cfg.hardCap) level = 'blocked';
+        else if (cfg.criticalBudget > 0 && cost >= cfg.criticalBudget) level = 'critical';
         else if (cfg.warnBudget > 0 && cost >= cfg.warnBudget) level = 'warn';
         const sig = { source: 'cost', providerId: cfg.providerId, cost };
         if (level !== 'ok') {
-            sig.budget = level === 'critical' ? cfg.criticalBudget : cfg.warnBudget;
+            sig.budget = level === 'blocked' ? cfg.hardCap : (level === 'critical' ? cfg.criticalBudget : cfg.warnBudget);
             sig.level = level;
+            sig.block = level === 'blocked';
         }
         return sig;
     }
@@ -241,7 +308,8 @@ function createCostWatchdog(opts = {}) {
             currency: cfg.currency,
             cumulative: round6(cumulative(now)),
             level: (() => { let l = 'ok'; const c = cumulative(now);
-                if (cfg.criticalBudget > 0 && c >= cfg.criticalBudget) l = 'critical';
+                if (cfg.hardCap > 0 && c >= cfg.hardCap) l = 'blocked';
+                else if (cfg.criticalBudget > 0 && c >= cfg.criticalBudget) l = 'critical';
                 else if (cfg.warnBudget > 0 && c >= cfg.warnBudget) l = 'warn'; return l; })(),
             alarmsFired: firedCount,
             alarmsDeduped: dedupedCount,
@@ -249,6 +317,9 @@ function createCostWatchdog(opts = {}) {
             estDowngradeSaving: round6(totalPerReqSaving),
             warnBudget: cfg.warnBudget,
             criticalBudget: cfg.criticalBudget,
+            hardCap: cfg.hardCap,
+            alertRatios: cfg.alertRatios,
+            firedRatiosCount: firedRatios.size,
             gateOpen: gateOpen(),
         };
     }
