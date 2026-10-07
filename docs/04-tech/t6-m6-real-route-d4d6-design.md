@@ -110,3 +110,29 @@ T7 三门控 10-06 已默认开（`f573110`），`PROXY_SANDBOX_EGRESS_MODE` 保
 ## 六、纪律（沿用 AGENTS）
 
 热路径 4 文件逻辑行 0 触碰（0.3 仅注释且随 signoff 批）；`git add --` 显式列文件；push 前 hermes 复核 + 维护者确认；A/B/C 三项不获 signoff 前不动 DB / 不写 key / 不翻 override；peer 在途 `docs/04-tech/savings-gateway-design.md` 不碰。
+
+## 七、DoD 达成状态 + 条件性 signoff（2026-10-07 实测，AGENTS §4 全真跑）
+
+**前置 ①②③④ 状态（全真跑，非文档摘录）**：
+- **A1 三 key 活**：deepseek 活（`GET api.deepseek.com/v1/models` HTTP 200 返回 deepseek-flash+deepseek-v4-pro，key_hint `sk-900…e6f`，10-07 探活）；agnes/kimi 经 D5 4 格探针命中正确 provider（agnes-3.0-flash→generic、kimi-k2.6→openai，不再 fallback kimi）。
+- **B agnes 名对齐**：已对齐，agnes 不再误落 kimi（D5 4 格验证）。
+- **C override 真接管**：18800 隔离实例 `PROXY_ROUTE_OVERRIDE=1` 实测 coding→deepseek-v4-pro HTTP 200（37.7s，usage `prompt:107/completion:5495(reasoning 4501)/total:5602`，成本 ~0.018 CNY）；`override-audit.jsonl` 2 行（10-06 18:02 + 10-07 coding 真打，`applied:true`）。18794 生产端口 `CURSOR_ROUTE_OVERRIDE=1`+`PROXY_ROUTING_FEEDBACK=1` 跑着攒 feedback。
+- **0.2 shadow 已开**：`PROXY_ROUTING_FEEDBACK=1` 门控，18794/18800 均接入 shadow 记录。
+
+**DoD 四要件达成表（§四）**：
+
+| 要件 | 状态 | 实测证据 |
+|----|----|----|
+| ① 观察数据 `routing_feedback` ≥100 行 | **❌ 未达（待补量）** | 当前 0 行纯净态（已清污染，保证 D0 真实性）；本质是真实 Cursor 流量观察项，in-the-loop、不可 curl 凑 |
+| ② 隔离 E2E（coding→deepseek 200 / 本地→ollama 200 / audit ≥2 类） | **✅ 全绿** | 18800 coding→deepseek-v4-pro HTTP 200；`override-audit.jsonl` 2 行（≥2 类）；本地 qwen→ollama 实测 |
+| ③ D5 对齐（4 格探针 agnes 不 fallback kimi） | **✅ 全绿** | `scratch/d5-4grid-probe.mjs`：qwen→ollama / deepseek-v4-pro→DeepSeek-Test / agnes→generic / kimi→openai，live+override 双路径 |
+| ④ 零回归（cursor 236/19 + 热路径 0 逻辑行） | **✅ 全绿** | jest 19 suite/236 全过（1.86s）；热路径 4 文件 `git diff --stat` 空 |
+
+**条件性 signoff（2026-10-07 15:45 维护者拍板「按建议来」——接受）**：
+- **决策**：M6 机制侧 ✅ signoff；①D0 100 行观察标注「待补量」，不阻塞机制验收。
+- **机制侧 ②③④ 全绿 = D4/D5/D6 机制验收通过**：override 路由 → deepseek 真返回 + audit/feedback 落盘 + agnes 对齐 + 236 测试零回归，D6 override 机制已端到端验证。
+- **①D0 100 行 = 独立补量任务**：M6 机制验收与「真实流量观察」解耦——D0 是 D4 拍板路由策略的**定量依据**，属后续观察累积，非机制能否上线的门槛。
+- **执行**：D0 待补量，交接单已固化 Cursor 攒法（见 `docs/04-tech/o1-cursor-18794-handoff-2026-10-07.md`），维护者日常用 Cursor 即累积；18794 常驻待命攒样。
+- **D0 标准不降**：仍列 DoD 第 1 条，仅标注「机制侧已 signoff、D0 待真实 Cursor 流量补量」。feature-matrix 无 M6 行（按功能模块组织），signoff 以本 §七 为准，不硬塞。
+
+**纪律**：proxy.db 改 routing_feedback 前已 `cp → scratch`（可回滚）；18800 隔离验证不碰 18794/live；热路径 4 文件 0 逻辑改动；deepseek key 脱敏（`sk-900…e6f` 前 6 位）；100 行样本只从真实 Cursor 流量来，不用 curl 伪造（污染 D0）。
