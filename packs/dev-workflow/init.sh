@@ -81,7 +81,7 @@ fi
 
 if [[ -z "$SPEC_SRC" ]]; then
   # 默认从本仓库拷模板（假设脚本在 multi-proxy 仓内被调用）
-  SPEC_SRC="$(cd "$SCRIPT_DIR/../../.." && pwd)/docs/06-methodology/DEV-WORKFLOW-SPEC-draft-2026-10-01.md"
+  SPEC_SRC="$HOME/Documents/AI项目/agent-infra/methodology/DEV-WORKFLOW-SPEC-draft-2026-10-01.md"
   if [[ ! -f "$SPEC_SRC" ]]; then
     die "找不到规范源文件: $SPEC_SRC"
   fi

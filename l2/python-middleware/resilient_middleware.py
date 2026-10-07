@@ -1,6 +1,6 @@
 """ResilientModelMiddleware — cross-provider failover 中间件 ()。
 
-设计依据：docs/octop-harness-failover-middleware-spec.md（319 行，基于 PyPI
+设计依据：octop failover 中间件内部 spec（仓库本地 docs/04-tech/，不进公开树，319 行，基于 PyPI
 orcakit-harness-agent v1.0.11 wheel 实测源码，commit c5562ef）。
 
 补 harness 原生的空档：官方只有 ModelRetryMiddleware（同一模型上重试，见

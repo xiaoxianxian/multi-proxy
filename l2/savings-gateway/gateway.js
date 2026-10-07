@@ -5,7 +5,7 @@
 // 把请求打到「最便宜够强」的档位；并产出「省钱账」：若照默认大模型打会花 X，
 // 实际路由到档位 Y 省了 Z。
 //
-// 五决策拍板（docs/04-tech/savings-gateway-design.md §四·§五，2026-09-21 维护者授权）：
+// 五决策拍板（savings-gateway 内部设计文档 §四·§五，2026-09-21 维护者授权，不进公开树）：
 //   ① 形态 B：独立模块 l2/savings-gateway/，不碰热路径（forward.js / codex-proxy/proxy.js 零触碰）
 //   ② 端口 18795（独立 thin server，见同目录 server.js；内核本身不监听）
 //   ③ dummy key：网关签发/校验（前缀 gw_），命中即映射真 provider key（真 key 由调用方注入，

@@ -109,7 +109,7 @@ T7 三门控 10-06 已默认开（`f573110`），`PROXY_SANDBOX_EGRESS_MODE` 保
 
 ## 六、纪律（沿用 AGENTS）
 
-热路径 4 文件逻辑行 0 触碰（0.3 仅注释且随 signoff 批）；`git add --` 显式列文件；push 前 hermes 复核 + 维护者确认；A/B/C 三项不获 signoff 前不动 DB / 不写 key / 不翻 override；peer 在途 `docs/04-tech/savings-gateway-design.md` 不碰。
+热路径 4 文件逻辑行 0 触碰（0.3 仅注释且随 signoff 批）；`git add --` 显式列文件；push 前 hermes 复核 + 维护者确认；A/B/C 三项不获 signoff 前不动 DB / 不写 key / 不翻 override；peer 在途 savings-gateway 内部设计文档（不进公开树）不碰。
 
 ## 七、DoD 达成状态 + 条件性 signoff（2026-10-07 实测，AGENTS §4 全真跑）
 

@@ -63,7 +63,7 @@
 | 加新 adapter(任意 agent) | P0 | `l2/adapter-protocol.md` | 无 |
 | DSH DS2/DS3 发 npm 包 | P0 | `docs/02-product/dsh-integration.md` | DSH 0.2 未发(外部)|
 | I1 RAG 知识库(P0)| P0 | 内部竞品分析(不进公开仓) | 草图已出,未开发 |
-|  failover middleware | P1 | `docs/octop-harness-failover-middleware-spec.md` | 跨语言(Python),维护者发话再做 |
+|  failover middleware | P1 | octop failover 中间件内部 spec（不进公开树） | 跨语言(Python),维护者发话再做 |
 | 本地 LLM 一等公民(agent type:model)| P2 | 内部竞品分析 i3(不进公开仓) | 无 |
 | 圆桌共识 mode | P1 | 内部竞品分析 i2(不进公开仓) | 无 |
 | 卸载 plist 清理(README §十二#2)| P2 | `install.sh --uninstall` | 无 |
