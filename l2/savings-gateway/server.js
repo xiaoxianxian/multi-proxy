@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // 省钱网关 thin HTTP server（task1 一期 · 决策②端口 18795）
@@ -16,6 +20,15 @@ const { createSavingsGateway, gateOpen, GATE_ENV, SHADOW_ENV } = require('./gate
 const { createCostWatchdog } = require('./cost-watchdog.js');
 
 const DEFAULT_PORT = 18795;
+
+// P1-b 增强（2026-10-08）：per-provider 熔断查询门控，默认关（零行为变更）。
+// 设 PROXY_SAVINGS_CIRCUIT_BREAKER=1/true/recommended 才向网关注入 cc-switch 派生推荐熔断器；
+// 关 = 不注入 breaker（circuitOpen 恒为 undefined，老行为不变）。
+function resolveCircuitBreakerOpt() {
+  const v = process.env.PROXY_SAVINGS_CIRCUIT_BREAKER;
+  if (v === '1' || v === 'true' || v === 'recommended') return 'recommended';
+  return undefined; // → gateway 内 circuitBreaker=null（默认关）
+}
 
 function readBody(req, limit = 2 * 1024 * 1024) {
     return new Promise((resolve, reject) => {
@@ -43,7 +56,7 @@ function openaiError(res, status, message, type) {
 }
 
 function createServer(opts = {}) {
-    const gateway = opts.gateway || createSavingsGateway();
+    const gateway = opts.gateway || createSavingsGateway({ circuitBreaker: opts.circuitBreaker || resolveCircuitBreakerOpt() });
     const watchdog = opts.watchdog || createCostWatchdog();   // G1：硬上限看门狗（默认 hardCap=0 不拦）
     return http.createServer(async (req, res) => {
         const url = req.url || '/';
