@@ -10,6 +10,10 @@
  * This test deliberately asserts the failure to lock in the regression.
  */
 
+'use strict';
+// 沙箱下 require(express/supertest 依赖链) 单用例可 6~10s，默认 5s 会误判超时。
+jest.setTimeout(30000);
+
 const express = require('express');
 const { Readable } = require('stream');
 

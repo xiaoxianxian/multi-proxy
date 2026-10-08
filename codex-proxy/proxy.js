@@ -221,6 +221,47 @@ function findProvider(modelName) {
   return null;
 }
 
+// ===== 上游熔断（2026-10-09，借鉴 cc-switch 的「错误率 + 最小样本」门控）=====
+// 挂在 18790 而不是桥层，是因为这里才是真正 per-provider 路由的那层：
+// agnes 挂掉不该连累 deepseek / kimi；桥（18795）只看到单一 UPSTREAM，分不出是谁挂了。
+//
+// 门控默认关：PROXY_CIRCUIT_BREAKER 未设 → breaker = null，三条转发逐字不变（零行为变更）。
+// 语义与 l2/savings-gateway 同一条红线：
+//   success  → 2xx → recordSuccess
+//   upstream → 5xx / 429 / 408 / 网络不可达（上游故障）→ recordFailure
+//   client   → 其他 4xx（客户端错，含坏 key）→ **不喂**。
+//             反例：把 401 也记失败，一个用错 key 的客户端就能把整个 provider 熔断、连累所有流量。
+const { createRecommendedBreaker } = require('../l2/circuit-breaker.js');
+const CIRCUIT_BREAKER_ENV = String(process.env.PROXY_CIRCUIT_BREAKER || '').toLowerCase();
+const CIRCUIT_MODE_RAW = String(process.env.PROXY_CIRCUIT_MODE || 'observe').toLowerCase();
+const CIRCUIT_MODE = ['observe', 'block'].includes(CIRCUIT_MODE_RAW) ? CIRCUIT_MODE_RAW : 'observe';
+const upstreamBreaker = ['1', 'true', 'recommended'].includes(CIRCUIT_BREAKER_ENV)
+    ? createRecommendedBreaker()
+    : null;
+
+function classifyUpstreamStatus(status) {
+    return (status >= 500 || status === 429 || status === 408) ? 'upstream' : 'client';
+}
+
+// 请求前：该 provider 已 OPEN 且 mode=block → 直接 503（快速失败，别让客户端干等超时）。
+// observe（默认）与门控关时一律放行。
+function circuitAllows(provider, res) {
+    if (!upstreamBreaker || !provider) return true;
+    if (upstreamBreaker.allowRequest(provider.name)) return true;
+    if (CIRCUIT_MODE === 'block' && canWrite(res)) {
+        res.status(503).json({ success: false, error: `Upstream circuit open: ${provider.name}`, code: 'CIRCUIT_OPEN' });
+        return false;
+    }
+    return true;
+}
+
+function feedCircuit(provider, kind) {
+    if (!upstreamBreaker || !provider) return;
+    if (kind === 'success') { upstreamBreaker.recordSuccess(provider.name); return; }
+    if (kind === 'upstream') upstreamBreaker.recordFailure(provider.name);
+    // kind === 'client' → 故意不记：4xx 是客户端的错，不是上游健康信号
+}
+
 // ===== In-memory provider store =====
 const PROVIDERS_FILE = path.join(DATA_DIR, 'providers.json');
 
@@ -313,6 +354,31 @@ function buildCodexHealthChecks() {
   return { checks, reasons };
 }
 
+/**
+ * /health 用的熔断快照。
+ *
+ * ⚠️ 关键：真实记账全在 per-provider sibling 上，主实例（default）永远 CLOSED。
+ * 只报主实例会让 observe 期的观察结果恒为「CLOSED / 0 outcomes」——等于瞎子摸象，
+ * 也就没法拿数据决定要不要切 block。所以这里必须带 providers 明细 + 汇总。
+ */
+function buildCircuitSnapshot() {
+  if (!upstreamBreaker) return { enabled: false };
+  const list = Object.entries(upstreamBreaker.getProviders());
+  return {
+    enabled: true,
+    mode: CIRCUIT_MODE,
+    ...upstreamBreaker.getStateSnapshot(),     // 主实例（default），仅供对照
+    providers: Object.fromEntries(list),
+    totals: {
+      tracked: list.length,
+      open: list.filter(([, s]) => s.state === 'OPEN').map(([n]) => n),
+      halfOpen: list.filter(([, s]) => s.state === 'HALF_OPEN').map(([n]) => n),
+      outcomes: list.reduce((n, [, s]) => n + (s.outcomes || 0), 0),
+      worstErrorRate: list.reduce((m, [, s]) => Math.max(m, s.errorRate || 0), 0),
+    },
+  };
+}
+
 app.get('/health', requireAuth, (req, res) => {
   const { checks, reasons } = buildCodexHealthChecks();
   const allOk = checks.process && checks.config && checks.providers;
@@ -322,6 +388,8 @@ app.get('/health', requireAuth, (req, res) => {
     models: UPSTREAM_MODELS.flatMap(p => p.availableModels),
     checks,
     reasons,
+    // per-provider 熔断状态（门控关 = enabled:false）
+    circuit: buildCircuitSnapshot(),
     timestamp: new Date().toISOString()
   });
 });
@@ -598,26 +666,37 @@ function createUpstreamSignal(req, res, timeoutMs = UPSTREAM_TIMEOUT_MS) {
     controller.abort(reason);
   };
 
+  // 🔴 每个在途请求都会在 req/res 上挂 3 个监听器（req.aborted、req.close、res.finish、res.close），
+  // 全生命周期不摘的话，高并发或长跑测试会触发 MaxListenersExceededWarning。
+  // 用一个 cleanup 在 abort 事件上一次性摘掉，避免监听器堆积。
+  const cleanups = [];
   if (req && typeof req.on === 'function') {
-    req.on('aborted', () => abort(CLIENT_GONE)); // Node 16 起弃用，2026-10 实测仍生效
-    req.on('close', () => {                      // Node 18+ 兜底
-      if (isClientGone(req)) abort(CLIENT_GONE);
-    });
+    const hAborted = () => abort(CLIENT_GONE);
+    const hClose = () => { if (isClientGone(req)) abort(CLIENT_GONE); };
+    req.on('aborted', hAborted); // Node 16 起弃用，2026-10 实测仍生效
+    req.on('close', hClose);      // Node 18+ 兜底
+    cleanups.push(() => { req.removeListener('aborted', hAborted); req.removeListener('close', hClose); });
   }
   if (res && typeof res.on === 'function') {
     // 🔴 res 的 'close' 在 keep-alive 下**可能早于 'finish'** 触发，
     // 光看 writableEnded 会把「自己写完了、socket 顺手关掉」误判成「客户端拔了」，
     // 结果每一笔正常请求都把刚拿到的上游掐掉。所以自己写完这件事得单独记一笔。
     let selfFinished = false;
-    res.on('finish', () => { selfFinished = true; });
-    res.on('close', () => { if (!selfFinished && isResClosedEarly(res)) abort(CLIENT_GONE); });
+    const hFinish = () => { selfFinished = true; };
+    const hClose = () => { if (!selfFinished && isResClosedEarly(res)) abort(CLIENT_GONE); };
+    res.on('finish', hFinish);
+    res.on('close', hClose);
+    cleanups.push(() => { res.removeListener('finish', hFinish); res.removeListener('close', hClose); });
   }
 
   const timer = setTimeout(() => abort(new Error('upstream timeout')), timeoutMs);
   if (typeof timer.unref === 'function') timer.unref();
 
-  // 响应写完后（正常收尾）不再等这个定时器，别白挂着
-  controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+  // 响应写完后（正常收尾）不再等这个定时器，也别留着监听器
+  controller.signal.addEventListener('abort', () => {
+    clearTimeout(timer);
+    for (const fn of cleanups) { try { fn(); } catch {} }
+  }, { once: true });
   return controller.signal;
 }
 
@@ -699,12 +778,17 @@ function addHistory(action, from, to, mode, success) {
 
 // Chat Completions passthrough
 app.post('/v1/chat/completions', requireAuth, async (req, res) => {
+  let circuitProvider = null;   // 熔断记账用：catch 作用域拿不到 try 里的 provider
   try {
     const { model } = req.body;
     const provider = findProvider(model);
     if (!provider) {
       return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
+    circuitProvider = provider;
+
+    // 熔断：block 模式下该 provider 已 OPEN → 快速 503，别让客户端干等上游超时
+    if (!circuitAllows(provider, res)) return;
 
     const upstreamUrl = `${provider.baseUrl}/chat/completions`;
     // L004：客户端一走，这份 signal 立刻让上游停下，不再空跑满 120 秒
@@ -720,6 +804,7 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     });
 
     if (!response.ok) {
+      feedCircuit(provider, classifyUpstreamStatus(response.status));
       // Log the raw upstream error internally for debugging
       const err = await response.text();
       console.error(`Chat upstream error (status ${response.status}): ${err}`);
@@ -727,6 +812,8 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       if (!canWrite(res)) return;
       return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
+
+    feedCircuit(provider, 'success');
 
     if (req.body.stream) {
       res.setHeader('Content-Type', 'text/event-stream');
@@ -765,6 +852,8 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       res.json(data);
     }
   } catch (e) {
+    // 客户端拔了（canWrite=false）不算上游故障，不喂熔断；其余视为上游不可达
+    if (canWrite(res)) feedCircuit(circuitProvider, 'upstream');
     console.error(`Chat error: ${e.message}`);
     // 客户端断了才走到这里（L004 后的新路径）：不打日志刷屏，也不往死 socket 上写
     if (!canWrite(res)) return;
@@ -782,12 +871,15 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
 const { normalizeTools } = require('../tools/token-policy-bridge.js');
 
 app.post('/v1/responses', requireAuth, async (req, res) => {
+  let circuitProvider = null;
   try {
     const { model } = req.body;
     const provider = findProvider(model);
     if (!provider) {
       return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
+    circuitProvider = provider;
+    if (!circuitAllows(provider, res)) return;
 
     // 注意返回值是 { body, changed, from } 包装对象，不是 body 本身——直接 stringify
     // 整个返回值会把 model 一起弄丢（上游报 "model name cannot be empty"）。
@@ -810,16 +902,19 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
     });
 
     if (!response.ok) {
+      feedCircuit(provider, classifyUpstreamStatus(response.status));
       const err = await response.text();
       console.error(`[responses] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
       if (!canWrite(res)) return;
       return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
     }
+    feedCircuit(provider, 'success');
     const { outcome, acc } = await pipeUpstreamBytes(res, response, '[responses]', upstreamSignal);
     if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
       captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'codex-proxy', stream: !!req.body.stream } });
     }
   } catch (e) {
+    if (canWrite(res)) feedCircuit(circuitProvider, 'upstream');
     console.error(`[responses] error: ${e.message}`);
     if (!canWrite(res)) return;
     return res.status(500).json({ success: false, error: e.message, code: 'RESPONSES_ERROR' });
@@ -1021,12 +1116,15 @@ function anthropicMessagesUrl(provider) {
 }
 
 app.post('/v1/messages', requireAuth, async (req, res) => {
+  let circuitProvider = null;
   try {
     const { model } = req.body;
     const provider = findProvider(model);
     if (!provider) {
       return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
+    circuitProvider = provider;
+    if (!circuitAllows(provider, res)) return;
 
     const upstreamUrl = anthropicMessagesUrl(provider);
     // 鉴权：Anthropic 原生认 x-api-key；Claude Code 走 ANTHROPIC_AUTH_TOKEN 时发 Bearer。
@@ -1053,6 +1151,7 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     });
 
     if (!response.ok) {
+      feedCircuit(provider, classifyUpstreamStatus(response.status));
       const err = await response.text();
       console.error(`[messages] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
       if (!canWrite(res)) return;
@@ -1062,12 +1161,14 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     // manager 侧的 usage-probe 归一，这里不解析、不判 wire。
     // usage 藏在流末。客户端中途断开 ⇒ 这笔账「没跑完」⇒ 不上报：
     // 半截 usage 报上去是虚账，比少报一笔更难看（L004）。
+    feedCircuit(provider, 'success');
     const { outcome, acc } = await pipeUpstreamBytes(res, response, '[messages]', upstreamSignal);
     if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
       reportUsage(acc, Date.now() - t0);
       captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'codex-proxy', stream: !!req.body.stream } });
     }
   } catch (e) {
+    if (canWrite(res)) feedCircuit(circuitProvider, 'upstream');
     console.error(`[messages] error: ${e.message}`);
     if (!canWrite(res)) return;
     return res.status(500).json({ success: false, error: e.message, code: 'MESSAGES_ERROR' });
@@ -1083,6 +1184,9 @@ module.exports = {
   parseConfigToml,
   createUpstreamSignal, // L004：测试直接打这个函数，别再靠「镜像一份代码」的假测试
   canWrite,
+  // per-provider 上游熔断（2026-10-09）：门控关时 getCircuitBreaker() 返回 null
+  getCircuitBreaker: () => upstreamBreaker,
+  classifyUpstreamStatus,
 };
 
 // ===== P0-B: 默认绑 127.0.0.1（仅本机）=====

@@ -15,7 +15,9 @@
  * 断言点只有一条：客户端 destroy 之后，那份传给上游的 signal 必须已经 aborted。
  */
 
-jest.setTimeout(20000);
+// 沙箱 node 22.22.2 下 require 真 proxy.js（express 依赖链）单例可 30s+，
+// L004 端到端用例起真 TCP + AbortSignal 时序，全量并行时 CPU 争抢更慢。
+jest.setTimeout(120000);
 
 const http = require('http');
 const { EventEmitter } = require('events');
@@ -128,7 +130,15 @@ describe('L004 端到端：客户端拔线后上游不再空跑', () => {
           res.resume();
         }
       );
-      req.on('error', reject);
+      req.on('error', (e) => {
+        // 客户端 destroy 的「socket hang up」是预期副作用，不算真错误
+        if (e && e.code === 'ECONNRESET' || (e && e.message === 'socket hang up')) {
+          if (!waitEnd) resolve('client-gone');
+          else reject(e);
+          return;
+        }
+        reject(e);
+      });
       req.end(JSON.stringify({ model: 'deepseek-v4-pro', messages: [{ role: 'user', content: 'hi' }] }));
       if (typeof cb === 'function') cb(req);
     });
@@ -147,8 +157,10 @@ describe('L004 端到端：客户端拔线后上游不再空跑', () => {
     mockUpstream(true); // 上游永远不结束
 
     let closed = false;
+    let destroyed = false;
     const started = postMessages((req) => {
       setTimeout(() => {
+        destroyed = true;
         req.destroy(); // 客户端 5 秒走（这里 300ms）
         closed = true;
       }, 300);
@@ -158,6 +170,7 @@ describe('L004 端到端：客户端拔线后上游不再空跑', () => {
     await started;   // 响应已经在流了
     await sleep(700); // 等 destroy 生效 + signal 传播
     expect(closed).toBe(true);
+    expect(destroyed).toBe(true);
     const seen = signals.filter(Boolean); // 成本上报那次 fetch 不带 signal，不算
     expect(seen).toHaveLength(1);
     expect(seen[0].aborted).toBe(true);
