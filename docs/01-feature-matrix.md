@@ -7,8 +7,8 @@ This file is part of the multi-proxy project.
 # docs/01-feature-matrix.md — 功能完成度矩阵
 
 > 本表所有数字必须来自真实运行，不可从文档摘录。
-> 最后验证：**2026-10-08 全真跑**（manager 86 套件 / **1315 pass / 0 fail** + cursor 236/19 + codex 79/8 + hermes 77/4 + L2 46 demo 全绿），main = `beb1e50`。
-> 10-08 变更：`curator-pack` 3 fail 已随对应 commit 收口消失（10-07 实测为 3，今日 1315 全绿）；新增 run-history / skill-versioning / savings-gateway(server) 等模块，测试从 1297 → **1315**、套件 83 → **86**。09-28 历史快照见 §测试总计。
+> 最后验证：**2026-10-08 全真跑**（manager 87 套件 / **1326 pass / 0 fail** + cursor 236/19 + codex 79/8 + hermes 77/4 + L2 46 demo 全绿），main = `11f290c`。
+> 10-08 变更：`curator-pack` 3 fail 已随对应 commit 收口消失（10-07 实测为 3，今日 1326 全绿）；新增 run-history / skill-versioning / savings-gateway(server) / http-retry 等模块，测试从 1297 → **1326**、套件 83 → **87**。09-28 历史快照见 §测试总计。
 
 ---
 
@@ -59,6 +59,7 @@ This file is part of the multi-proxy project.
 | `memory-merge.js` | `l2/memory-merge.js` | 11/11 demo PASS | 跨 agent 记忆合并 |
 | `skill-service.js` | `l2/skill-service.js` | 13/13 demo PASS | 技能服务注册与调用 |
 | `savings-gateway/` | `l2/savings-gateway/gateway.js` + `server.js` | 24/24 demo PASS + jest 18 例 | 省钱网关（task1 一期·shadow 模拟 delta）：难度档位路由 + 模拟省账（planned large 基线 − actual 档位）+ `produceCostSignal` 喂 alert.js；门控 `PROXY_SAVINGS_GATEWAY` 默认关 observe + shadow 默认开，127.0.0.1:18795，dummy key `gw_` 映射（内核不持真 key）；不碰热路径 |
+| `http-retry.js` | `l2/http-retry.js` | 11/11 jest PASS | 上游限流/5xx/网络错退避重试底座（零依赖，尊重 Retry-After + 指数退避+±25%抖动+封顶防惊群 + 4xx 不重试）；`l1-agent-adapter.js` chat 出网已接入 |
 
 ---
 
@@ -68,7 +69,7 @@ This file is part of the multi-proxy project.
 |---------|------|------|------|
 | h3web | `l2/adapters/h3web-adapter.js` | 6/6 demo PASS | 本地 H3 文生视频 HTTP 适配器 |
 | aigc | `l2/adapters/aigc-adapter.js` | 10/10 demo PASS | AIGC 生图/生视频适配器 |
-| l1-agent | `l2/adapters/l1-agent-adapter.js` | 25/25 demo PASS | L1 chat 型 adapter（Codex / Hermes）|
+| l1-agent | `l2/adapters/l1-agent-adapter.js` | 25/25 demo PASS | L1 chat 型 adapter（Codex / Hermes）；chat 出网已接 `http-retry` 退避重试 |
 | 协议规范 | `l2/adapter-protocol.md` | 有样例 | 开放 HTTP/MCP 协议（可热插拔）|
 
 ---
@@ -77,14 +78,14 @@ This file is part of the multi-proxy project.
 
 | 模块 | 文件/套件 | 测试数 | 状态 |
 |------|--------|--------|------|
-| multi-proxy-manager | 86 suites | **1315 pass / 0 fail** | ✅ 全绿（10-08 `beb1e50` 实跑；`curator-pack` 3 fail 已随对应 commit 收口消失；须 `NODE_OPTIONS=--experimental-vm-modules`）|
+| multi-proxy-manager | 87 suites | **1326 pass / 0 fail** | ✅ 全绿（10-08 `11f290c` 实跑；`curator-pack` 3 fail 已随对应 commit 收口消失；须 `NODE_OPTIONS=--experimental-vm-modules`）|
 | cursor-proxy | 19 files / 19 suites | **236 tests** | ✅ 全绿（须 `NODE_OPTIONS=--experimental-vm-modules`，直跑 `npx jest` 会 ESM 假崩误判）|
 | codex-proxy | 8 files / 8 suites | **79 tests** | ✅ 全绿 |
 | hermes-proxy | 4 files | 77 pytest 项 | ✅（1 urllib3 warning，非失败）|
 | L2 demo | 46 .demo.js（`run-demos.js` selected） | 全 PASS | ✅（10-01 起 35→42→46 递增）|
 | shell (bats) | 1 .bats | 11 tests（本机无 `bats` binary，沿用 09-28 历史值，不纳入合计）| 沿用 |
 
-**10-08 现状：全矩阵绿（manager 1315/0fail，curator-pack 3 fail 已消失）。** 历史快照：09-28 manager 822/50、cursor 17/219、codex 6/62、hermes 77/4、l2 23/318（合计 1380 checks）；增量轨迹 manager 770(09-26)→807(09-27)→822(09-28)→1297(10-07)→**1315(10-08)**、l2 demo 23→35→42→**46**、cursor 219→**236**、codex 62→**79**；中间 task1 `savings-gateway`、cost-watchdog、run-history/skill-versioning 等增量已并入。
+**10-08 现状：全矩阵绿（manager 1326/0fail，curator-pack 3 fail 已消失）。** 历史快照：09-28 manager 822/50、cursor 17/219、codex 6/62、hermes 77/4、l2 23/318（合计 1380 checks）；增量轨迹 manager 770(09-26)→807(09-27)→822(09-28)→1297(10-07)→**1326(10-08)**、l2 demo 23→35→42→**46**、cursor 219→**236**、codex 62→**79**；中间 task1 `savings-gateway`、cost-watchdog、run-history/skill-versioning、http-retry 等增量已并入。
 
 ---
 
