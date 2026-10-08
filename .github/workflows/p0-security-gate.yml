@@ -91,6 +91,12 @@ jobs:
     needs: [cursor]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # 2026-10-08 修：manager 有 2 个 ESM suite（skill-service-route / frontend.logs），
+      # 跨-suite 并行时不带 --experimental-vm-modules 会偶发挂（实测 1324/1326，
+      # 带 vmodules 则 1326/1326 恒绿）。--rerunFailsAtMost=2 压不平——是 ESM 加载
+      # 确定性失败，非网络/时序偶发。feature-matrix 早已记「manager 须 vmodules」，CI 漏带 → 假红。
+      NODE_OPTIONS: --experimental-vm-modules
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
