@@ -146,9 +146,11 @@ function createSavingsGateway(opts = {}) {
     const executor = typeof opts.executor === 'function' ? opts.executor : null;
     // P1-b（cc-switch 借鉴 2026-10-08）：可选 per-provider 熔断查询缝。
     // 默认 null = 不查熔断、零行为变更（非侵入；shadow 默认开，观测缝不阻塞）。
-    // 传入一个 CircuitBreaker 实例后，handleChatCompletions 按实际路由档位 actualAdapter
-    // 查 allowRequest：该 provider 熔断 OPEN → 本轮标记 circuitOpen=true（观测位；二期
-    // executor 真路由时可据此 failover/hold）。只读 allowRequest，不记 outcome（二期，避免投机）。
+    // 传入一个 CircuitBreaker 实例（或 'recommended' 哨兵）后，handleChatCompletions 按实际路由档位
+    // actualAdapter 查 allowRequest：该 provider 熔断 OPEN → 由 circuitMode 决定动作
+    // （observe=只记账 circuitOpen；failover=改路由到健康候选；block=直接拒 503）。
+    // 真实执行（非 shadow）后把 executor 返回的显式 status 喂回 breaker（recordSuccess/recordFailure），
+    // 熔断才会真 OPEN——shadow 不记 outcome，避免对模拟调用记假成功/失败。
     // 注入点增强（2026-10-08）：opts.circuitBreaker 支持字符串 'recommended' 哨兵 →
     //   自动用 cc-switch 派生推荐配置（RECOMMENDED_CONFIG）构造 breaker，免去调用方手拼。
     let circuitBreaker = null;
@@ -157,6 +159,9 @@ function createSavingsGateway(opts = {}) {
     } else if (opts.circuitBreaker && typeof opts.circuitBreaker.allowRequest === 'function') {
       circuitBreaker = opts.circuitBreaker;
     }
+    // 熔断动作模式（2026-10-08 二期缝）：observe(默认·仅记账·零行为变更) / failover(改路由到健康候选) / block(OPEN 即拒 503)。
+    // 仅当 circuitBreaker 已注入才有意义；不设 breaker 时 circuitMode 不参与任何路径。
+    const circuitMode = ['failover', 'block'].includes(opts.circuitMode) ? opts.circuitMode : 'observe';
     // dummy key 表：{ '<gw_…>': '<intentTier>' }。真 provider key 映射由调用方在
     // executor/dispatch 层注入（内核不持真 key）；此处只存「档位意图」。
     const dummyKeys = opts.dummyKeys && typeof opts.dummyKeys === 'object' ? { ...opts.dummyKeys } : {};
@@ -199,13 +204,45 @@ function createSavingsGateway(opts = {}) {
         // 难度路由（决策⑤：按档位，价格不进排序）
         const decision = engine.route({ type: 'text', complexity, prompt: '(savings-gateway)' });
         const chosen = decision.chosen;
-        const actualTier = chosen ? (chosen.modelTier || DEFAULT_TIER_NAME(chosen)) : 'medium';
-        const actualAdapter = chosen ? chosen.adapterId : 'qwen';
-         // P1-b：按实际路由档位查 per-provider 熔断（仅当注入了 breaker）；
+        let actualTier = chosen ? (chosen.modelTier || DEFAULT_TIER_NAME(chosen)) : 'medium';
+        let actualAdapter = chosen ? chosen.adapterId : 'qwen';
+        let failover = false;
+         // P1-b（二期缝 2026-10-08）：按实际路由档位查 per-provider 熔断（仅当注入了 breaker）；
          // 无 breaker → circuitOpen=undefined（不查、不记账，老行为不变）。
         const circuitOpen = circuitBreaker
             ? !circuitBreaker.allowRequest(actualAdapter)
             : undefined;
+
+        // 二期缝（2026-10-08）：熔断动作。仅当注入了 breaker 且当前 chosen 熔断 OPEN 才介入路由决策；
+        //   observe（默认）= 只记账 circuitOpen，不改动路由（零行为变更）；
+        //   failover = 把 actualAdapter 改到候选里第一个健康的（真实切流，不在观测位留假成功）；
+        //   block   = 直接抛 503 circuit_breaker_open，拒绝本轮请求。
+        // circuitOpen 反映「初选 provider 是否 OPEN」——failover 后仍保留 true 并置 failover 标记，
+        // 以便账目区分「主路由熔断但已切换」与「主路由正常」。
+        if (circuitBreaker && circuitOpen) {
+            if (circuitMode === 'block') {
+                const e = new Error('circuit_breaker_open');
+                e.httpStatus = 503;
+                throw e;
+            }
+            if (circuitMode === 'failover') {
+                const healthy = (decision.candidates || [])
+                    .map((c) => c.adapterId)
+                    .filter((id) => id !== actualAdapter)
+                    .find((id) => circuitBreaker.allowRequest(id));
+                if (healthy) {
+                    const cand = (decision.candidates || []).find((c) => c.adapterId === healthy);
+                    actualAdapter = healthy;
+                    actualTier = (cand && cand.modelTier) ? cand.modelTier : DEFAULT_TIER_NAME({ adapterId: healthy });
+                    failover = true;
+                } else {
+                    const e = new Error('circuit_breaker_open_no_fallback');
+                    e.httpStatus = 503;
+                    throw e;
+                }
+            }
+            // observe：保持 circuitOpen=true，不改动路由（老行为）
+        }
 
         // tokens：优先真实 usage（调用方透传），否则启发式估算（模拟，诚实标 estimated）
         const est = estimatePromptTokens(reqBody && reqBody.messages);
@@ -220,6 +257,13 @@ function createSavingsGateway(opts = {}) {
         if (!engine.shadowMode && executor) {
             // 二期缝：真执行（executor 负责拿真 key 打上游），usage 以 executor 返回为准
             execInfo = syncExecute(executor, actualAdapter, reqBody);
+            // 二期缝（2026-10-08）：真实执行结果喂 breaker（仅非 shadow + executor 返回了显式 status；
+            //   shadow 不记 outcome，避免对模拟调用记假成功/失败；execInfo=null 即同步 stub/异常也不记）。
+            //   这样 breaker 才会真 OPEN，上面的 failover/block 才有意义（否则熔断永远停在 CLOSED，纯观测）。
+            if (circuitBreaker && execInfo && typeof execInfo.status === 'string') {
+                if (execInfo.status === 'failed') circuitBreaker.recordFailure(actualAdapter);
+                else if (execInfo.status === 'done') circuitBreaker.recordSuccess(actualAdapter);
+            }
             if (execInfo && execInfo.usage) {
                 const pt = coerceNum(execInfo.usage.prompt_tokens);
                 const ct = coerceNum(execInfo.usage.completion_tokens);
@@ -266,6 +310,8 @@ function createSavingsGateway(opts = {}) {
             shadow: engine.shadowMode,
             tokensEstimated: !(reqBody && reqBody.usage),
             circuitOpen,    // P1-b：per-provider 熔断观测位（无 breaker=undefined，不阻塞 shadow）
+            circuitMode: circuitBreaker ? circuitMode : undefined,   // 二期缝：本次生效的熔断动作模式
+            failover,       // 二期缝：本次是否因主路由熔断而切到健康候选
         });
 
         const response = {
@@ -294,7 +340,9 @@ function createSavingsGateway(opts = {}) {
                 plannedCost,
                 actualCost,
                 saved,
-                circuitOpen,
+                circuitOpen,    // 初选 provider 是否熔断 OPEN（failover 后仍保留 true，配合 failover 标记区分「已切换」）
+                failover,       // 二期缝：是否因熔断切到健康候选
+                circuitMode: circuitBreaker ? circuitMode : undefined,   // 二期缝：生效的熔断动作模式
                 // 定价来源一并向调用方暴露：看到 actualCost 的人必须同时知道它是实价、
                 // 档位估的还是「未知」。只有数字不看来源 = 假数字照发不误（C0-3）。
                 pricingSource,

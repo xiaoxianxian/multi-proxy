@@ -21,13 +21,20 @@ const { createCostWatchdog } = require('./cost-watchdog.js');
 
 const DEFAULT_PORT = 18795;
 
-// P1-b 增强（2026-10-08）：per-provider 熔断查询门控，默认关（零行为变更）。
+// P1-b 增强（2026-10-08）：per-provider 熔断门控，默认关（零行为变更）。
 // 设 PROXY_SAVINGS_CIRCUIT_BREAKER=1/true/recommended 才向网关注入 cc-switch 派生推荐熔断器；
 // 关 = 不注入 breaker（circuitOpen 恒为 undefined，老行为不变）。
+// 注入后动作由 PROXY_SAVINGS_CIRCUIT_MODE 控制：observe(默认·只记账) / failover(改路由到健康候选) / block(OPEN 即拒 503)。
 function resolveCircuitBreakerOpt() {
   const v = process.env.PROXY_SAVINGS_CIRCUIT_BREAKER;
   if (v === '1' || v === 'true' || v === 'recommended') return 'recommended';
   return undefined; // → gateway 内 circuitBreaker=null（默认关）
+}
+
+// 熔断动作模式（2026-10-08 二期缝）。仅当上面的 breaker 已注入才有意义；默认 observe（零行为变更）。
+function resolveCircuitModeOpt() {
+  const m = (process.env.PROXY_SAVINGS_CIRCUIT_MODE || 'observe').toLowerCase();
+  return ['observe', 'failover', 'block'].includes(m) ? m : 'observe';
 }
 
 function readBody(req, limit = 2 * 1024 * 1024) {
@@ -56,7 +63,10 @@ function openaiError(res, status, message, type) {
 }
 
 function createServer(opts = {}) {
-    const gateway = opts.gateway || createSavingsGateway({ circuitBreaker: opts.circuitBreaker || resolveCircuitBreakerOpt() });
+    const gateway = opts.gateway || createSavingsGateway({
+        circuitBreaker: opts.circuitBreaker || resolveCircuitBreakerOpt(),
+        circuitMode: opts.circuitMode !== undefined ? opts.circuitMode : resolveCircuitModeOpt(),
+    });
     const watchdog = opts.watchdog || createCostWatchdog();   // G1：硬上限看门狗（默认 hardCap=0 不拦）
     return http.createServer(async (req, res) => {
         const url = req.url || '/';
@@ -104,8 +114,10 @@ function createServer(opts = {}) {
                 if (lastEntry) watchdog.record(lastEntry);
                 return json(res, 200, out);
             } catch (e) {
-                const status = e.httpStatus === 401 ? 401 : 400;
-                return openaiError(res, status, e.message, e.message === 'invalid_api_key' || e.message === 'unknown_api_key' ? 'invalid_api_key' : 'invalid_request_error');
+                const status = e.httpStatus === 401 ? 401 : (e.httpStatus === 503 ? 503 : 400);
+                const type = e.httpStatus === 503 ? 'circuit_breaker_open'
+                    : (e.message === 'invalid_api_key' || e.message === 'unknown_api_key' ? 'invalid_api_key' : 'invalid_request_error');
+                return openaiError(res, status, e.message, type);
             }
         }
 

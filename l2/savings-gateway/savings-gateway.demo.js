@@ -110,6 +110,53 @@ function demo() {
     check('导出 RECOMMENDED_CIRCUIT_CONFIG：halfOpenMaxCalls=3', RECOMMENDED_CIRCUIT_CONFIG.halfOpenMaxCalls === 3);
     check('导出 RECOMMENDED_CIRCUIT_CONFIG：successThreshold=2', RECOMMENDED_CIRCUIT_CONFIG.successThreshold === 2);
     check('导出 RECOMMENDED_CIRCUIT_CONFIG：errorRate 滑窗 0.6/10/4', RECOMMENDED_CIRCUIT_CONFIG.errorRateThreshold === 0.6 && RECOMMENDED_CIRCUIT_CONFIG.slidingWindowSize === 10 && RECOMMENDED_CIRCUIT_CONFIG.minRequests === 4);
+
+    // [9] 二期缝（2026-10-08）：熔断动作 failover / block / observe
+    console.log('\n[9] 二期缝：熔断动作 failover / block / observe');
+    // 简单 breaker：failureThreshold:1 → 一次 recordFailure 即 OPEN（确定性演示）
+    const cbAct = new CircuitBreaker({ failureThreshold: 1, resetTimeout: 60000 });
+    cbAct.recordFailure('deepseek'); // 把 medium 档默认路由目标 deepseek 打 OPEN
+    check('pre: deepseek 熔断 OPEN', cbAct.allowRequest('deepseek') === false);
+    const keyB = `${DUMMY_KEY_PREFIX}default-large`;
+
+    // observe（默认）：chosen=deepseek(OPEN) → 只记账，不改动路由
+    const gwObs = createSavingsGateway({ circuitBreaker: cbAct, circuitMode: 'observe' });
+    const rObs = gwObs.handleChatCompletions({ messages: [{ role: 'user', content: 'hi' }], complexity: 'medium', usage }, { key: keyB });
+    check('observe: circuitOpen=true（主路由 OPEN 仍记）', rObs.x_savings.circuitOpen === true);
+    check('observe: 路由不改（仍走 OPEN 的 deepseek）', rObs.model === 'deepseek');
+    check('observe: failover=false', rObs.x_savings.failover === false);
+
+    // block：chosen=deepseek(OPEN) → 抛 503
+    const gwBlock = createSavingsGateway({ circuitBreaker: cbAct, circuitMode: 'block' });
+    let blockedStatus = null;
+    try {
+        gwBlock.handleChatCompletions({ messages: [{ role: 'user', content: 'hi' }], complexity: 'medium', usage }, { key: keyB });
+    } catch (e) { blockedStatus = e.httpStatus; }
+    check('block: 抛 503 circuit_breaker_open', blockedStatus === 503);
+
+    // failover：chosen=deepseek(OPEN) → 改路由到健康候选（agnes/qwen）
+    const gwFo = createSavingsGateway({ circuitBreaker: cbAct, circuitMode: 'failover' });
+    const rFo = gwFo.handleChatCompletions({ messages: [{ role: 'user', content: 'hi' }], complexity: 'medium', usage }, { key: keyB });
+    check('failover: circuitOpen 仍记 true（主路由 OPEN）', rFo.x_savings.circuitOpen === true);
+    check('failover: failover=true', rFo.x_savings.failover === true);
+    check('failover: 离开 deepseek 切到健康候选 agnes(small)', rFo.model === 'agnes' && rFo.x_savings.actualTier === 'small');
+    check('failover: 落到的候选健康（allowRequest=true）', cbAct.allowRequest(rFo.model) === true);
+
+    // failover 无健康候选 → 退化为 block 503（把其余候选也打 OPEN）
+    cbAct.recordFailure('agnes');
+    cbAct.recordFailure('qwen');
+    check('pre: agnes/qwen 也 OPEN', cbAct.allowRequest('agnes') === false && cbAct.allowRequest('qwen') === false);
+    let foStatus = null;
+    try {
+        gwFo.handleChatCompletions({ messages: [{ role: 'user', content: 'hi' }], complexity: 'medium', usage }, { key: keyB });
+    } catch (e) { foStatus = e.httpStatus; }
+    check('failover 无健康候选 → 退化 503', foStatus === 503);
+
+    // 默认关（不注入 breaker）：circuitOpen 恒 undefined，零行为变更
+    const gwNo = createSavingsGateway();
+    const rNo = gwNo.handleChatCompletions({ messages: [{ role: 'user', content: 'hi' }], complexity: 'medium', usage }, { key: keyB });
+    check('默认关：circuitOpen=undefined', rNo.x_savings.circuitOpen === undefined);
+    check('默认关：路由不受影响（deepseek）', rNo.model === 'deepseek');
     // [6] 非侵入（门控默认关 / shadow 默认开 / 不碰 env）
     console.log('\n[6] 非侵入断言');
     check('shadow 默认开', gw.isShadow() === true);
