@@ -374,4 +374,6 @@ multi-proxy/
 **双许可说明**：AGPL-3.0 下可免费使用、修改、再分发，但任何通过网络（SaaS）对外提供服务或分发衍生作品，须同样以 AGPL-3.0 开源其全部修改。
 **商业用途需单独授权**：若要将本项目用于闭源商业产品，或提供未开源的商业 SaaS 服务，请向作者获取单独的商业授权（见 `LICENSE-COMMERCIAL.md`，联系：`281330913@163.com`）。
 
+**商业授权交付文件**：可交付的商业版授权文件见 `LICENSE-ENTERPRISE.md`（条款详情以 `LICENSE-COMMERCIAL.md` 为准，以双方签署协议生效）。
+
 > 依赖合规：现行依赖（Express / Flask / SQLite / better-sqlite3 等）均为宽松许可，AGPL 项目引用无需修改，保留其版权声明即可。
