@@ -7,8 +7,8 @@ This file is part of the multi-proxy project.
 # docs/01-feature-matrix.md — 功能完成度矩阵
 
 > 本表所有数字必须来自真实运行，不可从文档摘录。
-> 最后验证：**2026-10-07 三路并行真跑**（l2 46 demo 全绿 + cursor 236/19 + codex 79/8 + hermes 77/4 + manager 1297 pass/3 fail/83 suites），main = `f10e0d2`。
-> （10-07 实测：l2 demo 23→**46** 全绿（10-01 起 35→42→46 递增）；manager 822→**1297**、cursor 17文件/219→**19文件/236**、codex 6/62→**8/79**；hermes 77/4 不变。**唯一红灯 = manager 3 fail**：curator-pack `policies.length` 断言 5 vs 实得 6（另一 agent 在途 WIP `side-effect-guard`/`cost-watchdog` 未 commit，测试期望未跟），非回归、非负载。详见 `MEMORY-2026-10-06.md §5.22`；09-28 历史见 §测试总计下历史快照。）
+> 最后验证：**2026-10-08 全真跑**（manager 86 套件 / **1315 pass / 0 fail** + cursor 236/19 + codex 79/8 + hermes 77/4 + L2 46 demo 全绿），main = `beb1e50`。
+> 10-08 变更：`curator-pack` 3 fail 已随对应 commit 收口消失（10-07 实测为 3，今日 1315 全绿）；新增 run-history / skill-versioning / savings-gateway(server) 等模块，测试从 1297 → **1315**、套件 83 → **86**。09-28 历史快照见 §测试总计。
 
 ---
 
@@ -73,18 +73,18 @@ This file is part of the multi-proxy project.
 
 ---
 
-## 测试总计（2026-10-07，全真跑）
+## 测试总计（2026-10-08，全真跑）
 
 | 模块 | 文件/套件 | 测试数 | 状态 |
 |------|--------|--------|------|
-| multi-proxy-manager | 83 suites | **1297 pass / 3 fail** | ❌ 3 fail（curator-pack `policies.length` 5 vs 6，另一 agent WIP 未 commit，见 §缺口）|
+| multi-proxy-manager | 86 suites | **1315 pass / 0 fail** | ✅ 全绿（10-08 `beb1e50` 实跑；`curator-pack` 3 fail 已随对应 commit 收口消失；须 `NODE_OPTIONS=--experimental-vm-modules`）|
 | cursor-proxy | 19 files / 19 suites | **236 tests** | ✅ 全绿（须 `NODE_OPTIONS=--experimental-vm-modules`，直跑 `npx jest` 会 ESM 假崩误判）|
 | codex-proxy | 8 files / 8 suites | **79 tests** | ✅ 全绿 |
 | hermes-proxy | 4 files | 77 pytest 项 | ✅（1 urllib3 warning，非失败）|
 | L2 demo | 46 .demo.js（`run-demos.js` selected） | 全 PASS | ✅（10-01 起 35→42→46 递增）|
 | shell (bats) | 1 .bats | 11 tests（本机无 `bats` binary，沿用 09-28 历史值，不纳入合计）| 沿用 |
 
-**10-07 现状：除 manager 3 fail 外全绿。** 历史快照：09-28 manager 822/50、cursor 17/219、codex 6/62、hermes 77/4、l2 23/318（合计 1380 checks）；增量轨迹 manager 770(09-26)→807(09-27)→822(09-28)→**1297(10-07)**、l2 demo 23→35→42→**46**、cursor 219→**236**、codex 62→**79**；中间 task1 `savings-gateway`、cost-watchdog 等增量已并入。
+**10-08 现状：全矩阵绿（manager 1315/0fail，curator-pack 3 fail 已消失）。** 历史快照：09-28 manager 822/50、cursor 17/219、codex 6/62、hermes 77/4、l2 23/318（合计 1380 checks）；增量轨迹 manager 770(09-26)→807(09-27)→822(09-28)→1297(10-07)→**1315(10-08)**、l2 demo 23→35→42→**46**、cursor 219→**236**、codex 62→**79**；中间 task1 `savings-gateway`、cost-watchdog、run-history/skill-versioning 等增量已并入。
 
 ---
 
