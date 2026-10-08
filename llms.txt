@@ -1,0 +1,52 @@
+# Multi-Proxy
+
+> Multi-Proxy 是面向 AI 编程代理（Codex / Hermes / Cursor 等）的**非侵入式多 Agent 编排中枢**。它把多个 coding agent 当作「员工」统一编排——切的是「活」，不是「模型」。全程非侵入：agent 感知不到中枢存在；可运行在本地私有栈（Ollama / 自托管 API）之上。
+
+理解本项目的几个要点：
+
+- 它**不是**模型切换器。cc-switch / Codex++ 这一类解决的是「切模型」；本仓库解决上一层：项目 → 任务 → 分派 → 验收 → 记忆复用。
+- **非侵入**是核心设计原则：只读各 agent 的配置、绝不写回、不托管 agent 进程。
+- 分层架构：桌面壳 → 管理界面 → 中台（L2 能力内核 + 适配器）→ 网关（协议转换 / 负载均衡 / 路由）→ 代理（Codex / Hermes / Cursor Proxy）。
+- 网关层做 OpenAI Responses ↔ Chat Completions 协议转换，以及 Failover / Round Robin / 成本优化路由。
+- 3 分钟跑通核心 demo：`bash scripts/demo-tour.sh`（零副作用，影子模式）。
+
+## Quick start
+
+- [Quickstart](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/quickstart.md): 最短上手路径
+- [User Guide](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/USER-GUIDE.md): 完整使用说明
+- [README](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/README.md): 一句话定位、能力矩阵、五层架构总览
+- [FAQ](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/08-user/faq.md): 常见问题
+
+## Architecture
+
+- [Architecture](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/03-architecture/architecture.md): 网关层 / 中台层 / 代理层分层设计
+- [Codebase map](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/00-codebase-map.md): 仓库结构与模块索引
+- [03-architecture 目录](https://github.com/xiaoxianxian/multi-proxy/tree/main/docs/03-architecture): 架构文档全集（含外部 harness 接入底座约束，即 single-egress 出网铁律）
+
+## Architecture decision records
+
+- [ADR 0001 · lsof absolute path](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/03-adr/0001-lsof-absolute-path.md)
+- [ADR 0002 · no-proxy iron law](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/03-adr/0002-no-proxy-iron-law.md)
+- [ADR 0003 · L2 non-invasive principle](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/03-adr/0003-l2-non-invasive-principle.md): 非侵入原则的决策记录
+- [ADR 0004 · MCP bridge](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/03-adr/0004-mcp-bridge.md)
+- [ADR 0005 · work-type axis / premium exemption](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/03-adr/0005-work-type-axis-premium-exemption.md)
+
+## Features and operations
+
+- [Feature matrix](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/01-feature-matrix.md): 能力清单与状态
+- [Runbook](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/07-ops/runbook.md): 日常运维
+- [Deployment](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/07-ops/deployment.md): 部署说明
+- [Env notes](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/07-ops/ENV-NOTES.md): 环境变量说明
+- [Rollback](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/docs/07-ops/rollback.md): 回滚流程
+- [Providers README](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/multi-proxy-manager/PROVIDERS-README.md): 模型 provider 配置
+
+## Demo and contributing
+
+- [demo-tour.sh](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/scripts/demo-tour.sh): 3 分钟跑通全部核心 demo（零副作用，影子模式，不碰任何 agent 文件）
+- [CONTRIBUTING](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/CONTRIBUTING.md)
+- [l2 README](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/l2/README.md): L2 中台能力内核说明
+
+## Optional
+
+- [Desktop README](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/desktop/README.md): 桌面壳层
+- [packs/curator README](https://raw.githubusercontent.com/xiaoxianxian/multi-proxy/main/packs/curator/README.md): packs 说明
