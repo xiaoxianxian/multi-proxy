@@ -10,8 +10,7 @@
 //     atomic write（先写 .tmp 再 rename）+ 可选写前备份 .bak（cc-switch proxy_live_backup 范式），
 //     防「写一半崩了文件损坏」。
 //   - load()：读回上次快照（跨重启/跨进程），异常返 null。
-//   - merge(prev, fresh)：fresh 里的 provider 覆盖 prev，prev 独有（本轮没查）保留，
-//     可选 staleSince 让过旧的快照条目过期——「跨重启不丢 + 不无限累积」。
+//    - merge(prev, fresh)：fresh 里的 provider 覆盖 prev，prev 独有（本轮没查）保留——「跨重启不丢」。
 //
 // 非侵入铁律（与 l2/ 其它内核同构，照 run-history.js）：
 //   - 门控 PROXY_HEALTH_PERSIST 默认关 = save 直接 no-op（不落盘、零副作用）；
@@ -82,10 +81,9 @@ function createHealthStore(opts = {}) {
      * 合并旧快照与本轮新快照：fresh 覆盖 prev，prev 独有保留。
      * @param {Record<string, Object> | null} prev - load() 读回的旧 snapshot（null=无旧）
      * @param {Record<string, Object>} fresh - 本轮查到的 snapshot
-     * @param {{staleSince?: number}} [mergeOpts] - staleSince 之前落盘的旧 provider 不保留
      * @returns {Record<string, Object>}
      */
-    function merge(prev, fresh, mergeOpts = {}) {
+    function merge(prev, fresh) {
         const out = {};
         const prevTs = Object.keys(prev || {}).length ? prev : null;
         // prev 独有保留（本轮没查到的 provider，跨重启不丢）
