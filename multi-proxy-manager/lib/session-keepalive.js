@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // Session Keepalive — M7 方向六 P3-c：session ↔ tmux 保活胶水层

@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # l2/ — L2 Agent 编排中枢 P0 落地
 
 > 配套文档：`L2-BLUEPRINT.md`（架构与排期）· `l2/CASES.md`（3 落地案例：编排视频 / 告警 / 成本，2026-09-16）· `l2/PERF-REPORT.md`（性能实测，2026-09-16）· `l2/memory-alignment-protocol.md`（记忆与能力对齐协议：agent 读对方记忆/配置完善自己，各写各的不合并 + 双向水位线，2026-10-02 起）。

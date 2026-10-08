@@ -1,10 +1,14 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // 省钱网关 Demo — 演示 difficulty 路由 + 模拟 delta 省钱账 + 喂 alert.js cost 信号
 // 用法：node l2/savings-gateway/savings-gateway.demo.js
 // 全确定性（无网络、固定 usage、不读墙钟），与 l2 其它 demo 同构。
 
-const { createSavingsGateway, DEFAULT_PRICING, PLANNED_TIER, gateOpen, DUMMY_KEY_PREFIX } = require('./gateway.js');
+const { createSavingsGateway, DEFAULT_PRICING, PLANNED_TIER, gateOpen, DUMMY_KEY_PREFIX, RECOMMENDED_CIRCUIT_CONFIG } = require('./gateway.js');
 const { CircuitBreaker } = require('../circuit-breaker.js');
 const A = require('../alert.js');
 
@@ -96,6 +100,16 @@ function demo() {
     // 观测位可被 getSavingsLog 读回
     const log = gw2.getSavingsLog();
     check('circuitOpen 进省账日志（观测位可追溯）', log.some((e) => e.circuitOpen === true));
+
+    // [8] P1-b 增强（2026-10-08）：'recommended' 哨兵 → 自动注入推荐 breaker（含 halfOpenMaxCalls/successThreshold）
+    console.log('\n[8] P1-b 增强：recommended 哨兵自动注入推荐 breaker');
+    const gwRec = createSavingsGateway({ circuitBreaker: 'recommended' });
+    const rRec = gwRec.handleChatCompletions({ messages: [{ role: 'user', content: 'x' }], complexity: 'low', usage }, { key });
+    check('recommended 哨兵 → 注入 breaker（非 null）且默认未断 circuitOpen=false', rRec.x_savings.circuitOpen === false);
+    check('recommended 哨兵 ≠ null（排除未注入导致 undefined）', rRec.x_savings.circuitOpen !== undefined);
+    check('导出 RECOMMENDED_CIRCUIT_CONFIG：halfOpenMaxCalls=3', RECOMMENDED_CIRCUIT_CONFIG.halfOpenMaxCalls === 3);
+    check('导出 RECOMMENDED_CIRCUIT_CONFIG：successThreshold=2', RECOMMENDED_CIRCUIT_CONFIG.successThreshold === 2);
+    check('导出 RECOMMENDED_CIRCUIT_CONFIG：errorRate 滑窗 0.6/10/4', RECOMMENDED_CIRCUIT_CONFIG.errorRateThreshold === 0.6 && RECOMMENDED_CIRCUIT_CONFIG.slidingWindowSize === 10 && RECOMMENDED_CIRCUIT_CONFIG.minRequests === 4);
     // [6] 非侵入（门控默认关 / shadow 默认开 / 不碰 env）
     console.log('\n[6] 非侵入断言');
     check('shadow 默认开', gw.isShadow() === true);

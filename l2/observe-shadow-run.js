@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // observe-shadow-run.js —— 翻闸门 Step 1「观察态」真跑器（runbook §三 Step 1 的可执行版）。

@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // P0-1 能力过滤单测 + P1-4 taskClassifier 英文补全单测
 import { classifyTask } from '../../src/routing/taskClassifier.js';
 import {

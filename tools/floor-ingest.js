@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // floor-ingest —— 把「宿主 agent 的事件流」接进代理面 floor view

@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * M4 方向三：error-patterns 单元测试。
  * 匹配、结构化历史、关键词检索、种子库完整性、持久化；不污染真实 ~/.multi-proxy-manager。

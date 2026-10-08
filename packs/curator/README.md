@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # Curator Pack（packs/curator/）
 
 把 Raven 的 agent 级 RSI（改写 harness 而非权重）思路，落到 multi-proxy 已有的 `l2/token-policy.js` 5-hook 扩展面上，做成**默认关**的 curated pack。

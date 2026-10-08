@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // skill-ledger-diff · 页面（skills.html）基线 diff 的真点击路径验证
 //   node tools/skill-ledger-diff-ui.demo.js

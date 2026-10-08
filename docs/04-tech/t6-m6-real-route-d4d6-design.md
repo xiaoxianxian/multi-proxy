@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # T6 · M6 接真实路由 D4-D6 设计稿（落码前置清单 + DoD）
 
 > 状态：**设计稿，待维护者拍**。本文 0 改码；所有数字/状态为 2026-10-06 本机实测（AGENTS §4 不抄旧数）。

@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 商业许可（Commercial License） — multi-proxy
 
 > multi-proxy 采用**双许可**：开源版以 **GNU AGPL-3.0**（见根目录 `LICENSE`，FSF 官方全文）；

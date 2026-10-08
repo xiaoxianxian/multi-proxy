@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // V2-7 h3web 8731/8732 动态端口探测 + 未起退化 mock（v2-M5 · 续跑手册 §七安全切片）

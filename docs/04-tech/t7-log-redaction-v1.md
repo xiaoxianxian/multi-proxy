@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # T7 · log_redaction 出站脱敏 v1 提级 · 设计稿（2026-10-06 hermes）
 
 > 触发：77号 §4.1 P1 表 T7「`log_redaction` 出站脱敏是否提级 v1（对标 agentgateway）」，依赖 T5 已收口。

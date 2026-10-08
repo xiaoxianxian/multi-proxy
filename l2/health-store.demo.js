@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // L2 health-store demo — 验证 P0-2 provider 健康态持久化（跨重启不丢 + 写前备份 + 合并防无限累积）

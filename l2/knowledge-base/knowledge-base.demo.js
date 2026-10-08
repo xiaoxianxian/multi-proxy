@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // P0 I1 RAG 知识库（拉模式）· 真跑验证 demo（node l2/knowledge-base/knowledge-base.demo.js）
 // 全内存、零网络、零外部依赖。守 §8.6 验收纪律：数字/行为变动真跑取证，不靠模型自验。

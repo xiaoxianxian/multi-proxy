@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 import app from './app.js';
 import { HealthMonitor } from '../monitoring/healthMonitor.js';
 import { loadEnabledProviderConfigs, setOverrideLogSink } from './handlers/chatHandler.js';

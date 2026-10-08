@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // Curator pack handler · Memory 面（onHistory）
 // 映射：Raven Memory 面（轮可见记忆）→ token-policy onHistory hook。06-curator-pack.md §3。

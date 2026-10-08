@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // Orchestrator — L2 P2 编排中枢核心：任务拆解 → 调度（拓扑 + 并行/串行/条件分支）→ 执行 → 聚合 → 协作历史。

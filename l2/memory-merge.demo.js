@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // P1.1a 记忆服务内核 · 真跑验证 demo（node l2/memory-merge.demo.js）
 // 全默认零网络零文件、零 LLM。重点证明 §5.2「非侵入」：envInject 只产出映射，绝不写 process.env / 不碰 agent 文件。

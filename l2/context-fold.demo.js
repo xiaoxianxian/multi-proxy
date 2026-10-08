@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // context-fold 内核 · 真跑验证 demo（node l2/context-fold.demo.js）
 // 全内存、纯函数、零 manager 依赖。

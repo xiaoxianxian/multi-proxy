@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * fetch-models / test-connection 错误文案分类测试
  * 验证 401/403（认证失败）、404（端点不存在）、网络错误三类文案区分。

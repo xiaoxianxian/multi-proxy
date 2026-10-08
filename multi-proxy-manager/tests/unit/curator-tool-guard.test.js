@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // 桥在接 onToolOutput / onResponse 时新加的两个 curator policy 的保护网。
 // 这两个 handler 在真链路上才第一次被跑到（单测只调纯函数），所以必须自己立规矩：

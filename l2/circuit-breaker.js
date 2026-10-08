@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // L2 公共模块：熔断器（CircuitBreaker）
@@ -21,7 +25,7 @@
  * @typedef {Object} CircuitBreakerConfig
  * @property {number} failureThreshold - 触发熔断的连续失败次数(老逻辑，始终生效)
  * @property {number} resetTimeout - OPEN→HALF_OPEN 的等待时间（ms）
- * @property {number} [halfOpenMaxCalls] - HALF_OPEN 状态允许的最大探测调用数
+ * @property {number} [halfOpenMaxCalls] - HALF_OPEN 状态允许的最大探测调用数（探测预算；不设=无限=老行为，仅靠 successThreshold 控制恢复）
  * @property {number} [errorRateThreshold] - 错误率开熔断阈值 0~1 (P0-1，默认关：未设则错误率门控不生效)
  * @property {number} [slidingWindowSize] - 错误率统计的滑动窗口大小(最近 N 次调用)；需配 errorRateThreshold 才生效
  * @property {number} [minRequests] - 错误率门控的最小样本数(样本不足不开熔断，防低流量误熔断)；默认 1
@@ -34,6 +38,7 @@ class CircuitBreaker {
   #failureCount = 0;
   #lastFailureTime = 0;
   #halfOpenCalls = 0;
+  #halfOpenAdmitted = 0;      // HALF_OPEN 态已放行的探测数（受 halfOpenMaxCalls 预算约束）
   /** @type {CircuitBreakerConfig} */
   #config;
   // P0-1 新增(全默认 → 老行为不变)：
@@ -62,6 +67,8 @@ class CircuitBreaker {
     if (this.#state === 'OPEN' && Date.now() - this.#lastFailureTime >= this.#config.resetTimeout) {
       this.#state = 'HALF_OPEN';
       this.#halfOpenCalls = 0;
+      this.#successCount = 0;
+      this.#halfOpenAdmitted = 0;
     }
     return this.#state;
   }
@@ -113,12 +120,21 @@ class CircuitBreaker {
    const b = this.#resolve(providerId);
    b.#pushOutcome(true);
    const threshold = typeof b.#config.successThreshold === 'number' ? b.#config.successThreshold : 1;
-   if (b.#state === 'HALF_OPEN') {
-     b.#successCount++;
-     if (b.#successCount >= threshold) {
-       b.#state = 'CLOSED';
-       b.#failureCount = 0;
-       b.#successCount = 0;
+    if (b.#state === 'HALF_OPEN') {
+      b.#successCount++;
+      const maxProbes = typeof b.#config.halfOpenMaxCalls === 'number' ? b.#config.halfOpenMaxCalls : Infinity;
+      if (b.#successCount >= threshold) {
+        // 连续成功达阈值 → 恢复
+        b.#state = 'CLOSED';
+        b.#failureCount = 0;
+        b.#successCount = 0;
+        b.#halfOpenAdmitted = 0;
+      } else if (b.#halfOpenAdmitted >= maxProbes) {
+        // 探针预算用尽仍未达恢复阈值 → 回 OPEN（重新计时，避免无限半开）
+        b.#state = 'OPEN';
+        b.#lastFailureTime = Date.now();
+        b.#successCount = 0;
+        b.#halfOpenAdmitted = 0;
       }
     } else {
      b.#failureCount = 0;
@@ -140,8 +156,9 @@ class CircuitBreaker {
    b.#failureCount++;
    b.#lastFailureTime = Date.now();
 
-   if (b.#state === 'HALF_OPEN') {
-     b.#state = 'OPEN';
+    if (b.#state === 'HALF_OPEN') {
+      b.#state = 'OPEN';
+      b.#halfOpenAdmitted = 0;
     } else if (b.#failureCount >= b.#config.failureThreshold) {
      b.#state = 'OPEN';
     } else if (b.#slidingWindowActive && b.#errorRateExceeds()) {
@@ -156,7 +173,16 @@ class CircuitBreaker {
    * @returns {boolean}
    */
   allowRequest(providerId = 'default') {
-   return this.#resolve(providerId).currentState !== 'OPEN';
+    const b = this.#resolve(providerId);
+    const st = b.currentState;
+    if (st === 'OPEN') return false;
+    if (st === 'HALF_OPEN') {
+      // 半开探测预算：放行满 halfOpenMaxCalls 个探针后即不再放行（避免恢复期 provider 被探针洪泛）
+      const maxProbes = typeof b.#config.halfOpenMaxCalls === 'number' ? b.#config.halfOpenMaxCalls : Infinity;
+      if (b.#halfOpenAdmitted >= maxProbes) return false;
+      b.#halfOpenAdmitted++;
+    }
+    return true;
   }
 
   /**
@@ -170,12 +196,13 @@ class CircuitBreaker {
 
   /** @private P0-1：重置单 breaker 全状态 */
   #resetAll() {
-   this.#state = 'CLOSED';
-   this.#failureCount = 0;
-   this.#lastFailureTime = 0;
-   this.#halfOpenCalls = 0;
-   this.#successCount = 0;
-   this.#outcomes.length = 0;
+    this.#state = 'CLOSED';
+    this.#failureCount = 0;
+    this.#lastFailureTime = 0;
+    this.#halfOpenCalls = 0;
+    this.#successCount = 0;
+    this.#halfOpenAdmitted = 0;
+    this.#outcomes.length = 0;
   }
 
   /**
@@ -198,8 +225,9 @@ class CircuitBreaker {
      state: this.currentState,
      failureCount: this.#failureCount,
      lastFailureTime: this.#lastFailureTime,
-     halfOpenCalls: this.#halfOpenCalls,
-     config: { ...this.#config },
+    halfOpenCalls: this.#halfOpenCalls,
+    halfOpenAdmitted: this.#halfOpenAdmitted,
+    config: { ...this.#config },
    };
     // P0-1：滑窗激活时附带错误率观测
    if (this.#slidingWindowActive) {
@@ -211,4 +239,31 @@ class CircuitBreaker {
   }
   }
 
-module.exports = { CircuitBreaker };
+/**
+ * cc-switch 借鉴（2026-10-08）：推荐默认熔断器配置。
+ * 来源：对照研究文档里「cc-switch 非 claude 行默认 errorRate 0.6 / slidingWindow 10 / minRequests 4 / successThreshold 2」+ halfOpenMaxCalls 3。
+ * 全部为「推荐值」，调用方按需采用；本模块不强制、不默认启用（门控仍由调用方各自控制）。
+ *   failureThreshold 4 + resetTimeout 30000：兜底纯计数路径（滑窗未激活时也生效，避免低流量 4 连败误熔断的宽松版）
+ *   errorRateThreshold 0.6 + slidingWindowSize 10 + minRequests 4：近 10 次样本≥4 时错误率>0.6 才 OPEN（防低流量误熔断）
+ *   successThreshold 2：HALF_OPEN 需连续 2 次成功才回 CLOSED
+ *   halfOpenMaxCalls 3：半开态最多 3 个探测，避免恢复期 provider 被探针洪泛
+ */
+const RECOMMENDED_CONFIG = Object.freeze({
+  failureThreshold: 4,
+  resetTimeout: 30000,
+  errorRateThreshold: 0.6,
+  slidingWindowSize: 10,
+  minRequests: 4,
+  successThreshold: 2,
+  halfOpenMaxCalls: 3,
+});
+
+/**
+ * 用推荐默认配置创建一个熔断器实例（不修改本模块任何默认行为，仅提供便捷构造）。
+ * @returns {CircuitBreaker}
+ */
+function createRecommendedBreaker() {
+  return new CircuitBreaker({ ...RECOMMENDED_CONFIG });
+}
+
+module.exports = { CircuitBreaker, RECOMMENDED_CONFIG, createRecommendedBreaker };

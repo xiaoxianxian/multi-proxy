@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * Q1 双计费 + 价表三层 + 汇率(CNY 比价)· P1 纯函数单元测试
  * (2026-09-22 架构稿 §3.1/§3.5/§4.2.2 + §7 P1 验收: tsc 0 错 + 新增 ~18 测试全绿 +

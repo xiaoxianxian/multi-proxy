@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# multi-proxy — Copyright © 2026 xiaoxian (Jason)
+# Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+# This file is part of the multi-proxy project.
+
 """互通性验证 · python 侧（降级，不污染全局环境）
 
 证明 JSON (canonical) <-> YAML (human view) 双向无损。

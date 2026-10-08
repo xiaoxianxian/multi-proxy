@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // 真实崩溃恢复演练 —— 不用 mock 模拟崩溃，而是真的 fork 一个子进程并 SIGKILL 它。

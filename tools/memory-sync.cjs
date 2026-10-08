@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * tools/memory-sync.cjs — agent 记忆对齐协议的「可执行同步」(v0.1)
  *
@@ -35,6 +39,24 @@ const TODO_HEADING_RE = /待办提醒/; // 节级识别：WB 两种写法都要�
 
 // ── 小工具 ──────────────────────────────────────────────────────────
 function expandHome(p) { return p ? p.replace(/^~/, os.homedir()) : p; }
+
+// ── 墓碑（tombstone）：跨机可同步的删除标记（2026-10-08，维护者选 ② 另找可入库落点）──
+// 落点 l2/sync/tombstones-<direction>.jsonl（NOT alignment/，可入库；alignment/ 含内部代号/绝对路径永不入库）。
+// 防泄露：只存 sha256(itemId)，不存明文 id / 记忆文本。接收方 pull 时对自己每条 item 算 sha256(id) 比对，命中即抑制。
+const crypto = require('node:crypto');
+const TOMB_DIR = path.join(ROOT, 'l2', 'sync');
+function tombFile(direction) { return path.join(TOMB_DIR, `tombstones-${direction}.jsonl`); }
+function shaId(id) { return crypto.createHash('sha256').update(String(id)).digest('hex'); }
+function loadTombstones(direction) {
+  try {
+    return new Set(
+      fs.readFileSync(tombFile(direction), 'utf8')
+        .split('\n').filter(Boolean)
+        .map((l) => { try { return JSON.parse(l).keyHash; } catch { return null; } })
+        .filter(Boolean)
+    );
+  } catch { return new Set(); }
+}
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
@@ -109,10 +131,11 @@ function hitKeywords(item, topic) {
 
 // ── 主流程 ──────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const a = { cmd: argv[0] || '', topic: null, direction: 'hermes-to-workbuddy' };
+  const a = { cmd: argv[0] || '', topic: null, direction: 'hermes-to-workbuddy', id: null };
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--topic' && argv[i + 1]) a.topic = argv[++i];
     else if (argv[i] === '--direction' && argv[i + 1]) a.direction = argv[++i];
+    else if (argv[i] === '--id' && argv[i + 1]) a.id = argv[++i];
   }
   return a;
 }
@@ -124,8 +147,28 @@ function resolveTargets(align) {
   process.exit(2);
 }
 
+function handleTombstone(args) {
+  if (!args.id) { console.error('❌ tombstone 需要 --id "<itemId>"（从 report/check 输出取 id）'); process.exit(1); }
+  fs.mkdirSync(TOMB_DIR, { recursive: true });
+  const f = tombFile(args.direction);
+  let seq = 0;
+  try {
+    const lines = fs.readFileSync(f, 'utf8').split('\n').filter(Boolean);
+    if (lines.length) seq = (JSON.parse(lines[lines.length - 1]).seq) || 0;
+  } catch { /* 新文件，从 0 起 */ }
+  const rec = { keyHash: shaId(args.id), seq: seq + 1, ts: new Date().toISOString(), direction: args.direction };
+  fs.appendFileSync(f, JSON.stringify(rec) + '\n', 'utf8');
+  console.log(`⏱ tombstone 已落盘（committable + 脱敏，可入库跨机同步）: ${f}`);
+  console.log(`   keyHash=${rec.keyHash.slice(0, 16)}… seq=${rec.seq} direction=${args.direction}`);
+  console.log(`   接收方 pull 同 direction 时，会自动抑制该 itemId 对应的条目（不表面、不吸收）。`);
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  // tombstone 是独立删除标记，不需要 alignment 配置，提前放行（alignment/ 可能尚未初始化）
+  if (args.cmd === 'tombstone') { handleTombstone(args); return; }
+
   const alignFile = path.join(ALIGN_DIR, `${args.direction}.json`);
   const align = readJson(alignFile);
   const targets = resolveTargets(align);
@@ -176,6 +219,7 @@ function main() {
     case 'pull': {
       align._mtimeSeen = align._mtimeSeen || {};
       const absorbedIds = new Set((align.absorbed || []).map((a) => a.id || a.src));
+      const tombed = loadTombstones(args.direction);
       const now = new Date().toISOString();
       let totalNew = 0;
       console.log(`🔄 pull @ ${args.direction}：按 mtime 增量重扫 ${targets.length} 个目标`);
@@ -194,6 +238,10 @@ function main() {
         const fresh = items.filter((it) => !absorbedIds.has(it.id));
         align.absorbed = align.absorbed || [];
         for (const it of fresh) {
+          if (tombed.has(shaId(it.id))) {
+            console.log(`     ⏱ tombstoned, skip ${it.id.slice(0, 60)}…`);
+            continue;
+          }
           align.absorbed.push({
             ts: now.slice(0, 10),
             id: it.id,
@@ -216,7 +264,7 @@ function main() {
     }
 
     default:
-      console.log('用法: node tools/memory-sync.cjs <report | check --topic "…" | pull> [--direction A-to-B]');
+      console.log('用法: node tools/memory-sync.cjs <report | check --topic "…" | pull | tombstone --id "…"> [--direction A-to-B]');
       process.exit(1);
   }
 }

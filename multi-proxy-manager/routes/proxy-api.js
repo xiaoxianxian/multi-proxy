@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // ==================== 路由：供应商 API（test-connection / fetch-models / balances / 转发白名单） ====================
 const express = require('express');
 const axios = require('axios');

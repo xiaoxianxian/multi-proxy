@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 非侵入边界白皮书 — 中枢如何做到"agent 感知不到"（2026-09-21）
 
 > 来源：维护者转 DeepSeek 会话（批评②"非侵入实现路径需澄清"）+ 项目 AGENTS.md 非侵入铁律。

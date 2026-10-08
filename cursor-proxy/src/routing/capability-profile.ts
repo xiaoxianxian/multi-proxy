@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // P0-1 capability profile — 能力画像（2026-09-30 路由能力矩阵 P0-1 交付）
 //
 // 问题：cost-optimization 只看价，不看「这个模型会不会做这个任务」。

@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // Per-test process.env 快照/恢复 —— 根治跨文件 env 泄漏导致的 flaky。
 //
 // 背景：多个 route test 在 module-load 级设 process.env.PROXY_* / JWT_SECRET

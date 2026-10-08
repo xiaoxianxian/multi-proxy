@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // L2 circuit-breaker demo — 验证提取自 cursor-proxy 的熔断器模块正确性
@@ -37,10 +41,17 @@ setTimeout(() => {
   console.assert(cb2.currentState === 'CLOSED', 'T3: should be CLOSED after success in HALF_OPEN');
   console.log('  T3 PASS: HALF_OPEN→CLOSED on success');
 
-   // 重新启动测试：HALF_OPEN 失败 → OPEN
-  cb2.recordFailure();
-  console.assert(cb2.currentState === 'OPEN', 'T3: should be OPEN after failure in HALF_OPEN');
-  console.log('  T3 PASS: HALF_OPEN→OPEN on failure');
+   // 真实验证 HALF_OPEN 失败 → OPEN（新建 breaker 走完 OPEN→HALF_OPEN 再失败）
+  const cb2b = new CircuitBreaker({ failureThreshold: 2, resetTimeout: 100 });
+  cb2b.recordFailure();
+  cb2b.recordFailure();
+  console.assert(cb2b.currentState === 'OPEN', 'T3b: 2 fails → OPEN');
+  setTimeout(() => {
+    console.assert(cb2b.currentState === 'HALF_OPEN', 'T3b: OPEN→HALF_OPEN after timeout');
+    cb2b.recordFailure(); // HALF_OPEN 失败 → 立即回 OPEN
+    console.assert(cb2b.currentState === 'OPEN', 'T3b: HALF_OPEN failure → OPEN');
+    console.log('  T3 PASS: HALF_OPEN→OPEN on failure');
+  }, 130);
 
    // 测试 4: reset() 手动恢复
   cb2.reset();
@@ -101,7 +112,44 @@ setTimeout(() => {
     cb10.recordSuccess(); // 第 2 次成功 → CLOSED
     console.assert(cb10.currentState === 'CLOSED', 'T10: 2nd success ≥ threshold(2) → CLOSED');
     console.log('  T10 PASS: successThreshold — HALF_OPEN needs N consecutive successes to close');
-    console.log('\n[CB Demo] ALL PASS (10/10, incl P0-1)');
   }, 60);
 
 }, 150);
+
+// 测试 11-12 (P0-1 续)：halfOpenMaxCalls 探测预算门控
+setTimeout(() => {
+  // T11：halfOpenMaxCalls=2, successThreshold=2 —— 验证探测预算 + 预算耗尽回 OPEN + 恢复
+  const cb11 = new CircuitBreaker({ failureThreshold: 1, resetTimeout: 30, halfOpenMaxCalls: 2, successThreshold: 2 });
+  cb11.recordFailure(); // failureThreshold=1 → OPEN
+  console.assert(cb11.currentState === 'OPEN', 'T11: 1 fail → OPEN');
+
+  setTimeout(() => {
+    console.assert(cb11.currentState === 'HALF_OPEN', 'T11: OPEN→HALF_OPEN after resetTimeout');
+    console.assert(cb11.allowRequest() === true, 'T11: probe #1 admitted');
+    console.assert(cb11.allowRequest() === true, 'T11: probe #2 admitted');
+    console.assert(cb11.allowRequest() === false, 'T11: budget exhausted → block');
+    // 1 次成功 < 阈值(2) 且预算用尽 → 回 OPEN（重新计时）
+    cb11.recordSuccess();
+    console.assert(cb11.currentState === 'OPEN', 'T11: budget exhausted w/o recovery → back to OPEN');
+
+    setTimeout(() => {
+      console.assert(cb11.currentState === 'HALF_OPEN', 'T11: re-enters HALF_OPEN after new timeout');
+      cb11.recordSuccess(); // successCount=1 < 2
+      console.assert(cb11.currentState === 'HALF_OPEN', 'T11: 1 success still HALF_OPEN');
+      cb11.recordSuccess(); // successCount=2 → CLOSED
+      console.assert(cb11.currentState === 'CLOSED', 'T11: 2 consecutive successes → CLOSED');
+      console.log('  T11 PASS: halfOpenMaxCalls probe budget + budget-exhausted revert + recovery');
+
+      // T12：halfOpenMaxCalls 不设 → 老行为（无限探针，仅靠 successThreshold）
+      const cb12 = new CircuitBreaker({ failureThreshold: 1, resetTimeout: 30, successThreshold: 1 });
+      cb12.recordFailure();
+      setTimeout(() => {
+        console.assert(cb12.currentState === 'HALF_OPEN', 'T12: OPEN→HALF_OPEN');
+        console.assert(cb12.allowRequest() === true, 'T12: no cap → admits');
+        console.assert(cb12.allowRequest() === true, 'T12: no cap → still admits (old behavior)');
+        console.log('  T12 PASS: halfOpenMaxCalls unset → old unlimited-probe behavior preserved');
+        console.log('\n[CB Demo] ALL PASS (12/12, incl P0-1 + halfOpenMaxCalls)');
+      }, 50);
+    }, 50);
+  }, 50);
+}, 400);

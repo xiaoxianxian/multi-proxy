@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # Agent Memory & Capability Alignment Protocol（记忆与能力对齐协议）
 
 > **定位**：L2 开放接入协议的孪生协议，与 `l2/adapter-protocol.md` 并列。

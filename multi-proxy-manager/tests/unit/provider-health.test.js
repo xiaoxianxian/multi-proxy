@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * M2 方向二：provider-health 单元测试。
  * recordProbe 连续失败→unhealthy、成功→恢复、隔离窗口判定、2b 跨 proxy 聚合、

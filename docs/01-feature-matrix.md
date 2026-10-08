@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # docs/01-feature-matrix.md — 功能完成度矩阵
 
 > 本表所有数字必须来自真实运行，不可从文档摘录。

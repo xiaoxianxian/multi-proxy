@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // 成本分析内核 · 真跑验证 demo（node l2/cost.demo.js）
 // 全内存、非侵入、零 manager 依赖。余额快照由调用方注入（mock /balances 产出）。

@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 安全模型白皮书 — 密钥/日志/网络边界（2026-09-21）
 
 > 来源：维护者转 DeepSeek 会话（批评⑥"缺安全/隐私白皮书"）+ AGENTS.md 安全铁律。

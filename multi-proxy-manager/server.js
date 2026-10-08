@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // Multi-Proxy Manager Shell — 组装层。
 // 业务实现拆分在 lib/（auth/logger/process-manager/forward）与 routes/ 下，
 // 本文件只负责 express 应用组装：中间件顺序 + 路由挂载 + 错误处理 + SPA fallback。

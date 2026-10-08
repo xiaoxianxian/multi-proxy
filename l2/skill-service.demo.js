@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // P1 技能服务内核 · 真跑验证 demo（node l2/skill-service.demo.js）
 // 全内存、非侵入、零网络零文件。覆盖 L2-BLUEPRINT P1 行 349 三验收项：Skill CRUD + 版本 + 规范格式适配。

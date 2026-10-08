@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 路由策略透明化 — route-engine 决策逻辑披露（2026-09-21）
 
 > 来源：维护者转 DeepSeek 会话 `chat.deepseek.com/share/26aeslhzz19kxgw3go`（批评③"调度/成本策略黑盒"）。

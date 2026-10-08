@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // Curator pack handler · Prompt 面（onRequestAssemble）
 // 初始 passthrough：不注入场景前缀，Curator 后续可改 scenePrefix 模板。

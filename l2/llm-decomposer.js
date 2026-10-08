@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // llm-decomposer.js — L2 P2.2「LLM 拆解」：填补 decomposer.js 预留的 `llmDecompose` 注入缝。

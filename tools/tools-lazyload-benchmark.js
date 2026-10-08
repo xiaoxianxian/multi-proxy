@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // curator · tools-lazyload 离线 A/B 基准（第一个真 handler 的效果实测）
 //

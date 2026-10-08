@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // L2 公共模块：健康监控器（HealthMonitor）
@@ -7,7 +11,7 @@
 // 注意：本模块依赖 fetch（Node 18+ 内置），不引入外部依赖。
 // 调用方需提供 configsRef（含 baseUrl / apiKey / id），本模块只读不写配置。
 
-const { CircuitBreaker } = require('./circuit-breaker.js');
+const { CircuitBreaker, RECOMMENDED_CONFIG } = require('./circuit-breaker.js');
 const { createHealthStore } = require('./health-store.js');
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -126,11 +130,11 @@ class HealthMonitor {
    */
   #ensureBreaker(id) {
     if (!this.#breakers.has(id)) {
-      this.#breakers.set(id, new CircuitBreaker({
-        failureThreshold: 3,
-        resetTimeout: 30000,
-        halfOpenMaxCalls: 1,
-      }));
+      // P1-b 增强（2026-10-08，cc-switch 借鉴）：per-provider 熔断器套用推荐默认配置。
+      // 仍受上层 PROXY_HEALTH_MONITOR 门控（默认关）→ 门控关时本方法根本不被调用，零行为变更。
+      // 推荐值：successThreshold 2（连续 2 次成功才回 CLOSED）+ halfOpenMaxCalls 3（半开最多 3 探针）
+      //   + 错误率滑窗 0.6/10/4（近 10 次样本≥4 且错误率>0.6 才 OPEN，防低流量误熔断）。
+      this.#breakers.set(id, new CircuitBreaker({ ...RECOMMENDED_CONFIG }));
     }
     return this.#breakers.get(id);
   }

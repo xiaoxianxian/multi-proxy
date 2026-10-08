@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // 28 号文档 C1 + C3 的保护网。
 // C1 = context-fold 七类组成内核（秤）；C3 = token-policy 账本记真数。

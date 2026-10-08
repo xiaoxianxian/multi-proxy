@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * Admin API 认证测试（P0-4）
  * 验证：设置 PROXY_AUTH_TOKEN 后 /admin-api/* 需要 x-proxy-auth 头；

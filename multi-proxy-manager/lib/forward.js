@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // ==================== 供应商 API 转发辅助（fetch-models / test-connection / forward 白名单） ====================
 const axios = require('axios');
 const { appendLog } = require('./logger');

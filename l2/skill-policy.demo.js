@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // 账本 → token-policy 控制面 · 真跑验证 demo（node l2/skill-policy.demo.js）
 // 断言分两组：①构造 ledger（确定性，任何机器都能过）②本机真账本（软断言，只报不断言失败）。

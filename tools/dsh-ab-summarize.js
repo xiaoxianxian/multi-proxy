@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * 离线重放 dsh A/B 的汇总表 —— 从 tools/dsh-saving-ab.sh 落盘的 raw 日志算结论，
  * **不再发任何上游请求**（DeepSeek 限流很凶，为看一张表烧 4 次请求不划算）。

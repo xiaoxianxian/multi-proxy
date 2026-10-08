@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // R1 live E2E（v2-M5 · 三 agent 真连 + gate/executor 机制）—— 对标 mcp-orchestrate-real.demo.js。

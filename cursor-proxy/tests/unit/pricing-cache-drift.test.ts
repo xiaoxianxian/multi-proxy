@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 /**
  * Q1 P2/P3 - price-cache + drift alert tests (2026-09-22).
  * Covers arch 3.1 single-source sync lock / 3.2 drift detection / 3.10 alert reuse.

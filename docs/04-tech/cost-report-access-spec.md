@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # docs/04-tech/cost-report-access-spec.md — 跨进程 usage 上报接入规范
 
 > 适用：任何**给 agent 做代理**的进程（codex-proxy / hermes-proxy / cursor-proxy / 未来第三方）。

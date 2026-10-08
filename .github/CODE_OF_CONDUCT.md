@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 社区行为守则 — multi-proxy
 
 > 适用范围:multi-proxy 仓库的 issue / PR / review / 所有社区讨论。

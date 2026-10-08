@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // 互通性验证 · node 侧（权威）
 // 证明：JSON (canonical) <-> YAML (human view) 双向无损，且符合 JSON Schema。
 // 依赖：全局 ~/node_modules 的 yaml + ajv（node v22）。

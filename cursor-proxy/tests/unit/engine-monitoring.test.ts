@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 import { RouteEngine, type RouteConfig } from '../../src/routing/routeEngine.js';
 import { CircuitBreaker, type CircuitBreakerConfig } from '../../src/monitoring/circuitBreaker.js';
 import { RateLimiter } from '../../src/monitoring/rateLimiter.js';

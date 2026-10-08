@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # docs/00-codebase-map.md — 代码库地图
 
 > 本文件自动从项目结构 + `docs/01-feature-matrix.md` + 实际目录扫描生成，不手编。

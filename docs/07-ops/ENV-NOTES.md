@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 环境与运行问题速查（ENV-NOTES）
 
 > 本文档集中记录项目运行 / 测试环境相关问题与修复。

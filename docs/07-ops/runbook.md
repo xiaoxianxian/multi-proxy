@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 运维手册（runbook）
 
 > 提炼自 `manage.sh`、`07-ops/ENV-NOTES.md`、`P0-FIXES.md`、`03-adr/`。

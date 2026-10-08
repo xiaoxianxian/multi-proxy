@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // ==================== Proxy Manager 桌面壳 ====================
 // 职责边界（重要）:
 //   - 壳只负责: 开窗口 + 确保 manager(18792) 在跑 + 退出时按需回收

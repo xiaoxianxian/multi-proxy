@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 贡献 / 接入指引 — multi-proxy
 
 > 给外部开发者与合作方的接入入口。先读 `README.md`(项目总览)+ `AGENTS.md`(AI 代理铁律)。

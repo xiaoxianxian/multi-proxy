@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // ==================== Agent 代理所有权冲突检测 ====================
 // 作用：开/关某个 agent 的 Proxy-rebuild 代理前，先判断该 agent 的
 // base_url 是否被「其他代理工具」（如 cc-switch）占用。

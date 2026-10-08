@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 export function convertToolCalling(messages: any[], tools: any[]): any {
   const toolCalls: any[] = [];
   const cleaned: any[] = [];

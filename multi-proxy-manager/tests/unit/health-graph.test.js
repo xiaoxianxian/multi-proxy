@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // M1 DAG 健康依赖图 —— lib/health.js 归一化 + 持久化单元测试。
 // 覆盖：
 //    - 三套 /health 契约归一化（codex 'healthy' / cursor 'ok' / degraded / 拉取失败 down）

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // step2-canary-run.js —— 翻闸门 Step 2「单任务小流量真执行」受控演练器（runbook §三 Step 2 的可执行版）。

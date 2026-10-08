@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // ==================== 路由：L2 Agent Registry（P0 增量 2b） ====================
 // 把 l2/agent-registry.js 内核挂到 manager HTTP API（/api/registry/*）。
 //

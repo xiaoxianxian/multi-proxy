@@ -49,6 +49,8 @@ docs/04-business/
 docs/09-review/
 docs/11-lessons/
 docs/10-initiatives/
+# 2026-10-08 增补：公开化策略稿（内部资产，自己标了「不在闸门段、git add -A 会夹带上库」）
+docs/公开化计划*.md
 docs/INDEX.md
 docs/PENDING-DECISIONS.md
 docs/02-product/PRD.md

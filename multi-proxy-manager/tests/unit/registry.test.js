@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 const request = require('supertest');
 const jwt = require('jsonwebtoken');

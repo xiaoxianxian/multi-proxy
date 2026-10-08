@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 // 宿主 adapter · 真跑验证 demo（node l2/skill-hosts.demo.js）
 // 全部断言基于本机真实目录（~/.hermes / ~/.workbuddy / ~/.codex / ~/.cursor），非构造数据。

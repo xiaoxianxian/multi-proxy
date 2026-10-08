@@ -1,3 +1,7 @@
+# multi-proxy — Copyright © 2026 xiaoxian (Jason)
+# Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+# This file is part of the multi-proxy project.
+
 """ResilientModelMiddleware — cross-provider failover 中间件 ()。
 
 设计依据：octop failover 中间件内部 spec（仓库本地 docs/04-tech/，不进公开树，319 行，基于 PyPI

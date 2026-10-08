@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # Agent Adapter 协议（L2 核心卖点 · 开放接入）
 
 > 区分 L2 与 CC-Switch / codex++ 的本质：不锁定主流 agent，任何能实现本协议的 agent 都能接入/卸载。

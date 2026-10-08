@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # MCP 接入指南 — L2 编排能力消费（DS2 之前的可消费面）
 
 > 受众：想用 MCP（Model Context Protocol）消费 multi-proxy L2 编排能力的外部 agent / 客户端作者。

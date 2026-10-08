@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# multi-proxy — Copyright © 2026 xiaoxian (Jason)
+# Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+# This file is part of the multi-proxy project.
+
 """数 token：给 `node tools/token-estimate-calibrate.js --truth=qwen` 用。
 
    python3 tools/qwen-tokenizer-count.py <tokenizer.json> <corpus.json>

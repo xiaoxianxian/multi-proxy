@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # Multi-Proxy — 多 Agent 编排中枢（L2）
 
 > **一句话定位：把 Codex / Hermes / Cursor 等 AI 编程代理当作「员工」，统一管住它们的配置、记忆、技能与健康，把任务调度到最合适的代理上——不是再做一个模型切换器，切的是「活」，不是「模型」。**

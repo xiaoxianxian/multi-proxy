@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // ==================== M4 方向三：错误模式检索与复用（core matching + history） ====================
 //
 // 3a. 错误模式库：常见错误的 pattern + 解决建议（种子从历史 handover/P0/AGENTS.md/03-adr 真实错误提取，非臆造）

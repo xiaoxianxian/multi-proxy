@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# multi-proxy — Copyright © 2026 xiaoxian (Jason)
+# Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+# This file is part of the multi-proxy project.
+
 """跨语言端到端验证：side-effect-guard HTTP 端点 + Python 客户端。
 
 模拟一个真实业务写操作（往 jsonl 追加判定结果），经 guard 跑两次，验证：

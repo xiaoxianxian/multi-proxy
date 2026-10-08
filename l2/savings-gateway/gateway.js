@@ -1,3 +1,7 @@
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 'use strict';
 
 // 省钱网关内核（task1 一期 · l2/savings-gateway/）
@@ -31,6 +35,7 @@
 const { RouteEngine } = require('../route-engine.js');
 const { AgentRegistry } = require('../agent-registry.js');
 const { seedDefaultProfiles } = require('../mcp-default-seed.js');
+const { RECOMMENDED_CONFIG, createRecommendedBreaker } = require('../circuit-breaker.js');
 
 const DUMMY_KEY_PREFIX = 'gw_';
 const GATE_ENV = 'PROXY_SAVINGS_GATEWAY';
@@ -144,9 +149,14 @@ function createSavingsGateway(opts = {}) {
     // 传入一个 CircuitBreaker 实例后，handleChatCompletions 按实际路由档位 actualAdapter
     // 查 allowRequest：该 provider 熔断 OPEN → 本轮标记 circuitOpen=true（观测位；二期
     // executor 真路由时可据此 failover/hold）。只读 allowRequest，不记 outcome（二期，避免投机）。
-    let circuitBreaker =
-        opts.circuitBreaker && typeof opts.circuitBreaker.allowRequest === 'function'
-             ? opts.circuitBreaker : null;
+    // 注入点增强（2026-10-08）：opts.circuitBreaker 支持字符串 'recommended' 哨兵 →
+    //   自动用 cc-switch 派生推荐配置（RECOMMENDED_CONFIG）构造 breaker，免去调用方手拼。
+    let circuitBreaker = null;
+    if (opts.circuitBreaker === 'recommended') {
+      circuitBreaker = createRecommendedBreaker();
+    } else if (opts.circuitBreaker && typeof opts.circuitBreaker.allowRequest === 'function') {
+      circuitBreaker = opts.circuitBreaker;
+    }
     // dummy key 表：{ '<gw_…>': '<intentTier>' }。真 provider key 映射由调用方在
     // executor/dispatch 层注入（内核不持真 key）；此处只存「档位意图」。
     const dummyKeys = opts.dummyKeys && typeof opts.dummyKeys === 'object' ? { ...opts.dummyKeys } : {};
@@ -392,6 +402,8 @@ module.exports = {
     resolvePricing,
     estimatePromptTokens,
     createSavingsGateway,
+    // P1-b 增强（2026-10-08）：导出推荐熔断配置，供调用方/门控注入点取用
+    RECOMMENDED_CIRCUIT_CONFIG: RECOMMENDED_CONFIG,
     // 单例转发
     handleChatCompletions: _gw.handleChatCompletions,
     savingsReport: _gw.savingsReport,

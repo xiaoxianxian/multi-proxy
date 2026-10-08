@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # Proxy Rebuild — 新用户完整上手指南
 
 > 面向第一次接触本项目的用户，从安装到验收的完整流程。

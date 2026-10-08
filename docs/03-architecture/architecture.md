@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # 架构文档（architecture）
 
 > 提炼自 `L2-BLUEPRINT.md`（主源）、`docs/01-feature-matrix.md`、`l2/README.md`、`l2/adapter-protocol.md`、`docs/04-tech/api.md`。
