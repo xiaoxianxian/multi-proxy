@@ -42,6 +42,12 @@ const DEFAULT_MODE = 'observe'; // observe | rewrite；运行时读 env，便于
 const STUB = process.env.BRIDGE_STUB === '1';
 const CAPTURE_BODY = process.env.BRIDGE_LOG_BODY === '1';
 const AGENT_TYPE = process.env.BRIDGE_AGENT_TYPE || 'coding';
+// 熔断门控（2026-10-08，借鉴 cc-switch）：默认关 → 零行为变更。
+//   BRIDGE_CIRCUIT_BREAKER=recommended  给 UPSTREAM 装推荐熔断器
+//   BRIDGE_CIRCUIT_MODE=observe(默认,只记账不拦) | block(上游 OPEN 时返 503)
+// ⚠️ 桥只转发单一 UPSTREAM，无第二上游可 failover ⇒ 仅 observe/block。
+const BRIDGE_CIRCUIT_BREAKER = process.env.BRIDGE_CIRCUIT_BREAKER;
+const BRIDGE_CIRCUIT_MODE = process.env.BRIDGE_CIRCUIT_MODE || 'observe';
 // 只有这几个字段允许写回请求体。handler 返回别的字段一律忽略并计数——
 // 未知字段写进上游请求等于赌 provider 会容忍，赢了没收益、输了直接 400。
 const MERGE_FIELDS = ['messages', 'systemPrompt', 'history', 'tools'];
@@ -73,6 +79,12 @@ const CORPUS_PATH = path.join(LOG_DIR, `bridge-corpus-${new Date().toISOString()
 
 const TP = require('../l2/token-policy.js');
 const CF = require('../l2/context-fold.js');
+// 熔断（2026-10-08，借鉴 cc-switch）：给上游(UPSTREAM)装一枚推荐熔断器。
+// 桥只转发到单一 UPSTREAM，故只支持 observe/block（无第二上游可 failover；
+// per-provider 的 failover 语义留给 savings-gateway / codex-proxy（18790）那层）。
+const { createRecommendedBreaker } = require('../l2/circuit-breaker.js');
+// 单一上游熔断：默认 null（门控关、零行为变更）。不开 providerId → 走主实例(default)。
+const upstreamBreaker = BRIDGE_CIRCUIT_BREAKER === 'recommended' ? createRecommendedBreaker() : null;
 
 // curator pack 注册。packs/curator 目前没有 loader 入口（没有 pack.js / index.js），
 // 所以之前日志里 policies=[] 既不是「没 handler」也不是白名单问题——是压根没人注册过它。
@@ -501,7 +513,10 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url.startsWith('/health')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok: true, mode: process.env.BRIDGE_MODE || DEFAULT_MODE, upstream: UPSTREAM, agentType: AGENT_TYPE, normalizeTools: NORMALIZE_TOOLS, log: LOG_PATH }));
+    const circuit = upstreamBreaker
+      ? { enabled: true, mode: BRIDGE_CIRCUIT_MODE, upstream: UPSTREAM, ...upstreamBreaker.getStateSnapshot() }
+      : { enabled: false };
+    return res.end(JSON.stringify({ ok: true, mode: process.env.BRIDGE_MODE || DEFAULT_MODE, upstream: UPSTREAM, agentType: AGENT_TYPE, normalizeTools: NORMALIZE_TOOLS, circuit, log: LOG_PATH }));
   }
 
   let body = {};
@@ -632,8 +647,26 @@ const server = http.createServer(async (req, res) => {
   let out;
   if (STUB) {
     out = { status: 200, ms: 0, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'stub', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } }) };
+  } else if (upstreamBreaker && BRIDGE_CIRCUIT_MODE === 'block' && !upstreamBreaker.allowRequest()) {
+    // 上游熔断 OPEN → 直接拒（block 模式）。不记 outcome（OPEN 由失败样本自维持，重复记会让它卡死）。
+    out = {
+      status: 503,
+      ms: 0,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ success: false, error: 'circuit_breaker_open', upstream: UPSTREAM }),
+    };
+    rec.circuitOpen = true;
+    rec.circuitMode = BRIDGE_CIRCUIT_MODE;
   } else {
     out = await forward(req, outBody);
+    // 真实转发后喂 outcome，让熔断状态真实演化（observe 也喂，仅 block 拦截）。
+    //   502=上游不可达 / ≥500=上游错误 → recordFailure；其余(2xx/4xx) → recordSuccess
+    //   （4xx 是客户端错，非上游故障，不当熔断信号）。
+    if (upstreamBreaker) {
+      if (out.status === 502 || out.status >= 500) upstreamBreaker.recordFailure();
+      else upstreamBreaker.recordSuccess();
+      rec.circuitState = upstreamBreaker.getStateSnapshot().state;
+    }
   }
 
   const observeSample = (rec) => {
