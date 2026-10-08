@@ -37,6 +37,16 @@ function resolveCircuitModeOpt() {
   return ['observe', 'failover', 'block'].includes(m) ? m : 'observe';
 }
 
+// 真实执行器（2026-10-08 二期缝使能件）：默认不启用（零行为变更）。
+// 设 PROXY_SAVINGS_EXECUTOR=forward 才构建透传执行器，把请求打到上游（默认 18790 = codex-proxy）；
+// 启用时强制 shadow=off（否则内核不会真调上游）。上游 URL 经 PROXY_SAVINGS_UPSTREAM 注入。
+function resolveExecutorOpt() {
+  if ((process.env.PROXY_SAVINGS_EXECUTOR || '').toLowerCase() !== 'forward') return undefined;
+  const { createForwardExecutor } = require('./gateway.js');
+  const upstream = process.env.PROXY_SAVINGS_UPSTREAM || 'http://127.0.0.1:18790';
+  return createForwardExecutor(upstream);
+}
+
 function readBody(req, limit = 2 * 1024 * 1024) {
     return new Promise((resolve, reject) => {
         let data = '';
@@ -63,17 +73,22 @@ function openaiError(res, status, message, type) {
 }
 
 function createServer(opts = {}) {
+    const executor = opts.executor !== undefined ? opts.executor : resolveExecutorOpt();
     const gateway = opts.gateway || createSavingsGateway({
         circuitBreaker: opts.circuitBreaker || resolveCircuitBreakerOpt(),
         circuitMode: opts.circuitMode !== undefined ? opts.circuitMode : resolveCircuitModeOpt(),
+        // forward 执行器启用时强制 shadow=off（否则内核不真调上游）；未启用则保持默认 shadow（零行为变更）
+        ...(executor ? { executor, shadow: false } : {}),
     });
     const watchdog = opts.watchdog || createCostWatchdog();   // G1：硬上限看门狗（默认 hardCap=0 不拦）
-    return http.createServer(async (req, res) => {
+    const server = http.createServer(async (req, res) => {
         const url = req.url || '/';
         const pathname = url.split('?')[0];
 
         if (req.method === 'GET' && pathname === '/health') {
-            return json(res, 200, { ok: true, module: 'savings-gateway', gateOpen: gateOpen(), shadow: gateway.isShadow() });
+            const cb = gateway.getCircuitBreaker();
+            const circuit = cb ? { enabled: true, mode: (opts.circuitMode || resolveCircuitModeOpt()), ...cb.getStateSnapshot() } : { enabled: false };
+            return json(res, 200, { ok: true, module: 'savings-gateway', gateOpen: gateOpen(), shadow: gateway.isShadow(), executor: gateway.getExecutor() ? 'forward' : 'none', circuit });
         }
 
         if (req.method === 'GET' && pathname === '/savings/report') {
@@ -112,6 +127,41 @@ function createServer(opts = {}) {
                 const entries = gateway.getSavingsLog();
                 const lastEntry = entries[entries.length - 1];
                 if (lastEntry) watchdog.record(lastEntry);
+                // 二期缝（2026-10-08）：真实 executor 异步转发 + 喂熔断 outcome。
+                // 仅当注入了 executor 且非 shadow 才走（默认 shadow → 跳过，零行为变更）。
+                if (gateway.getExecutor() && !gateway.isShadow()) {
+                    try {
+                        const ex = await gateway.getExecutor()(out.model, body, { auth: key });
+                        const cb = gateway.getCircuitBreaker();
+                        if (cb && ex && typeof ex.status === 'string') {
+                            // 只有上游自身故障（5xx / 429 / 408 / 网络不可达）才喂熔断；
+                            // 4xx 客户端错误（坏 key、参数错）与本执行器不支持的流式都不算上游不健康。
+                            if (ex.status === 'failed') cb.recordFailure(out.model);
+                            else if (ex.status === 'done') cb.recordSuccess(out.model);
+                        }
+                        if (ex && ex.status === 'done' && ex.content != null) {
+                            out.choices[0].message.content = ex.content;
+                            out.x_savings.simulated = false;
+                        }
+                        // 诚实错误：上游失败绝不能返回 200 + 模拟内容（等于上游挂了还喂假答案）
+                        if (ex && ex.status === 'failed') {
+                            return openaiError(res, 502, `savings-gateway upstream error: ${ex.error || 'upstream failed'}`, 'upstream_unreachable');
+                        }
+                        if (ex && ex.status === 'unsupported') {
+                            return openaiError(res, 501, 'savings-gateway forward executor does not support upstream streaming responses', 'stream_unsupported');
+                        }
+                        if (ex && ex.status === 'client_error') {
+                            // 原样透传上游 4xx（通常是坏 key），让客户端看到真实原因
+                            const sc = Number.isFinite(ex.statusCode) ? ex.statusCode : 400;
+                            res.writeHead(sc, { 'Content-Type': 'application/json' });
+                            return res.end(ex.raw || JSON.stringify({ error: { message: ex.error, type: 'upstream_client_error', code: null } }));
+                        }
+                    } catch (ef) {
+                        const cb = gateway.getCircuitBreaker();
+                        if (cb) cb.recordFailure(out.model);
+                        return openaiError(res, 502, `savings-gateway upstream error: ${ef.message}`, 'upstream_unreachable');
+                    }
+                }
                 return json(res, 200, out);
             } catch (e) {
                 const status = e.httpStatus === 401 ? 401 : (e.httpStatus === 503 ? 503 : 400);
@@ -123,6 +173,10 @@ function createServer(opts = {}) {
 
         openaiError(res, 404, `unknown route: ${req.method} ${pathname}`);
     });
+    // 把网关挂到 server 实例上：start() 的启动日志需要读它（start 拿不到 createServer 的局部变量）。
+    // 非侵入：只是多挂一个属性，不改变 http.Server 的任何既有行为。
+    server._gateway = gateway;
+    return server;
 }
 
 // 直接 node 运行 = 起服务；被 require = 只导出工厂（测试不监听）
@@ -135,7 +189,8 @@ function start(port, bindHost) {
         server.listen(p, host, () => {
             server.off('error', reject);
             const addr = server.address();
-            console.log(`[savings-gateway] listening on ${host}:${addr.port} gate=${gateOpen() ? 'open' : 'closed(observe)'} shadow=${SHADOW_ENV === '0' ? 'off' : 'on'}`);
+            const gw = server._gateway;
+            console.log(`[savings-gateway] listening on ${host}:${addr.port} gate=${gateOpen() ? 'open' : 'closed(observe)'} shadow=${gw && gw.isShadow ? gw.isShadow() : 'n/a'}`);
             resolve(server);
         });
     });

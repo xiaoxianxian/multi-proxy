@@ -251,25 +251,11 @@ function createSavingsGateway(opts = {}) {
         const completionTokens = reqBody && reqBody.usage && Number.isFinite(reqBody.usage.completion_tokens)
             ? reqBody.usage.completion_tokens : 0;
 
-        // 模拟 delta（决策④）：planned=large 基线，actual=实际档位；无真实上游调用
+        // 模拟 delta（决策④）：planned=large 基线，actual=实际档位；无真实上游调用。
+        // 真实上游调用（executor）移到 server 层异步执行——handleChatCompletions 保持同步，
+        // 不破坏 demo / manager 测试的同步契约；server 异步转发后把 outcome 喂回 breaker。
         let content = null;
         let execInfo = null;
-        if (!engine.shadowMode && executor) {
-            // 二期缝：真执行（executor 负责拿真 key 打上游），usage 以 executor 返回为准
-            execInfo = syncExecute(executor, actualAdapter, reqBody);
-            // 二期缝（2026-10-08）：真实执行结果喂 breaker（仅非 shadow + executor 返回了显式 status；
-            //   shadow 不记 outcome，避免对模拟调用记假成功/失败；execInfo=null 即同步 stub/异常也不记）。
-            //   这样 breaker 才会真 OPEN，上面的 failover/block 才有意义（否则熔断永远停在 CLOSED，纯观测）。
-            if (circuitBreaker && execInfo && typeof execInfo.status === 'string') {
-                if (execInfo.status === 'failed') circuitBreaker.recordFailure(actualAdapter);
-                else if (execInfo.status === 'done') circuitBreaker.recordSuccess(actualAdapter);
-            }
-            if (execInfo && execInfo.usage) {
-                const pt = coerceNum(execInfo.usage.prompt_tokens);
-                const ct = coerceNum(execInfo.usage.completion_tokens);
-                if (pt > 0 || ct > 0) { /* 真实 usage 覆盖估算 */ }
-            }
-        }
         // C6：per-model 优先，回落 tier，兜底内置表（不炸）。
         // pricingSource 必须落账——原来 `|| pricing.medium` 是静默回落，
         // 档位/模型对不上时会拿 medium 的价算出个像样的数，那是假数字。
@@ -359,15 +345,6 @@ function createSavingsGateway(opts = {}) {
         return response;
     }
 
-    // 同步 executor（二期缝；一期 shadow 默认不走到）
-    function syncExecute(fn, adapterId, body) {
-        try {
-            const r = fn(adapterId, body);
-            if (r && r.then === undefined) return r;
-            return null; // 一期不处理 async（诚实边界：二期 executor 改 await 缝）
-        } catch { return null; }
-    }
-
     // 省钱报告（一期账目 API；排行榜留二期）
     function savingsReport(windowMs) {
         const cutoff = (windowMs != null && Number.isFinite(windowMs))
@@ -419,6 +396,10 @@ function createSavingsGateway(opts = {}) {
         produceCostSignal,
         setShadowMode: (on) => { engine.setShadowMode(on); },
         isShadow: () => engine.shadowMode,
+        // 二期缝（2026-10-08）：暴露 breaker 实例，供 server 层异步真实转发后喂 outcome
+        // （handleChatCompletions 保持同步，不破坏 demo / manager 测试契约）。
+        getCircuitBreaker: () => circuitBreaker,
+        getExecutor: () => executor,
         getDummyKeys: () => ({ ...dummyKeys }),
         setExecutor: (fn) => { /* 二期缝 */ if (typeof fn === 'function') executor = fn; },
         // 测试/演示
@@ -428,6 +409,56 @@ function createSavingsGateway(opts = {}) {
         _registry: registry,
         _pricing: pricing,
         _dummyKeys: dummyKeys,
+    };
+}
+
+// 真实执行器（二期缝使能件，2026-10-08）：把请求透传到上游（默认 18790 = codex-proxy），
+// 由上游做真实 per-provider 路由。照抄 token-policy-bridge 的 fetch 转发 + auth 透传，JSON-only。
+// 仅当 server 层 PROXY_SAVINGS_EXECUTOR=forward 且 shadow=off 时才启用（默认不启用 → 零行为变更）。
+//
+// ⚠️ forward 模式下 savings-gateway 是「带省账+熔断的透明前端」：客户端须用对上游有效的真 key
+// （dummy key 仅供 shadow 模拟，forward 到 18790 会被拒）。上游走 SSE 流式时本执行器降级为
+// failed（savings-gateway 内核不 pipe 流式），避免静默记成成功。
+function createForwardExecutor(upstreamBase, opts2 = {}) {
+    const base = String(upstreamBase || 'http://127.0.0.1:18790').replace(/\/+$/, '');
+    const timeoutMs = Number.isFinite(opts2.timeoutMs) ? opts2.timeoutMs : 120000;
+    return async function forwardExecutor(adapterId, body, meta = {}) {
+        const auth = meta && meta.auth;
+        const headers = { 'Content-Type': 'application/json' };
+        if (auth) headers['Authorization'] = auth;
+        const url = `${base}/v1/chat/completions`;
+        let res;
+        try {
+            res = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(timeoutMs),
+            });
+        } catch (e) {
+            return { status: 'failed', error: `upstream unreachable: ${e.message}` };
+        }
+        const ctype = res.headers.get('content-type') || '';
+        if (/text\/event-stream/i.test(ctype)) {
+            // 上游是健康的，只是本执行器不支持流式 → 不是 provider 故障，不喂熔断
+            return { status: 'unsupported', statusCode: res.status, error: 'upstream stream unsupported by savings-gateway forward executor' };
+        }
+        const text = await res.text();
+        if (res.status >= 200 && res.status < 300) {
+            let parsed = null;
+            try { parsed = JSON.parse(text); } catch { /* 非 JSON 成功体，content 留空 */ }
+            const usage = parsed && parsed.usage ? parsed.usage : null;
+            const content = parsed && parsed.choices && parsed.choices[0] && parsed.choices[0].message
+                ? parsed.choices[0].message.content : null;
+            return { status: 'done', usage, content, raw: parsed };
+        }
+        // 4xx（429/408 除外）是客户端侧的错（坏 key、参数错），不代表上游不健康 →
+        // 单列 'client_error'，不喂熔断：否则一个用错 key 的客户端就能把熔断器打 OPEN、连累所有流量。
+        if (res.status >= 400 && res.status < 500 && res.status !== 429 && res.status !== 408) {
+            return { status: 'client_error', statusCode: res.status, error: text.slice(0, 200), raw: text };
+        }
+        // 5xx / 429 / 408 = 上游自身故障 → 喂熔断
+        return { status: 'failed', statusCode: res.status, error: text.slice(0, 200), raw: text };
     };
 }
 
@@ -452,6 +483,8 @@ module.exports = {
     createSavingsGateway,
     // P1-b 增强（2026-10-08）：导出推荐熔断配置，供调用方/门控注入点取用
     RECOMMENDED_CIRCUIT_CONFIG: RECOMMENDED_CONFIG,
+    // 二期缝（2026-10-08）：真实执行器工厂，server 层 PROXY_SAVINGS_EXECUTOR=forward 时启用
+    createForwardExecutor,
     // 单例转发
     handleChatCompletions: _gw.handleChatCompletions,
     savingsReport: _gw.savingsReport,
