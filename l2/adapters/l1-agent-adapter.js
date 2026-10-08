@@ -28,6 +28,11 @@
 
 const http = require('http');
 const crypto = require('crypto');
+// 上游限流/5xx/网络错的退避重试底座（零依赖，仅 node 内置）
+const { withHttpRetry } = require('../http-retry.js');
+function retryLogger(n, info) {
+  if (process.env.PROXY_DEBUG) console.warn('[l1-agent-adapter] 上游重试 #' + n, info);
+}
 // 共享底座（质量工程 §三）：默认能力/默认模型唯一事实源（原本文件硬编码已迁入）。
 const { adapterDefaults } = require('../knowledge-base/routing-base.js');
 
@@ -71,7 +76,7 @@ function httpPostJson(host, port, pathStr, obj, headers = {}, timeoutMs = 120000
             (r) => {
                 let buf = '';
                 r.on('data', (c) => { buf += c; });
-                r.on('end', () => res({ status: r.statusCode, body: buf }));
+                r.on('end', () => res({ status: r.statusCode, body: buf, headers: r.headers }));
             });
         req.on('error', rej);
         req.setTimeout(timeoutMs, () => { req.destroy(); rej(new Error('chat timeout')); });
@@ -196,7 +201,11 @@ class L1AgentAdapter {
             //   故显式带上限：不传时逐字保持原样（交给下游默认），传了就有确定天花板。
             ...(task.maxTokens ? { max_tokens: task.maxTokens } : {}),
         };
-        const r = await httpPostJson(host, port, this.chatPath, body, this._authHeaders(), this.timeoutMs);
+        // ⚠️ 上游限流/5xx/网络错走 withHttpRetry 退避重试（见 l2/http-retry.js）；
+        //   这里只处理「重试用尽 / 不可重试」的最终结果，保持下方诊断信息不变。
+        const r = await withHttpRetry(
+            () => httpPostJson(host, port, this.chatPath, body, this._authHeaders(), this.timeoutMs),
+            { logger: retryLogger });
         // ⚠️ 错误信息必须带响应体摘要（2026-10-01 真开暴露的可诊断性缺口）：
         //   上层代理会对**上游故障**回自己的状态码再包一层 —— 实测 :18790 对失效 key /
         //   额度耗尽 / 限流一律回 `{"error":"Upstream error","code":"UPSTREAM_ERROR"}`，
@@ -205,8 +214,9 @@ class L1AgentAdapter {
         if (r.status !== 200) {
             const brief = String(r.body || '').replace(/\s+/g, ' ').slice(0, 200);
             const tag = r.status === 401 ? 'auth failed' : 'chat failed';
+            // 429 已实际退避重试；仍失败说明限流持续，标签如实反映（不再误导「该重试却没重试」）
             throw new Error(`L1 agent ${tag}: HTTP ${r.status} (task ${taskId})` +
-                `${brief ? ` :: ${brief}` : ''}` + (r.status === 429 ? ' [上游限流，退避重试]' : ''));
+                `${brief ? ` :: ${brief}` : ''}` + (r.status === 429 ? ' [上游限流·已退避重试仍失败]' : ''));
         }
         let parsed;
         try {
