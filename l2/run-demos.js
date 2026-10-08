@@ -70,6 +70,7 @@ const DEMO_TAGS = {
     'circuit-breaker.demo.js': ['governance', 'resilience'],
     'cost.demo.js': ['governance', 'cost'],
     'health-monitor.demo.js': ['governance'],
+    'health-store.demo.js': ['governance', 'resilience'],
     'l2-bootstrap.demo.js': ['bootstrap', 'orchestrator', 'route', 'registry'],
     'mcp-orchestrate-llm.demo.js': ['mcp'],
     'mcp-orchestrate-real.demo.js': ['mcp'],
