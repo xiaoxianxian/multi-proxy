@@ -139,6 +139,14 @@ function createSavingsGateway(opts = {}) {
     const shadow = opts.shadow !== undefined ? !!opts.shadow : shadowDefault();
     const engine = new RouteEngine({ registry, shadowMode: shadow });
     const executor = typeof opts.executor === 'function' ? opts.executor : null;
+    // P1-b（cc-switch 借鉴 2026-10-08）：可选 per-provider 熔断查询缝。
+    // 默认 null = 不查熔断、零行为变更（非侵入；shadow 默认开，观测缝不阻塞）。
+    // 传入一个 CircuitBreaker 实例后，handleChatCompletions 按实际路由档位 actualAdapter
+    // 查 allowRequest：该 provider 熔断 OPEN → 本轮标记 circuitOpen=true（观测位；二期
+    // executor 真路由时可据此 failover/hold）。只读 allowRequest，不记 outcome（二期，避免投机）。
+    let circuitBreaker =
+        opts.circuitBreaker && typeof opts.circuitBreaker.allowRequest === 'function'
+             ? opts.circuitBreaker : null;
     // dummy key 表：{ '<gw_…>': '<intentTier>' }。真 provider key 映射由调用方在
     // executor/dispatch 层注入（内核不持真 key）；此处只存「档位意图」。
     const dummyKeys = opts.dummyKeys && typeof opts.dummyKeys === 'object' ? { ...opts.dummyKeys } : {};
@@ -183,6 +191,11 @@ function createSavingsGateway(opts = {}) {
         const chosen = decision.chosen;
         const actualTier = chosen ? (chosen.modelTier || DEFAULT_TIER_NAME(chosen)) : 'medium';
         const actualAdapter = chosen ? chosen.adapterId : 'qwen';
+         // P1-b：按实际路由档位查 per-provider 熔断（仅当注入了 breaker）；
+         // 无 breaker → circuitOpen=undefined（不查、不记账，老行为不变）。
+        const circuitOpen = circuitBreaker
+            ? !circuitBreaker.allowRequest(actualAdapter)
+            : undefined;
 
         // tokens：优先真实 usage（调用方透传），否则启发式估算（模拟，诚实标 estimated）
         const est = estimatePromptTokens(reqBody && reqBody.messages);
@@ -242,6 +255,7 @@ function createSavingsGateway(opts = {}) {
             pricingDeclared: resolvedAct ? (resolvedAct.declared || null) : null,   // 价是谁给的（model 条目 priceSource），0 元也得分清是查的还是说的
             shadow: engine.shadowMode,
             tokensEstimated: !(reqBody && reqBody.usage),
+            circuitOpen,    // P1-b：per-provider 熔断观测位（无 breaker=undefined，不阻塞 shadow）
         });
 
         const response = {
@@ -270,6 +284,7 @@ function createSavingsGateway(opts = {}) {
                 plannedCost,
                 actualCost,
                 saved,
+                circuitOpen,
                 // 定价来源一并向调用方暴露：看到 actualCost 的人必须同时知道它是实价、
                 // 档位估的还是「未知」。只有数字不看来源 = 假数字照发不误（C0-3）。
                 pricingSource,

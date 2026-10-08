@@ -8,23 +8,32 @@
 // 调用方需提供 configsRef（含 baseUrl / apiKey / id），本模块只读不写配置。
 
 const { CircuitBreaker } = require('./circuit-breaker.js');
+const { createHealthStore } = require('./health-store.js');
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const HEALTH_ENDPOINT = '/models';
 
 class HealthMonitor {
-  /** @type {Map<string, {state: string, lastChecked: number, error?: string}>} */
+   /** @type {Map<string, {state: string, lastChecked: number, error?: string}>} */
   #statuses = new Map();
   /** @type {Map<string, CircuitBreaker>} */
   #breakers = new Map();
   #interval = 30000; // 30s 轮询间隔
   #timer = null;
+  /**
+   * P1-a（cc-switch 借鉴 2026-10-08）：健康态持久化 store。
+   * 门控 PROXY_HEALTH_PERSIST 默认关 = 纯内存行为完全不变（save/load 全 no-op）；
+   * 开 = 跨重启/跨进程恢复 provider 健康态（load 在 start，save 在每轮 check 末尾）。
+   * 落盘文件在 ~/.multi-proxy-manager/provider-health.json（atomic write + 写前 .bak）。
+   */
+  #store = createHealthStore();
 
   /**
    * 启动健康检查定时器
    * @param {{current: Array<{id: string, baseUrl: string, apiKey: string, enabled?: boolean}>}} configsRef
    */
   start(configsRef) {
+    this.#restorePrevious();
     this.#runCheck(configsRef);
     this.#timer = setInterval(() => this.#runCheck(configsRef), this.#interval);
     // unref 以便 timer 不阻塞进程退出
@@ -38,6 +47,26 @@ class HealthMonitor {
     if (this.#timer) {
       clearInterval(this.#timer);
       this.#timer = null;
+     }
+  }
+
+  /**
+   * P1-a（cc-switch 借鉴 2026-10-08）：start 时从落盘快照恢复上一轮 provider 健康态。
+   * 门控 PROXY_HEALTH_PERSIST 默认关时 isEnabled()=false → 整个方法 no-op（零文件 IO，老行为不变）；
+   * 开 = 把上次 save 的 {providerId→{state,lastChecked,error}} 灌回 #statuses，
+   *   使「本轮没重新查到的 provider」跨重启仍保留上次健康态（cc-switch provider_health 范式）。
+   * 注意：只恢复健康态（#statuses），不重建 #breakers——CircuitBreaker 无可写回方法，保持非侵入。
+   */
+  #restorePrevious() {
+    if (!this.#store.isEnabled()) return; // 门控关 = no-op
+    const prev = this.#store.load();
+    if (!prev || !prev.snapshot) return;
+    for (const [id, st] of Object.entries(prev.snapshot)) {
+      this.#statuses.set(id, {
+        state: st.state,
+        lastChecked: st.lastChecked,
+        error: st.error,
+       });
     }
   }
 
@@ -112,6 +141,7 @@ class HealthMonitor {
   async #runCheck(configsRef) {
     const configs = configsRef.current.filter((c) => c.enabled !== false);
     await Promise.all(configs.map((config) => this.#checkProvider(config)));
+    this.#store.save(this.getAllStatuses()); // P1-a：每轮 check 末落盘健康态（门控关=no-op，atomic write）
   }
 
   /**

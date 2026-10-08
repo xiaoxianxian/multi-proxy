@@ -5,6 +5,7 @@
 // 全确定性（无网络、固定 usage、不读墙钟），与 l2 其它 demo 同构。
 
 const { createSavingsGateway, DEFAULT_PRICING, PLANNED_TIER, gateOpen, DUMMY_KEY_PREFIX } = require('./gateway.js');
+const { CircuitBreaker } = require('../circuit-breaker.js');
 const A = require('../alert.js');
 
 let pass = 0, fail = 0;
@@ -74,6 +75,27 @@ function demo() {
     const noBudget = gw.produceCostSignal();
     check('不设预算 → 信号不带 budget（不告警，YAGNI）', noBudget.budget === undefined && A.evaluate(noBudget).length === 0);
 
+    // [7] P1-b（cc-switch 借鉴 2026-10-08）：per-provider 熔断查询接线（gateway ↔ circuit-breaker.allowRequest）
+    console.log('\n[7] P1-b per-provider 熔断观测（gateway 接 circuit-breaker.allowRequest）');
+    // 非侵入：默认不注入 breaker → circuitOpen 值为 undefined（breaker 未被询，零行为变更）
+    const rNoneGw = gw.handleChatCompletions({ messages: [{ role: 'user', content: 'x' }], usage }, { key });
+    check('默认（无 breaker）→ circuitOpen=undefined（breaker 未被询，非侵入）', rNoneGw.x_savings.circuitOpen === undefined);
+    // 注入 breaker 且未断（CLOSED）→ circuitOpen=false
+    const breaker = new CircuitBreaker({ failureThreshold: 2, resetTimeout: 1000 });
+    const gw2 = createSavingsGateway({ circuitBreaker: breaker });
+    const rClosedGw = gw2.handleChatCompletions({ messages: [{ role: 'user', content: '写个hello' }], complexity: 'low', usage }, { key });
+    const closedAdapter = rClosedGw.model;   // low→small(agnes)
+    check('注入 breaker 且未断 → circuitOpen=false', rClosedGw.x_savings.circuitOpen === false);
+    // 按 actualAdapter(per-provider 维度)记录失败到 OPEN，下一笔同 provider → circuitOpen=true
+    for (let i = 0; i < 2; i++) breaker.recordFailure(closedAdapter);
+    const rOpenGw = gw2.handleChatCompletions({ messages: [{ role: 'user', content: '写个hello' }], complexity: 'low', usage }, { key });
+    check('同 provider 熔断 OPEN 后 → circuitOpen=true（per-provider 维度）', rOpenGw.x_savings.circuitOpen === true);
+    // 另一 provider（未断）→ still false，证明是 per-provider 而非全局串了
+    const r2 = gw2.handleChatCompletions({ messages: [{ role: 'user', content: '架构级重构' }], complexity: 'high', usage }, { key });
+    check('另一 provider 未断 → circuitOpen=false（per-provider 隔离）', r2.x_savings.circuitOpen === false && r2.model !== closedAdapter);
+    // 观测位可被 getSavingsLog 读回
+    const log = gw2.getSavingsLog();
+    check('circuitOpen 进省账日志（观测位可追溯）', log.some((e) => e.circuitOpen === true));
     // [6] 非侵入（门控默认关 / shadow 默认开 / 不碰 env）
     console.log('\n[6] 非侵入断言');
     check('shadow 默认开', gw.isShadow() === true);
