@@ -114,7 +114,12 @@ function memAvailableGb() {
     if (i > 0) d[line.slice(0, i).trim()] = line.slice(i + 1).trim().replace(/\.$/, '');
   }
   const p = (k) => parseInt(d[k] || '0', 10);
-  return ((p('Pages free') + p('Pages speculative') + p('Pages inactive')) * ps) / 1024 ** 3;
+  // ⚠️ 口径修正（2026-10-10 第二轮）：macOS 上「可立即动用」的内存 = free + speculative
+  // + purgeable（纯空闲）+ inactive（已释放可逐出，系统会快速回收）。
+  // 第一轮我把它砍成只取 free 页，在 macOS「已释放页默认转 inactive」的模型下过于保守——
+  // 实际 free 页极少，但 inactive 是系统随时可吐出来的。对 --gen 这种「一提交就拉权重」的
+  // 任务，真正该盯的是 wired（有没有模型驻留）而不是 free 页数量。
+  return (p('Pages free') + p('Pages speculative') + p('Pages purgeable') + p('Pages inactive')) * ps / 1024 ** 3;
 }
 
 function swapPct() {
@@ -134,8 +139,9 @@ function ollamaLoaded() {
 }
 
 async function runPrecheck() {
-  const minGb = Number(process.env.PRECHECK_MIN_GB || 12);
+  const minGb = Number(process.env.PRECHECK_MIN_GB || 16);
   const maxSwap = Number(process.env.PRECHECK_MAX_SWAP_PCT || 70);
+  const swapEnforce = process.env.PRECHECK_SWAP_ENFORCE !== '0'; // 默认启用；48GB 机型常态 ~90% 可关
   const mem = memAvailableGb();
   const swap = swapPct();
   const oll = ollamaLoaded();
@@ -148,10 +154,10 @@ async function runPrecheck() {
     gw = null;
   }
   const memOk = mem !== null && mem >= minGb;
-  const swapOk = swap !== null && swap < maxSwap;
+  const swapOk = !swapEnforce || (swap !== null && swap < maxSwap);
 
-  console.log(`[precheck] 可用内存       : ${mem === null ? '未知' : mem.toFixed(1) + ' GB'}  (门槛 ≥${minGb}GB)  ${memOk ? '✅' : '❌'}`);
-  console.log(`[precheck] swap 使用率    : ${swap === null ? '未知' : swap.toFixed(0) + '%'}  (门槛 <${maxSwap}%)  ${swapOk ? '✅' : '❌'}`);
+  console.log(`[precheck] 可用内存(free页): ${mem === null ? '未知' : mem.toFixed(1) + ' GB'}  (门槛 ≥${minGb}GB)  ${memOk ? '✅' : '❌'}`);
+  console.log(`[precheck] swap 使用率    : ${swap === null ? '未知' : swap.toFixed(0) + '%'}  (${swapEnforce ? `门槛 <${maxSwap}%` : '48GB 机型常态，本次不阻断'})  ${swapOk ? '✅' : '❌'}`);
   console.log(`[precheck] Ollama 已载模型: ${oll === null ? '未知(CLI 不可用)' : oll}`);
   console.log(`[precheck] h3web :${PORTS.join('/')}   : ${port ? 'up ✅' : 'down ❌'}`);
   console.log(`[precheck] 8799 常驻网关  : ${gw ? 'up ✅（无需冷启动）' : 'down（将走 own 自起，冷启动 50–60s）'}`);
@@ -224,16 +230,38 @@ async function runPrecheck() {
   const H = Number(process.env.PROBE_HEIGHT || 1344);
   const STEPS = Number(process.env.PROBE_STEPS || 8);
   const SECS = Number(process.env.PROBE_SECONDS || 5);
+
+  // ── 提交前硬门控（2026-10-10）：Hermes/Jarvis 会自动把 qwen3.8 拉回 Ollama，
+  // 占满 RAM 后 --gen 的引擎全程在 swap 里挣扎（上次在 10min 轮询上限内卡死）。
+  // 这里在真正 POST /api/gen 前再验一次 free 页 + Ollama 驻留，不满足直接拒提交，
+  // 把"在 swap 里慢慢烧 10 分钟"的坑堵死。可用 PROBE_SKIP_GATE=1 绕过（自担风险）。
+  if (process.env.PROBE_SKIP_GATE !== '1') {
+    const minGb = Number(process.env.GATE_MIN_FREE_GB || 8);
+    const freeNow = memAvailableGb();
+    const ollNow = ollamaLoaded();
+    const ollBusy = ollNow !== 'none' && ollNow !== null;
+    const freeOk = freeNow !== null && freeNow >= minGb;
+    console.log(`[gate] free 页=${freeNow === null ? '未知' : freeNow.toFixed(1) + ' GB'} (需≥${minGb}GB) ${freeOk ? '✅' : '❌'} | Ollama=${ollNow === null ? '未知' : (ollBusy ? '占用中 ❌' : '空 ✅')}`);
+    if (!freeOk || ollBusy) {
+      console.error(
+        `✗ --gen 门控未过：${!freeOk ? `free 页 ${freeNow === null ? '未知' : freeNow.toFixed(1) + 'GB'} < ${minGb}GB；` : ''}${ollBusy ? `Ollama 驻留 [${ollNow}]（Hermes 兜底任务占着）` : ''}。`
+      );
+      console.error('  修复：先 `ollama stop <model>` + 停掉 Hermes 的 Ollama 占用任务（见 docs/H3WEB-REAL-INTEGRATION.md §跑基准前暂停并发任务），再重跑 --gen。');
+      console.error('  确要硬跑自担风险：PROBE_SKIP_GATE=1 node scripts/h3web-roundtrip-probe.js --gen');
+      process.exit(3);
+    }
+  }
+
   console.log(`[probe] gen 模式：提交 job（${W}×${H}，steps=${STEPS}，seconds=${SECS}）...`);
   console.log('[probe] 想更省资源：PROBE_WIDTH=512 PROBE_HEIGHT=512 PROBE_STEPS=4 PROBE_SECONDS=3');
   let submit;
   try {
     submit = await req(HOST, port, '/api/gen', 'POST', {
       prompt: 'multi-proxy round-trip probe',
-      width: 768,
-      height: 1344,
-      steps: 8,
-      seconds: 5,
+      width: W,
+      height: H,
+      steps: STEPS,
+      seconds: SECS,
     });
   } catch (e) {
     console.error(`✗ /api/gen 失败: ${e.message}`);

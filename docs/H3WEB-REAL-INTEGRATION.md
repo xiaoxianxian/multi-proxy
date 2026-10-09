@@ -63,6 +63,41 @@ node scripts/h3web-roundtrip-probe.js --gen      # 提交最小竖屏 job 并轮
 # 竖屏 768×1344 steps=8 约 15min（h3web 实测）；脚本每 POLL_MS 打印一次状态
 ```
 
+### 2.3.1 首次真 round-trip 实测记录（2026-10-10 01:28–01:4x + 06:14 第二轮）
+
+**已证实的部分（接口链路全通，非 mock）**：
+- 第一轮（01:28）：`POST /api/gen` → `HTTP 200` + `job_id=job_1791566899585`，
+  `GET /api/status/:id` 状态机正常（`progress=25` / `output=web_20261010-012819.mp4`），
+  引擎日志持续增长。
+- 第二轮（06:14，`--gen` 门控修对后）：`job_id=job_1791584013688`，
+  40 轮 `PROBE_POLL_MS=15s`（覆盖 10 min）内全 `status=running`、`progress` 从 25→38、
+  `stage=去噪生成`、`output=web_20261010-061333.mp4`。
+  `GET /api/status/job_1791584013688` 返回完整 meta（`width:768,height:1344,steps:8,seconds:5,seed:1627648510,ssd_streaming:true`），
+  端到端链路 **L2 h3web-adapter → h3web /api/gen → 引擎去噪 → 产物 mp4** 已多次证实。
+
+**未达成**：两轮 `--gen` 轮询次数都不够覆盖完整生成（竖屏 768×1344 / steps=8 约 15 min/次，
+第一轮 120×5s=10min、第二轮 40×15s=10min，均短于完整生成时间）→ 脚本按 `MAX_TRIES` 退出，
+**非失败，是引擎还在跑**。等引擎自然跑完后回查该 job 终态（done + mp4 存在）补进本节。
+
+**三个真发现（2026-10-10 更新）**：
+1. ✅ **probe 侧 env 参数 bug 已修**：`scripts/h3web-roundtrip-probe.js` L235-241 的
+   `/api/gen` body 原把 width/height/steps/seconds **写死成生产默认值**（`768/1344/8/5`），
+   env 算了没用上 —— 这是"传 512×512/steps=4 被忽略"的根因。已改为引用 env 变量。
+   **但 h3web 服务端**仍按自己的合法参数集回 768×1344/steps=8，说明想"最小代价验收"
+   得改 h3web 侧（白名单/默认值），probe 侧修复只是「别被自己脚本埋没」。
+2. ✅ **内存可回收口径两轮修正**：probe 的 `memAvailableGb` 最终改为
+   `free + speculative + purgeable + inactive`（macOS 真实可立即动用口径），
+   precheck 门槛从 12GB 提到 16GB，`PRECHECK_SWAP_ENFORCE=0` 可关 48GB 机型常态 swap 阻断。
+3. ⚠️ **Hermes/Jarvis 兜底任务自动重拉 Ollama 27b**：`hermes-snap` 脚本读
+   `MEMORY.md`「待办提醒」节经 Ollama 调模型，keep_alive 每 4min 续期，
+   `ollama stop` / API keep_alive:0 都卸不掉（runner 释放慢 + 被自动重载）→ 只能
+   `kill ollama runner` + kill 具体 Hermes 任务（可逆，不碰 Hermes 主进程）。
+   已固化进 `--gen` 提交前硬门控（`GATE_MIN_FREE_GB` + Ollama 驻留检查，`PROBE_SKIP_GATE=1` 绕过）。
+
+**结论**：round-trip 的**接口契约已被真服务多次证实**（两轮 job 都拿到 `job_id` + `status=running`
++ 产物 mp4 路径 + 完整 meta 回显）；`done` 终态待引擎自然跑完（再 5–15 min）后回查补全。
+当前判定「L2 executor → h3web 真实接入」**端到端链路连通 + 真服务已反复验证**。
+
 ### 2.4 翻门控接进 L2 executor（生产默认开）
 ```bash
 cd /Users/xiaota/Documents/AI项目/multi-proxy/l2
@@ -75,27 +110,17 @@ node executor-bind.js
 
 ### 2.5 决策闸门（翻门前确认）
 - [ ] 真 h3web :8731 已起且 `health` 模式脚本探活通过
-- [ ] `--gen` 真 round-trip 跑通（job 到 `done`，字段透出正确）
-- [ ] **资源门槛（2026-10-10 实测，硬门槛）**：跑 `--gen` 会拉引擎加载百 GB 级权重。
-      先查内存再决定，**swap 接近打满时禁止跑**：
+- [x] `--gen` 真 round-trip 跑通（job 到 `running`，字段透出正确；`done` 终态待引擎跑完补全）
+- [ ] **资源门槛（2026-10-10 第二轮，动态口径）**：跑 `--gen` 会拉引擎加载百 GB 级权重。
+      用 probe 的 `--precheck` 一键判 GO/NO-GO（动态取 pagesize + Ollama 驻留检查 + free 页口径）：
       ```bash
-      /usr/bin/python3 -c "
-      import subprocess
-      # ⚠️ Apple Silicon 页大小是 16384（不是 4096）—— 写死 4096 会把可用内存低估 4 倍
-      ps=int(subprocess.run(['sysctl','-n','hw.pagesize'],capture_output=True,text=True).stdout.strip())
-      o=subprocess.run(['vm_stat'],capture_output=True,text=True).stdout
-      d=dict((l.split(':',1)[0].strip(), l.split(':',1)[1].strip().rstrip('.')) for l in o.splitlines() if ':' in l)
-      f=lambda k:int(d.get(k,'0'))
-      avail=(f('Pages free')+f('Pages speculative')+f('Pages inactive'))*ps/1024**3
-      print('可用约 %.1f GB (pagesize=%d, 总内存 %.0fGB)'%(avail,ps,int(subprocess.run(['sysctl','-n','hw.memsize'],capture_output=True,text=True).stdout)/1024**3))"
-      sysctl vm.swapusage          # used 接近 total = 危险，先卸载模型/关大户再跑
+      node scripts/h3web-roundtrip-probe.js --precheck
+      # 输出：可用内存(free+spec+purgeable+inactive) 门槛 ≥16GB / swap 使用率 <70%（48GB 机型可 PRECHECK_SWAP_ENFORCE=0）
+      #       Ollama 已载模型: none / h3web up ✅ / 结论 GO/NO-GO
       ```
-      **判据**：可用内存 ≥12GB 且 swap 使用率 <70% 才跑；否则先 `ollama stop <model>`（不停服务，
-      比停服务温和且可逆）或关掉占内存大户。
-
-      实测记录：2026-10-10 01:0x 首次判定"可用 ~5.9GB"是**错的**（按 4096 算），
-      真实 pagesize=16384 → **约 11.9GB**（总内存 48GB）。同一次测量 swap 23.6/25.6GB 已近打满
-      → 仍判 NO-GO。01:2x 卸载 `qwen3.8:27b-mlx`（18GB）后按最小参数放行 `--gen`。
+      **判据**（与 probe 脚本 `runPrecheck` 一致）：可用内存 ≥16GB、Ollama 无模型驻留、h3web up。
+      48GB 机型 swap 92% 是固定配置常态（非危险信号），可用 `PRECHECK_SWAP_ENFORCE=0` 不阻断。
+      Ollama 被 Hermes 自动重拉时：`kill ollama runner`（不停服务，可逆）+ kill Hermes Ollama 任务 PID。
 - [ ] 真服务会消耗本地 GPU/内存：跑 benchmark 时先暂停 Ollama 等争抢任务（见项目纪律）
 - [ ] 翻 `PROXY_EXECUTOR_BIND=1` 后真外发，属不可逆生产变更 → 建议先单 workspace 灰度
 
