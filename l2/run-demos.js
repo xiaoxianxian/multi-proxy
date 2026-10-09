@@ -99,6 +99,7 @@ const DEMO_TAGS = {
     'h3web-port-discovery.demo.js': ['adapter', 'adapter:h3web'],
     'cost-watchdog.demo.js': ['governance', 'cost'],
     'savings-gateway.demo.js': ['gateway', 'cost', 'routing'],
+    'model-catalog-emitter.demo.js': ['catalog', 'adapter'],
 };
 
 // 收集所有 demo 文件（相对 l2/ 的路径）
