@@ -27,8 +27,20 @@
 ## 2 · 真实接入 round-trip 步骤（前置：起真 h3web :8731）
 
 ### 2.1 前置检查
+
 - 本地 h3web 服务在 `:8731` 监听（`lsof -iTCP:8731 -sTCP:LISTEN` 有输出）。
-- 当前实测（2026-10-09 19:47）：**`:8731` 未监听、无 h3web 进程** → 此步为维护者侧动作。
+- 历史实测（2026-10-09 19:47）：`:8731` 未监听、无 h3web 进程。
+- **2026-10-10 01:0x 实测：服务已起并跑通连通性** —— `GET / -> 200`、`/api/status/<fake> -> 404`（路由确实挂载）、`/api/characters -> 200`，且 `H3webAdapter.health() -> {"ok":true,"port":8731,"raw":200}`。自此「adapter 仅 mock 验证」这一过时表述作废。
+
+**启动方式（标准库，无第三方依赖）：**
+```bash
+/usr/bin/python3 "/Users/xiaota/Documents/AI项目/本地部署Minimax H3/h3web.py"
+```
+> ⚠️ 两个坑（2026-10-10 实测）：
+> 1. 用 `nohup ... &` 在受管 shell 里起，**进程会在命令结束后被清理**（日志无崩溃堆栈 = 外部信号杀掉）。要持久存活请用系统 launchd / 终端前台 / 服务托管方式。
+> 2. `curl` 不加 `--noproxy '*'` 会拿到**代理返回的假 502**（`upstream connect failed`），别据此误判服务异常。
+
+> 📌 常驻策略（维护者 2026-10-10 拍板）：**不给 h3web 配 launchd 常驻**。改由 multi-proxy 在使用侧「检测 → 提醒 → 可选一键开启」，见 §5。
 
 ### 2.2 用探测脚本验证（秒级、零副作用）
 ```bash
@@ -38,6 +50,14 @@ node scripts/h3web-roundtrip-probe.js            # health 模式：探活 + 端�
 ```
 
 ### 2.3 真 round-trip（耗时长，显式开启）
+
+**先弄清引擎路由再跑**（`h3web.py:49`）：`BRIDGE_BASE` 默认 `http://127.0.0.1:8799`，即**模块 B 常驻网关**，它不在 h3web 项目里，而是 `beeftv-bridge/h3_bridge.py`（维护者另一个自研件）。两条生成路径都**优先走 8799**，拿不到才回退 `own` 自起 h3 二进制 —— 回退 = 冷启动 50–60s + 加载百 GB 级权重。
+
+- 起 8799：`python3 "/Users/xiaota/Documents/AI项目/本地部署Minimax H3/beeftv-bridge/h3_bridge.py"`（常驻，省重复冷加载，但**持续占内存**）
+- 不起 8799：能跑通，代价是每次冷加载；验收阶段可接受，但必须先过 §2.5 资源门槛。
+
+> 2026-10-10 决策：**本次未起 8799、未跑 `--gen`** —— 实测可用内存 ~5.9GB、swap 15.4/16GB 近打满、Ollama 在跑，不满足资源门槛。维护者验收完或停掉 Ollama 后再跑。
+
 ```bash
 node scripts/h3web-roundtrip-probe.js --gen      # 提交最小竖屏 job 并轮询到 done
 # 竖屏 768×1344 steps=8 约 15min（h3web 实测）；脚本每 POLL_MS 打印一次状态
@@ -56,6 +76,18 @@ node executor-bind.js
 ### 2.5 决策闸门（翻门前确认）
 - [ ] 真 h3web :8731 已起且 `health` 模式脚本探活通过
 - [ ] `--gen` 真 round-trip 跑通（job 到 `done`，字段透出正确）
+- [ ] **资源门槛（2026-10-10 实测，硬门槛）**：跑 `--gen` 会拉引擎加载百 GB 级权重。
+      先查内存再决定，**swap 接近打满时禁止跑**：
+      ```bash
+      /usr/bin/python3 -c "
+      import subprocess
+      o=subprocess.run(['vm_stat'],capture_output=True,text=True).stdout
+      d=dict((l.split(':',1)[0].strip(), l.split(':',1)[1].strip().rstrip('.')) for l in o.splitlines() if ':' in l)
+      f=int(d.get('Pages free',0))+int(d.get('Pages speculative',0))+int(d.get('Pages inactive',0))
+      print('可用约 %.1f GB'%(f*4096/1024**3))"
+      sysctl vm.swapusage          # used 接近 total = 危险，先停 Ollama 再跑
+      ```
+      2026-10-10 01:0x 实测：可用 ~5.9GB、**swap 15.4/16GB 已近打满**、Ollama 11434 在跑 → 判定**不满足门槛**，`--gen` 未执行。
 - [ ] 真服务会消耗本地 GPU/内存：跑 benchmark 时先暂停 Ollama 等争抢任务（见项目纪律）
 - [ ] 翻 `PROXY_EXECUTOR_BIND=1` 后真外发，属不可逆生产变更 → 建议先单 workspace 灰度
 
@@ -82,7 +114,34 @@ node executor-bind.js
 
 ---
 
-## 4 · 本文件结论
+## 4 · multi-proxy 侧「检测 + 提醒 + 一键开启」（2026-10-10 新增）
+
+> 维护者诉求原话：*"未来需要常驻的话，应该是 multi-proxy 检测到提醒我，或者检测到并且给我一键开启的功能。"*
+> 落地形态：**不替 h3web 配 launchd**，改由 multi-proxy 在使用侧发现它没起就提醒 + 留显式授权的一键开启。
+
+| 层 | 文件 | 职责 |
+|----|------|------|
+| 内核 | `multi-proxy-manager/lib/h3web-guard.js` | `probe()` 只读探活、`advice()` 生成提醒+启动建议、`start()` 门控拉起（detached 脱离 manager 生命周期）、`snapshot()` 聚合视图 |
+| HTTP 面 | `multi-proxy-manager/routes/h3web-guard.js` | `GET /api/h3web/status`（只读，不鉴权，同 provider-health）、`POST /api/h3web/start`（`requireAuth` + 门控） |
+| 挂载 | `multi-proxy-manager/server.js` | 挂在代理 wildcard 之前；启动期异步自检，down 就打印提醒与两条起法 |
+| CLI | `scripts/h3web-roundtrip-probe.js --start` | 探测不到就拉起（`force:true` = CLI 显式授权，等价于门控开） |
+
+**配置 env**：`PROXY_H3WEB_SCRIPT`（h3web.py 路径，默认已内置本机已知路径）、`PROXY_H3WEB_PORTS`（探测端口）、`PROXY_H3WEB_AUTOSTART=1`（放行 HTTP 一键开启，默认关）。
+
+**不变式（与 provider-health / skill-hosts / mcp 同范式）**：
+1. 探活**严格只读** —— 只发 `GET /`，绝不 `POST /api/gen`（那会触发引擎冷加载）。
+2. 门控默认关 → `POST /api/h3web/start` 返回 403 并告知怎么开，**绝不擅自拉起外部进程**。
+3. 服务 down 时 `GET /status` 仍返 `200` + `up:false`（"没起"是正常状态，不是 HTTP 错误）。
+
+**实测证据（2026-10-10）**：
+- up 分支：`{"up":true,"port":8731,"statusCode":200,"advice":{"level":"ok"}}`
+- down 分支（探 19999）：`level:warn` + 完整 `command` / `api` / `gate` 建议
+- 门控：`start()` 未开 env → `gated:true` 拒绝
+- 一键开启真闭环：`--start` 用假脚本在 18799 spawn → 监听 → 探活 → `exit 0`（假服务已清理，未碰真 8731）
+
+---
+
+## 5 · 本文件结论
 - h3web 接入：**已建 + 已测**，剩「起真服务 + 翻门控」两步，均有脚本/runbook 可复制。
 - #7/#8/#D：**非代码缺口**，是 v2 范围或维护者决策，不擅自实现。
 - 全部 shadow 能力（M6 / L2 executor / savings-gateway / h3web）均已建+已测+已接线，剩的是翻门控决策，均有 runbook。

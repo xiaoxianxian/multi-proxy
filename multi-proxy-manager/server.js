@@ -109,6 +109,10 @@ app.use('/api/floor', require('./routes/floor'));
 // 跨进程 usage 上报面：代理进程（如 codex-proxy）把上游 usage 报进来，与 floor 同挂此层。
 // 接入规范见 routes/cost-report.js 头注释 —— 接入方只需贴 raw + agent，解析由 usage-probe 自动做。
 app.use('/api/cost', require('./routes/cost-report'));
+// h3web Guard：外部本地服务（h3web :8731）检测 / 提醒 / 可选一键开启。
+// 与 provider-health/sessions 同模式，挂在代理 wildcard 之前（否则 /api/h3web 被 :proxy=h3web 误捕获）。
+// 分工（维护者 2026-10-10）：不替 h3web 配 launchd 常驻，只在使用侧「发现没起就提醒」+ 留门控一键开启。
+app.use('/api/h3web', require('./routes/h3web-guard'));
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
@@ -191,6 +195,20 @@ if (process.env.NODE_ENV !== "test") {
   }
   // 业务侧端点总是挂载（before/record 受同一门控，pending/reconcile 只读不受控）
   console.log(`[side-effect-guard-business] endpoints mounted at /api/guard（ledger: ${guardBusinessRoutes.BUSINESS_GUARD_DIR}；门控 MULTI_PROXY_SIDE_EFFECT_GUARD 同控）`);
+  // h3web Guard 启动期自检：下游本地服务没起就**喊出来**（这是「提醒我」的落地）。
+  // 严格只读（只 GET /，绝不 /api/gen），异步不阻塞启动；探活失败也只是不提醒，不影响面板。
+  const h3webGuard = require('./lib/h3web-guard');
+  h3webGuard.snapshot().then(function (s) {
+    if (s.up) {
+      console.log(`[h3web-guard] h3web up on 127.0.0.1:${s.port}（L2 executor 通道可用）`);
+    } else {
+      console.log(`[h3web-guard] ⚠️ ${s.advice.message}`);
+      if (s.advice.action) {
+        console.log(`[h3web-guard]    手动起: ${s.advice.action.command}`);
+        console.log(`[h3web-guard]    一键起: PROXY_H3WEB_AUTOSTART=1 启动本面板 → POST /api/h3web/start`);
+      }
+    }
+  }).catch(function () { /* 探活失败不算启动错误 */ });
   const costScheduler = alertRoutes.startCostScheduler();
   // 管理面板默认只绑本回环 127.0.0.1（安全收紧：面板带 JWT 但不应全网卡可达）；
   // Docker/跨机部署显式设 BIND_HOST=0.0.0.0，沿用 hermes-proxy 的 BIND_HOST 惯例。

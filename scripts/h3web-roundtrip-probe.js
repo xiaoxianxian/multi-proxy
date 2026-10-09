@@ -30,6 +30,9 @@ const PORTS = (process.env.PROXY_H3WEB_PORTS || '8731,8732')
   .filter(Boolean);
 
 const GEN = process.argv.includes('--gen');
+// --start：探测不到服务时自动拉起（CLI 显式授权，等价于门控开）。
+// 复用 manager 的 h3web-guard 内核，避免「两份启动逻辑」漂移。
+const START = process.argv.includes('--start');
 const POLL_MS = Number(process.env.PROBE_POLL_MS || 3000);
 const MAX_TRIES = Number(process.env.PROBE_MAX_TRIES || 200);
 const HOST = '127.0.0.1';
@@ -86,32 +89,47 @@ function tryJson(s) {
 
 (async () => {
   console.log(`[probe] 候选端口: ${PORTS.join(', ')}`);
-  const port = await probePort(PORTS);
+  let port = await probePort(PORTS);
+  if (!port && START) {
+    const guard = require('../multi-proxy-manager/lib/h3web-guard');
+    console.log(`[probe] --start: 未探测到服务，拉起 h3web (${guard.resolveScript() || '未找到脚本'}) ...`);
+    const r = await guard.start({ force: true });
+    if (!r.ok) {
+      console.error(`✗ 拉起失败: ${r.error || JSON.stringify(r)}`);
+      process.exit(2);
+    }
+    console.log(`[probe] 已 spawn pid=${r.pid}，等待监听...`);
+    port = await probePort(PORTS);
+  }
   if (!port) {
     console.error(
       `✗ 未在 ${PORTS.join(',')} 探测到 h3web 监听。\n` +
-        `  请先起 h3web 本地服务（端口 8731），再跑本脚本。\n` +
+        `  请先起 h3web 本地服务（端口 8731），再跑本脚本；或加 --start 让本脚本拉起。\n` +
         `  参考 docs/H3WEB-REAL-INTEGRATION.md §2。`
     );
     process.exit(2);
   }
   console.log(`✓ h3web 在 :${port} 探活成功 (GET / -> ${'200'})`);
 
-  // 端点契约嗅探：真实 h3web 的 /api/gen 与 /api/status 是否按 adapter 预期响应
-  const sniff = {};
+  // 端点契约嗅探（health 模式**严格只读**：绝不 POST /api/gen 提交 job）。
+  // 为什么不下发 job：h3web 一收到 /api/gen 就会拉起引擎（网关不可达时自起 h3 二进制，
+  // 冷启动要 50–60s 加载权重），health 探活不该付出这个代价 —— 那是 --gen 模式的事。
+  // 改用「不存在的 task_id 打 /api/status」：能回 404 就证明 status 路由真的挂载了。
   try {
-    const g = await req(HOST, port, '/api/gen', 'POST', {
-      prompt: 'probe-health-check',
-      width: 512,
-      height: 512,
-      steps: 4,
-      seconds: 3,
-    });
-    sniff.gen = { status: g.status, body: tryJson(g.body) };
+    const s = await req(HOST, port, '/api/status/probe-nonexistent-id');
+    console.log(
+      `[probe] GET /api/status/<fake> -> HTTP ${s.status}` +
+        (s.status === 404 ? ' (路由已挂载，符合预期)' : ' (非 404，人工看一眼响应)')
+    );
   } catch (e) {
-    sniff.gen = { error: e.message };
+    console.log(`[probe] GET /api/status/<fake> -> 探测失败: ${e.message}`);
   }
-  console.log(`[probe] POST /api/gen -> ${JSON.stringify(sniff.gen).slice(0, 200)}`);
+  try {
+    const c = await req(HOST, port, '/api/characters');
+    console.log(`[probe] GET /api/characters -> HTTP ${c.status}`);
+  } catch {
+    /* 该端点可选，探测失败不致命 */
+  }
 
   if (!GEN) {
     console.log('[probe] health 模式完成（未提交真实 job）。');
@@ -119,8 +137,15 @@ function tryJson(s) {
     process.exit(0);
   }
 
-  // gen 模式：真提交一个最小竖屏 job 并轮询到终态
-  console.log('[probe] gen 模式：提交最小 job（768×1344 竖屏，steps=8，seconds=5）...');
+  // gen 模式：真提交一个最小竖屏 job 并轮询到终态。
+  // 参数可用 env 覆盖 —— 默认按「能跑通契约的最小代价」设定，因为引擎冷启动要
+  // 加载百 GB 级权重，验收阶段没必要为一次 round-trip 付生产级成片的代价。
+  const W = Number(process.env.PROBE_WIDTH || 768);
+  const H = Number(process.env.PROBE_HEIGHT || 1344);
+  const STEPS = Number(process.env.PROBE_STEPS || 8);
+  const SECS = Number(process.env.PROBE_SECONDS || 5);
+  console.log(`[probe] gen 模式：提交 job（${W}×${H}，steps=${STEPS}，seconds=${SECS}）...`);
+  console.log('[probe] 想更省资源：PROBE_WIDTH=512 PROBE_HEIGHT=512 PROBE_STEPS=4 PROBE_SECONDS=3');
   let submit;
   try {
     submit = await req(HOST, port, '/api/gen', 'POST', {
