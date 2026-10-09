@@ -39,6 +39,7 @@ This file is part of the multi-proxy project.
 | 成本分析 B 路 | `multi-proxy-manager/lib/cost-track.js` | ✅ (shadow) | 14/14 demo | 余额快照 → 消费/趋势 |
 | 路由引擎 | `l2/route-engine.js` + `route-engine.demo.js` | ✅ | 1 demo PASS | 视频/文本/未知三类路由 log-only |
 | 会话保持 | `multi-proxy-manager/lib/session-keepalive.js` / `tmux-keepalive.js` / `worktree-manager.js` | ✅ | 有 jest | M7 方向五 |
+| 任务级 Session / 续跑 UI | `multi-proxy-manager/routes/sessions.js` + `public/sessions.html` | ✅ | 23/23 jest | M7 方向五（2026-10-09 实勘已收口：列表/abort/resume含对账409/done/fail/reconcile + 前端中止续跑 + 30s刷新） |
 | agent-owner 单一保护 | `multi-proxy-manager/lib/agent-owner.js` | ✅ | 有 jest | 防双开 |
 | 前端 4 页 | `public/dashboard/logs/proxy-config/login.html` | ✅ | 有 jest | 完整 UI + 乐观更新 |
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// multi-proxy — Copyright © 2026 xiaoxian (Jason)
+// Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+// This file is part of the multi-proxy project.
+
 // token-policy-bridge · 熔断门控端到端测试（2026-10-08）
 //
 // 桩一个假上游，spawn 真实 bridge 进程，验证：

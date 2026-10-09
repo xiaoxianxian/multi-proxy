@@ -124,8 +124,15 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: shell script gate (check.sh, zero-dep CJK-safe fallback)
-        run: bash tests/shell/check.sh
+      - name: shell script gate (check.sh + bats)
+        run: |
+          bash tests/shell/check.sh
+          npm install -g bats >/dev/null 2>&1 || true
+          if command -v bats >/dev/null 2>&1; then
+            bats tests/shell/manage.sh.test.bats
+          else
+            echo "bats unavailable; check.sh already validated above"
+          fi
 
   # 内部资产 push 闸门（2026-09-28 维护者拍板升级）：
   # 与 .gitignore「内部资产：永不提交」段同源。该段每加一条规则，本 job 自动多查一类。
@@ -140,3 +147,20 @@ jobs:
           python-version: "3.11"
       - name: push-gate check (internal assets must not be tracked)
         run: bash scripts/push-gate-check.sh HEAD
+
+  # 版权头闸门（2026-10-09 加）：确保所有公开树源码/文档都带 AGPL+商业双许可头。
+  # 与 scripts/add-copyright-header.sh 同源；该脚本的 dry-run 候选数必须为 0（frontmatter 文件已跳过）。
+  license-header:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: check no missing copyright headers
+        run: |
+          out=$(bash scripts/add-copyright-header.sh)
+          echo "$out"
+          n=$(echo "$out" | grep '候选文件数:' | awk -F'[: ]+' '{print $NF}')
+          if [ "$n" -ne 0 ]; then
+            echo "FAIL: $n file(s) missing copyright header — run: DRY_RUN=false bash scripts/add-copyright-header.sh"; exit 1
+          fi
+          echo "license-header OK (0 missing)"

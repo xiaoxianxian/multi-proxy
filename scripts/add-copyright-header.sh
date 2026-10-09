@@ -113,13 +113,18 @@ while IFS= read -r -d '' f; do
   $skip && continue
   # 跳过已有 header 的
   has_header "$f" && continue
+  # frontmatter 保护: .md 首行是 --- 则跳过（与 apply_header 一致，避免破坏 YAML frontmatter；
+  # 否则 dry-run 会把 ADR/技能 SKILL.md 列为"待加"，但实际 apply 会跳过 → 数字虚高）
+  if [[ "$f" == *.md ]]; then
+    [[ "$(head -1 "$f")" == "---" ]] && continue
+  fi
   candidates+=("$f")
 done < <(find . \( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' -o -name '*.ts' -o -name '*.py' -o -name '*.md' \) -type f -print0 2>/dev/null)
 
 # ④ 过滤被 .gitignore 忽略的内部资产（MEMORY-*.md / docs/内部 / .pytest_cache 等）：
 #    这些文件在盘上但永不进公开仓，不该被版权头脚本改动，避免污染内部笔记与缓存。
 #    用 git check-ignore -z（NUL 分隔、不包裹引号）避免中文路径被加引号后比较失配。
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ ${#candidates[@]} -gt 0 ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   filtered=()
   for f in "${candidates[@]}"; do
     # 逐文件用退出码判断：0=被忽略（内部资产，跳过），1=未忽略（保留）。
@@ -130,10 +135,16 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       filtered+=("$f")
     fi
   done
-  candidates=("${filtered[@]}")
+  candidates=("${filtered[@]+"${filtered[@]}"}")
 fi
 
 total=${#candidates[@]}
+if [ "$total" -eq 0 ]; then
+  echo "=== Copyright Header Dry-Run (DRY_RUN=$DRY_RUN) ==="
+  echo "候选文件数: 0"
+  echo "无文件需要加头"
+  exit 0
+fi
 echo "=== Copyright Header Dry-Run (DRY_RUN=$DRY_RUN) ==="
 echo "候选文件数: $total"
 
