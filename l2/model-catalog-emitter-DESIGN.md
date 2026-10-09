@@ -1,3 +1,9 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # Model Catalog Emitter — 设计文档
 
 > 模块：`l2/model-catalog-emitter.js` + `model-catalog-emitter.demo.js`
