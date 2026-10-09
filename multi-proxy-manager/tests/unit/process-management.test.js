@@ -109,6 +109,21 @@ function waitForPortFree(port, timeout = 5000) {
   });
 }
 
+// TE5: obtain a free ephemeral port (bind + immediate close) so these tests
+// never collide with fixed ports occupied by other processes or parallel jest
+// workers. A freshly-listened-but-never-connected socket frees immediately on
+// close (no TIME_WAIT), so the returned port is safe to re-bind within the test.
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const s = createServer((req, res) => res.end('ok'));
+    s.on('error', reject);
+    s.listen(0, '127.0.0.1', () => {
+      const port = s.address().port;
+      s.close(() => resolve(port));
+    });
+  });
+}
+
 // ==================== Tests ====================
 
 describe('Process Management', () => {
@@ -133,6 +148,9 @@ describe('Process Management', () => {
     });
 
     it('spawns a process that listens on a port', async () => {
+      // Use an ephemeral port (not a fixed one) so a stray process or a
+      // parallel jest worker occupying a fixed port can't cause flakiness.
+      const port = await getFreePort();
       const proc = spawn('node', [
         '-e',
         `
@@ -141,8 +159,8 @@ describe('Process Management', () => {
           res.writeHead(200);
           res.end('ok');
         });
-        s.listen(19999, '127.0.0.1', () => {
-          console.log('listening on 19999');
+        s.listen(${port}, '127.0.0.1', () => {
+          console.log('listening on ${port}');
         });
         process.once('SIGTERM', () => {
           s.close(() => process.exit(0));
@@ -154,7 +172,7 @@ describe('Process Management', () => {
 
       try {
         // Wait for port to become bound
-        const bound = await waitForPortBound(19999, 3000);
+        const bound = await waitForPortBound(port, 3000);
         expect(bound).toBe(true);
       } finally {
         proc.kill('SIGTERM');
@@ -206,22 +224,26 @@ describe('Process Management', () => {
     });
 
     it('returns true when port becomes bound', async () => {
+      const port = await getFreePort();
       server = createServer((req, res) => res.end('ok'));
 
-      // Port should be free initially
-      const free = await waitForPortBound(19998, 1500);
+      // Port should be free initially (just released by getFreePort)
+      const free = await waitForPortBound(port, 1500);
       expect(free).toBe(false);
 
       // Start listening
-      await new Promise((resolve) => server.listen(19998, '127.0.0.1', resolve));
+      await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
 
       // Should detect port is now bound
-      const bound = await waitForPortBound(19998, 2000);
+      const bound = await waitForPortBound(port, 2000);
       expect(bound).toBe(true);
     });
 
     it('returns false on timeout when port never binds', async () => {
-      const bound = await waitForPortBound(19997, 1000);
+      // getFreePort() guarantees a currently-free port, so waiting on it
+      // without binding must time out and return false.
+      const port = await getFreePort();
+      const bound = await waitForPortBound(port, 1000);
       expect(bound).toBe(false);
     });
   });
@@ -237,28 +259,30 @@ describe('Process Management', () => {
     });
 
     it('returns true when port becomes free', async () => {
+      const port = await getFreePort();
       server = createServer((req, res) => res.end('ok'));
 
-      await new Promise((resolve) => server.listen(19996, '127.0.0.1', resolve));
+      await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
 
       // Port should be bound
-      const bound = await waitForPortBound(19996, 2000);
+      const bound = await waitForPortBound(port, 2000);
       expect(bound).toBe(true);
 
       // Close the server
       await new Promise((resolve) => server.close(resolve));
 
       // Wait for port to become free
-      const freed = await waitForPortFree(19996, 3000);
+      const freed = await waitForPortFree(port, 3000);
       expect(freed).toBe(true);
     });
 
     it('returns false when port stays occupied', async () => {
+      const port = await getFreePort();
       server = createServer((req, res) => res.end('ok'));
-      await new Promise((resolve) => server.listen(19995, '127.0.0.1', resolve));
+      await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
 
       // Port should stay bound — should timeout
-      const freed = await waitForPortFree(19995, 1000);
+      const freed = await waitForPortFree(port, 1000);
       expect(freed).toBe(false);
     });
   });

@@ -7,7 +7,7 @@ const express = require('express');
 const fs = require('fs');
 
 const { requireAuth } = require('../lib/auth');
-const { appendLog, LOG_FILE } = require('../lib/logger');
+const { appendLog, getLogFile } = require('../lib/logger');
 const pm = require('../lib/process-manager');
 const { detectOccupancy, detectAll } = require('../lib/agent-owner');
 const { normalizeProxyHealth, persistHealthHistory } = require('../lib/health');
@@ -245,10 +245,10 @@ router.post('/restart/:name', requireAuth, async (req, res) => {
 router.get('/logs', requireAuth, (req, res) => {
   try {
     const { limit = 200 } = req.query;
-    if (!fs.existsSync(LOG_FILE)) {
+    if (!fs.existsSync(getLogFile())) {
       return res.json({ logs: '', count: 0, recent: 0 });
     }
-    const content = fs.readFileSync(LOG_FILE, 'utf8');
+    const content = fs.readFileSync(getLogFile(), 'utf8');
     const lines = content.split('\n').filter(l => l.trim());
     const recent = lines.slice(-parseInt(limit));
     res.json({ logs: recent.join('\n'), count: lines.length, recent: recent.length });
@@ -259,11 +259,11 @@ router.get('/logs', requireAuth, (req, res) => {
 
 router.get('/logs/raw', requireAuth, (_req, res) => {
   try {
-    if (!fs.existsSync(LOG_FILE)) {
+    if (!fs.existsSync(getLogFile())) {
       return res.send('');
     }
     res.set('Content-Type', 'text/plain');
-    res.send(fs.readFileSync(LOG_FILE, 'utf8'));
+    res.send(fs.readFileSync(getLogFile(), 'utf8'));
   } catch (e) {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -271,7 +271,7 @@ router.get('/logs/raw', requireAuth, (_req, res) => {
 
 router.post('/logs/clear', requireAuth, (_req, res) => {
   try {
-    fs.writeFileSync(LOG_FILE, '');
+    fs.writeFileSync(getLogFile(), '');
     appendLog('info', 'system', 'Logs cleared');
     res.json({ success: true });
   } catch (e) {

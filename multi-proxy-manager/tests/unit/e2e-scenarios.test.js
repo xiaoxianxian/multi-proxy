@@ -15,6 +15,9 @@
  */
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
+// Defensive: ensure server.js never calls app.listen() (it gates on NODE_ENV!=='test').
+// Jest sets this automatically, but pinning it removes any worker-ordering ambiguity.
+process.env.NODE_ENV = 'test';
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const app = require('../server');
@@ -24,7 +27,6 @@ const AUTH_TOKEN = jwt.sign({ authenticated: true, ts: Date.now() }, process.env
 const authed = (req) => req.set('x-auth-token', AUTH_TOKEN);
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 // Resolve project root robustly: go up from tests/unit/ → multi-proxy-manager/ → multi-proxy/
 const PROJECT_ROOT = path.resolve(__dirname, '../..', '..');
@@ -132,12 +134,6 @@ describe('E2E — Manager API Flow', () => {
 });
 
 describe('E2E — Log System', () => {
-  let logFile;
-
-  beforeAll(() => {
-    logFile = path.join(os.tmpdir(), 'multi-proxy-manager', 'requests.log');
-  });
-
   it('GET /api/logs returns valid JSON', async () => {
     const res = await authed(request(app).get('/api/logs'));
     expect(res.status).toBe(200);

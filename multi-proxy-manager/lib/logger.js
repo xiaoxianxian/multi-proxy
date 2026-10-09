@@ -15,6 +15,9 @@ let logFile = LOG_FILE;
 
 // 注入测试文件路径（jest setup 用，避免测试打到真实 requests.log / error-history）
 function setLogFile(f) { logFile = f; }
+// 读/清也走可变 logFile（而非常量 LOG_FILE），保证测试命中注入的 tmp 文件，
+// 与生产的真实文件读取行为一致；避免并行测试 / 真实 manager 抢同一真实文件导致偶发失败。
+function getLogFile() { return logFile; }
 
 /**
  * Format a log entry as a JSON lines record.
@@ -76,4 +79,4 @@ function appendLog(level, proxyName, message, meta = {}) {
    }
 }
 
-module.exports = { LOG_DIR, LOG_FILE, formatLogEntry, appendLog, setLogFile };
+module.exports = { LOG_DIR, LOG_FILE, formatLogEntry, appendLog, setLogFile, getLogFile };
