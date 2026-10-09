@@ -16,6 +16,8 @@
 //
 // 用法：
 //   node scripts/h3web-roundtrip-probe.js                 # health 模式（默认）：仅探活 + 端点契约嗅探，秒级、零副作用
+//   node scripts/h3web-roundtrip-probe.js --precheck      # 跑 --gen 前的资源/服务自检（秒级，判 GO/NO-GO）
+//   node scripts/h3web-roundtrip-probe.js --start         # 探测不到服务时拉起（CLI 显式授权，等价门控开）
 //   node scripts/h3web-roundtrip-probe.js --gen           # gen 模式：真提交一个最小 job 并轮询到终态（耗时，竖屏成片约 15min）
 //   PROXY_H3WEB_PORTS=8731,8732 node scripts/h3web-roundtrip-probe.js
 //   PROBE_POLL_MS=5000 PROBE_MAX_TRIES=200 node scripts/h3web-roundtrip-probe.js --gen
@@ -23,6 +25,7 @@
 // 退出码：0=成功 2=未探测到 h3web（请先起服务） 1=其它错误
 
 const http = require('http');
+const { execSync } = require('child_process');
 
 const PORTS = (process.env.PROXY_H3WEB_PORTS || '8731,8732')
   .split(',')
@@ -87,7 +90,84 @@ function tryJson(s) {
   }
 }
 
+// ---------- --precheck：跑 --gen 前的资源/服务自检（秒级，零副作用） ----------
+// 为什么单独做：--gen 会拉引擎加载百 GB 级权重，swap 打满时跑 = 系统卡死风险。
+// 每次靠人肉 vm_stat 判断容易算错（Apple Silicon pagesize=16384，写死 4096 会低估 4 倍），
+// 所以把判据固化成脚本，退出码 0=可跑 / 3=不可跑。
+const { execSync: _es } = require('child_process');
+
+function sh(cmd) {
+  try {
+    return execSync(cmd, { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch {
+    return null;
+  }
+}
+
+function memAvailableGb() {
+  const o = sh('vm_stat');
+  if (!o) return null;
+  const ps = parseInt((sh('sysctl -n hw.pagesize') || '16384').trim(), 10); // ⚠️ 必须动态取，不能写死 4096
+  const d = {};
+  for (const line of o.split('\n')) {
+    const i = line.indexOf(':');
+    if (i > 0) d[line.slice(0, i).trim()] = line.slice(i + 1).trim().replace(/\.$/, '');
+  }
+  const p = (k) => parseInt(d[k] || '0', 10);
+  return ((p('Pages free') + p('Pages speculative') + p('Pages inactive')) * ps) / 1024 ** 3;
+}
+
+function swapPct() {
+  const o = sh('sysctl -n vm.swapusage');
+  if (!o) return null;
+  const t = /total\s*=\s*([\d.]+)M/.exec(o);
+  const u = /used\s*=\s*([\d.]+)M/.exec(o);
+  if (!t || !u || parseFloat(t[1]) === 0) return null;
+  return (parseFloat(u[1]) / parseFloat(t[1])) * 100;
+}
+
+function ollamaLoaded() {
+  const o = sh('ollama ps');
+  if (!o) return null; // CLI 不可用（受限环境）时如实说未知，不猜
+  const rows = o.split('\n').filter((l) => /\d+\s*(GB|MB)/.test(l) && !/^NAME/.test(l));
+  return rows.length ? rows.map((l) => l.trim().split(/\s{2,}/)[0]).join(', ') : 'none';
+}
+
+async function runPrecheck() {
+  const minGb = Number(process.env.PRECHECK_MIN_GB || 12);
+  const maxSwap = Number(process.env.PRECHECK_MAX_SWAP_PCT || 70);
+  const mem = memAvailableGb();
+  const swap = swapPct();
+  const oll = ollamaLoaded();
+  const port = await probePort(PORTS);
+  let gw = null;
+  try {
+    const r = await req(HOST, 8799, '/', 'GET');
+    gw = r.status;
+  } catch {
+    gw = null;
+  }
+  const memOk = mem !== null && mem >= minGb;
+  const swapOk = swap !== null && swap < maxSwap;
+
+  console.log(`[precheck] 可用内存       : ${mem === null ? '未知' : mem.toFixed(1) + ' GB'}  (门槛 ≥${minGb}GB)  ${memOk ? '✅' : '❌'}`);
+  console.log(`[precheck] swap 使用率    : ${swap === null ? '未知' : swap.toFixed(0) + '%'}  (门槛 <${maxSwap}%)  ${swapOk ? '✅' : '❌'}`);
+  console.log(`[precheck] Ollama 已载模型: ${oll === null ? '未知(CLI 不可用)' : oll}`);
+  console.log(`[precheck] h3web :${PORTS.join('/')}   : ${port ? 'up ✅' : 'down ❌'}`);
+  console.log(`[precheck] 8799 常驻网关  : ${gw ? 'up ✅（无需冷启动）' : 'down（将走 own 自起，冷启动 50–60s）'}`);
+
+  const go = memOk && swapOk && !!port;
+  console.log(`\n[precheck] 结论: ${go ? 'GO —— 可以跑 --gen' : 'NO-GO —— 先解决 ❌ 项再跑 --gen'}`);
+  if (!go) {
+    if (!memOk) console.log('  · 可用内存不足：`ollama stop <model>` 卸载模型（不停服务，可逆）或关占内存大户');
+    if (!swapOk) console.log('  · swap 接近打满：系统已在换页，此时加载百 GB 权重极易 OOM/卡死');
+    if (!port) console.log('  · h3web 没起：加 --start 让脚本拉起');
+  }
+  process.exit(go ? 0 : 3);
+}
+
 (async () => {
+  if (process.argv.includes('--precheck')) return runPrecheck();
   console.log(`[probe] 候选端口: ${PORTS.join(', ')}`);
   let port = await probePort(PORTS);
   if (!port && START) {

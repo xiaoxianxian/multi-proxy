@@ -81,13 +81,21 @@ node executor-bind.js
       ```bash
       /usr/bin/python3 -c "
       import subprocess
+      # ⚠️ Apple Silicon 页大小是 16384（不是 4096）—— 写死 4096 会把可用内存低估 4 倍
+      ps=int(subprocess.run(['sysctl','-n','hw.pagesize'],capture_output=True,text=True).stdout.strip())
       o=subprocess.run(['vm_stat'],capture_output=True,text=True).stdout
       d=dict((l.split(':',1)[0].strip(), l.split(':',1)[1].strip().rstrip('.')) for l in o.splitlines() if ':' in l)
-      f=int(d.get('Pages free',0))+int(d.get('Pages speculative',0))+int(d.get('Pages inactive',0))
-      print('可用约 %.1f GB'%(f*4096/1024**3))"
-      sysctl vm.swapusage          # used 接近 total = 危险，先停 Ollama 再跑
+      f=lambda k:int(d.get(k,'0'))
+      avail=(f('Pages free')+f('Pages speculative')+f('Pages inactive'))*ps/1024**3
+      print('可用约 %.1f GB (pagesize=%d, 总内存 %.0fGB)'%(avail,ps,int(subprocess.run(['sysctl','-n','hw.memsize'],capture_output=True,text=True).stdout)/1024**3))"
+      sysctl vm.swapusage          # used 接近 total = 危险，先卸载模型/关大户再跑
       ```
-      2026-10-10 01:0x 实测：可用 ~5.9GB、**swap 15.4/16GB 已近打满**、Ollama 11434 在跑 → 判定**不满足门槛**，`--gen` 未执行。
+      **判据**：可用内存 ≥12GB 且 swap 使用率 <70% 才跑；否则先 `ollama stop <model>`（不停服务，
+      比停服务温和且可逆）或关掉占内存大户。
+
+      实测记录：2026-10-10 01:0x 首次判定"可用 ~5.9GB"是**错的**（按 4096 算），
+      真实 pagesize=16384 → **约 11.9GB**（总内存 48GB）。同一次测量 swap 23.6/25.6GB 已近打满
+      → 仍判 NO-GO。01:2x 卸载 `qwen3.8:27b-mlx`（18GB）后按最小参数放行 `--gen`。
 - [ ] 真服务会消耗本地 GPU/内存：跑 benchmark 时先暂停 Ollama 等争抢任务（见项目纪律）
 - [ ] 翻 `PROXY_EXECUTOR_BIND=1` 后真外发，属不可逆生产变更 → 建议先单 workspace 灰度
 
