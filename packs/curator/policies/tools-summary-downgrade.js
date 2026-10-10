@@ -211,6 +211,23 @@ function handler(ctx, io) {
   const tools = Array.isArray(ctx && ctx.tools) ? ctx.tools : [];
   if (!tools.length) return null;
 
+  // ── §3 窗口适配（agent-infra/handoff-contract.md）：按目标窗口倒推档位 ──
+  // 多模型路由的有效窗口被最小模型卡死：这一轮落到小窗口模型时，历史塞不下，
+  // 给小模型一份「压缩副本」、完整历史留给下一个大模型。这里把「目标窗口预算」
+  // 翻译成「该压到哪个档位」：够得着就 light，够不着逐档收紧到 aggressive。
+  // 🔴 仅在显式给了 targetWindowTokens + historyTokens 时才倒推；否则尊重 cfg.mode（零行为变更）。
+  const historyTokens = Number.isFinite(cfg.historyTokens) ? cfg.historyTokens : null;
+  const targetWindowTokens = Number.isFinite(cfg.targetWindowTokens) ? cfg.targetWindowTokens : null;
+  if (historyTokens != null && targetWindowTokens != null) {
+    const allTok = schemaTokens(tools);
+    const headroom = targetWindowTokens - historyTokens;            // 给 tools schema 留的预算
+    const needRatio = headroom > 0 ? allTok / headroom : Infinity;  // >1 = 预算不够，得压
+    // needRatio <= 1：预算够，最保守的 light 即可；否则逐档收紧。
+    cfg.mode = needRatio <= 1 ? 'light'
+      : needRatio <= 1.3 ? 'balanced'
+        : 'aggressive';
+  }
+
   const aggressive = cfg.mode === 'aggressive';
   const maxChars = aggressive ? cfg.aggressiveMaxChars
     : cfg.mode === 'balanced' ? cfg.balancedMaxChars

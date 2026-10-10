@@ -23,6 +23,9 @@ __pycache__/
 
 # WorkBuddy 跨 agent 运行时 + 运行产物（非源码，且 .workbuddy/MEMORY.md 是跨 agent 共享记忆，勿进 git）
 .workbuddy/
+# 项目共享留痕区（agent 中立的时序日志，2026-10-10 立）：留项目目录是为了跨 agent 共享，
+# 但属内部过程资产，不进公开仓 —— 防 git add -A 夹带（与 .workbuddy/ 同理，见上方 push 纪律）。
+PROJECT-STATE/
 logs/
 
 # 子代理运行时 dump（ 的 17/17 测试结果 JSON，内容已存 IMPLEMENTATION_REPORT.md，非源码）

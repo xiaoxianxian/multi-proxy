@@ -57,6 +57,10 @@ class CircuitBreaker {
     if (typeof config.errorRateThreshold === 'number' && typeof config.slidingWindowSize === 'number' && config.slidingWindowSize > 0) {
       this.#slidingWindowActive = true;
      }
+    // §5 循环熔断协作（agent-infra/handoff-contract.md，可选注入，默认 null 零行为变更）：
+    // 允许外部 HandoffGuard（l2/handoff-reason.js）在 allowRequest 放行前追加一道
+    // 「乒乓 / 切换预算」门控。不注入则本熔断器行为逐字不变（向后兼容铁律）。
+    this.handoffGuard = null;
   }
 
   /**
@@ -182,6 +186,10 @@ class CircuitBreaker {
       if (b.#halfOpenAdmitted >= maxProbes) return false;
       b.#halfOpenAdmitted++;
     }
+    // §5 循环熔断协作：注入 handoffGuard 后，放行前再问一道「该不该切到下一个 owner」。
+    // guard 拒绝（乒乓 / 切换预算耗尽 / 超时）则不放行——防多 agent 互相甩锅。
+    // 未注入（this.handoffGuard == null）时本行永不命中，行为逐字不变（向后兼容铁律）。
+    if (this.handoffGuard && !this.handoffGuard.shouldHandoff(providerId).allow) return false;
     return true;
   }
 

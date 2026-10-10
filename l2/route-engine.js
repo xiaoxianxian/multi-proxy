@@ -30,6 +30,11 @@ const {
     DEFAULT_TIMEOUT_MS: DEFAULT_JUDGE_TIMEOUT,
 } = require('./decision-judge.js');
 
+// §4/§5 交接触发器契约 + 循环熔断（agent-infra/handoff-contract.md）。
+// 默认 null = 不观测（零行为变更铁律：不注入就不改任何现有行为）。
+// 注入 HandoffGuard 后 route() 只在 decision.handoff 写观测结果，**不改档位、不自动切**
+// ——切模型的所有权归调用方，route 仍遵守 N3「纯决策、绝不自动执行」。
+
 const DEFAULT_LOG_CAPACITY = 100;
 
 // log_redaction 三档：默认 'full' = 现状（taskPrompt 截前 50 字，不改变行为）。
@@ -39,7 +44,7 @@ const DEFAULT_LOG_REDACTION = 'full';
 
 class RouteEngine {
     constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null, semanticReview = false, semanticThrow = false, noCandidateStrategy = null, llmJudge = false, riskGate = false,
-        riskTimeoutMs = DEFAULT_JUDGE_TIMEOUT } = {}) {
+        riskTimeoutMs = DEFAULT_JUDGE_TIMEOUT, handoffGuard = null } = {}) {
         this.registry = registry;
         this.pluginRuntime = pluginRuntime || { listCapabilities: () => [] };
         this.shadowMode = shadowMode;
@@ -69,6 +74,11 @@ class RouteEngine {
         // 风险旁路单独一份：二次确认（Portico 侧动作）只关心「哪一类、要不要复核」，
         // 不该被 complexity judge 拖着一起等——两条旁路的收口粒度不同，分开存。
         this._riskCalls = new Set();
+        // §4/§5 交接触发器契约 + 循环熔断（agent-infra/handoff-contract.md）。
+        // 默认 null = 不观测（零行为变更）；注入 l2/handoff-reason.js 的 HandoffGuard 后，
+        // route() 只在 decision.handoff 写「该不该切 / 卡在乒乓还是预算」的观测，
+        // **不改档位、不自动切**——切模型所有权归调用方（N3 纯决策铁律不破）。
+        this.handoffGuard = handoffGuard;
       }
 
      // 按任务类型路由：返回候选 adapter 列表 + 路由决策日志
@@ -228,6 +238,15 @@ class RouteEngine {
          if (!this.shadowMode && decision.chosen) {
              decision.action = 'execute';
          }
+
+        // §4/§5 交接触发器契约观测（默认关，零行为变更）：
+        // 注入 handoffGuard 时，把「本次选中的 adapter 该不该自动切 owner」写进
+        // decision.handoff 供 shadow 日志 / 健康看板观测。route 只观测、不切——
+        // 真正切模型由调用方拿 decision.handoff.allow 决定（N3 铁律：纯决策）。
+        if (this.handoffGuard && decision.chosen) {
+            const next = decision.chosen.adapterId;
+            decision.handoff = this.handoffGuard.shouldHandoff(next);
+        }
 
         this._pushLog(decision);
         return decision;
