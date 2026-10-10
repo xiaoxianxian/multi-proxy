@@ -65,6 +65,8 @@ function emitModel(m, overrides = {}) {
     // model_messages：调用方注入的官方指令模板（大文本），emitter 不重造
     // 不注入 → undefined（Codex 用内置默认），不伪造
     const modelMessages = overrides.model_messages || m.model_messages;
+    // base_instructions：调用方注入的系统提示（大文本），emitter 不重造；31 字段完整
+    const baseInstructions = overrides.base_instructions || m.base_instructions;
 
     const supportedEfforts = (overrides.supported_reasoning_levels || [])
         .filter((e) => VALID_EFFORTS.has(e.effort) || VALID_EFFORTS.has(e))
@@ -107,7 +109,8 @@ function emitModel(m, overrides = {}) {
         input_modalities: modalities,
         priority: priority,
         supported_in_api: m.supported_in_api != null ? m.supported_in_api : true,
-        // --- 官方指令（大文本，由调用方注入，不重造）---
+        // --- 官方指令（大文本，由调用方注入，不重造；codex 0.153.4 要求至少其一）---
+        base_instructions: baseInstructions,
         model_messages: modelMessages,
     };
 }

@@ -77,6 +77,27 @@ function rewriteCatalogPointer(baseConfigText, newFileName) {
     return { text, injected: true, from: m[2] };
 }
 
+// 从 cc-switch 真源 catalog 取官方指令（base_instructions + model_messages），
+// codex 0.153.4 硬校验每个 model 必须含 base_instructions 或 model_messages.instructions_template
+// 之一，缺失则 catalog 整份解析失败（实测 17 模型全挂）。真源 = ~/.codex/cc-switch-model-catalog.json
+// （cc-switch 自己写的，非投机造）。文件不存在 → 返回 null（退出不注入，保留 emitter 纯净行为，
+// 不破坏 demo 的 model_messages===undefined 断言）。门控 CATALOG_INJECT_INSTRUCTIONS=0 时 buildPlan 不调用。
+function loadCcSwitchTemplates() {
+    const p = path.join(process.env.HOME || '', '.codex', 'cc-switch-model-catalog.json');
+    if (!fs.existsSync(p)) return null;
+    try {
+        const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+        const m = (j.models && j.models[0]) || null;
+        if (!m) return null;
+        const tpl = {};
+        if (typeof m.base_instructions === 'string') tpl.baseInstructions = m.base_instructions;
+        if (m.model_messages) tpl.modelMessages = m.model_messages;
+        return (tpl.baseInstructions || tpl.modelMessages) ? tpl : null;
+    } catch {
+        return null;
+    }
+}
+
 // 一次产出完整 plan（catalog JSON 文本 + config 文本 + 写盘动作清单）
 async function buildPlan(opts = {}) {
     const homeDir = opts.home || DEFAULT_HOME;
@@ -90,6 +111,24 @@ async function buildPlan(opts = {}) {
 
     // 2. emitter 补全成 31 字段 catalog（纯函数，§3 不写 agent 家目录）
     const catalog = emitCatalog(models, { model: {} });
+
+    // 2b. 注入官方指令大文本（codex 0.153.4 硬校验每个 model 必填其一，否则整份 catalog 解析失败）
+    // 门控默认开：读 cc-switch 真源（~/.codex/cc-switch-model-catalog.json，cc-switch 自写非投机）注入到
+    // 全部 model。文件不存在 → 不注入，保持 emitter 纯净。门控 CATALOG_INJECT_INSTRUCTIONS=0 关闭注入
+    //（保留 catalog-writer 的纯净 30 字段行为，与 emitter demo 对齐）。
+    let injectionNote = '未查 cc-switch 真源';
+    if (process.env.CATALOG_INJECT_INSTRUCTIONS !== '0' && process.env.CATALOG_INJECT_INSTRUCTIONS !== 'false') {
+       const tpl = loadCcSwitchTemplates();
+       if (tpl) {
+           catalog.models.forEach((m) => {
+               if (tpl.baseInstructions) m.base_instructions = tpl.baseInstructions;
+               if (tpl.modelMessages) m.model_messages = tpl.modelMessages;
+           });
+           injectionNote = `从 cc-switch 真源注入 base_instructions+model_messages 到 ${catalog.models.length} 模型（codex 0.153.4 硬校验）`;
+       } else {
+           injectionNote = 'cc-switch 真源不存在/无指令 → 不注入（emitter 保持纯净）';
+       }
+    }
     const catalogJson = JSON.stringify(catalog, null, 2);
     const catalogFile = path.join(homeDir, DEFAULT_CATALOG_FILE);
 
@@ -111,7 +150,7 @@ async function buildPlan(opts = {}) {
     // 4. 写盘动作清单（dry-run 打印用）
     const actions = [
         { op: 'mkdir', path: homeDir, kind: 'dir', note: '只创建隔离 home，不碰 agent 家目录' },
-        { op: 'write', path: catalogFile, kind: 'json', note: `${count} 模型 → 31 字段/条（emitter 补全）` },
+        { op: 'write', path: catalogFile, kind: 'json', note: `${count} 模型 → 31 字段/条（emitter 补全）；${injectionNote}` },
         hasBaseConfig
             ? { op: 'write', path: configFile, kind: 'toml', note: pointerNote }
             : { op: 'skip', path: configFile, kind: 'toml', note: `真 config 不存在 (${baseConfigPath})，跳过` },
@@ -205,4 +244,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { buildPlan, applyPlan, rewriteCatalogPointer, fetchModels };
+module.exports = { buildPlan, applyPlan, rewriteCatalogPointer, fetchModels, loadCcSwitchTemplates };
