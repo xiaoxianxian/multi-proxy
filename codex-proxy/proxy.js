@@ -168,23 +168,27 @@ function updateRoutingMode(mode) {
 }
 
 // ===== Upstream models =====
+// 🔴 2026-10-11：apiKey 改成 getter 延迟读 env。
+// 原因：const 表在模块加载时一次性求值 process.env.XXX，但 dotenv（第 7 行）
+// 与 launchd 注入的 key 可能在之后才生效，导致首读时 key 为空 → 上游 401。
+// 改成 getter 后，每次 findProvider() 调用时现读，key 总能拿到最新值。
 const UPSTREAM_MODELS = [
   {
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
-    apiKey: process.env.DEEPSEEK_API_KEY,
+    get apiKey() { return process.env.DEEPSEEK_API_KEY; },
     availableModels: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   },
   {
     name: 'Kimi',
     baseUrl: 'https://api.moonshot.cn/v1',
-    apiKey: process.env.MOONSHOT_API_KEY,
+    get apiKey() { return process.env.MOONSHOT_API_KEY; },
     availableModels: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2.5', 'kimi-k2.6', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'moonshot-v1-128k-vision-preview', 'moonshot-v1-32k-vision-preview', 'moonshot-v1-8k-vision-preview', 'moonshot-v1-auto']
   },
   {
     name: 'Agnes',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
-    apiKey: process.env.AGNES_API_KEY,
+    get apiKey() { return process.env.AGNES_API_KEY; },
     // 🔴 2026-10-02 维护者订正：agnes-2.0-flash / agnes-1.5-flash 是老型号，官方不一定还收。
     // 实测：agnes-2.0-flash 与 2.5-flash 在 max_tokens=16 下 16 token 全被 thinking 吃掉、
     // body.content 恒为空（finish_reason=length）；agnes-1.5-flash 直接 503。
@@ -790,6 +794,7 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     // 熔断：block 模式下该 provider 已 OPEN → 快速 503，别让客户端干等上游超时
     if (!circuitAllows(provider, res)) return;
 
+    const t0 = Date.now();
     const upstreamUrl = `${provider.baseUrl}/chat/completions`;
     // L004：客户端一走，这份 signal 立刻让上游停下，不再空跑满 120 秒
     const upstreamSignal = createUpstreamSignal(req, res);
@@ -816,40 +821,22 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     feedCircuit(provider, 'success');
 
     if (req.body.stream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      try {
-        // B6 fix: response.body is a Web ReadableStream (global fetch) but Express
-        // res is a Node stream, NOT a WHATWG WritableStream — pipeTo(res) throws
-        // TypeError → 504. Use Node's Readable.fromWeb bridge (Node 17+) to pipe
-        // raw bytes to res, matching cursor-proxy chatHandler raw-byte passthrough.
-        const readable = Readable.fromWeb(response.body);
-        readable.on('error', (err) => {
-          console.error(`[Stream] Upstream read error: ${err.message}`);
-          if (!res.headersSent) {
-            res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
-          } else if (!res.destroyed) {
-            res.end();
-          }
-        });
-        await new Promise((resolve, reject) => {
-          readable.pipe(res);
-          // L004 后 close 有两种来路：流式写完了（正常），客户端拔了（aborted）。
-          // 两种都该收手，区别只在日志里带不带 aborted，别再区别对待。
-          res.on('close', resolve);
-          res.on('finish', resolve);
-          res.on('error', reject);
-        });
-      } catch (err) {
-        console.error(`[Stream] Pipe error: ${err.message}`);
-        if (!canWrite(res)) return;
-        res.status(504).json({ success: false, error: 'Stream timeout or upstream disconnected', code: 'STREAM_TIMEOUT' });
+      // 流式也接成本采集：复用 pipeUpstreamBytes tee 一份字节、流走完再抽 usage 上报，
+      // 与 /v1/messages 同款。dsh 走的就是这条流式 chat 链路（api: openai-completions），
+      // 之前直接 readable.pipe(res) 没攒字节 ⇒ 流量过 18790 但成本链路抓不到。
+      // 只在 outcome==='completed' 上报：客户端中途断开=虚账，半截 usage 报上去比少报一笔更难看（L004）。
+      const { outcome, acc } = await pipeUpstreamBytes(res, response, '[chat]', upstreamSignal);
+      if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
+        captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'codex-proxy', stream: true } });
+        reportUsage(acc, Date.now() - t0, detectAgent(req), req.body && req.body.model);
       }
     } else {
       const data = await response.json();
       captureTrace({ req, provider, rawOrObj: data, meta: { agent: 'codex-proxy', stream: false } });
       res.json(data);
+      // 成本采集：chat 路由此前只有 /v1/messages 接了 reportUsage，dsh 走的这条一直没进账。
+      // 流式分支暂不接（usage 藏在流末、客户端中途断开=虚账），先保非流式完整可记账。
+      reportUsage(JSON.stringify(data), Date.now() - t0, detectAgent(req), req.body && req.body.model);
     }
   } catch (e) {
     // 客户端拔了（canWrite=false）不算上游故障，不喂熔断；其余视为上游不可达
@@ -992,7 +979,7 @@ function pipeUpstreamBytes(res, response, tag, signal) {
  * 🔴 纪律：上报是**旁路**，fire-and-forget + 全 catch。manager 挂了 / 格式认不出，
  * 都不能让主路径（Claude Code 的请求）失败或变慢。
  */
-function reportUsage(raw, latencyMs) {
+function reportUsage(raw, latencyMs, agent, model) {
   if (!raw || typeof raw !== 'string') return;
   const url = String(process.env.MANAGER_URL || 'http://127.0.0.1:18792').replace(/\/$/, '');
   // 写端点不 fail-open：没 token 就不报，宁可少一笔账也不让陌生人灌假成本。
@@ -1001,10 +988,15 @@ function reportUsage(raw, latencyMs) {
   const agentToken = process.env.MANAGER_AGENT_TOKEN || process.env.PROXY_AUTH_TOKEN;
   const headers = { 'content-type': 'application/json' };
   if (agentToken) headers['x-agent-token'] = agentToken;
+  // model / requestModel 原样带上：否则过代理的 openai 线会退化成 model=<unknown>，
+  // 按模型拆账直接没数据（见 cost-report.js 头注释）。上游 usage 里通常不带模型名，
+  // 所以这里从请求体补（dsh / codex / cursor 都在 body.model 声明目标模型）。
+  const body = { agent: agent || 'codex-proxy', raw, latencyMs };
+  if (model) { body.model = model; body.requestModel = model; }
   fetch(`${url}/api/cost/report`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ agent: 'codex-proxy', raw, latencyMs }),
+    body: JSON.stringify(body),
   }).catch((e) => {
     // 全 catch（不拖累主路径），但**只警告一次** —— 静默吞掉会让"上报没生效"变成玄学。
     if (!reportWarned) {
@@ -1014,6 +1006,24 @@ function reportUsage(raw, latencyMs) {
   });
 }
 let reportWarned = false;
+
+// ===== agent 维度检测（2026-10-11，dsh 成本采集）=====
+// codex-proxy 同时服务多个客户端（dsh / codex / cursor / hermes...），
+// 上报账本时必须能区分是谁在花钱，否则「省钱效果」无法按客户端归因。
+// 检测优先级：
+//   1. 显式 `x-agent` 请求头（接入方主动声明，如 dsh 插件在状态栏上报）
+//   2. `user-agent` 头里抓客户端特征（dsh / codex / cursor / hermes）
+//   3. 默认 'codex-proxy'（保持向后兼容，老客户端不带头也照旧）
+function detectAgent(req) {
+  const explicit = req.headers['x-agent'];
+  if (explicit && String(explicit).trim()) return String(explicit).trim();
+  const ua = String(req.headers['user-agent'] || '');
+  if (/dsh|deepseek[-\s]harness/i.test(ua)) return 'dsh';
+  if (/codex|openai/i.test(ua)) return 'codex';
+  if (/cursor/i.test(ua)) return 'cursor';
+  if (/hermes/i.test(ua)) return 'hermes';
+  return 'codex-proxy';
+}
 
 // ===== 质量层观测 capture（flag-gated，默认关）=====
 // 服务于「模型漂移 / session 切换衔接 / 多 agent 轨迹质量」的量化：只在出口抓
@@ -1164,7 +1174,7 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     feedCircuit(provider, 'success');
     const { outcome, acc } = await pipeUpstreamBytes(res, response, '[messages]', upstreamSignal);
     if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
-      reportUsage(acc, Date.now() - t0);
+      reportUsage(acc, Date.now() - t0, detectAgent(req), req.body && req.body.model);
       captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'codex-proxy', stream: !!req.body.stream } });
     }
   } catch (e) {

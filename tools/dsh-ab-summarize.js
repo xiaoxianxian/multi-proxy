@@ -58,6 +58,9 @@ const A_pt = mean(A.map((_, i) => g(A, i, 0))), B_pt = mean(B.map((_, i) => g(B,
 const A_ms = mean(A.map((_, i) => g(A, i, 2))), B_ms = mean(B.map((_, i) => g(B, i, 2)));
 const A_ht = mean(A.map((_, i) => g(A, i, 1))), B_ht = mean(B.map((_, i) => g(B, i, 1)));
 const yuan = (hit, miss) => (miss / 1e6) * 1 + (hit / 1e6) * 0.1;
+// 🔴 上游不回缓存分档时（实测 agnes 不回 prompt_cache_hit/miss），口径二/三会全 0。
+//    0 会被读成「没省钱」，跟口径一的 −35% 直接打架 —— 宁可显式标 n/a，不硬凑数字。
+const cacheSplit = [...A, ...B].some(r => (Number(r[1]) || 0) > 0 || (Number(r[2]) || 0) > 0);
 
 console.log(`样本: ${file}  (${hash})   轮数 = ${A.length}`);
 console.log('');
@@ -70,6 +73,8 @@ console.log('');
 console.log('[口径二] 真付钱多少 —— miss 才是全价新算的那一截');
 console.log(`   A(直连) miss 均值 = ${f(A_ms).padStart(6)}    B(过桥) miss 均值 = ${f(B_ms).padStart(6)}`);
 console.log(`   Δ = ${f(B_ms - A_ms).padStart(6)}   ${pct(B_ms, A_ms)}`);
+if (!cacheSplit)
+  console.log('   ⚠️ n/a：上游未回 prompt_cache_hit/miss 分档，miss 恒 0 —— 本口径不可用，别读成「没省」');
 console.log('   🔴 稳态下 miss 只跟「这轮新变的尾巴」有关，跟桥没关系。别把口径一的 −32%');
 console.log('      读成「每轮都省三成」——那是「这一轮要喂进去的量」的差，不是「花的钱」的差。');
 console.log('');
@@ -81,5 +86,11 @@ for (let i = 0; i < A.length; i++) {
 }
 console.log('');
 console.log('[口径三] 钱（输入侧；DeepSeek 未命中 1 元/M + 命中 0.1 元/M，换上游重算）');
-console.log(`   A(直连) = ${yuan(A_ht, A_ms).toFixed(5)} 元    B(过桥) = ${yuan(B_ht, B_ms).toFixed(5)} 元    变化 = ${pct(yuan(B_ht, B_ms), yuan(A_ht, A_ms))}`);
+if (!cacheSplit) {
+  console.log('   n/a —— 上游未回 prompt_cache_hit/miss，无法按缓存分档计价');
+  console.log('         （硬算会得到 0 元，被读成「没省钱」，跟口径一打架，故不凑数）');
+  console.log('   👉 省钱结论看口径一（pt Δ）：确定性，不依赖缓存分档。');
+} else {
+  console.log(`   A(直连) = ${yuan(A_ht, A_ms).toFixed(5)} 元    B(过桥) = ${yuan(B_ht, B_ms).toFixed(5)} 元    变化 = ${pct(yuan(B_ht, B_ms), yuan(A_ht, A_ms))}`);
+}
 console.log('   ⚠️ 不含输出；换上游/换价要重算这一行。');

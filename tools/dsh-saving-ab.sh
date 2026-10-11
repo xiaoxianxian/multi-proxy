@@ -29,7 +29,7 @@ BRIDGE="http://127.0.0.1:18795"
 BRIDGE_HEALTH="$BRIDGE/health"
 MODELS="${MODELS:-deepseek-v4-flash}"
 ROUNDS="${1:-3}"
-NODE_BIN="/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-3/bin/node"
+NODE_BIN="/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-6/bin/node"
 PAYLOAD="$REPO_DIR/logs/dsh-ab-payload.json"
 
 # ---- 0. 起桥（launchd 挂了就降级 nohup；桥死了后面全是废话）----
@@ -53,6 +53,7 @@ if [ "${FAKE:-0}" != "1" ]; then
   PAYLOAD="$TMPP"
 else
   echo "样本来源：合成样本（FAKE=1）"
+  TMPP="$REPO_DIR/logs/dsh-ab-fake-payload.json"
 "$NODE_BIN" -e '
 const fs = require("fs");
 const NAMES = ["read_file","search_code","apply_patch","run_terminal","list_dir","grep_files",
@@ -162,6 +163,9 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
 
   const A_pt = mean(A.map((_,i)=>ptV(A,i))), B_pt = mean(B.map((_,i)=>ptV(B,i)));
   const A_ms = mean(A.map((_,i)=>msV(A,i))), B_ms = mean(B.map((_,i)=>msV(B,i)));
+  // 🔴 上游不回缓存分档时（实测 agnes 不回 prompt_cache_hit/miss），口径二/三会全 0。
+  //    0 会被读成「没省钱」，跟口径一的 −35% 直接打架 —— 宁可显式标 n/a，不硬凑数字。
+  const cacheSplit = [...A, ...B].some(r => (parseInt(r[1])||0) > 0 || (parseInt(r[2])||0) > 0);
 
   console.log("===== 汇总（pt = prompt_tokens = hit + miss）=====");
   console.log("");
@@ -174,6 +178,8 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   console.log("[口径二] 真付钱多少 —— miss 才是每次全价新算的那一截");
   console.log("   A(直连) miss 均值 = " + f(A_ms).padStart(6) + "    B(过桥) miss 均值 = " + f(B_ms).padStart(6));
   console.log("   Δ = " + f(B_ms-A_ms).padStart(6) + "   " + pct(B_ms,A_ms));
+  if (!cacheSplit)
+    console.log("   ⚠️ n/a：上游未回 prompt_cache_hit/miss 分档，miss 恒 0 —— 本口径不可用，别读成「没省」");
   console.log("   🔴 别把口径一的 −32% 读成「每轮每轮都省三成」。miss 只反映「这轮新变的尾巴」，");
   console.log("      稳态下它跟桥没关系。要看桥有没有省钱，看口径一 + 下面的钱。");
   console.log("");
@@ -192,6 +198,12 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   const BH = mean(B.map((_,i)=>htV(B,i))), BM = mean(B.map((_,i)=>msV(B,i)));
   const ac = yuan(AH,AM), bc = yuan(BH,BM);
   console.log("[口径三] 钱（输入侧；DeepSeek 未命中 1 元/M + 命中 0.1 元/M）");
-  console.log("   A(直连) = " + ac.toFixed(5) + " 元    B(过桥) = " + bc.toFixed(5) + " 元    变化 = " + pct(bc,ac));
+  if (!cacheSplit) {
+    console.log("   n/a —— 上游未回 prompt_cache_hit/miss，无法按缓存分档计价");
+    console.log("         （硬算会得到 0 元，被读成「没省钱」，跟口径一打架，故不凑数）");
+    console.log("   👉 省钱结论看口径一（pt Δ）：确定性，不依赖缓存分档。");
+  } else {
+    console.log("   A(直连) = " + ac.toFixed(5) + " 元    B(过桥) = " + bc.toFixed(5) + " 元    变化 = " + pct(bc,ac));
+  }
   console.log("   ⚠️ 不含输出；换上游/换价要重算这一行。");
 });'
