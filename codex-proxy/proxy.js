@@ -172,11 +172,28 @@ function updateRoutingMode(mode) {
 // 原因：const 表在模块加载时一次性求值 process.env.XXX，但 dotenv（第 7 行）
 // 与 launchd 注入的 key 可能在之后才生效，导致首读时 key 为空 → 上游 401。
 // 改成 getter 后，每次 findProvider() 调用时现读，key 总能拿到最新值。
+//
+// 🔴🔴 2026-10-12 二次修（纯 getter 引入的回归，必读）：
+//   纯延迟读打破了「UPSTREAM_MODELS 是**模块加载时求值的常量**」这条既有约定
+//   （codex-proxy-messages.test.js:26 注释里就是这么写的，测试在 require 之前设 env）。
+//   现场：jest.setup-afterenv.js 的 afterEach 会把 process.env 恢复到 worker 加载时的
+//   快照（那是为根治跨文件 env 泄漏 flaky 特意加的）⇒ 测试里 module-scope 设的
+//   DEEPSEEK_API_KEY 在**第一个 test 结束后就被清掉** ⇒ getter 读到 undefined
+//   ⇒ 「鉴权换成 provider 自己的 key」两条断言挂（全量套件 2 failed）。
+//   解法：**运行时 env 优先，读不到回落加载时快照** ——
+//     · 延迟读的价值完整保留（运行中被注入/改过的 key 照样生效，这才是改 getter 的目的）；
+//     · 同时不再依赖 env 从头到尾都存在（顺带更稳：任何误删 env 的路径都不会丢 key）。
+//   ⚠️ 别再改回纯 `process.env.XXX`：那会让 launchd/dotenv 注入晚于模块加载时 key 为空。
+const _keyAtLoad = {
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+  MOONSHOT_API_KEY: process.env.MOONSHOT_API_KEY,
+  AGNES_API_KEY:    process.env.AGNES_API_KEY,
+};
 const UPSTREAM_MODELS = [
   {
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
-    get apiKey() { return process.env.DEEPSEEK_API_KEY; },
+    get apiKey() { return process.env.DEEPSEEK_API_KEY || _keyAtLoad.DEEPSEEK_API_KEY; },
     availableModels: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   },
   {
@@ -188,7 +205,7 @@ const UPSTREAM_MODELS = [
   {
     name: 'Agnes',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
-    get apiKey() { return process.env.AGNES_API_KEY; },
+    get apiKey() { return process.env.AGNES_API_KEY || _keyAtLoad.AGNES_API_KEY; },
     // 🔴 2026-10-02 维护者订正：agnes-2.0-flash / agnes-1.5-flash 是老型号，官方不一定还收。
     // 实测：agnes-2.0-flash 与 2.5-flash 在 max_tokens=16 下 16 token 全被 thinking 吃掉、
     // body.content 恒为空（finish_reason=length）；agnes-1.5-flash 直接 503。
