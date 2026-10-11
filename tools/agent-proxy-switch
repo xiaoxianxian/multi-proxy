@@ -483,20 +483,75 @@ for i, l in enumerate(lines):
             if re.match(r'^\S', lines[j]): break
         break
 
-# 3) 在 providers: 块下追加 curator（跟 custom 同级缩进 2 空格）
-block = []
-if key_env: block.append('    key_env: %s' % key_env)
-block.append('    base_url: %s' % url)
-block.append('    discover_models: true')
-# 找到最后一个 2 空格缩进的 provider 键，插到它后面
-idx = -1
+# 3) 在 providers: 块下安置 curator —— 🔴 2026-10-11 缺陷修复（70 号 ②B）：
+#    旧实现整文件找「最后一个 2 空格裸键」（idx=i 反复覆盖 → 落到文件尾的
+#    platforms: 域下，插错块），且主配置 providers: 里本就有的 curator: 空
+#    scaffold（base_url:''）没被填 → model.provider=curator 指向无 base_url 的
+#    provider，②B「走桥 18795」路由落空。
+#    修法（最小改动，只改插入定位，不动 step 1/2）：
+#    a) 先限定 providers: 块的行范围（^providers: 行 ~ 下一个顶层键）
+#    b) 块内已有 curator: 子键（空 scaffold）→ 原地逐键填充，不重复追加
+#    c) 没有 → 块内最后一个 2 空格裸键后追加（旧逻辑，限定范围）
+pstart = -1
 for i, l in enumerate(lines):
-    if re.match(r'^  [A-Za-z_][A-Za-z0-9_]*:\s*$', l): idx = i
-if idx < 0:
-    sys.stderr.write('未在 providers: 块里找到 provider 条目\n'); sys.exit(4)
-lines[idx + 1:idx + 1] = ['  curator:', '    name: Curator (multi-proxy bridge)'] + block
-open(path, 'w').write('\n'.join(lines))
-print('  已生成 %s（主配置完整拷贝 + providers.curator）' % path)
+    if re.match(r'^providers:\s*$', l):
+        pstart = i
+        break
+if pstart < 0:
+    sys.stderr.write('未在 profile 里找到顶层 providers: 块，profile 生成失败：%s\n' % path)
+    sys.exit(4)
+pend = len(lines)
+for i in range(pstart + 1, len(lines)):
+    if re.match(r'^[A-Za-z_][A-Za-z_0-9_]*:', lines[i]):
+        pend = i
+        break
+cur_idx = -1
+for i in range(pstart + 1, pend):
+    if re.match(r'^  curator:\s*$', lines[i]):
+        cur_idx = i
+        break
+
+if cur_idx >= 0:
+    # (a) 原地填充既有 curator: 子键（逐键重扫；_fill 内插入会使索引漂移，故每次从头扫）
+    # 注：脚本顶层执行，lines 是全局，_fill 里只做变更（lines[j]=/insert），无需 global 声明
+    def _fill(k, v):
+        for j in range(cur_idx + 1, len(lines)):
+            l2 = lines[j]
+            # 出 curator: 子块（下一个 2 空格裸键 / 任意顶层键）
+            if re.match(r'^  [A-Za-z_][A-Za-z_0-9_]*:\s*$', l2) or re.match(r'^[A-Za-z_][A-Za-z_0-9_]*:', l2):
+                break
+            m3 = re.match(r'^(\s+)' + k + r':\s*(.*)$', l2)
+            if m3:
+                lines[j] = m3.group(1) + k + ': ' + v
+                return
+        lines.insert(cur_idx + 1, '    %s: %s' % (k, v))
+    if key_env: _fill('key_env', key_env)
+    _fill('name', 'Curator (multi-proxy bridge)')
+    _fill('base_url', url)
+    _fill('discover_models', 'true')
+    _fill('enabled', 'true')
+    open(path, 'w').write('\n'.join(lines))
+    print('  已生成 %s（主配置完整拷贝 + 原地填充 providers.curator 既有 scaffold）' % path)
+else:
+    # (b) providers: 块内无 curator: 子键 → 追加到块**末尾**（lines[pend:pend]，紧贴下一个顶层键之前）。
+    #     🔴 2026-10-11 二次修：旧逻辑「插在最后一个裸键（如 ollama:）下方」会切断该 provider 的
+    #     子键（base_url/models/name）—— ollama: 变空 provider、curator「继承」ollama 子键
+    #     （base_url 被 ollama 的 11434 覆盖、YAML 重复键）。改插到块末尾，curator 成为
+    #     custom/ollama 的同级兄弟，不碰任何既有 provider。
+    #     idx 仍作空块保护（providers 块内一条 provider 都没有 → 拒绝生成，不猜）。
+    idx = -1
+    for i in range(pstart + 1, pend):
+        if re.match(r'^  [A-Za-z_][A-Za-z_0-9_]*:\s*$', lines[i]): idx = i
+    if idx < 0:
+        sys.stderr.write('providers: 块里没有任何 provider 条目，profile 生成失败：%s\n' % path)
+        sys.exit(4)
+    block = []
+    if key_env: block.append('    key_env: %s' % key_env)
+    block = ['  curator:', '    name: Curator (multi-proxy bridge)'] + block + [
+        '    base_url: %s' % url, '    discover_models: true', '    enabled: true']
+    lines[pend:pend] = block
+    open(path, 'w').write('\n'.join(lines))
+    print('  已生成 %s（主配置完整拷贝 + providers 块末尾追加 curator）' % path)
 PY
 }
 
