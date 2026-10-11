@@ -152,7 +152,8 @@ function loadPricingFromEnv() {
 //      'proxy'   = 模型没登记，回落到 per-proxy 那套价
 //      'unknown' = 都没有 ⇒ 算出来的 0 是「没价」，不是「免费」
 // =====================================================================
-const _modelPricing = new Map();   // modelId -> {input, output, cacheHit, priceSource?, providerId?}
+const modelMetadata = require('./model-metadata');
+const _modelPricing = new Map();   // modelId -> {input, output, cacheHit, priceSource?, providerId?, retrievedAt?}
 
 // 读价表。失败不抛：价表读不出来只影响算钱，不该让网关起不来。
 //
@@ -195,6 +196,8 @@ function _registerModelPricing(m, prov) {
         cacheHit:    m.pricing.cacheHit != null ? (Number(m.pricing.cacheHit) || 0) : undefined,
         priceSource: m.priceSource || undefined,
         providerId:  prov.provider_id || prov.id || undefined,
+        // P4：价格采集时刻（缺失 null，不造「现在」）。
+        retrievedAt: modelMetadata.extractRetrievedAt(m),
         // P3：分时档。存原样（不在加载期做窗口判定 —— 判定必须发生在**计价那一刻**）。
         offPeakPricing: m.offPeakPricing || undefined,
       });
@@ -264,6 +267,7 @@ function resolvePricing(pricingModel, st, opts) {
         window: ov.window, windowIndex: ov.windowIndex, offPeak: ov.offPeak,
         scheduled: true,
         priceSource: ov.priceSource || mp.priceSource,
+        retrievedAt: mp.retrievedAt == null ? null : mp.retrievedAt,
       };
     }
     return {
@@ -271,6 +275,7 @@ function resolvePricing(pricingModel, st, opts) {
       input: mp.input, output: mp.output, cacheHit: mp.cacheHit,
       window: 'standard', windowIndex: -1, offPeak: false, scheduled: false,
       priceSource: mp.priceSource,
+      retrievedAt: mp.retrievedAt == null ? null : mp.retrievedAt,
     };
   }
   const sp = st && st.pricing;
@@ -280,11 +285,13 @@ function resolvePricing(pricingModel, st, opts) {
       input: Number(sp.input) || 0, output: Number(sp.output) || 0,
       cacheHit: sp.cacheHit != null ? Number(sp.cacheHit) || 0 : undefined,
       window: 'standard', windowIndex: -1, offPeak: false, scheduled: false,
+      retrievedAt: null,
     };
   }
   return {
     source: 'unknown', key: pricingModel || UNKNOWN, input: 0, output: 0, cacheHit: undefined,
     window: 'standard', windowIndex: -1, offPeak: false, scheduled: false,
+    retrievedAt: null,
   };
 }
 
@@ -416,6 +423,8 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
     model: pricingModel,
     requestModel,
     pricingSource,          // 'model' | 'proxy' | 'unknown'（P2：区分「真免费」与「没价」）
+    // P4：价格采集时刻。没有就省略该字段（=「不知道」），绝不伪造「现在」。
+    pricingRetrievedAt: pr.retrievedAt || undefined,
     // P3 分时档：'standard' = 标准价；'w0'… = 命中第几个 off-peak 窗口。
     // 🔴 只记在**配了分时档**的模型上（pr.scheduled）—— 没配时刻表的模型记
     //    'standard' 是句废话，还会把「哪些模型有闲时可挖」这个问题搅浑。
