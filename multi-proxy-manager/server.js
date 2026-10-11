@@ -110,6 +110,10 @@ app.use('/api/floor', require('./routes/floor'));
 // 跨进程 usage 上报面：代理进程（如 codex-proxy）把上游 usage 报进来，与 floor 同挂此层。
 // 接入规范见 routes/cost-report.js 头注释 —— 接入方只需贴 raw + agent，解析由 usage-probe 自动做。
 app.use('/api/cost', require('./routes/cost-report'));
+// P7 本地预算闸门：只读判级（GET）+ 越限采集发告警（POST collect，复用 alert 内核规则）。
+// 没配 budget.json ⇒ enabled:false，零行为变更。边界见 routes/budget.js 头注释：
+// 单租户本地能力，不碰账号/余额/代持（那层等公司 + 商业/法务 feasibility）。
+app.use('/api/budget', require('./routes/budget'));
 // h3web Guard：外部本地服务（h3web :8731）检测 / 提醒 / 可选一键开启。
 // 与 provider-health/sessions 同模式，挂在代理 wildcard 之前（否则 /api/h3web 被 :proxy=h3web 误捕获）。
 // 分工（维护者 2026-10-10）：不替 h3web 配 launchd 常驻，只在使用侧「发现没起就提醒」+ 留门控一键开启。

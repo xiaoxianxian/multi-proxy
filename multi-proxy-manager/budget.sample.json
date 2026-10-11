@@ -1,0 +1,14 @@
+{
+  "_comment": "P7 本地预算闸门配置样本。复制为 ~/.multi-proxy-manager/budget.json 并按需修改；不配 = 不拦不报（零行为变更）。字段含义见 multi-proxy-manager/lib/budget-guard.js 头注释与 routes/budget.js。",
+  "_sample_note": "下面这份是「关」状态（hardCap=0）——照抄不会改变任何行为，改 hardCap 才生效。",
+  "period": "monthly",
+  "hardCap": 0,
+  "warnRatio": 0.8,
+  "timezone": "Asia/Shanghai",
+  "perModel": {
+    "deepseek-v4-flash": 30
+  },
+  "perAgent": {
+    "dsh": 50
+  }
+}

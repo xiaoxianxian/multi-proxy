@@ -546,6 +546,32 @@ function loadLedger(fileOverride) {
   return n;
 }
 
+// P7：**只读**账本条目出口（预算闸门吃它）。与 loadLedger 的区别：
+//   loadLedger        —— 读回并**应用进内存态**（启动期恢复用，有副作用：_state 被改写、
+//                        还会喂 upstreamCheck 样本外的路径，见 applyTokens 的 !_loading 注释）
+//   readLedgerEntries —— 只解析返回 [{...}]，**不碰 _state、不喂样本、不记 seen**
+// 预算判定是「看一眼历史」，不能因为看了一眼就把账本重新应用一遍（那会让
+// upstreamCheck 的样本、getAll 的累计全部翻倍——与「重启一次账本翻倍」同坑）。
+// 解析容错与 loadLedger 相同：坏行跳过（append 写不会破坏前面的行）。
+function readLedgerEntries(fileOverride) {
+  const file = fileOverride || ledgerFile();
+  let text;
+  try {
+    if (!fs.existsSync(file)) return [];
+    text = fs.readFileSync(file, 'utf8');
+  } catch { return []; }
+  const out = [];
+  for (const line of text.split('\n')) {
+    const s = line.trim();
+    if (!s) continue;
+    try {
+      const r = JSON.parse(s);
+      if (r && typeof r === 'object') out.push(r);
+    } catch { /* 半行/损坏 → 跳过 */ }
+  }
+  return out;
+}
+
 // 按模型拆账的对外拷贝（**必须拷贝**：直接给引用会让调用方改到内部 _state，账就脏了）
 function cloneModels(bag) {
   const out = {};
@@ -609,6 +635,9 @@ module.exports = {
   getCost,      // → models / requestModels 两个按模型的拆账视图
   getAll,
   loadLedger,
+  // P7（2026-10-12）：只读账本条目（预算闸门用）。**不应用进内存态**——
+  // 与 loadLedger 的副作用边界见函数注释。budget-guard 的纯函数吃这个数组。
+  readLedgerEntries,
   ledgerFile,
   reset,
   // P2（2026-10-12）：model 级价表。loadPricingFromProviders 在 server 启动时调一次；
