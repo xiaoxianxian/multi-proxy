@@ -853,16 +853,32 @@ switch_one() {
     return 0
   fi
 
-  # 🔴 原生 owner（cc-switch / proxy-rebuild / direct）分支走完在这里统一 return。
-  #    curator 在前面已 return，off 在前面已 return ⇒ 走到这的都执行成功了。
-  #    少了这行会一路穿到下面兜底，在“明明写成功了”之后又补一句「未知的 owner」
-  #    （2026-10-02 实测：切 codex 到 proxy-rebuild 时 base_url 确实写入了，但末尾照样报错）。
-  return 0
+  # ---------------------------------------------------------------------
+  # 🔴🔴 2026-10-12 P0 修复：**这个 return 原本在这里，把它后面的原生分支整段
+  #    变成了死代码**。原注释写「原生 owner 分支走完在这里统一 return」，但
+  #    return 在 case **之前** ⇒ 永远到不了 case。
+  #    现场：2026-10-02 那次把 `off` 提到原生 case 之前时，只挪了 off，忘了这个
+  #    return ⇒ 从此 `codex cc-switch` / `hermes proxy-rebuild` / `cursor direct`
+  #    全部 **exit 0 + 零输出 + 一个字节没写**。比报错危险：静默成功，用户以为切了。
+  #    修法：return 移到函数末尾（原生 case 之后）。这样
+  #      curator → 前面已 return ／ off → 前面已 return
+  #      原生 owner 匹配 → 走完 case 落到这里 return 0
+  #      原生 owner 不匹配 → 各 agent 的 `*)` 兜底 return 1（cursor 的 `*)` 是这次补的）
+  # ⚠️ 别再把任何 return 放在 case 之前。这条注释就是给下次改动的人看的。
+  # ---------------------------------------------------------------------
 
   case "$agent" in
     codex)
       case "$owner" in
         cc-switch)
+          # 🔴 2026-10-12 P0 补：设计原则 4「不死链」要求切之前先确认目标端口在监听，
+          #    但 cc-switch 分支是唯一漏掉这条检查的（proxy-rebuild 各分支都有）。
+          #    漏掉的后果与写死链一样：base_url 指到一个没起的服务，agent 一发请求就 502。
+          if ! port_listening $CC_SWITCH_PORT; then
+            echo "  [错误] cc-switch(15721)未监听。为避免死链已中止，配置未改动。" >&2
+            echo "     请先启动 cc-switch，再：agent-proxy-switch codex cc-switch" >&2
+            return 1
+          fi
           set_codex "$CC_SWITCH_URL"
           echo "  请重启 Codex 使配置生效。" ;;
         proxy-rebuild)
@@ -906,10 +922,34 @@ switch_one() {
           echo "  [半自动] 请手动在 Cursor GUI 完成切换："
           echo "    1) 打开 Cursor → Settings → Models"
           echo "    2) 清空 OpenAI Base URL（恢复 Cursor 默认）" ;;
-        *) echo "  cursor 的 owner 只能是 proxy-rebuild 或 direct" >&2; return 1 ;;
+        *) echo "  cursor 的 owner 只能是 proxy-rebuild / direct / curator / off" >&2; return 1 ;;
+      esac ;;
+    dsh)
+      case "$owner" in
+      *) # 🔴 2026-10-12 P0 补：dsh 原本在原生 case 里**一个分支都没有** ⇒
+         #    `agent-proxy-switch dsh direct`（及任何拼错的 owner）会一路穿到函数末尾
+         #    静默 return 0 —— 零输出、零副作用，看着像切成功了。
+         #    刻意**不实现** dsh 的 direct：文件头 :42 就写了「dsh 无『直连』，closest 是
+         #    官方 baseURL」，而官方 baseURL 按 provider 各异（deepseek/agnes/ollama），
+         #    猜错就是把 agent 送到一个没账本、甚至需要新 key 的地方 —— 这与 off 刻意不猜
+         #    直连（:788-790）是同一条纪律。要改 dsh 走 curator / off 两个语义开关。
+         echo "  dsh 的 owner 只有 curator / off（无 direct）" >&2
+         echo "     原因：dsh 的「直连」是官方 baseURL，按 provider 各异（deepseek/agnes/ollama），" >&2
+         echo "           猜错=把 agent 送进一个没账本甚至要新 key 的地方，故不猜。" >&2
+         echo "     用法：agent-proxy-switch dsh curator   开启省钱桥" >&2
+         echo "           agent-proxy-switch dsh off      回滚到切 curator 之前" >&2
+         return 1 ;;
       esac ;;
   esac
 
+  # 🔴 原生 owner 分支执行完在这里统一 return（2026-10-12 P0：从 case **之前**挪到这里）。
+  #    本次挪动修掉的是：return 原本在原生 case 之前 ⇒ 那整段 case 是不可达死代码，
+  #    `codex cc-switch` / `hermes proxy-rebuild` / `cursor direct` 全部
+  #    **exit 0 + 零输出 + 一个字节没写**（2026-10-12 用 CODEX_CFG 指向临时文件复现坐实）。
+  #    现在：curator → 前面已 return；off → 前面已 return；
+  #          原生 owner 匹配 → 走完 case 落到这里 return 0；不匹配 → 各 `*)` 已 return 1。
+  # ⚠️ 别再把 return 放在 case 之前。
+  return 0
 }
 
 usage() {
