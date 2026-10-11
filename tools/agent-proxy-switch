@@ -333,6 +333,91 @@ sys.stderr.write("未在 llm-pi-ai.providers.%s 下找到 baseURL，未修改：
 PY
 }
 current_dsh_url() { dsh_patch_scan read; }
+
+# 读出 provider 块里除 baseURL 外的关键字段（apiKeyEnv / api / models 白名单）。
+# 2026-10-12 P1 加：takeover 要把「真 upstream」存进我们自己的库，模型白名单与
+# apiKeyEnv 必须一起带过去 —— 否则还原后 dsh 的 provider 只剩一个 URL，模型选不到
+# （工具文件头 :82 就警告过「models: 是显式白名单，只改 baseURL 不够」）。
+dsh_provider_inspect() {
+  DSH_PATH="$DSH_CFG" DSH_PROV="$DSH_PROVIDER" python3 - <<'PY'
+import os, re, sys
+path = os.environ['DSH_PATH']; prov = os.environ['DSH_PROV']
+try:
+    lines = open(path).read().split('\n')
+except OSError as e:
+    sys.stderr.write("读取失败：%s\n" % e); sys.exit(3)
+in_llm = False; in_prov = False
+for i, line in enumerate(lines):
+    if not in_llm:
+        if re.match(r'^\s*-\s*id:\s*llm-pi-ai\s*$', line):
+            in_llm = True
+        continue
+    if re.match(r'^\s*-\s*id:\s*', line):
+        break
+    if not in_prov and re.match(r'^\s*providers:\s*$', line):
+        in_prov = True
+        continue
+    if in_prov:
+        if re.match(r'^\S', line):
+            break
+        m = re.match(r'^(\s*)(' + re.escape(prov) + r'):\s*$', line)
+        if not m:
+            continue
+        ind = len(m.group(1))
+        j = i + 1
+        keyenv = ''; api = ''; models = []; in_models = False
+        while j < len(lines):
+            nl = lines[j]
+            if nl.strip() and (len(nl) - len(nl.lstrip(' '))) <= ind:
+                break
+            s = nl.strip()
+            mk = re.match(r'^apiKeyEnv:\s*(\S+)\s*$', s)
+            if mk: keyenv = mk.group(1)
+            ma = re.match(r'^api:\s*(\S+)\s*$', s)
+            if ma: api = ma.group(1)
+            if s == 'models:':
+                in_models = True
+            elif in_models:
+                mm = re.match(r'^-\s*id:\s*(\S+)\s*$', s)
+                if mm:
+                    models.append(mm.group(1))
+                elif not s.startswith('-'):
+                    in_models = False
+            j += 1
+        print('%s|%s|%s' % (keyenv, api, ','.join(models)))
+        sys.exit(0)
+sys.stderr.write("未找到 provider %s\n" % prov); sys.exit(4)
+PY
+}
+
+# ---- takeover 真值库（2026-10-12 P1，借鉴 cc-switch）----
+# 🔴 为什么要它：原来改 agent 配置是「把原值覆盖成 127.0.0.1:<port>」，原值就此消失，
+#    回滚只能靠人记得备份。**真值应该存在我们自己的库里，不该存在 agent 的配置里。**
+#    cc-switch 的做法（可逆四件套之三）：live config 只写**常量**
+#      ANTHROPIC_BASE_URL:   http://127.0.0.1:15721
+#      ANTHROPIC_AUTH_TOKEN: PROXY_MANAGED
+#    写进去的值不含任何需要记住的原值 ⇒ 回滚不用拼 yaml、不用记得「原来是谁」。
+#    我们照抄这个形态：agent 配置里只有 127.0.0.1 常量，真 upstream 在下面的 JSON 里。
+TAKEOVER_DIR="${TAKEOVER_DIR:-$STATE_DIR}"
+takeover_file_for() { echo "$TAKEOVER_DIR/takeover-$1.json"; }
+takeover_record() {
+  # $1=agent $2=provider $3=真upstream $4=apiKeyEnv $5=models(逗号分隔) $6=代理端点常量
+  mkdir -p "$TAKEOVER_DIR"
+  cat > "$(takeover_file_for "$1")" <<EOF
+{"agent":"$1","provider":"$2","upstream":"$3","apiKeyEnv":"$4","models":"$5","proxyUrl":"$6","mode":"takeover","at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+EOF
+  echo "  真值已入库：$(takeover_file_for "$1")"
+  echo "    provider=$2  upstream=$3  apiKeyEnv=$4  models=$5"
+}
+takeover_read() {
+  local f; f="$(takeover_file_for "$1")"
+  [ -f "$f" ] || return 1
+  /usr/bin/python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+print('%s|%s|%s|%s|%s' % (d.get('provider',''), d.get('upstream',''), d.get('apiKeyEnv',''), d.get('models',''), d.get('proxyUrl','')))
+" "$f" 2>/dev/null
+}
 # dsh 的开关是「换默认 provider」而不是改 baseURL：curator provider 的 baseURL 本来就是桥，
 # 所以 curator/off 只动 agent-default-model 这一个 entry 的 provider（+ model）字段。
 dsh_default_model() {
@@ -681,6 +766,21 @@ status_one() {
   else
     echo "  curator 开关状态       = 关（未切过 curator）"
   fi
+  # ---- takeover 接管状态（2026-10-12 P1）----
+  # 不显示的话用户根本不知道「真值已被存库、off 现在可用」，也就不会去用 off。
+  local tkf; tkf="$(takeover_file_for "$agent")"
+  if [ -f "$tkf" ]; then
+    local tkr; tkr="$(takeover_read "$agent" 2>/dev/null || true)"
+    # 🔴 用 IFS read 而不是 `cut -d'|' -f1`：cut 按**字节**切，中文全角括号是多字节，
+    #    实测会把 provider 名连同后面的字节一起吞掉（显示成「provider=」空的）。
+    local tk_prov tk_up
+    IFS='|' read -r tk_prov tk_up _ <<< "$tkr"
+    echo "  takeover 接管状态      = 已接管"
+    echo "    provider             = ${tk_prov}"
+    echo "    真 upstream          = ${tk_up}"
+    echo "    （真值存在 ${tkf}，不在 agent 配置里）"
+    echo "    还原方法             = agent-proxy-switch $agent off —— 不用记得原值，也不用翻备份"
+  fi
 }
 
 # ---- 桥按需加载：用完就地撤 ----
@@ -777,6 +877,58 @@ switch_one() {
       return 0 ;;
   esac
 
+  # ---------------------------------------------------------------------
+  # takeover（2026-10-12 P1）—— 真 upstream 存进我们自己的库，live config 只留常量。
+  #   这是给 **GUI 常驻型 agent** 用的：它们注入不了环境变量，做不到 profile 零写入，
+  #    只能写配置。写配置就必须是 takeover 形态，否则「原值被覆盖」不可逆。
+  #   用法：
+  #     agent-proxy-switch dsh takeover                       # 首次接管（真值从当前配置读）
+  #     TAKEOVER_UPSTREAM=<原URL> agent-proxy-switch dsh takeover
+  #                                                           # 真值已被覆盖覆盖时显式补登
+  #     agent-proxy-switch dsh off                             # 从库里读真值写回
+  # ---------------------------------------------------------------------
+  if [ "$owner" = "takeover" ]; then
+    case "$agent" in
+      dsh)
+        local cur; cur="$(current_dsh_url 2>/dev/null || true)"
+        local upstream="${TAKEOVER_UPSTREAM:-}"
+        if [ -z "$upstream" ]; then
+          # 🔴 当前值已是本机常量 ⇒ 真值不在配置里了（正是 2026-10-11 手工改 dsh 留下的现状）。
+          #    这时**不能猜** upstream 是什么：agnes/deepseek/ollama 各不相同，猜错就是
+          #    把 agent 送进一个没账本甚至要新 key 的地方（同 off 不猜直连的纪律）。
+          if printf '%s' "$cur" | grep -qE '127\.0\.0\.1|localhost'; then
+            echo "  [错误] 当前 baseURL 已是本机常量（$cur）—— 真值不在配置里了。" >&2
+            echo "     请用 TAKEOVER_UPSTREAM=<原URL> 显式给出真实 upstream 再登记。" >&2
+            echo "     例：TAKEOVER_UPSTREAM=https://apihub.agnes-ai.cn/v1 agent-proxy-switch dsh takeover" >&2
+            return 1
+          fi
+          upstream="$cur"
+        fi
+        local insp; insp="$(dsh_provider_inspect 2>/dev/null || true)"
+        local keyenv="${insp%%|*}"
+        local rest="${insp#*|}"
+        local models="${rest##*|}"
+        [ -n "$keyenv" ] || keyenv="(未知)"
+        set_dsh "$PR_CODEX_URL"
+        takeover_record dsh "$DSH_PROVIDER" "$upstream" "$keyenv" "$models" "$PR_CODEX_URL"
+        echo "  ✅ dsh 已接管：配置里只剩常量 $PR_CODEX_URL，真值在我们库里。"
+        echo "     回滚：agent-proxy-switch dsh off（不需要你记得原值，也不需要翻备份）"
+        # 🔴 设计原则 4「不死链」：接管后目标端口必须在监听，否则 agent 一发请求就 502。
+        #    这里**不阻断**登记（登记只补记真值，配置指向与登记前一致，不是新造死链），
+        #    但必须如实告知 —— 静默留个死端口是最坏的。
+        if port_listening $CODEX_PORT; then
+          echo "     ✅ 代理端口 ${CODEX_PORT} 正在监听。"
+        else
+          echo "     ⚠️ 代理端口 ${CODEX_PORT} **未在监听** —— dsh 现在发请求会失败。"
+          echo "        先把 codex-proxy 起起来（cd codex-proxy && node proxy.js），再在 dsh 里发消息。"
+        fi
+        return 0 ;;
+      *) echo "  takeover 目前只支持 dsh。codex/hermes 走 profile 零写入，本就不需要它；" >&2
+         echo "  cursor 是纯 GUI 手动改，无文件可接管。" >&2
+         return 1 ;;
+    esac
+  fi
+
   # ---- off：回滚到「切 curator 之前」----
   # 🔴🔴 位置很关键：必须排在**原生 owner 分支之前**。两个坑叠一起会静默吃掉 off：
   #    ① 原生 case 里 owner=off 会落进 `*)`，被判成「未知的 owner」直接 return 1；
@@ -789,6 +941,29 @@ switch_one() {
   # DeepSeek 官方（且走 device-flow 登录态，不是 baseURL 能表达的）。猜错就是把
   # agent 送到一个没账本、甚至需要新 key 的地方。所以 off = undo 到记录值。
   if [ "$owner" = "off" ] || [ "$owner" = "curator-off" ]; then
+    # -----------------------------------------------------------------
+    # takeover 模式优先（2026-10-12 P1）：真值在我们自己的库里，直接写回。
+    #   与 curator/off 的区别：curator 的 off 是「undo 到记录里的上一个 owner」，
+    #   takeover 的 off 是「把真 upstream 从库里读出来写回 agent 配置」。
+    #   ⇒ 不需要用户记得原值，也不需要翻 .bak 备份。
+    # -----------------------------------------------------------------
+    local tf; tf="$(takeover_file_for "$agent")"
+    if [ -f "$tf" ]; then
+      local trec tprov tupstream tkeyenv tmodels tproxy
+      trec="$(takeover_read "$agent")" || { echo "  [错误] takeover 记录读不出来" >&2; return 1; }
+      IFS='|' read -r tprov tupstream tkeyenv tmodels tproxy <<< "$trec"
+      [ -n "$tupstream" ] || { echo "  [错误] takeover 记录里没有 upstream" >&2; return 1; }
+      case "$agent" in
+        dsh) set_dsh "$tupstream" ;;
+        *) echo "  [错误] takeover 目前只支持 dsh" >&2; return 1 ;;
+      esac
+      rm -f "$tf"
+      echo "  ✅ $agent 已回滚到 takeover 之前：provider=$tprov  upstream=$tupstream"
+      echo "     真值来自我们的库 —— 不是猜的，也不用你记得备份在哪。"
+      echo "     ⚠️ GUI 常驻型（dsh）改完配置要重启客户端才生效。"
+      return 0
+    fi
+
     local stf; stf="$(state_file_for "$agent")"
     [ -f "$stf" ] || {
       echo "  [错误] 没有 curator 切换记录（${stf}）。" >&2
@@ -969,8 +1144,13 @@ usage() {
   curator / off 是「省钱总开关」一对：
     agent-proxy-switch codex  curator   # 切到 curator 桥（18795），开始省
     agent-proxy-switch codex  off       # 回滚到切 curator 之前（不是猜直连）
-    agent-proxy-switch dsh    curator   # dsh 侧改 cordis.patch.yml 的 provider.baseURL
-    agent-proxy-switch dsh    off       # 还原（用切换时记录的旧值）
+    agent-proxy-switch dsh    curator   # dsh 侧改 agent-default-model 的 provider
+
+  takeover / off 是「端点接管」一对（2026-10-12 P1，给 GUI 常驻型 agent）：
+    agent-proxy-switch dsh takeover     # 真 upstream 存进我们库，配置里只留 127.0.0.1 常量
+    agent-proxy-switch dsh off          # 从库里读真值写回（不用记得原值、不用翻备份）
+    真值已被覆盖时显式补登：
+      TAKEOVER_UPSTREAM=https://apihub.agnes-ai.cn/v1 agent-proxy-switch dsh takeover
 EOF
 }
 
