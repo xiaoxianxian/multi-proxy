@@ -242,6 +242,137 @@ function findProvider(modelName) {
   return null;
 }
 
+// ===== model-id 级路由策略（2026-10-12 P6，门控默认关）=====
+// 把「这个网关代理哪些模型」从 provider 级细化到 model-id 级，落地 Q3 的
+// 「只代理这 3 个模型、其余直连」。规则文件 ~/.multi-proxy-manager/routing-policy.json：
+//   { "default": "direct", "rules": [ {"match":"deepseek-v4-flash","action":"proxy"}, … ] }
+// 动作语义与纯函数实现见 routing-policy.js（parse/match/resolve 全部可单测）。
+//
+// 门控：PROXY_ROUTING_POLICY 不设 ⇒ routingPolicy = null ⇒ resolveRoute 恒返回 proxy
+//       ⇒ 三条转发路径逐字不变（零行为变更才敢默认关）。
+// 畸形 fail-safe：文件读不出/JSON 坏/形状不对 ⇒ 当作无策略 + 启动期大声报错。
+//       与 P3「malformed 计价按标准价」同纪律：配错时退回已知安全的老行为。
+const { parseRoutingPolicy, resolveRoute, resolveDirectTarget, buildDirectUpstreamUrl } = require('./routing-policy');
+// 文件位置可用 env 覆盖（测试与「策略放别处」的场景都用它），缺省落在 DATA_DIR。
+const ROUTING_POLICY_FILE = process.env.PROXY_ROUTING_POLICY_FILE || path.join(DATA_DIR, 'routing-policy.json');
+const ROUTING_POLICY_GATE = ['1', 'true', 'on', 'yes'].includes(String(process.env.PROXY_ROUTING_POLICY || '').toLowerCase());
+let routingPolicy = null;
+
+function loadRoutingPolicy() {
+  if (!ROUTING_POLICY_GATE) { routingPolicy = null; return; }
+  let raw = null;
+  try {
+    if (fs.existsSync(ROUTING_POLICY_FILE)) {
+      raw = JSON.parse(fs.readFileSync(ROUTING_POLICY_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error(`[ROUTING-POLICY] ${ROUTING_POLICY_FILE} 读取/解析失败，按无策略处理（老行为）: ${e.message}`);
+    raw = null;
+  }
+  const parsed = parseRoutingPolicy(raw);
+  if (!parsed.ok) {
+    console.error(`[ROUTING-POLICY] 策略畸形，按无策略处理（老行为）: ${parsed.error}`);
+    routingPolicy = null;
+    return;
+  }
+  routingPolicy = parsed.policy;
+  if (routingPolicy) {
+    console.log(`[ROUTING-POLICY] 已加载 model-id 级路由策略：default=${routingPolicy.default}, rules=${routingPolicy.rules.length} 条`);
+  }
+}
+
+// P6 direct：把请求透到该 agent 的 takeover 真上游（P1 的真值库）。
+// 🔴 解析不出 → 502 + 明写缺什么。绝不猜、绝不静默回落 proxy——那会让
+//    「我想绕开网关」的意图悄悄失效（钱照记、流量照过），比报错更糟。
+// direct 的全部含义就是「不走我们的链路」：不 captureTrace、不 reportUsage、不喂熔断。
+async function forwardDirect(req, res, model, route) {
+  const agent = detectAgent(req);
+  let records = {};
+  try {
+    const f = path.join(DATA_DIR, `takeover-${agent}.json`);
+    if (fs.existsSync(f)) {
+      const rec = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (rec && typeof rec === 'object') records[agent] = rec;
+    }
+  } catch (e) {
+    console.error(`[ROUTING-POLICY] 读 takeover-${agent}.json 失败: ${e.message}`);
+  }
+  const target = resolveDirectTarget(agent, { records, env: process.env });
+  if (!target.ok) {
+    console.error(`[ROUTING-POLICY] direct 目标不可解析（model=${model}, agent=${agent}）: ${target.detail}`);
+    if (!canWrite(res)) return;
+    return res.status(502).json({
+      success: false,
+      error: `Direct route target unresolved: ${target.detail}`,
+      code: 'DIRECT_TARGET_UNRESOLVED',
+    });
+  }
+
+  const upstreamUrl = buildDirectUpstreamUrl(target.upstream, req.path);
+  const headers = { 'Content-Type': 'application/json' };
+  // Anthropic 原生协议（/v1/messages）认 x-api-key；OpenAI 兼容认 Bearer。按入口分发。
+  if (req.path === '/v1/messages') {
+    headers['anthropic-version'] = req.headers['anthropic-version'] || '2023-06-01';
+    if (target.apiKey) {
+      headers['x-api-key'] = target.apiKey;
+      if (req.headers['authorization']) headers['authorization'] = `Bearer ${target.apiKey}`;
+    }
+  } else if (target.apiKey) {
+    headers['Authorization'] = `Bearer ${target.apiKey}`;
+  }
+
+  const upstreamSignal = createUpstreamSignal(req, res);
+  try {
+    const response = await fetch(upstreamUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req.body),
+      signal: upstreamSignal,
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      console.error(`[direct] upstream error (status ${response.status}) model=${model} agent=${agent}: ${err.slice(0, 300)}`);
+      if (!canWrite(res)) return;
+      return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
+    }
+    if (!canWrite(res)) return;
+    if (response.body) {
+      const ct = response.headers.get('content-type');
+      if (ct) res.setHeader('Content-Type', ct);
+      res.setHeader('Cache-Control', 'no-cache');
+      Readable.fromWeb(response.body).pipe(res);
+    } else {
+      res.json(await response.json());
+    }
+  } catch (e) {
+    console.error(`[direct] error model=${model} agent=${agent}: ${e.message}`);
+    if (!canWrite(res)) return;
+    return res.status(502).json({ success: false, error: e.message, code: 'DIRECT_UPSTREAM_ERROR' });
+  }
+}
+
+// 三条转发路由共用的策略闸门。await 后看返回值：
+//   'continue' —— 放行，走现有 proxy 链路（含门控关/无策略/action=proxy）
+//   'handled'  —— 已终结请求（deny 的 400 或 direct 的转发/502），调用方直接 return
+// 用法（放在 findProvider 空检查之后、circuitProvider 赋值之前）：
+//   if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
+async function applyRoutingPolicy(model, req, res) {
+  const route = resolveRoute(model, routingPolicy);
+  if (route.action === 'deny') {
+    res.status(400).json({
+      success: false,
+      error: `Model not permitted by routing policy: ${model}`,
+      code: 'MODEL_NOT_PERMITTED',
+    });
+    return 'handled';
+  }
+  if (route.action === 'direct') {
+    await forwardDirect(req, res, model, route);
+    return 'handled';
+  }
+  return 'continue';
+}
+
 // ===== 上游熔断（2026-10-09，借鉴 cc-switch 的「错误率 + 最小样本」门控）=====
 // 挂在 18790 而不是桥层，是因为这里才是真正 per-provider 路由的那层：
 // agnes 挂掉不该连累 deepseek / kimi；桥（18795）只看到单一 UPSTREAM，分不出是谁挂了。
@@ -481,6 +612,10 @@ app.get('/health', requireAuth, (req, res) => {
     modelSync: MODEL_SYNC_ENABLED
       ? { enabled: true, total: modelCatalog.models.length, updatedAt: modelCatalog.updatedAt, providers: modelCatalog.providers }
       : { enabled: false },
+    // P6：model-id 级路由策略状态（门控关/无策略 = enabled:false，行为与上线前逐字一致）
+    routingPolicy: routingPolicy
+      ? { enabled: true, file: ROUTING_POLICY_FILE, default: routingPolicy.default, rules: routingPolicy.rules.length }
+      : { enabled: false, file: ROUTING_POLICY_FILE },
     timestamp: new Date().toISOString()
   });
 });
@@ -876,6 +1011,9 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     if (!provider) {
       return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
+    // P6：model-id 级路由策略。deny/direct 在这里终结；proxy 才继续往下。
+    // 放在 circuitProvider 赋值之前 —— direct 的失败不该喂熔断（那不是上游健康信号）。
+    if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
     circuitProvider = provider;
 
     // 熔断：block 模式下该 provider 已 OPEN → 快速 503，别让客户端干等上游超时
@@ -952,6 +1090,8 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
     if (!provider) {
       return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
+    // P6：model-id 级路由策略（deny→400 / direct→透传 takeover 真上游 / proxy→继续）
+    if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
     circuitProvider = provider;
     if (!circuitAllows(provider, res)) return;
 
@@ -1220,6 +1360,8 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     if (!provider) {
       return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
     }
+    // P6：model-id 级路由策略（deny→400 / direct→透传 takeover 真上游 / proxy→继续）
+    if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
     circuitProvider = provider;
     if (!circuitAllows(provider, res)) return;
 
@@ -1284,6 +1426,12 @@ module.exports = {
   // per-provider 上游熔断（2026-10-09）：门控关时 getCircuitBreaker() 返回 null
   getCircuitBreaker: () => upstreamBreaker,
   classifyUpstreamStatus,
+  // P6：model-id 级路由策略（测试可经 PROXY_ROUTING_POLICY + PROXY_ROUTING_POLICY_FILE 注入）
+  loadRoutingPolicy,
+  getRoutingPolicy: () => routingPolicy,
+  applyRoutingPolicy,
+  forwardDirect,
+  ROUTING_POLICY_FILE,
 };
 
 // ===== P0-B: 默认绑 127.0.0.1（仅本机）=====
@@ -1296,5 +1444,6 @@ if (require.main === module) {
     console.log(`Config: ${CONFIG_TOML}`);
     console.log(`Models: ${UPSTREAM_MODELS.flatMap(p => p.availableModels).join(', ')}`);
     loadRoutingMode();
+    loadRoutingPolicy();   // P6：门控关时是 no-op（routingPolicy 恒 null）
    });
 }
