@@ -171,6 +171,15 @@ const { SideEffectGuard } = require('./lib/side-effect-guard');
 // 启动服务（跳过测试环境）
 if (process.env.NODE_ENV !== "test") {
   costTrack.loadPricingFromEnv();
+  // P2（2026-10-12）：读 ~/.multi-proxy-manager/providers.json 建 **model 级**价表。
+  // 必须在 loadPricingFromEnv 之后（proxy 级是它的 fallback 兜底档）、loadLedger 之前
+  // （历史行里的模型要先有价才拆得出账）。读失败只打一行，不阻塞启动。
+  const pricingLoaded = costTrack.loadPricingFromProviders();
+  if (pricingLoaded.ok) {
+    if (pricingLoaded.loaded) console.log(`[cost] model pricing loaded: ${pricingLoaded.loaded} models`);
+  } else {
+    console.log(`[cost] model pricing 未加载（${pricingLoaded.reason}）—— 取价回落到 per-proxy / unknown`);
+  }
   // 持久账本：读回历史（无账本文件 / 门控关 / 读失败都返回 0，不算错，不阻塞启动）
   const ledgerRows = costTrack.loadLedger();
   if (ledgerRows) console.log(`[cost] ledger loaded: ${ledgerRows} rows from ${costTrack.ledgerFile()}`);

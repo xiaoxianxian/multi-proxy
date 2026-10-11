@@ -130,6 +130,79 @@ function loadPricingFromEnv() {
 // 设置 per-proxy 单价（幂等：保留已累计的 tokens/cost，只换 pricing）
 // pricing: { input, output, cacheHit? } — 每百万 tokens，与 PROVIDERS-README.md 对齐
 // 无 pricing 时默认 0（本地模型 type='local' 单价全 0）
+// =====================================================================
+// model 级价表（2026-10-12 P2）
+// ---------------------------------------------------------------------
+// 🔴 为什么加：此前取价只用 `st.pricing`（**per-proxy** 一套价），而 providers.json 里
+//    的 pricing 是 **per-model** 的（`models[].pricing`）。PROVIDERS-README.md:30-31 自己
+//    写着 pricing 字段「当前代码尚未使用，属前向兼容预留」—— 2026-10-12 全仓检索确认
+//    **没有任何代码读 providers.json** ⇒ 同一网关下 deepseek / agnes / qwen 共用一套价，
+//    「按模型控成本」根本不成立。这是 P3 分时价 / P7 订阅的前置：平价表不接进路由，
+//    后面所有定价能力都是空转。
+//
+// 🔴 铁律（维护者 2026-10-12 第 3 点）：**「值是 0」和「值不存在」是不同参数**。
+//    agnes 的 pricing={0,0,0} 是**真免费**（带 priceSource 注明来源与日期），
+//    而「查不到这个模型」必须标 unknown，绝不静默当 0 —— 否则两者在账上长得一样，
+//    后面任何按价的推导（省钱率、预算告警）都会建立在流沙上。
+//    所以取价结果带 source：
+//      'model'   = providers.json 里有这个模型的价格（可能是真 0，看 priceSource）
+//      'proxy'   = 模型没登记，回落到 per-proxy 那套价
+//      'unknown' = 都没有 ⇒ 算出来的 0 是「没价」，不是「免费」
+// =====================================================================
+const _modelPricing = new Map();   // modelId -> {input, output, cacheHit, priceSource?, providerId?}
+
+// 读 ~/.multi-proxy-manager/providers.json（含 api_key，已被 .gitignore 保护）。
+// 失败不抛：价表读不出来只影响算钱，不该让网关起不来。
+function loadPricingFromProviders(file) {
+  const p = file || path.join(os.homedir(), '.multi-proxy-manager', 'providers.json');
+  let list;
+  try {
+    list = JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (e) {
+    return { ok: false, loaded: 0, reason: String((e && e.message) || e) };
+  }
+  if (!Array.isArray(list)) return { ok: false, loaded: 0, reason: 'providers.json 不是数组' };
+  let n = 0;
+  for (const prov of list) {
+    for (const m of (prov && prov.models) || []) {
+      if (!m || !m.id || !m.pricing) continue;
+      _modelPricing.set(m.id, {
+        input:       Number(m.pricing.input)  || 0,
+        output:      Number(m.pricing.output) || 0,
+        cacheHit:    m.pricing.cacheHit != null ? (Number(m.pricing.cacheHit) || 0) : undefined,
+        priceSource: m.priceSource || undefined,
+        providerId:  prov.provider_id || prov.id || undefined,
+      });
+      n += 1;
+    }
+  }
+  return { ok: true, loaded: n };
+}
+
+// 取价：model → proxy → unknown。返回的 source 必须跟着走完整个记账链路，
+// 否则「没价」和「免费」在账上无法区分。
+// 🔴 返回结构与 l2/savings-gateway/gateway.js 的 resolvePricing 对齐（{source, key, input, output}），
+//    别在仓库里造第二套约定。
+function resolvePricing(pricingModel, st) {
+  const mp = pricingModel ? _modelPricing.get(pricingModel) : null;
+  if (mp) {
+    return {
+      source: 'model', key: pricingModel,
+      input: mp.input, output: mp.output, cacheHit: mp.cacheHit,
+      priceSource: mp.priceSource,
+    };
+  }
+  const sp = st && st.pricing;
+  if (sp && (Number(sp.input) || Number(sp.output) || Number(sp.cacheHit))) {
+    return {
+      source: 'proxy', key: pricingModel || UNKNOWN,
+      input: Number(sp.input) || 0, output: Number(sp.output) || 0,
+      cacheHit: sp.cacheHit != null ? Number(sp.cacheHit) || 0 : undefined,
+    };
+  }
+  return { source: 'unknown', key: pricingModel || UNKNOWN, input: 0, output: 0, cacheHit: undefined };
+}
+
 // 按模型拆账的**空壳条目**（三模型字段的 store）。
 // 抽成函数是为了 setPricing / ensureState / _bump 三处共用一份定义，避免以后加字段漏改一处而漂移。
 function emptyModelEntry() {
@@ -217,7 +290,12 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
   const requestModel = i.requestModel || UNKNOWN;
 
   const st = ensureState(proxyName);
-  const { input: pIn, output: pOut, cacheHit: pCache } = st.pricing;
+  // 🔴 2026-10-12 P2：取价从「per-proxy 一套价」改成 model → proxy → unknown。
+  //    pricingSource 必须随账落盘 —— 不记的话，一个「没登记价格」的模型和一个
+  //    「真免费」的模型在账上都记 cost=0，之后任何省钱率/预算推导都建立在流沙上。
+  const pr = resolvePricing(pricingModel, st);
+  const pIn = pr.input, pOut = pr.output, pCache = pr.cacheHit;
+  const pricingSource = pr.source;
   const costDelta = givenCost != null ? givenCost
     : (t.prompt - t.cacheHit) / 1e6 * pIn + t.completion / 1e6 * pOut +
       (pCache !== undefined ? t.cacheHit / 1e6 * pCache : 0);
@@ -251,6 +329,7 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
     agent: i.agent || proxyName,
     model: pricingModel,
     requestModel,
+    pricingSource,          // 'model' | 'proxy' | 'unknown'（P2：区分「真免费」与「没价」）
     prompt: t.prompt,
     completion: t.completion,
     cacheHit: t.cacheHit || 0,
@@ -432,4 +511,8 @@ module.exports = {
   loadLedger,
   ledgerFile,
   reset,
+  // P2（2026-10-12）：model 级价表。loadPricingFromProviders 在 server 启动时调一次；
+  // resolvePricing 是取价唯一出口（model → proxy → unknown），导出便于单测钉死 fallback 链。
+  loadPricingFromProviders,
+  resolvePricing,
 };
