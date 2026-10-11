@@ -8,6 +8,7 @@
 // 本文件只负责 express 应用组装：中间件顺序 + 路由挂载 + 错误处理 + SPA fallback。
 const express = require('express');
 const path = require('path');
+const os = require('os');
 
 const pm = require('./lib/process-manager');
 
@@ -171,14 +172,32 @@ const { SideEffectGuard } = require('./lib/side-effect-guard');
 // 启动服务（跳过测试环境）
 if (process.env.NODE_ENV !== "test") {
   costTrack.loadPricingFromEnv();
-  // P2（2026-10-12）：读 ~/.multi-proxy-manager/providers.json 建 **model 级**价表。
+  // P2（2026-10-12）：建 **model 级**价表。
   // 必须在 loadPricingFromEnv 之后（proxy 级是它的 fallback 兜底档）、loadLedger 之前
   // （历史行里的模型要先有价才拆得出账）。读失败只打一行，不阻塞启动。
-  const pricingLoaded = costTrack.loadPricingFromProviders();
-  if (pricingLoaded.ok) {
-    if (pricingLoaded.loaded) console.log(`[cost] model pricing loaded: ${pricingLoaded.loaded} models`);
+  //
+  // 🔴 读**两个**文件（顺序决定覆盖优先级）：
+  //   ① providers.json —— manager UI 的 provider 注册表，实测**没有 models[]**（loaded=0），
+  //      但保不准哪天 UI 加上了，所以照读（0 条也正常，不算错）。
+  //   ② pricing.json   —— 专门的价表（扁平形状），**它才是真正在用的那份**。
+  //      之所以不直接往 providers.json 里补 models[]：那是 manager UI 的产出，随时被覆写。
+  const stateDir = path.join(os.homedir(), '.multi-proxy-manager');
+  const pricingLoaded = costTrack.loadPricingFromProviders([
+    path.join(stateDir, 'providers.json'),
+    path.join(stateDir, 'pricing.json'),
+  ]);
+  if (pricingLoaded.loaded) {
+    console.log(`[cost] model pricing loaded: ${pricingLoaded.loaded} models`);
   } else {
-    console.log(`[cost] model pricing 未加载（${pricingLoaded.reason}）—— 取价回落到 per-proxy / unknown`);
+    const why = (pricingLoaded.errors || []).map((e) => `${path.basename(e.file)}: ${e.reason}`).join(' | ');
+    console.log(`[cost] model pricing 未加载（${why}）—— 取价回落到 per-proxy / unknown`);
+  }
+  // P3：分时档配置体检。运行期对畸形一律 fail-safe 走标准价（安全），但**畸形必须
+  // 报出来** —— 「配了却静默不生效」是最难查的一类错账（与「宁可留个明处的缺口」同纪律）。
+  const schedProblems = costTrack.validatePricingSchedule();
+  for (const p of schedProblems) {
+    console.warn(`[cost] ⚠️ 分时档配置有问题（model=${p.model}），将恒收标准价：`);
+    for (const msg of p.problems) console.warn(`        - ${msg}`);
   }
   // 持久账本：读回历史（无账本文件 / 门控关 / 读失败都返回 0，不算错，不阻塞启动）
   const ledgerRows = costTrack.loadLedger();

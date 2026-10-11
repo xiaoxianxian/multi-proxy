@@ -47,6 +47,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const upstreamCheck = require('./upstream-check');
+// P3 分时定价（2026-10-12）：窗口判定是纯函数，单独成模块才能被单测钉死边界。
+// 本文件只负责「调它 + 把结果带进账」。
+const pricingSchedule = require('./pricing-schedule');
 
 // 模型缺失时的兜底 key：宁可叫 <unknown>，也**绝不猜模型名**（猜错就是假数据）。
 const UNKNOWN = '<unknown>';
@@ -151,44 +154,122 @@ function loadPricingFromEnv() {
 // =====================================================================
 const _modelPricing = new Map();   // modelId -> {input, output, cacheHit, priceSource?, providerId?}
 
-// 读 ~/.multi-proxy-manager/providers.json（含 api_key，已被 .gitignore 保护）。
-// 失败不抛：价表读不出来只影响算钱，不该让网关起不来。
-function loadPricingFromProviders(file) {
-  const p = file || path.join(os.homedir(), '.multi-proxy-manager', 'providers.json');
-  let list;
-  try {
-    list = JSON.parse(fs.readFileSync(p, 'utf8'));
-  } catch (e) {
-    return { ok: false, loaded: 0, reason: String((e && e.message) || e) };
+// 读价表。失败不抛：价表读不出来只影响算钱，不该让网关起不来。
+//
+// 🔴 2026-10-12 实测发现（不改这里 P2/P3 全是空转）：
+//    ~/.multi-proxy-manager/**providers.json 里根本没有 `models[]`** —— 它是 manager UI
+//    生成的 provider 注册表（id/name/api_key/base_url），与 providers.sample.json 的
+//    「provider 级 + models[]」形状**早就漂移了**。实测 loaded=0 ⇒ 真机上一个模型
+//    价格都没读到，所有账的 pricingSource 都是 unknown。
+//    与其去改 manager UI 的产出格式（那是它的地盘，且随时会被 UI 覆写），
+//    不如让价表**独立于 providers.json**：新增 pricing.json（扁平形状），两者都读。
+//
+// 支持两种形状（一眼分辨，不用配置字段声明）：
+//   A. provider 级：{ provider_id, models: [ { id, pricing, offPeakPricing? } ] }  ← sample 格式
+//   B. 扁平：      { id, pricing, offPeakPricing? }                                ← pricing.json
+// 同名模型**后面的文件覆盖前面的** ⇒ 调用方把「专门的价表」放后面。
+function loadPricingFromProviders(input) {
+  const files = Array.isArray(input)
+    ? input
+    : [input || path.join(os.homedir(), '.multi-proxy-manager', 'providers.json')];
+  let loaded = 0;
+  const errors = [];
+  for (const f of files) {
+    const r = _loadPricingFile(f);
+    loaded += r.loaded;
+    if (!r.ok) errors.push({ file: f, reason: r.reason });
   }
-  if (!Array.isArray(list)) return { ok: false, loaded: 0, reason: 'providers.json 不是数组' };
-  let n = 0;
-  for (const prov of list) {
-    for (const m of (prov && prov.models) || []) {
-      if (!m || !m.id || !m.pricing) continue;
-      _modelPricing.set(m.id, {
+  return {
+    ok: loaded > 0 || errors.every((e) => /ENOENT|no such file/i.test(e.reason || '')),
+    loaded,
+    errors,
+  };
+}
+
+// 登记一条模型价（两种形状共用）。返回是否真的登记了。
+function _registerModelPricing(m, prov) {
+  if (!m || !m.id || !m.pricing) return false;
+  _modelPricing.set(m.id, {
         input:       Number(m.pricing.input)  || 0,
         output:      Number(m.pricing.output) || 0,
         cacheHit:    m.pricing.cacheHit != null ? (Number(m.pricing.cacheHit) || 0) : undefined,
         priceSource: m.priceSource || undefined,
         providerId:  prov.provider_id || prov.id || undefined,
+        // P3：分时档。存原样（不在加载期做窗口判定 —— 判定必须发生在**计价那一刻**）。
+        offPeakPricing: m.offPeakPricing || undefined,
       });
+  return true;
+}
+
+// 读单个价表文件（providers.json / pricing.json 共用）。
+function _loadPricingFile(file) {
+  let list;
+  try {
+    list = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    return { ok: false, loaded: 0, reason: String((e && e.message) || e) };
+  }
+  if (!Array.isArray(list)) return { ok: false, loaded: 0, reason: '不是数组' };
+  let n = 0;
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (Array.isArray(entry.models)) {
+      for (const m of entry.models) if (_registerModelPricing(m, entry)) n += 1;
+    } else if (_registerModelPricing(entry, entry)) {
       n += 1;
     }
   }
   return { ok: true, loaded: n };
 }
 
+// 计价时刻（P3）：默认「现在」。
+// 🔴 语义钉死 = **completion time**：本函数只在响应完成、usage 拿到手之后被调用，
+//    所以「现在」就是响应完成那一刻。跨窗口的整单按完成时那一档算（抄 LiteLLM 规格），
+//    不扯「请求发起 vs 响应结束」。
+//    跨进程上报（codex-proxy → manager）时可以显式传 `at`，避免上报延迟把账算到
+//    下一档去。传不了就按收到时算 —— 差几毫秒，远比不记账好。
+function resolveAt(opts) {
+  const v = opts && opts.at;
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    if (isFinite(t)) return t;
+  }
+  return Date.now();
+}
+
 // 取价：model → proxy → unknown。返回的 source 必须跟着走完整个记账链路，
 // 否则「没价」和「免费」在账上无法区分。
 // 🔴 返回结构与 l2/savings-gateway/gateway.js 的 resolvePricing 对齐（{source, key, input, output}），
 //    别在仓库里造第二套约定。
-function resolvePricing(pricingModel, st) {
+//
+// ── P3 分时档（2026-10-12）──
+//   opts.at  计价时刻（ms 或 ISO 串），默认 Date.now()（= completion time）
+//   window   'standard' = 按标准价收；'w0'/'w1'… = 命中第几个 off-peak 窗口
+//   scheduled  该模型**配没配**分时档。与 window 是两件事：
+//      配了但在 peak 时段  → scheduled=true,  window='standard'
+//      压根没配分时档      → scheduled=false, window='standard'
+//    🔴 必须分得开：前者是「查过时刻表、这单该收标准价」，后者是「这个模型没有时刻表」。
+//      合成一个字段的话，以后回答「哪些模型有闲时折扣可挖」就只能重扫配置。
+function resolvePricing(pricingModel, st, opts) {
+  const at = resolveAt(opts);
   const mp = pricingModel ? _modelPricing.get(pricingModel) : null;
   if (mp) {
+    const sched = mp.offPeakPricing;
+    if (sched) {
+      const ov = pricingSchedule.applyOffPeak(mp, sched, at);
+      return {
+        source: 'model', key: pricingModel,
+        input: ov.input, output: ov.output, cacheHit: ov.cacheHit,
+        window: ov.window, windowIndex: ov.windowIndex, offPeak: ov.offPeak,
+        scheduled: true,
+        priceSource: ov.priceSource || mp.priceSource,
+      };
+    }
     return {
       source: 'model', key: pricingModel,
       input: mp.input, output: mp.output, cacheHit: mp.cacheHit,
+      window: 'standard', windowIndex: -1, offPeak: false, scheduled: false,
       priceSource: mp.priceSource,
     };
   }
@@ -198,9 +279,13 @@ function resolvePricing(pricingModel, st) {
       source: 'proxy', key: pricingModel || UNKNOWN,
       input: Number(sp.input) || 0, output: Number(sp.output) || 0,
       cacheHit: sp.cacheHit != null ? Number(sp.cacheHit) || 0 : undefined,
+      window: 'standard', windowIndex: -1, offPeak: false, scheduled: false,
     };
   }
-  return { source: 'unknown', key: pricingModel || UNKNOWN, input: 0, output: 0, cacheHit: undefined };
+  return {
+    source: 'unknown', key: pricingModel || UNKNOWN, input: 0, output: 0, cacheHit: undefined,
+    window: 'standard', windowIndex: -1, offPeak: false, scheduled: false,
+  };
 }
 
 // 按模型拆账的**空壳条目**（三模型字段的 store）。
@@ -293,7 +378,8 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
   // 🔴 2026-10-12 P2：取价从「per-proxy 一套价」改成 model → proxy → unknown。
   //    pricingSource 必须随账落盘 —— 不记的话，一个「没登记价格」的模型和一个
   //    「真免费」的模型在账上都记 cost=0，之后任何省钱率/预算推导都建立在流沙上。
-  const pr = resolvePricing(pricingModel, st);
+  // 🔴 P3：at 用上报端给的完成时刻（i.at），没有就按收到时算（= completion time）。
+  const pr = resolvePricing(pricingModel, st, { at: i.at });
   const pIn = pr.input, pOut = pr.output, pCache = pr.cacheHit;
   const pricingSource = pr.source;
   const costDelta = givenCost != null ? givenCost
@@ -330,6 +416,10 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
     model: pricingModel,
     requestModel,
     pricingSource,          // 'model' | 'proxy' | 'unknown'（P2：区分「真免费」与「没价」）
+    // P3 分时档：'standard' = 标准价；'w0'… = 命中第几个 off-peak 窗口。
+    // 🔴 只记在**配了分时档**的模型上（pr.scheduled）—— 没配时刻表的模型记
+    //    'standard' 是句废话，还会把「哪些模型有闲时可挖」这个问题搅浑。
+    pricingWindow: pr.scheduled ? pr.window : undefined,
     prompt: t.prompt,
     completion: t.completion,
     cacheHit: t.cacheHit || 0,
@@ -377,6 +467,7 @@ function reportUsage(opts) {
     pricingModel:  o.pricingModel,    // 用哪套价表算的（默认回落 model）
     reqId:         o.reqId,           // 幂等键（跨进程 tee 双触发靠它去重）
     agent:         o.agent,
+    at:            o.at,              // P3：完成时刻（跨进程上报时带上，避免上报延迟跨档）
   });
   return t;
 }
@@ -515,4 +606,23 @@ module.exports = {
   // resolvePricing 是取价唯一出口（model → proxy → unknown），导出便于单测钉死 fallback 链。
   loadPricingFromProviders,
   resolvePricing,
+  // P3（2026-10-12）：分时档。validatePricingSchedule 是**启动期静态体检** —— 运行期
+  // 对畸形一律 fail-safe 走标准价（安全），但畸形必须报出来，否则「配了却没生效」
+  // 会永远查不出来（与「宁可留个明处的缺口」同一条纪律）。
+  validatePricingSchedule,
+  // 纯函数层也导出：测成本轨的测试可以直接钉窗口边界，不用绕着 state 走。
+  pricingSchedule,
 };
+
+// 启动期体检：扫已登记的 model 级价表，把**会静默退化成标准价**的分时配置报出来。
+// 返回 [{ model, problems: [...] }]；空数组 = 没问题。
+// 🔴 只报不改：运行期行为由 pricing-schedule 的 fail-safe 保证，这里只负责让人看见。
+function validatePricingSchedule() {
+  const out = [];
+  for (const [modelId, mp] of _modelPricing) {
+    if (!mp.offPeakPricing) continue;
+    const problems = pricingSchedule.validateSchedule(mp.offPeakPricing);
+    if (problems.length) out.push({ model: modelId, problems });
+  }
+  return out;
+}
