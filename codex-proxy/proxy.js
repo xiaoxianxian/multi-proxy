@@ -314,6 +314,74 @@ function saveProviders(providers) {
 
 let providers = loadProviders();
 
+// ===== P5：模型目录上游同步（门控默认关，PROXY_MODEL_SYNC=1 才启用）=====
+// 做的是一件朴素的事：用各供应商自己的 key 打它的 GET /v1/models，把**真实在售**
+// 模型 add-only 并进本地缓存，/v1/models 从此反映上游现状而不是硬编码表
+// （思路同 new-api 的 adaptor.GetModelList()）。细节与纪律见 model-sync.js 头部。
+// 关时：下面的一切零调用，/v1/models 与旧版逐字一致。
+const modelSync = require('./model-sync');
+const MODEL_SYNC_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.PROXY_MODEL_SYNC || '').toLowerCase());
+const MODEL_SYNC_INTERVAL_MS = parseInt(process.env.PROXY_MODEL_SYNC_INTERVAL_MS, 10) > 0
+  ? parseInt(process.env.PROXY_MODEL_SYNC_INTERVAL_MS, 10)
+  : 30 * 60 * 1000;   // 默认半小时一轮：模型列表不是热数据，别拿它当心跳打上游
+const MODEL_CATALOG_FILE = path.join(DATA_DIR, 'model-catalog.json');
+
+function loadModelCatalog() {
+  try {
+    if (fs.existsSync(MODEL_CATALOG_FILE)) {
+      const d = JSON.parse(fs.readFileSync(MODEL_CATALOG_FILE, 'utf8'));
+      if (d && Array.isArray(d.models)) return d;
+    }
+  } catch (e) {
+    // 缓存坏掉按空目录继续 —— 绝不能因为这个让端点起不来
+    console.error(`[MODEL-SYNC] 缓存读取失败（按空目录继续）: ${e.message}`);
+  }
+  return { version: 1, updatedAt: null, models: [], providers: {} };
+}
+
+function saveModelCatalog(catalog) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    const tmp = MODEL_CATALOG_FILE + '.tmp';
+    // 缓存只存模型 id/归属/状态，不含任何 key（纪律：key 不落这个盘）；
+    // 0600 只是稳妥起见，与 providers.json 一致。
+    fs.writeFileSync(tmp, JSON.stringify(catalog, null, 2), { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, MODEL_CATALOG_FILE);
+  } catch (e) {
+    try { fs.unlinkSync(MODEL_CATALOG_FILE + '.tmp'); } catch {}
+    console.error(`[MODEL-SYNC] 缓存写入失败: ${e.message}`);
+  }
+}
+
+// 门控关时保持一个空目录对象，/v1/models 与 /health 读它零成本
+let modelCatalog = MODEL_SYNC_ENABLED
+  ? loadModelCatalog()
+  : { version: 1, updatedAt: null, models: [], providers: {} };
+
+async function runModelSyncOnce() {
+  // 单个供应商 8s 超时：后台任务不该把进程或事件循环拖住
+  const fetchWithTimeout = (url, opts) => fetch(url, { ...opts, signal: AbortSignal.timeout(8000) });
+  const r = await modelSync.runModelSync({
+    providers: loadProviders(),   // 每轮重读：Web UI 刚加的供应商下一轮就生效
+    fetchImpl: fetchWithTimeout,
+    readCache: loadModelCatalog,
+    writeCache: saveModelCatalog,
+  });
+  modelCatalog = loadModelCatalog();
+  const bad = Object.entries(r.providers).filter(([, s]) => !s.ok).map(([id, s]) => `${id}:${s.error}`);
+  console.log(`[MODEL-SYNC] ok=${r.ok} failed=${r.failed} added=${r.added.length} total=${r.total}${bad.length ? ' 失败: ' + bad.join(', ') : ''}`);
+  return r;
+}
+
+if (MODEL_SYNC_ENABLED) {
+  // 启动期拉一次（不阻塞 listen）；之后每 interval 一轮，unref 不挂住进程退出
+  runModelSyncOnce().catch((e) => console.error(`[MODEL-SYNC] 启动轮失败（不影响端点）: ${e.message}`));
+  setInterval(() => {
+    runModelSyncOnce().catch((e) => console.error(`[MODEL-SYNC] 本轮失败（不影响端点）: ${e.message}`));
+  }, MODEL_SYNC_INTERVAL_MS).unref();
+  console.log(`[MODEL-SYNC] 已启用：间隔 ${MODEL_SYNC_INTERVAL_MS}ms，缓存 ${MODEL_CATALOG_FILE}`);
+}
+
 function generateId() {
   return 'prov_' + Date.now().toString(36).padStart(9, '0') + '_' + Math.random().toString(36).substring(2, 8);
 }
@@ -321,19 +389,17 @@ function generateId() {
 // ===== API Routes =====
 
 // Models list
+// P5：builtin + providers.json（旧行为）+ 上游同步目录（仅门控开时非空，add-only 合并）。
+// 与旧版的两处差异都是有意的：① user providers 也参与全局去重（旧代码只在 builtin 内
+// 去重，两家供应商列同一模型会吐重复 id）；② models 字段为对象形状时正确取 id
+// （旧代码把对象当 id 塞进响应）。门控关闭时输出与旧版在无重复场景下逐字一致。
 app.get('/v1/models', requireAuth, (req, res) => {
-  const builtin = UPSTREAM_MODELS.flatMap(p =>
-    p.availableModels.map(name => ({
-      id: name, object: 'model', created: Math.floor(Date.now() / 1000), owned_by: p.name
-    }))
-  );
-  // Merge in models of user-defined providers (Web UI CRUD)
-  const userModelIds = new Set(builtin.map(m => m.id));
-  const userModels = loadProviders().filter(p => p.enabled !== false && Array.isArray(p.models))
-    .flatMap(p => p.models
-      .filter(name => !userModelIds.has(name))
-      .map(name => ({ id: name, object: 'model', created: Math.floor(Date.now() / 1000), owned_by: p.name })));
-  res.json({ object: 'list', data: builtin.concat(userModels) });
+  const userProviders = loadProviders().filter((p) => p.enabled !== false);
+  res.json(modelSync.buildModelsResponse({
+    builtin: UPSTREAM_MODELS,
+    userProviders,
+    synced: MODEL_SYNC_ENABLED ? modelCatalog.models : [],
+  }));
 });
 
 // Health check — M1 DAG 健康依赖图：分级状态 (ok/degraded/down) + 各检查项 + 原因。
@@ -411,6 +477,10 @@ app.get('/health', requireAuth, (req, res) => {
     reasons,
     // per-provider 熔断状态（门控关 = enabled:false）
     circuit: buildCircuitSnapshot(),
+    // P5：上游模型目录同步状态（门控关 = enabled:false；开了能看到 total/updatedAt/各供应商成败）
+    modelSync: MODEL_SYNC_ENABLED
+      ? { enabled: true, total: modelCatalog.models.length, updatedAt: modelCatalog.updatedAt, providers: modelCatalog.providers }
+      : { enabled: false },
     timestamp: new Date().toISOString()
   });
 });
