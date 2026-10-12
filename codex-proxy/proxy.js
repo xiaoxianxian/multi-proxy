@@ -258,6 +258,11 @@ const ROUTING_POLICY_FILE = process.env.PROXY_ROUTING_POLICY_FILE || path.join(D
 const ROUTING_POLICY_GATE = ['1', 'true', 'on', 'yes'].includes(String(process.env.PROXY_ROUTING_POLICY || '').toLowerCase());
 let routingPolicy = null;
 
+// P7-2：预算预检（热路径前置闸门）。模块只暴露纯函数 + decide，门控关时 decide 恒 open。
+// 三态（exact/degraded/open）的语义与快照字段说明见 budget-check.js 头注释。
+const budgetCheck = require('./budget-check');
+const BUDGET_GUARD_GATE = ['1', 'true', 'on', 'yes'].includes(String(process.env.PROXY_BUDGET_GUARD || '').toLowerCase());
+
 function loadRoutingPolicy() {
   if (!ROUTING_POLICY_GATE) { routingPolicy = null; return; }
   let raw = null;
@@ -371,6 +376,34 @@ async function applyRoutingPolicy(model, req, res) {
     return 'handled';
   }
   return 'continue';
+}
+
+// P7-2：预算预检。放在路由策略之后、熔断之前——direct/deny 的请求不该进预算账，
+// 预算也没必要为「绕开网关」的流量操心。用法同 applyRoutingPolicy：
+//   if (await applyBudgetGuard(model, req, res) !== 'continue') return;
+// 门控关 ⇒ 直接 'continue'，三条转发逐字不变（零行为变更）。
+// 返回 'handled' 时已经写过 429（BUDGET_EXCEEDED），调用方直接 return。
+async function applyBudgetGuard(model, req, res) {
+  if (!BUDGET_GUARD_GATE) return 'continue';
+  const body = req.body || {};
+  const maxTokens = body.max_tokens != null ? body.max_tokens : body.max_completion_tokens;
+  let d;
+  try {
+    d = await budgetCheck.decide(model, maxTokens, { now: new Date() });
+  } catch (e) {
+    // 判据自身异常 → fail-open（预算模块 bug 不该把正常流量挡了）
+    console.error(`[BUDGET-GUARD] 判定异常，fail-open: ${e.message}`);
+    return 'continue';
+  }
+  if (d.allowed) return 'continue';
+  if (canWrite(res)) {
+    res.status(429).json({
+      success: false,
+      error: `Budget guard: estimated worst-case cost ${d.estimate} CNY exceeds remaining ${d.remaining} (state=${d.state})`,
+      code: 'BUDGET_EXCEEDED',
+    });
+  }
+  return 'handled';
 }
 
 // ===== 上游熔断（2026-10-09，借鉴 cc-switch 的「错误率 + 最小样本」门控）=====
@@ -616,6 +649,10 @@ app.get('/health', requireAuth, (req, res) => {
     routingPolicy: routingPolicy
       ? { enabled: true, file: ROUTING_POLICY_FILE, default: routingPolicy.default, rules: routingPolicy.rules.length }
       : { enabled: false, file: ROUTING_POLICY_FILE },
+    // P7-2：预算预检状态（门控关 = enabled:false；开了能看当前三态 mode + 剩额 + 本地累加）
+    budgetGuard: BUDGET_GUARD_GATE
+      ? { enabled: true, ...budgetCheck.getStatus() }
+      : { enabled: false },
     timestamp: new Date().toISOString()
   });
 });
@@ -1014,6 +1051,8 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     // P6：model-id 级路由策略。deny/direct 在这里终结；proxy 才继续往下。
     // 放在 circuitProvider 赋值之前 —— direct 的失败不该喂熔断（那不是上游健康信号）。
     if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
+    // P7-2：预算预检（gate 关时恒 'continue'）。放熔断之前：被预算挡的请求不算上游故障。
+    if (await applyBudgetGuard(model, req, res) !== 'continue') return;
     circuitProvider = provider;
 
     // 熔断：block 模式下该 provider 已 OPEN → 快速 503，别让客户端干等上游超时
@@ -1092,6 +1131,8 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
     }
     // P6：model-id 级路由策略（deny→400 / direct→透传 takeover 真上游 / proxy→继续）
     if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
+    // P7-2：预算预检（gate 关时恒 'continue'）
+    if (await applyBudgetGuard(model, req, res) !== 'continue') return;
     circuitProvider = provider;
     if (!circuitAllows(provider, res)) return;
 
@@ -1362,6 +1403,8 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     }
     // P6：model-id 级路由策略（deny→400 / direct→透传 takeover 真上游 / proxy→继续）
     if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
+    // P7-2：预算预检（gate 关时恒 'continue'）
+    if (await applyBudgetGuard(model, req, res) !== 'continue') return;
     circuitProvider = provider;
     if (!circuitAllows(provider, res)) return;
 
@@ -1432,6 +1475,11 @@ module.exports = {
   applyRoutingPolicy,
   forwardDirect,
   ROUTING_POLICY_FILE,
+  // P7-2：预算预检（测试可经 PROXY_BUDGET_GUARD + PROXY_BUDGET_SNAPSHOT_FILE + budgetCheck.setTestOverrides 注入）
+  applyBudgetGuard,
+  getBudgetStatus: () => budgetCheck.getStatus(),
+  seedBudgetSnapshot: () => budgetCheck.seedStateFromFile(),
+  budgetCheck,
 };
 
 // ===== P0-B: 默认绑 127.0.0.1（仅本机）=====
@@ -1445,5 +1493,6 @@ if (require.main === module) {
     console.log(`Models: ${UPSTREAM_MODELS.flatMap(p => p.availableModels).join(', ')}`);
     loadRoutingMode();
     loadRoutingPolicy();   // P6：门控关时是 no-op（routingPolicy 恒 null）
+    budgetCheck.seedStateFromFile();   // P7-2：把磁盘快照读进内存（降级窗口可立即用；陈旧的 decide 会忽略）
    });
 }
