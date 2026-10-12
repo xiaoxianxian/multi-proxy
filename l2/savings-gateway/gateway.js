@@ -159,6 +159,14 @@ function createSavingsGateway(opts = {}) {
     } else if (opts.circuitBreaker && typeof opts.circuitBreaker.allowRequest === 'function') {
       circuitBreaker = opts.circuitBreaker;
     }
+    // 收费确认闸门（MPT 契约落地 2026-10-12）：可选注入缝，默认 null = 零行为变更（非侵入）。
+    // 与 breaker 同构——只在调用方显式注入（server.js 的 PROXY_SAVINGS_CHARGE_CONFIRM=1 门控）后才介入。
+    // evaluate({ adapterId, estimatedCost, confirmed, shadow }) → { required, confirmed, reason }：
+    //   required=true && confirmed=false → handleChatCompletions 抛 httpStatus=402 charge_confirmation_required；
+    //   required=true && confirmed=true → 放行；required=false（免费/shadow）→ 直接放行。
+    // 设计要点：只在「真实执行」(非 shadow) 才拦——shadow 模拟不真花钱，与 MPT「模拟=免费」一致。
+    const chargeConfirm = opts.chargeConfirm && typeof opts.chargeConfirm.evaluate === 'function'
+        ? opts.chargeConfirm : null;
     // 熔断动作模式（2026-10-08 二期缝）：observe(默认·仅记账·零行为变更) / failover(改路由到健康候选) / block(OPEN 即拒 503)。
     // 仅当 circuitBreaker 已注入才有意义；不设 breaker 时 circuitMode 不参与任何路径。
     const circuitMode = ['failover', 'block'].includes(opts.circuitMode) ? opts.circuitMode : 'observe';
@@ -276,6 +284,24 @@ function createSavingsGateway(opts = {}) {
             : round6(promptTokens / 1e6 * pAct.input + completionTokens / 1e6 * pAct.output);
         const plannedCost = round6(promptTokens / 1e6 * pPlan.input + completionTokens / 1e6 * pPlan.output);
         const saved = round6(Math.max(0, plannedCost - actualCost));
+
+        // 收费确认闸门（MPT 契约 2026-10-12）：仅当注入了 chargeConfirm 且「真实执行」(非 shadow) 才拦。
+        // 未注入（默认）→ 整段跳过，零行为变更。拦在记账/执行前，未确认直接 402，不产生省账也不打上游。
+        if (chargeConfirm && !engine.shadowMode) {
+            const verdict = chargeConfirm.evaluate({
+                adapterId: actualAdapter,
+                estimatedCost: unknownPrice ? null : actualCost,
+                confirmed: io.chargeConfirm === true,
+                shadow: engine.shadowMode,
+            });
+            if (verdict.required && !verdict.confirmed) {
+                const e = new Error('charge_confirmation_required');
+                e.httpStatus = 402;
+                e.chargeConfirm = verdict;   // 结构化结论随错误带出，server 层据此回 402 + 说明缺哪个确认
+                throw e;
+            }
+            // required && confirmed → 放行；required=false（免费/名单外）→ 放行
+        }
 
         // 省账落内存（门控关=不落盘；一期不落盘，落盘/排行榜列二期——YAGNI 诚实边界）
         pushSavings({

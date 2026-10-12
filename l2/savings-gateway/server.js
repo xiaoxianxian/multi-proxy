@@ -47,6 +47,21 @@ function resolveExecutorOpt() {
   return createForwardExecutor(upstream);
 }
 
+// 收费确认闸门（MPT 契约 2026-10-12）：默认关 = 不注入 = 网关零行为变更。
+// 设 PROXY_SAVINGS_CHARGE_CONFIRM=1/true/on 才构造闸门并注入 gateway；付费路由（真执行）
+// 需客户端显式带 X-Charge-Confirm 头（1/true/on）才放行，否则内核抛 402。
+// 付费名单可经 PROXY_SAVINGS_PAID_ADAPTERS（逗号分隔）覆盖默认 [deepseek,qwen]。
+function resolveChargeConfirmOpt() {
+  const v = String(process.env.PROXY_SAVINGS_CHARGE_CONFIRM ?? '').trim().toLowerCase();
+  if (!(v === '1' || v === 'true' || v === 'on')) return undefined; // 默认关 → 零行为变更
+  const { createChargeConfirmGate } = require('./charge-confirm.js');
+  const raw = String(process.env.PROXY_SAVINGS_PAID_ADAPTERS ?? '').trim();
+  const paidAdapters = raw
+      ? raw.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined; // 空 = 走默认名单
+  return createChargeConfirmGate(paidAdapters ? { paidAdapters } : {});
+}
+
 function readBody(req, limit = 2 * 1024 * 1024) {
     return new Promise((resolve, reject) => {
         let data = '';
@@ -74,11 +89,14 @@ function openaiError(res, status, message, type) {
 
 function createServer(opts = {}) {
     const executor = opts.executor !== undefined ? opts.executor : resolveExecutorOpt();
+    const chargeConfirm = opts.chargeConfirm !== undefined ? opts.chargeConfirm : resolveChargeConfirmOpt();
     const gateway = opts.gateway || createSavingsGateway({
         circuitBreaker: opts.circuitBreaker || resolveCircuitBreakerOpt(),
         circuitMode: opts.circuitMode !== undefined ? opts.circuitMode : resolveCircuitModeOpt(),
         // forward 执行器启用时强制 shadow=off（否则内核不真调上游）；未启用则保持默认 shadow（零行为变更）
         ...(executor ? { executor, shadow: false } : {}),
+        // 收费确认闸门（MPT 契约 2026-10-12）：门控注入，默认 undefined = 零行为变更
+        ...(chargeConfirm ? { chargeConfirm } : {}),
     });
     const watchdog = opts.watchdog || createCostWatchdog();   // G1：硬上限看门狗（默认 hardCap=0 不拦）
     const server = http.createServer(async (req, res) => {
@@ -117,12 +135,17 @@ function createServer(opts = {}) {
             }
             const auth = req.headers['authorization'] || '';
             const key = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+            // 收费确认旗标（MPT 契约 2026-10-12）：客户端显式带 X-Charge-Confirm: 1/true/on 才放行付费路由。
+            // agent 绝不能静默加这个头（MPT 的 *_CHARGE_CONFIRMATION_REQUIRED 协议）——只有用户批准后才带。
+            // 未带 = confirmed 默认 false → 内核在付费路由上抛 402。无闸门时此字段被忽略（零行为变更）。
+            const chargeConfirmHeader = String(req.headers['x-charge-confirm'] ?? '').trim().toLowerCase();
+            const chargeConfirmed = chargeConfirmHeader === '1' || chargeConfirmHeader === 'true' || chargeConfirmHeader === 'on';
             // G1：硬上限到限暂停——累计成本越过 hardCap 直接在真实执行/模拟前拒绝
             if (watchdog.state().block) {
                 return openaiError(res, 429, 'budget hard cap reached; requests paused until cap is raised', 'budget_exceeded');
             }
             try {
-                const out = gateway.handleChatCompletions(body, { key });
+                const out = gateway.handleChatCompletions(body, { key, chargeConfirm: chargeConfirmed });
                 // 喂 watchdog 累计成本（G1：到限即拒；default hardCap=0 不影响旧行为）
                 const entries = gateway.getSavingsLog();
                 const lastEntry = entries[entries.length - 1];
@@ -164,6 +187,17 @@ function createServer(opts = {}) {
                 }
                 return json(res, 200, out);
             } catch (e) {
+                // 收费确认拦截（MPT 契约 2026-10-12）：402 优先识别，随错误带结构化 verdict（缺哪个确认一目了然）
+                if (e.httpStatus === 402 && e.chargeConfirm) {
+                    return json(res, 402, {
+                        error: {
+                            message: 'paid route requires explicit charge confirmation; add X-Charge-Confirm: true header only after user approval',
+                            type: 'charge_confirmation_required',
+                            code: 'charge_confirmation_required',
+                        },
+                        chargeConfirm: e.chargeConfirm,
+                    });
+                }
                 const status = e.httpStatus === 401 ? 401 : (e.httpStatus === 503 ? 503 : 400);
                 const type = e.httpStatus === 503 ? 'circuit_breaker_open'
                     : (e.message === 'invalid_api_key' || e.message === 'unknown_api_key' ? 'invalid_api_key' : 'invalid_request_error');

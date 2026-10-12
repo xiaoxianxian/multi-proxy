@@ -175,6 +175,20 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **真跑**：`node l2/savings-gateway/savings-gateway.demo.js`（**24 PASS**，全确定性无网络：鉴权 401×2 / 难度路由 3 档 / 模拟 delta 记账 / token 启发式估算 / 省钱报告 / cost 信号端到端喂 alert.js / 非侵入断言）；jest `tests/unit/savings-gateway.test.js`（**18 例**，含 live HTTP 起 server：门控关 403 + 门控开 200 难度路由 + 401 鉴权 + 400 缺 messages + 看板/signal 只读 + 404）。全 manager jest **719/719（45 suites / 0 fail）**。live 冒烟：真起 `127.0.0.1:18795` 门控关 health 200 + POST 403 `gate-closed`，门控开 POST 200 `low→agnes saved=0.096 shadow=true` + bad key 401 `invalid_api_key` + 看板/signal 200。
 - **边界（YAGNI 诚实标注）**：一期止于「难度档位路由 + 模拟 delta 记账 + cost 信号」；**真执行**（shadow off + 注入 executor 真打上游、拿真 key）、**价格进 route 排序**、**省钱排行榜/落盘**、**A 路 token×单价 埋点接 forward.js 热路径** 全部列二期/后续增量，非侵入未接。
 
+## charge-confirm.js — 收费确认闸门（MPT 契约落地 · 2026-10-12 · 执行层强制确认）
+
+把 MoneyPrinterTurbo `SKILL.md` 的「`*_CHARGE_CONFIRMATION_REQUIRED` 协议」落成开源网关的**协议层硬约束**：agent 绝不能静默加确认旗标，只有用户显式批准（请求带 `X-Charge-Confirm`）才放行付费路由。与 savings-gateway 现有「统计层省账」互补——统计层只记账「省了多少」，本闸门在执行层「拦截」：未确认就真打付费上游前直接 402 挡下。
+
+- **内核**：`charge-confirm.js`（零依赖，工厂 `createChargeConfirmGate({paidAdapters?, usePricingBaseline?})`）。默认付费名单 `deepseek`/`qwen`（模拟基线价 >0），`agnes`（small 免费）永远不进名单 → 不需确认。`evaluate({adapterId, estimatedCost, confirmed, shadow})` → `{required, confirmed, reason}`：
+  - `shadow` 模拟（不真花钱）→ `required=false` 放行（与 MPT「模拟=免费」一致）；
+  - 免费路由（`agnes` / 名单外且价=0）→ `required=false` 放行；
+  - 付费 + `shadow=false` + 未确认 → `required=true`（网关抛 402）；
+  - 付费 + 已确认 → `reason=approved` 放行。
+- **接入缝（非侵入，与 breaker 同构）**：`gateway.js` 新增可选 `opts.chargeConfirm` 注入缝，默认 `null` = 零行为变更；`server.js` 门控 `PROXY_SAVINGS_CHARGE_CONFIRM=1/true/on` 才构造闸门并注入（关 = 不注入 = 网关零行为变更）。付费名单可经 `PROXY_SAVINGS_PAID_ADAPTERS`（逗号分隔）覆盖默认。
+- **请求协议**：客户端显式带 `X-Charge-Confirm: 1/true/on` 头才放行付费路由；未带 → 内核在记账/执行前抛 `httpStatus=402`，server 回 `402 charge_confirmation_required` 并随响应带结构化 verdict（`reason` 明确「缺哪个确认」），且**打不到上游、不产生省账**（拦截前置，未确认的请求不记账）。
+- **真跑**：`node l2/savings-gateway/charge-confirm.demo.js`（**18 PASS**，确定性：免费放行 / shadow 不拦 / 付费未确认拦 / 付费已确认放行 / 名单兜底 / baseline 开关 / 自定义名单）；`node l2/savings-gateway/charge-confirm.e2e.test.js`（**7 PASS**，真起假上游：默认关零变更 → 开+未确认 402 打不到上游 → 开+已确认 200 真打上游 → shadow 不拦）；`run-demos.js` 全量 53 例 + forward e2e 9 例全绿（零回归）。
+- **边界（YAGNI）**：闸门只在「真实执行（非 shadow）」介入；shadow 模拟永远放行（不真花钱不需确认）。名单外 + `usePricingBaseline=true`（默认）下，只要基线价 >0 仍会拦（保守：未知价不冒充免费）；要纯白名单语义需显式 `usePricingBaseline=false`。
+
 ## 铁律（落地前必读）
 
 - **MCP 消费入口**：想经 MCP 消费 L2 编排能力（routeTask/decompose/orchestrate），见 **`l2/MCP-integration-guide.md`**（DS2 之前唯一可消费面，门控 `PROXY_L2_MCP` 默认关）。
