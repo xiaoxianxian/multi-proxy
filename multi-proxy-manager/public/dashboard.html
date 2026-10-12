@@ -427,6 +427,10 @@
       <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
       代理面 Floor
     </div>
+    <div class="nav-item" data-page="cost" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+      成本
+    </div>
 
     <div class="nav-section-label">管理</div>
     <div class="nav-item" data-page="sessions" tabindex="0">
@@ -895,6 +899,50 @@
     </div>
   </div>
 
+  <!-- ==================== Cost Page ==================== -->
+  <div class="page" id="page-cost">
+    <div class="page-header">
+      <h1 class="page-title">成本</h1>
+      <p class="page-subtitle">各 provider 实时余额 · 当前周期预算判级 · 本月累计（模拟值）</p>
+    </div>
+    <div class="hig-card" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">各 Provider 余额</div>
+          <div class="hig-card-subtitle">GET /api/balances</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadCostPage()">
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="hig-card-body">
+        <div id="costBalanceList">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+            <div class="empty-text">暂无余额数据</div>
+          </div>
+        </div>
+     </div>
+   </div>
+    <div class="hig-card">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">当前周期预算判级</div>
+          <div class="hig-card-subtitle">GET /api/budget · 未配置 = 零行为变更</div>
+        </div>
+      </div>
+      <div class="hig-card-body">
+        <div id="costBudgetInfo">
+          <div class="empty-state">
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2l7 4v12l-7 4-7-4V6z"/></svg></div>
+            <div class="empty-text">未配置预算 · 零行为变更</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== Logs Page ==================== -->
   <div class="page" id="page-logs">
     <div class="page-header">
@@ -1065,6 +1113,7 @@
     else if (pageId === 'alerts') loadAlertsPage();
     else if (pageId === 'registry') loadRegistryPage();
     else if (pageId === 'sessions') loadSessions();
+    else if (pageId === 'cost') loadCostPage();
   }
 
   document.getElementById('sidebarNav').addEventListener('click', function(e) {
@@ -1711,14 +1760,80 @@
   // ===== Sessions Loading =====
   function loadSessions() {
     fetch('/api/sessions/running', { headers: { 'x-auth-token': authToken || '' } })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
+       .then(function(res) { return res.json(); })
+       .then(function(data) {
         var sessions = data.sessions || [];
         renderSessionsList(sessions, 'sessionsList');
         renderSessionsList(sessions, 'sessionsListFull');
+       })
+       .catch(function() { /* 静默失败 */ });
+   }
+
+   // ---- P5 成本页：各 provider 余额 + 当前周期预算判级 ----
+  function loadCostPage() {
+    var balList = document.getElementById('costBalanceList');
+    var budInfo = document.getElementById('costBudgetInfo');
+    var hdr = document.getElementById('costPageSubtitle') || document.querySelector('div#page-cost .page-subtitle');
+    var authHdr = { 'x-auth-token': authToken || '' };
+
+    // /api/balances — 各 provider 实时余额
+    fetch('/api/balances', { headers: authHdr })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var items = Array.isArray(data) ? data : (data.balances || []);
+        if (items.length === 0) {
+          balList.innerHTML = '<div class="empty-state"><div class="empty-text">暂无余额数据</div></div>';
+        } else {
+          balList.innerHTML = items.map(function(item) {
+            // 支持两种格式: {name, amount} 数组 或 {providerName: value} 对象
+            var name = item.name || item.provider || 'unknown';
+            var amount = item.amount != null ? item.amount : (typeof item === 'object' ? item[Object.keys(item)[0]] : item);
+            var amountStr = typeof amount === 'number' ? '\u00a5' + amount.toFixed(2) : String(amount);
+            return '<div class="proxy-card-item" style="padding:10px 14px;border-bottom:1px solid var(--border,#eef2f7);">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+              '<span style="font-weight:600;color:var(--foreground);">' + name + '</span>' +
+              '<span style="font-size:14px;color:var(--muted-foreground);">' + amountStr + '</span>' +
+              '</div></div>';
+          }).join('');
+        }
       })
-      .catch(function() { /* 静默失败 */ });
-  }
+      .catch(function() { balList.innerHTML = '<div class="empty-state"><div class="empty-text">无法获取余额数据</div></div>'; });
+
+    // /api/budget — 当前周期预算判级快照（P7-2 起含 prices/caps/configHash）
+    fetch('/api/budget', { headers: authHdr })
+      .then(function(r) { return r.json(); })
+      .then(function(b) {
+        if (!b || !b.status || b.enabled === false) {
+          budInfo.innerHTML = '<div class="empty-state"><div class="empty-text">未配置预算 · 零行为变更</div></div>';
+          return;
+        }
+        var levelClass = b.status === 'ok' ? 'green' : b.status === 'warn' ? 'orange' : 'red';
+        var levelText = b.status === 'ok' ? '正常' : b.status === 'warn' ? '警告' : '越限';
+        var caps = b.caps || {};
+        var priceCount = b.prices ? Object.keys(b.prices).length : 0;
+        budInfo.innerHTML =
+          '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
+          '<div style="flex:1;min-width:160px;padding:14px;background:var(--border);border-radius:8px;">' +
+            '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:4px;">当前判级</div>' +
+            '<div style="font-size:20px;font-weight:700;color:var(--' + levelClass + '-accent,#' + (b.status==='ok'?'10b981':b.status==='warn'?'f59e0b':'ef4444') + ');">' +
+              levelText + '</div>' +
+            '</div>' +
+          '<div style="flex:1;min-width:160px;padding:14px;background:var(--border);border-radius:8px;">' +
+            '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:4px;">价表模型数</div>' +
+            '<div style="font-size:20px;font-weight:700;color:var(--foreground);">' + priceCount + '</div>' +
+            '</div>' +
+          '<div style="flex:1;min-width:160px;padding:14px;background:var(--border);border-radius:8px;">' +
+            '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:4px;">总上限</div>' +
+            '<div style="font-size:20px;font-weight:700;color:var(--foreground);">' +
+              (caps.total ? '\u00a5' + caps.total : '不限制') +
+            '</div>' +
+            '</div>' +
+          '</div>' +
+          (b.configHash ?
+            '<div style="margin-top:10px;font-size:11px;color:var(--muted-foreground);">configHash: ' + b.configHash.slice(0,16) + ' ...</div>' : '');
+      })
+      .catch(function() { budInfo.innerHTML = '<div class="empty-state"><div class="empty-text">无法获取预算数据</div></div>'; });
+   }
 
   function renderSessionsList(sessions, containerId) {
     var container = document.getElementById(containerId);
