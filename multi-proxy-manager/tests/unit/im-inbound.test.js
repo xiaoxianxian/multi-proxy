@@ -41,6 +41,9 @@ describe('L2 P4 IM inbound (/api/im-inbound)', () => {
 
   afterEach(() => {
     delete process.env.MANAGER_AGENT_TOKEN;
+    delete process.env.IM_OUTBOUND_FEISHU_WEBHOOK;
+    delete process.env.IM_OUTBOUND_FEISHU_SECRET;
+    delete process.env.IM_OUTBOUND_TELEGRAM_TOKEN;
   });
 
   // ---- 门控 ----
@@ -134,6 +137,31 @@ describe('L2 P4 IM inbound (/api/im-inbound)', () => {
     expect(res.body.outbound.ok).toBe(false);
   });
 
+  test('带 replyTo.channel=telegram（配 token）→ 回投成功（outbound.ok=true）', async () => {
+    process.env.PROXY_IM_INBOUND = '1';
+    process.env.IM_OUTBOUND_TELEGRAM_TOKEN = 'tok';
+    const f = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200 });
+    const res = await request(app).post('/api/im-inbound/webhook')
+      .set('x-agent-token', TEST_AGENT_TOKEN)
+      .send({ channel: 'generic', text: 'hi', conversationId: '998877', replyTo: { channel: 'telegram' } });
+    expect(res.status).toBe(200);
+    expect(res.body.reply).toBe('mock-reply:hi');
+    expect(res.body.outbound.ok).toBe(true);
+    f.mockRestore();
+  });
+
+  test('带 replyTo.channel=feishu（缺 webhook env）→ 回投 graceful 失败（outbound.ok=false，不崩）', async () => {
+    process.env.PROXY_IM_INBOUND = '1';
+    delete process.env.IM_OUTBOUND_FEISHU_WEBHOOK;
+    const res = await request(app).post('/api/im-inbound/webhook')
+      .set('x-agent-token', TEST_AGENT_TOKEN)
+      .send({ channel: 'generic', text: 'hi', conversationId: 'oc_x', replyTo: { channel: 'feishu' } });
+    expect(res.status).toBe(200);
+    expect(res.body.reply).toBe('mock-reply:hi');
+    expect(res.body.outbound.ok).toBe(false);
+    expect(res.body.outbound.error).toMatch(/IM_OUTBOUND_FEISHU_WEBHOOK/);
+  });
+
   // ---- 边界 ----
   test('缺 channel → 400', async () => {
     process.env.PROXY_IM_INBOUND = '1';
@@ -172,6 +200,73 @@ describe('L2 P4 IM inbound (/api/im-inbound)', () => {
       .send({ channel: 'generic', text: 'hi', conversationId: 'c1' });
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/executor 未绑定/);
+  });
+
+  // ---- sendOutbound 平台分支（纯函数 + IO 隔离）----
+  describe('sendOutbound 平台分支', () => {
+    let fetchSpy;
+    beforeEach(() => {
+      delete process.env.IM_OUTBOUND_FEISHU_WEBHOOK;
+      delete process.env.IM_OUTBOUND_FEISHU_SECRET;
+      delete process.env.IM_OUTBOUND_TELEGRAM_TOKEN;
+    });
+    afterEach(() => { if (fetchSpy) { fetchSpy.mockRestore(); fetchSpy = null; } });
+
+    test('webhook 分支：缺 webhookUrl → 抛错', async () => {
+      await expect(router.sendOutbound('webhook', { text: 'hi' })).rejects.toThrow(/webhookUrl/);
+    });
+
+    test('feishu 分支：缺 IM_OUTBOUND_FEISHU_WEBHOOK → 抛错（fail loud，不静默）', async () => {
+      await expect(router.sendOutbound('feishu', { text: 'hi', target: 'oc_x' }))
+        .rejects.toThrow(/IM_OUTBOUND_FEISHU_WEBHOOK/);
+    });
+
+    test('feishu 分支：配 webhook env → POST（msg_type/text）', async () => {
+      process.env.IM_OUTBOUND_FEISHU_WEBHOOK = 'https://feishu.example/hook';
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200 });
+      const r = await router.sendOutbound('feishu', { text: '你好', target: 'oc_x' });
+      expect(r.ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith('https://feishu.example/hook', expect.objectContaining({ method: 'POST' }));
+      const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(body.msg_type).toBe('text');
+      expect(body.content.text).toBe('你好');
+    });
+
+    test('feishu 分支：配 secret → 带 timestamp + sign（HMAC-SHA256 base64）', async () => {
+      process.env.IM_OUTBOUND_FEISHU_WEBHOOK = 'https://feishu.example/hook';
+      process.env.IM_OUTBOUND_FEISHU_SECRET = 'mysecret';
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200 });
+      const r = await router.sendOutbound('feishu', { text: 'hi', target: 'oc_x' });
+      expect(r.ok).toBe(true);
+      const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(body.timestamp).toBeDefined();
+      expect(body.sign).toBeDefined();
+      const crypto = require('crypto');
+      const expected = crypto.createHmac('sha256', 'mysecret').update(`${body.timestamp}\nmysecret`).digest('base64');
+      expect(body.sign).toBe(expected);
+    });
+
+    test('telegram 分支：缺 token → 抛错', async () => {
+      await expect(router.sendOutbound('telegram', { text: 'hi' })).rejects.toThrow(/IM_OUTBOUND_TELEGRAM_TOKEN/);
+    });
+
+    test('telegram 分支：配 token + target → POST Bot API（chat_id=target）', async () => {
+      process.env.IM_OUTBOUND_TELEGRAM_TOKEN = 'bot-token';
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200 });
+      const r = await router.sendOutbound('telegram', { text: 'ping', target: '998877' });
+      expect(r.ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://api.telegram.org/botbot-token/sendMessage',
+        expect.objectContaining({ method: 'POST' })
+      );
+      const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(body.chat_id).toBe('998877');
+      expect(body.text).toBe('ping');
+    });
+
+    test('未知 channel → 抛错（YAGNI）', async () => {
+      await expect(router.sendOutbound('whatsapp', { text: 'hi' })).rejects.toThrow(/尚未实现/);
+    });
   });
 
   // ---- 纯函数（归一化）----

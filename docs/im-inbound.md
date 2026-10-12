@@ -54,11 +54,19 @@ PROXY_IM_INBOUND=1 PROXY_EXECUTOR_BIND=1 node server.js
 
 飞书订阅握手（`type: url_verification`）会原样回 `challenge`，不执行。
 
-## 出站（回投）现状
+## 出站（回投）支持的平台
 
-- `channel: webhook` → POST JSON 到 `webhookUrl`（fire-and-forget，2s 超时即弃）。
-- 飞书 / Telegram 等**平台专用发送 API 尚未实现**（YAGNI）。真实部署建议：在平台侧配一个你自己的回投中继，
-  或后续在 `lib/im-channels.js` 的 `sendOutbound` 里补 `feishu`/`telegram` 分支（调各平台 sendMessage）。
+凭据**全部走 env，不在代码里写死**；缺配置一律显式报错（fail loud，不静默假装成功）。
+
+| `replyTo.channel` | 走哪条 | 所需 env | 备注 |
+|---|---|---|---|
+| `webhook` | POST JSON 到 `replyTo.webhookUrl` | —（URL 在 body 里） | fire-and-forget，2s 超时即弃 |
+| `feishu` | POST 到 `IM_OUTBOUND_FEISHU_WEBHOOK` | `IM_OUTBOUND_FEISHU_WEBHOOK` | 可选 `IM_OUTBOUND_FEISHU_SECRET` 自动加 `timestamp`+`sign`（HMAC-SHA256 base64） |
+| `telegram` | POST 到 `https://api.telegram.org/bot<token>/sendMessage` | `IM_OUTBOUND_TELEGRAM_TOKEN` | `chat_id` 取 `msg.conversationId` |
+
+- 飞书 / Telegram 的回投目标都来自归一化后的 `conversationId`（飞书 `chat_id` / Telegram `chat.id`）。
+- 其他平台仍走 `webhook` 旁挂一个你自己的中继，不预先写死平台专用 API（YAGNI）。
+- 所有出站都是 non-fatal：回投失败只记录 `outbound.ok=false`，不崩主流程。
 
 ## 测试
 

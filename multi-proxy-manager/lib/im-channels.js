@@ -60,14 +60,51 @@ const NORMALIZERS = {
 
 // 出站：把回复发回平台。
 //   channel='webhook'：POST JSON 到 webhookUrl（fire-and-forget，2s 超时即弃，non-fatal）。
-//   channel='feishu'/'telegram'/其他：平台专用 API 尚未实现 → 显式报错，让调用方改用 webhook 旁挂。
+//   channel='feishu' ：POST 到 env IM_OUTBOUND_FEISHU_WEBHOOK（可选 IM_OUTBOUND_FEISHU_SECRET 签名）。
+//   channel='telegram'：POST 到 Telegram Bot API（env IM_OUTBOUND_TELEGRAM_TOKEN + 目标 chat_id）。
+//   缺配置一律显式报错（fail loud），不静默假装成功；凭据全部走 env，不在代码里写死。
 async function sendOutbound(channel, { target, text, webhookUrl } = {}) {
+  if (!text) throw new Error('sendOutbound: text 必填');
+
   if (channel === 'webhook') {
     if (!webhookUrl) throw new Error("sendOutbound(webhook): webhookUrl 必填");
     return postJson(webhookUrl, { text, target, conversationId: target });
   }
-  // 平台专用 API 留 stub：先不直连各平台，统一建议走 webhook 旁挂一个你自己的回投中继。
-  // 这样 IM 通道保持「归一化 + 执行 + 回投」三件解耦，平台对接按需扩展，不预先写死。
+
+  if (channel === 'feishu') {
+    const hook = process.env.IM_OUTBOUND_FEISHU_WEBHOOK;
+    if (!hook) {
+      throw new Error(
+        "sendOutbound(feishu): 未配置 IM_OUTBOUND_FEISHU_WEBHOOK —— 要么配它，要么改用 channel='webhook' 旁挂回投地址"
+      );
+    }
+    const body = { msg_type: 'text', content: { text: String(text) } };
+    const secret = process.env.IM_OUTBOUND_FEISHU_SECRET;
+    if (secret) {
+      // 飞书签名：stringToSign = `${timestamp}\n${secret}`；sign = base64(HMAC-SHA256(stringToSign, secret))
+      const ts = Math.floor(Date.now() / 1000);
+      const crypto = require('crypto');
+      const stringToSign = `${ts}\n${secret}`;
+      const sign = crypto.createHmac('sha256', secret).update(stringToSign).digest('base64');
+      body.timestamp = String(ts);
+      body.sign = sign;
+    }
+    return postJson(hook, body);
+  }
+
+  if (channel === 'telegram') {
+    const token = process.env.IM_OUTBOUND_TELEGRAM_TOKEN;
+    if (!token) {
+      throw new Error(
+        "sendOutbound(telegram): 未配置 IM_OUTBOUND_TELEGRAM_TOKEN —— 要么配它，要么改用 channel='webhook' 旁挂回投地址"
+      );
+    }
+    if (!target) throw new Error('sendOutbound(telegram): target(=chat_id) 必填');
+    const api = `https://api.telegram.org/bot${token}/sendMessage`;
+    return postJson(api, { chat_id: String(target), text: String(text) });
+  }
+
+  // 其他平台专用 API 尚未实现 → 显式报错，让调用方改用 webhook 旁挂。
   throw new Error(
     `sendOutbound('${channel}'): 平台专用 API 尚未实现（YAGNI）—— 用 channel='webhook' 旁挂回投地址`
   );

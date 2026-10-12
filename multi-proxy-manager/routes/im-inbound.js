@@ -121,15 +121,23 @@ router.post('/webhook', requireAgentAuth, async (req, res) => {
       executor: req.app.locals.imExecutor || undefined,
     });
 
-    // 回投（异步、non-fatal）
+    // 回投（异步、non-fatal）。channel 支持 webhook / feishu / telegram：
+    //   - webhook：需 replyTo.webhookUrl，POST JSON 到该地址。
+    //   - feishu / telegram：凭据走 env（IM_OUTBOUND_FEISHU_WEBHOOK | IM_OUTBOUND_TELEGRAM_TOKEN），
+    //     用 msg.conversationId 当目标（飞书 chat_id / Telegram chat.id）。
     let outbound = null;
     const replyTo = body.replyTo;
-    if (replyTo && replyTo.channel === 'webhook' && replyTo.webhookUrl) {
-      outbound = await sendOutbound('webhook', {
-        target: msg.conversationId,
-        text: result.content,
-        webhookUrl: replyTo.webhookUrl,
-      }).catch((e) => ({ ok: false, error: e.message }));
+    if (replyTo && replyTo.channel) {
+      const outChannel = replyTo.channel;
+      const outArgs = { target: msg.conversationId, text: result.content };
+      if (outChannel === 'webhook' && !replyTo.webhookUrl) {
+        outbound = { ok: false, error: 'replyTo.webhookUrl 必填' };
+      } else if (outChannel === 'webhook') {
+        outArgs.webhookUrl = replyTo.webhookUrl;
+      }
+      if (!outbound) {
+        outbound = await sendOutbound(outChannel, outArgs).catch((e) => ({ ok: false, error: e.message }));
+      }
     }
 
     return res.json({
