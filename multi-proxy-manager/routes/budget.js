@@ -29,6 +29,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 
 const router = express.Router();
@@ -67,6 +68,10 @@ function loadBudgetConfig() {
 }
 
 // 判定一次（只读账本 + 纯函数判级）
+// P7-2 起响应里带三个快照字段（给 codex-proxy 的热路径预检做降级源）：
+//   prices     —— model 级价表拷贝（预检要算「这个请求最坏情况花多少」）
+//   caps       —— 总/按模型/按 agent 三档上限（预检要判的是上限，不是已花）
+//   configHash —— 预算配置的内容哈希（proxy 发现 manager 改了配置就刷新快照）
 function evaluateNow() {
   const loaded = loadBudgetConfig();
   if (!loaded.ok || !loaded.config) {
@@ -74,7 +79,13 @@ function evaluateNow() {
   }
   const entries = costTrack.readLedgerEntries();
   const result = budgetGuard.evaluateBudget(entries, loaded.config);
-  return { ...result, file: budgetFilePath() };
+  return {
+    ...result,
+    file: budgetFilePath(),
+    prices: costTrack.getPricingTable(),
+    caps: { total: loaded.config.hardCap, perModel: loaded.config.perModel, perAgent: loaded.config.perAgent },
+    configHash: crypto.createHash('sha256').update(JSON.stringify(loaded.config)).digest('hex').slice(0, 16),
+  };
 }
 
 // GET /api/budget — 当前周期判级快照

@@ -572,6 +572,24 @@ function readLedgerEntries(fileOverride) {
   return out;
 }
 
+// P7-2（2026-10-12）：价表只读出口（预算预检的快照字段之一）。
+// codex-proxy 的热路径预检要算「这个请求最坏情况花多少」，需要单价；
+// manager 不可达时 proxy 用上次同步下来的快照，价格就在快照里。
+// 🔴 返回**拷贝**：直接给 _modelPricing 的引用会让调用方改到内部价表（同 cloneModels 的理由）。
+// 只带 model 级价（proxy 级 fallback 价是 manager 路由时的兜底，预检估不出就放行，不猜）。
+function getPricingTable() {
+  const out = {};
+  for (const [modelId, mp] of _modelPricing) {
+    if (!mp || typeof mp !== 'object') continue;
+    out[modelId] = {
+      input: mp.input,
+      output: mp.output,
+      cacheHit: mp.cacheHit != null ? mp.cacheHit : undefined,
+    };
+  }
+  return out;
+}
+
 // 按模型拆账的对外拷贝（**必须拷贝**：直接给引用会让调用方改到内部 _state，账就脏了）
 function cloneModels(bag) {
   const out = {};
@@ -638,6 +656,8 @@ module.exports = {
   // P7（2026-10-12）：只读账本条目（预算闸门用）。**不应用进内存态**——
   // 与 loadLedger 的副作用边界见函数注释。budget-guard 的纯函数吃这个数组。
   readLedgerEntries,
+  // P7-2（2026-10-12）：价表只读拷贝（预算预检快照用，见函数注释）。
+  getPricingTable,
   ledgerFile,
   reset,
   // P2（2026-10-12）：model 级价表。loadPricingFromProviders 在 server 启动时调一次；

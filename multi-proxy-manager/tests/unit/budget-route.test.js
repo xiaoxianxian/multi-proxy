@@ -136,4 +136,42 @@ describe('P7 budget route (/api/budget)', () => {
     expect(res.body.spent).toBe(0);
     expect(res.body.level).toBe('ok');
   });
+
+  test('P7-2 快照字段：prices（价表拷贝）+ configHash（配置内容哈希）', async () => {
+    writeBudget({ period: 'monthly', hardCap: 10, timezone: 'UTC' });
+    writeLedger([row({ cost: 3 })]);
+    // 价表走真实 loader（不是手搓内部态）：model 级价进快照，proxy 才敢离线估最坏情况
+    const pricingFile = path.join(tmpDir, 'pricing.json');
+    fs.writeFileSync(pricingFile, JSON.stringify([
+      { id: 'deepseek-v4-flash', pricing: { input: 2, output: 8, cacheHit: 0.04 } },
+      { id: 'kimi-k2.6', pricing: { input: 4, output: 16 } },
+    ]));
+    const loaded = CT.loadPricingFromProviders([pricingFile]);
+    expect(loaded.loaded).toBe(2);
+
+    const res = await request(app).get('/api/budget');
+    expect(res.body.enabled).toBe(true);
+    expect(res.body.prices).toEqual({
+      'deepseek-v4-flash': { input: 2, output: 8, cacheHit: 0.04 },
+      'kimi-k2.6': { input: 4, output: 16, cacheHit: undefined },
+    });
+    expect(res.body.configHash).toMatch(/^[0-9a-f]{16}$/);
+    expect(res.body.caps).toEqual({ total: 10, perModel: {}, perAgent: {} });
+
+    // 同配置 → 同 hash（proxy 靠它判断「manager 改没改配置」）
+    const again = await request(app).get('/api/budget');
+    expect(again.body.configHash).toBe(res.body.configHash);
+
+    // 改配置 → hash 变（proxy 发现变化就刷新本地快照，不拿旧 cap 执行）
+    writeBudget({ period: 'monthly', hardCap: 20, timezone: 'UTC' });
+    const changed = await request(app).get('/api/budget');
+    expect(changed.body.configHash).not.toBe(res.body.configHash);
+  });
+
+  test('P7-2：没配预算时不带 prices/configHash（proxy 侧视为「无预算」不预检）', async () => {
+    const res = await request(app).get('/api/budget');
+    expect(res.body.enabled).toBe(false);
+    expect(res.body.prices).toBeUndefined();
+    expect(res.body.configHash).toBeUndefined();
+  });
 });
