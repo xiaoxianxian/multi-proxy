@@ -118,6 +118,10 @@ app.use('/api/budget', require('./routes/budget'));
 // 与 provider-health/sessions 同模式，挂在代理 wildcard 之前（否则 /api/h3web 被 :proxy=h3web 误捕获）。
 // 分工（维护者 2026-10-10）：不替 h3web 配 launchd 常驻，只在使用侧「发现没起就提醒」+ 留门控一键开启。
 app.use('/api/h3web', require('./routes/h3web-guard'));
+// L2 P4 · IM 入站通道：把 IM 平台（飞书/Telegram/…）的消息接进本地 agent 执行并回投。
+// 门控 PROXY_IM_INBOUND 默认关（非侵入，与 orchestration/alert 同模式），
+// 真执行另受 PROXY_EXECUTOR_BIND 门控（缺省 0）→ 不开不触下游、不花钱。
+app.use('/api/im-inbound', require('./routes/im-inbound'));
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
