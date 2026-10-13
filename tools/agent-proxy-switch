@@ -90,7 +90,7 @@
 #   ⚠️ 仍成立的边界（别顺嘴说成全自动）：HOME 隔离对**终端拉起**生效；
 #     Dock 双击的父进程是 launchd，拿不到 shim 注入的 HOME ⇒ 双击仍走原生配置。
 #     要双击也走桥，得用 B 路线改 `.app` 的 CFBundleExecutable（dsh 无签名 ⇒ 代价远小于 ChatGPT.app，
-#     但仍属不可逆类，须维护者 signoff，本工具不擅自做）。
+#     但仍属不可逆类，须维护者 验收，本工具不擅自做）。
 #
 # 给 dsh 接的注意点（实测自 ~/.dsh/profiles/desktop/cordis.patch.yml）：
 #   dsh 是「provider 注册表」型客户端，端点写在
@@ -1049,7 +1049,7 @@ switch_one() {
         echo "     生效方式：终端跑 \`dsh-curator\`（= HOME=$DSH_HOME_PROFILE <真 dsh>）"
         echo "     原生 \`dsh\` 照常读自己的 ~/.dsh，两者互不影响。"
         echo "  ⚠️ HOME 隔离只对**终端拉起**生效：Dock 双击的父进程是 launchd，拿不到注入的 HOME，"
-        echo "     双击仍走原生配置（要双击也走桥须改 .app，属不可逆，须单独 signoff，本工具不做）。"
+        echo "     双击仍走原生配置（要双击也走桥须改 .app，属不可逆，须单独 验收，本工具不做）。"
         echo "     关闭：agent-proxy-switch dsh off —— 只删隔离 home 与 shim，~/.dsh 不动"
         return 0
       fi

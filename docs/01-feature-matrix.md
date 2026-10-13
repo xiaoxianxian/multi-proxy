@@ -101,7 +101,7 @@ This file is part of the multi-proxy project.
 | 5 | ~~P5 GUI 看板~~ | 易用性 | ✅ 已闭环（`commit 2163ca9`：Electron 壳 `main.js` 117 行 + `launch-gui.sh` + `manage.sh gui` 子命令；启动脚本含 base_url 占用检测） | ✅ 已闭环（低） |
 | 6 | ~~DSH 生态（DS1 SKILL.md 待产）~~ | ✅ DS1 已落（2 SKILL + `docs/02-product/dsh-integration.md`）；DS2/DS3 暂缓（#1496） | ✅ 已闭环 |
 | 7 | **manager 3 测试 fail**（`curator-pack.test.js` `policies.length` 5 vs 6） | manager jest 非全绿（10-07 实测 1297/3fail/83）| 另一 agent 在途 WIP（`side-effect-guard.js`/`cost-watchdog.js`，git status 8M+7??）给 curator 加第 6 条 policy，测试期望未跟；**不擅修**（§5.6 属对方地盘），等其 commit 后自然修复 | P1（阻塞绿灯）|
-| 8 | **M6 D0 = 100 行真实 Cursor 样本** | M6 机制已条件性 signoff（`f10e0d2`），样本未达 | 18794 待维护者在 Cursor 实配 base_url + 实际 coding 攒 `routing_feedback`；脚本喂 = 污染拒用；18794 保持不动（重拉反伤 O1 env）| P1（待维护者 in-the-loop）|
+| 8 | **M6 D0 = 100 行真实 Cursor 样本** | M6 机制已条件性 验收（`f10e0d2`），样本未达 | 18794 待维护者在 Cursor 实配 base_url + 实际 coding 攒 `routing_feedback`；脚本喂 = 污染拒用；18794 保持不动（重拉反伤 O1 env）| P1（待维护者 in-the-loop）|
 | 9 | **curator 对 codex responses 内容级压缩失效** | codex 路径 token 不省 | 补响应级折叠 | 中 |
 | 10 | **token 控制面 A 路**（`cost.js` token×单价进料管）+ 30 号基线 estimate→actual | 答不了"钱花在哪类 token" | 是否插队到 12 号既定序列前待维护者 | 中 |
 | 11 | **多租户 / Portico 控制面**（企业版 7 缺口） | 控制面未建 | 维持 multi-proxy 无状态数据面 / Portico P1 待维护者 | P2（待维护者）|

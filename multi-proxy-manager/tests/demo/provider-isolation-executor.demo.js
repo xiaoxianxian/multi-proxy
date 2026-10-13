@@ -8,7 +8,7 @@
 // 全内存 + 临时 sidecar，非侵入、零生产污染：
 //   - 真执行写的是临时 provider-isolation sidecar（绝不碰生产 ~/.multi-proxy-manager/providers.json）。
 //   - 绝不 flip providers.json enabled（高后果动作；误禁用会重排全局路由）——flip 是另一条 opt-in 注入缝，
-//     默认 ctx.flipEnabled=null → 永不触发。见 docs/02-product/m2-execution-signoff.md。
+//     默认 ctx.flipEnabled=null → 永不触发。见 docs/02-product/m2-execution-验收.md。
 //
 // 桥接契约（与 routes/provider-health.js 一致）：消费方把
 //   provider-health.listIsolated() 产出逐条 enrich correlation = correlateCrossProxy(id) 后喂给

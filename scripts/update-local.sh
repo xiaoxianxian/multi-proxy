@@ -118,7 +118,7 @@ fetch_and_probe() {
   log "   ✅ G2 工作区干净"
   if [ "${local_ahead:-0}" -gt 0 ]; then
     log "   ❌ G3 本地有 ${local_ahead} 个未推送提交，无法 fast-forward"
-    log "      按规矩（push 要维护者 signoff）这里不推，请维护者决定：先 push 或先处理"
+    log "      按规矩（push 要维护者 验收）这里不推，请维护者决定：先 push 或先处理"
     return 1
   fi
   log "   ✅ G3 本地无未推送提交"

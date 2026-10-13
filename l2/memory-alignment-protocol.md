@@ -160,4 +160,4 @@ agent A 在接手一个涉及 agent B 曾参与的话题/项目时，**开工前
 ## 已知边界与下一步
 
 - **L2 内核机械保证（DEFERRED，2026-10-02 维护者拍板）**：水位线当前是脚本+文件约定；接 L2 `registry`/`bootstrap` 做自动互认/机械推进，等 multi-proxy 测试验收阶段维护者确认再动（项目 MEMORY「⏳ 待办提醒」第 1 条已挂该触发器）。
-- **常驻自动化**：「每个会话自动扫触发器」需 cron/automation 兜底，属维护者 signoff 项（定 cadence + 触发方式），未拍板前靠 agent 开工纪律（§二）手动跑 `check`。
+- **常驻自动化**：「每个会话自动扫触发器」需 cron/automation 兜底，属维护者 验收 项（定 cadence + 触发方式），未拍板前靠 agent 开工纪律（§二）手动跑 `check`。

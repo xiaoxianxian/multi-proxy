@@ -88,7 +88,7 @@ function aggregate(entries, minSample) {
   } else if (hitRate === 0) {
     verdict = 'NO_OVERRIDE';     // 有样本但引擎从不真正 override → 无需开闸门
   } else {
-    verdict = 'SIGNOFF_READY';   // 样本充足且有真实命中 → 可评估开闸门
+    verdict = '验收_READY';   // 样本充足且有真实命中 → 可评估开闸门
   }
   return { total, applied, hitRate, byTaskType, byProvider, verdict, minSample };
 }
@@ -141,8 +141,8 @@ function main() {
     case 'NO_OVERRIDE':
       console.log('NO_OVERRIDE：有样本但命中率 0——引擎从未真正 override，无需开闸门。');
       break;
-    case 'SIGNOFF_READY':
-      console.log(`SIGNOFF_READY：样本 ${a.total} ≥ ${a.minSample} 且命中率 ${pct(a.hitRate)}，可评估开闸门。`);
+    case '验收_READY':
+      console.log(`验收_READY：样本 ${a.total} ≥ ${a.minSample} 且命中率 ${pct(a.hitRate)}，可评估开闸门。`);
       break;
   }
 }

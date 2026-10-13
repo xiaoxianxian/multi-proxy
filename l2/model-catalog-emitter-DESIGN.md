@@ -78,6 +78,6 @@ $ node l2/model-catalog-emitter.demo.js
 ## 7. 风险（§3 非侵入）
 
 emitter 生成 catalog 本身零风险（纯函数）。
-**写 `~/.codex/config.toml` + `~/.codex/model-catalog.json` 是 signoff 动作**。
+**写 `~/.codex/config.toml` + `~/.codex/model-catalog.json` 是 验收 动作**。
 emitter 不碰 agent 家目录，写盘由调用方 CLI 在 `CURATOR_CATALOG_EMIT=true` 时执行，
-需维护者 signoff（§3 非侵入铁律 / 69 号挂账 / 70 号 GUI 红线）。
+需维护者 验收（§3 非侵入铁律 / 69 号挂账 / 70 号 GUI 红线）。
