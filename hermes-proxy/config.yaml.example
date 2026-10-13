@@ -3,7 +3,9 @@
 
 model:
   base_url: https://apihub.agnes-ai.com/v1
-  default: agnes-2.0-flash
+  # 2026-10-02 实测：2.0/2.5-flash 在短 max_tokens 下正文被 thinking 吃空、1.5 直接 503，
+  # 3.0-flash 才真出正文 ⇒ 示例一律给 3.0-flash。
+  default: agnes-3.0-flash
   provider: custom
 
 providers:

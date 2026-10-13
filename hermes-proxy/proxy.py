@@ -218,8 +218,13 @@ def update_config_yaml(file_path, new_model):
                     provider_config['default_model'] = new_model
                     break
 
-        with open(file_path, 'w') as f:
+        # P0-8 同一条纪律：这里写的是 Hermes 的**主配置文件**，直接 open('w') 一旦
+        # 在写一半时崩溃/磁盘满，留下的是半截 YAML ⇒ Hermes 下次直接起不来。
+        # 与 save_providers 同一模式：tmp 写全 → os.replace 原子替换。
+        tmp_file = file_path + '.tmp'
+        with open(tmp_file, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+        os.replace(tmp_file, file_path)
 
         return {'success': True, 'message': f'Updated config to model: {new_model}'}
     except Exception as e:
