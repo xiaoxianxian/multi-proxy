@@ -13,6 +13,8 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDi
 
 $Ports = @{ codex=18790; hermes=18793; cursor=18794; dsh=18797; manager=18792 }
 $Dirs  = @{ codex='codex-proxy'; hermes='hermes-proxy'; cursor='cursor-proxy'; dsh='dsh-proxy'; manager='multi-proxy-manager' }
+# Windows 上 Python 可能是 python3 或 python（python.org 安装默认只有 python）
+$Py = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } elseif (Get-Command python -ErrorAction SilentlyContinue) { 'python' } else { 'python3' }
 
 function PortInUse($port) {
   try { return [bool](Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue) }
@@ -29,17 +31,17 @@ function StartProxy($name) {
   $log = Join-Path $LogDir "$name-proxy.log"
   if ($name -eq 'hermes') {
     if (-not (Test-Path (Join-Path $dir 'proxy.py'))) { Write-Warning "hermes proxy.py 缺失"; return }
-    Start-Process -NoNewWindow python3 -ArgumentList 'proxy.py' -WorkingDirectory $dir -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+    Start-Process $Py -ArgumentList 'proxy.py' -WorkingDirectory $dir -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError "$log.err"
   } elseif ($name -eq 'cursor') {
     if (-not (Test-Path (Join-Path $dir 'dist'))) {
       Write-Host "[->] Cursor Proxy 未编译，正在编译..."
       Start-Process -NoNewWindow npm -ArgumentList 'run','build' -WorkingDirectory $dir -Wait
     }
     if (-not (Test-Path (Join-Path $dir 'dist/server/start.js'))) { Write-Warning "Cursor Proxy 未编译"; return }
-    Start-Process -NoNewWindow node -ArgumentList 'dist/server/start.js' -WorkingDirectory $dir -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+    Start-Process node -ArgumentList 'dist/server/start.js' -WorkingDirectory $dir -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError "$log.err"
   } else {
     if (-not (Test-Path (Join-Path $dir 'proxy.js'))) { Write-Warning "$name proxy.js 缺失"; return }
-    Start-Process -NoNewWindow node -ArgumentList 'proxy.js' -WorkingDirectory $dir -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+    Start-Process node -ArgumentList 'proxy.js' -WorkingDirectory $dir -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError "$log.err"
   }
   Start-Sleep -Seconds 2
   if (PortInUse $port) { Write-Host "[OK] $name 启动成功 (端口 $port)" } else { Write-Host "[FAIL] $name 启动失败，看日志: $log" }

@@ -31,7 +31,7 @@ if ($Start)   { & "$Root\manage.ps1" start;   exit 0 }
 
 # 依赖检查
 if (-not (Need node)) { Write-Error "缺少 Node.js，请先安装: https://nodejs.org/"; exit 1 }
-if (-not (Need python3)) { Write-Error "缺少 Python3，请先安装: https://www.python.org/"; exit 1 }
+if (-not ((Need python3) -or (Need python))) { Write-Error "缺少 Python3，请先安装: https://www.python.org/ （并确保 python3 或 python 在 PATH）"; exit 1 }
 
 # 各代理依赖安装（已存在 node_modules 则跳过）
 foreach ($d in @('codex-proxy','hermes-proxy','cursor-proxy','dsh-proxy','multi-proxy-manager')) {
