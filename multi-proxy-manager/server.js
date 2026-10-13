@@ -151,6 +151,8 @@ app.use((req, res, next) => {
       '/sessions': 'sessions.html',
       '/knowledge': 'knowledge.html',
       '/floor': 'floor.html',
+      // P0 修：dashboard 侧栏跳 /skills，routeMap 缺此项 ⇒ 点击被回落成 dashboard（无反应）。
+      '/skills': 'skills.html',
     };
     const page = routeMap[req.path] || 'dashboard.html';
     return res.sendFile(path.join(__dirname, 'public', page));

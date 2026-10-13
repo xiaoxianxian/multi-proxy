@@ -328,6 +328,12 @@ function ensureState(proxyName) {
       completionTokens: 0,
       totalTokens: 0,
       thinkingTokens: 0,
+      // 2026-10-12 补（cc-switch 借鉴 P1-2）：cache 写入分项 + 首 token 延迟口径。
+      // 此前只有 cacheHit（读取）折扣，写入侧完全黑 —— 而 Anthropic 的 cache write 比
+      // 普通 input 更贵（官方 1.25×），记不下来就永远算不清"缓存到底省没省钱"。
+      cacheCreationTokens: 0,
+      firstTokenMsSum: 0,        // 首 token 延迟累加（配合下者算均值）
+      firstTokenMsCount: 0,
       cost: 0,
       requestCount: 0,
       pricing: p,
@@ -346,6 +352,11 @@ function extractTokens(usage) {
                      typeof usage?.output_tokens     === 'number' ? usage.output_tokens     : 0;
   const cacheHit   = typeof usage?.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens :
                      typeof usage?.cacheHit               === 'number' ? usage.cacheHit              : 0;
+  // 2026-10-12 补：cache **写入**分项（Anthropic 的 cache_creation_input_tokens；
+  // OpenAI 侧没有对应用法，故为 0）。与 cacheHit（读取）分开记：读取打折、写入加价，
+  // 混在一个数里就没法判断缓存到底是省还是亏。
+  const cacheCreation = typeof usage?.cache_creation_input_tokens === 'number' ? usage.cache_creation_input_tokens :
+                        typeof usage?.cacheCreation              === 'number' ? usage.cacheCreation              : 0;
   // 推理痕迹（**只计数不计费**）：上游 output_tokens 通常已含 thinking，再算一遍就是重复计费。
   // 单列出来的理由是**可观测**——真付费上游实测（64 号 §七坑 6）：max_tokens 被 thinking 吃满时
   // 整条响应一个 text 块都没有；盘面上只看得到「输出 27」，看不出「27 里 23 是空转的思考」。
@@ -353,7 +364,7 @@ function extractTokens(usage) {
   const td       = usage?.output_tokens_details;
   const thinking = typeof td?.thinking_tokens === 'number' ? td.thinking_tokens :
                    typeof usage?.thinking_tokens === 'number' ? usage.thinking_tokens : 0;
-  return { prompt, completion, cacheHit, thinking };
+  return { prompt, completion, cacheHit, cacheCreation, thinking };
 }
 
 // 单次落账的**唯一出口**：热路径 accumulate 与跨进程上报共用这一份成本公式，
@@ -388,15 +399,28 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
   // 🔴 P3：at 用上报端给的完成时刻（i.at），没有就按收到时算（= completion time）。
   const pr = resolvePricing(pricingModel, st, { at: i.at });
   const pIn = pr.input, pOut = pr.output, pCache = pr.cacheHit;
+  // cache 写入单价：价表里配了 cacheCreation 就用，没配则回退到 input 价（不猜折扣，
+  // 宁可高估也别把"写入很贵"这件事抹掉 —— Anthropic 官方是 input 的 1.25×）。
+  const pCacheWrite = pr.cacheCreation !== undefined ? pr.cacheCreation : pIn;
   const pricingSource = pr.source;
   const costDelta = givenCost != null ? givenCost
     : (t.prompt - t.cacheHit) / 1e6 * pIn + t.completion / 1e6 * pOut +
-      (pCache !== undefined ? t.cacheHit / 1e6 * pCache : 0);
+      (pCache !== undefined ? t.cacheHit / 1e6 * pCache : 0) +
+      // 🔴 `|| 0` 不是防御性冗余：老账本行（loadLedger 读回）和外部调用方构造的 t
+      // 都**没有** cacheCreation 字段，undefined 会让 costDelta 整个变 NaN ——
+      // 一次 NaN 就把这个 proxy 的累计账彻底污染，且不会报错。宁可记 0，不许记 NaN。
+      (t.cacheCreation || 0) / 1e6 * pCacheWrite;
   st.promptTokens      += t.prompt;
   st.completionTokens += t.completion;
   st.totalTokens       += t.prompt + t.completion;
   // 不进 totalTokens（保持 total = prompt + completion 的既有口径，既有测试钉死这个等式）
   st.thinkingTokens   += t.thinking;
+  // 同样不进 totalTokens：cache 写入是 input 之外的独立计费项（Anthropic 口径）
+  st.cacheCreationTokens += (t.cacheCreation || 0);   // 同上：NaN 比 0 危险得多
+  if (typeof i.firstTokenMs === 'number') {
+    st.firstTokenMsSum += i.firstTokenMs;
+    st.firstTokenMsCount += 1;
+  }
   st.cost              += costDelta;
   st.requestCount      += 1;
 
@@ -432,6 +456,9 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
     prompt: t.prompt,
     completion: t.completion,
     cacheHit: t.cacheHit || 0,
+    // 2026-10-12 补：cache 写入分项 + 首 token 延迟（都是"钱花在哪/慢在哪"的可观测项）
+    cacheCreation: t.cacheCreation || 0,
+    firstTokenMs: typeof i.firstTokenMs === 'number' ? i.firstTokenMs : undefined,
     thinking: t.thinking || 0,
     cost: costDelta,
     latencyMs: typeof latencyMs === 'number' ? latencyMs : undefined,

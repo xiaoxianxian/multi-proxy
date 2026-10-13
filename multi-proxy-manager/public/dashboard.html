@@ -1803,19 +1803,21 @@
     fetch('/api/budget', { headers: authHdr })
       .then(function(r) { return r.json(); })
       .then(function(b) {
-        if (!b || !b.status || b.enabled === false) {
+        // P0 修：后端 /api/budget 返回的是 level（ok|warn|blocked），不是 status；
+        // 读 status 恒为 undefined ⇒ 配了预算也永远显示"未配置"。
+        if (!b || !b.level || b.enabled === false) {
           budInfo.innerHTML = '<div class="empty-state"><div class="empty-text">未配置预算 · 零行为变更</div></div>';
           return;
         }
-        var levelClass = b.status === 'ok' ? 'green' : b.status === 'warn' ? 'orange' : 'red';
-        var levelText = b.status === 'ok' ? '正常' : b.status === 'warn' ? '警告' : '越限';
+        var levelClass = b.level === 'ok' ? 'green' : b.level === 'warn' ? 'orange' : 'red';
+        var levelText = b.level === 'ok' ? '正常' : b.level === 'warn' ? '警告' : '越限';
         var caps = b.caps || {};
         var priceCount = b.prices ? Object.keys(b.prices).length : 0;
         budInfo.innerHTML =
           '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
           '<div style="flex:1;min-width:160px;padding:14px;background:var(--border);border-radius:8px;">' +
             '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:4px;">当前判级</div>' +
-            '<div style="font-size:20px;font-weight:700;color:var(--' + levelClass + '-accent,#' + (b.status==='ok'?'10b981':b.status==='warn'?'f59e0b':'ef4444') + ');">' +
+            '<div style="font-size:20px;font-weight:700;color:var(--' + levelClass + '-accent,#' + (b.level==='ok'?'10b981':b.level==='warn'?'f59e0b':'ef4444') + ');">' +
               levelText + '</div>' +
             '</div>' +
           '<div style="flex:1;min-width:160px;padding:14px;background:var(--border);border-radius:8px;">' +

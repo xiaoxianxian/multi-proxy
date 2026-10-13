@@ -18,9 +18,12 @@ fi
 xattr -r -d com.apple.quarantine node_modules/electron/dist/Electron.app 2>/dev/null || true
 
 # 检查后端
+# P0 修：manage.sh 在仓库根，不在 multi-proxy-manager/ 下；原 ./manage.sh 在后端未起时
+# 因 set -e 直接退出 ⇒ GUI 永远起不来。
+MANAGE_SH="$SCRIPT_DIR/../manage.sh"
 if ! curl -s http://127.0.0.1:18792/ > /dev/null 2>&1; then
     echo "⚠️  后端未运行，正在启动..."
-    ./manage.sh manager start
+    "$MANAGE_SH" manager start
 fi
 
 echo "✓ 后端运行中 (http://127.0.0.1:18792)"
