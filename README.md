@@ -196,26 +196,38 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 
 ## 十、快速开始
 
-```bash
-# 安装依赖（自动从 .env.example 生成各代理 .env）
-bash install.sh --all
+**跨平台安装**（macOS / Linux / Windows 三端均支持）：
 
+```bash
+# ── macOS / Linux（bash） ──
+bash install.sh --all        # 安装依赖 + 从 .env.example 生成各代理 .env
 # 编辑各代理 .env 配置 API Key
 nano codex-proxy/.env
 nano cursor-proxy/.env
 # Hermes 用 YAML：cp hermes-proxy/config.yaml.example hermes-proxy/config.yaml 后编辑
-
-# 启动 / 状态
 bash manage.sh start
 bash manage.sh status
 # 管理面板 → http://127.0.0.1:18792
 ```
 
-**常用命令**：`manage.sh {start|stop|restart|status}` · `manage.sh logs {all|codex|hermes|cursor|manager}` · 单服务 `manage.sh <agent> {start|stop|restart}` · 自启 `install.sh --autostart` · 桌面壳 `desktop/`（Electron，壳 = 启动器 + 窗口，业务代码不进 .app）。
+```powershell
+# ── Windows（PowerShell，原生，无需 WSL） ──
+.\install.ps1        # 安装依赖 + 启动 + 配置登录自启
+.\manage.ps1 status  # 查看状态
+```
 
-**前置**：macOS + Node.js 20+（cursor-proxy 的 TypeScript 测试需 Node 24 + ESM runner）；`lsof` 走 `/usr/sbin/lsof` 绝对路径（Node 子进程 PATH 不含 `/usr/sbin` 会误判，ADR-0001）。
+**开机自启（按平台）**：
+- macOS：`bash install.sh --autostart`（launchd，写 `~/Library/LaunchAgents/com.multi-proxy-manager.plist`）
+- Linux：`bash install.sh --autostart`（systemd 用户服务，写 `~/.config/systemd/user/multi-proxy-manager.service`；`systemctl --user status multi-proxy-manager` 查看）
+- Windows：`.\install.ps1` 默认配置登录自启（计划任务 `MultiProxyManager`）；移除 `.\install.ps1 -Uninstall`
+
+**常用命令**：`manage.sh {start|stop|restart|status}` · `manage.sh logs {all|codex|hermes|cursor|manager}` · 单服务 `manage.sh <agent> {start|stop|restart}` · 自启 `install.sh --autostart` · 桌面壳 `desktop/`（Electron，壳 = 启动器 + 窗口，业务代码不进 .app）。Windows 对应 `manage.ps1` / `install.ps1`。
+
+**前置**：Node.js 20+（cursor-proxy 的 TypeScript 测试需 Node 24 + ESM runner）；Python3（Hermes）。端口检测已跨平台（优先 `lsof`，回退 `ss` / `/proc/net/tcp`）。支持 macOS（launchd）/ Linux（systemd --user）/ Windows（PowerShell + 计划任务）。Linux 装依赖：`sudo apt install nodejs npm python3`；Windows 需先装 Node.js 与 Python3。
 
 完整上手流程见 `docs/quickstart.md`；验收口径见 `docs/06-test/acceptance.md`。
+
+**启动顺序与端口依赖**：代理相互独立可单独起停；`18790`(codex) 是核心网关，savings-gateway(`18796`) 反向依赖它（`upstream: 127.0.0.1:18790`）。一键 `bash manage.sh start` 按依赖顺序拉起；单服务 `bash manage.sh <agent> start`。所有端口默认绑 `127.0.0.1`，仅 Docker/跨机显式 `BIND_HOST=0.0.0.0`。运行状态一键核对：`bash tools/health-all.sh`。
 
 ---
 
@@ -264,15 +276,15 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十四、测试与验收（1180+11 全绿 · 2026-09-28 真跑）
+## 十四、测试与验收（manager 1458 / codex 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 · 2026-10-13 实测全绿）
 
 | 模块 | 命令 | 结果 |
 |------|------|------|
-| multi-proxy-manager | `cd multi-proxy-manager && npx jest --silent --forceExit` | 822/822（50 suites） |
-| codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 62/62（6 suites） |
-| cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit` | 219/219（17 suites） |
+| multi-proxy-manager | `cd multi-proxy-manager && npx jest --silent --forceExit` | 1458/1458（94 suites） |
+| codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 159/159（14 suites） |
+| cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit` | 250/250（21 suites） |
 | hermes-proxy | `cd hermes-proxy && python3 -m pytest tests/ -q` | 77/77（4 files） |
-| **L2 demo** | `find l2 -name '*.demo.js' -print0 \| xargs -0 -n1 node` | 29/29 脚本跑通 |
+| **L2 demo** | `find l2 -name '*.demo.js' -print0 \| xargs -0 -n1 node` | 51/51 demo 跑通 |
 | shell (bats) | `cd tests/shell && bats *.bats` | 11/11（CI 无 bats 时走 `check.sh` 零依赖回退） |
 
 历史修复记录见 `P0-FIXES.md`（11 项 P0）；完整验收判据见 `docs/06-test/acceptance.md`。
@@ -314,8 +326,12 @@ multi-proxy/
 ### #1 〔历史·已规避〕裸 `*` 污染全局 NO_PROXY
 旧版部署脚本含 `launchctl setenv no_proxy "127.0.0.1,localhost,*"`，使所有走系统代理的 GUI 应用直连超时。当前源码已无此写法（autostart plist 仅设 `PATH` + 代理自身局部 env），修复写法 `*` → `::1`。
 
-### #2 〔当前〕`install.sh --uninstall` 卸载不完整
-卸载只删 `com.multi-proxy-manager.plist`，不清理早期遗留的 `com.codex.*` 等 LaunchAgents。修复：卸载时扫描移除已知 plist 集合，或统一单一命名。
+### #2 〔已修复·2026-10-13〕`install.sh --uninstall` 卸载不完整
+历史：只删 `com.multi-proxy-manager.plist`，不清理其余 `com.multi-proxy.*` plist 与用户级残留。
+修复（2026-10-13）：
+- `uninstall_launchd` 改用 `plist_label`（plutil 优先 + python 兜底 + grep 终极兜底），修掉含特殊字符注释的 plist（如 savings-gateway）被 expat 解析失败而跳过的问题；
+- 新增 `uninstall_residues`：卸载时一并清理 `~/.multi-proxy-manager`、`codex-proxy/{logs,trace}`、`hermes-proxy/.env`、`multi-proxy-manager/.env`、`~/.local/bin/dsh-curator`（第三方 `~/.dsh` 主目录只警告不自动删）；
+- 全程支持 `install.sh --uninstall --dry-run` 预览，确认无误再实跑。
 
 ### #3 〔设计〕「单一所有者」机制
 无机制天然防止 proxy 与 cc-switch 同时认领同一 agent 的 base_url。已用 `tools/agent-proxy-switch` + `lib/agent-owner.js` 提供结构化防护（见第五节），桌面壳开壳前强制检测。
@@ -361,7 +377,7 @@ multi-proxy/
 | 所有权冲突检测（agent-owner + 切换器 + 桌面壳前置检测） | 完成 |
 | DSH 接入通道（`.dsh/skills/`） | 完成 |
 | P0 安全修复（`P0-FIXES.md`：11 项） | 完成 |
-| 全量测试 1180 + bats 11 + L2 demo 29 全绿（2026-09-28 真跑） | 完成 |
+| 全量测试 manager 1458 / codex 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 全绿（2026-10-13 实测） | 完成 |
 | **交付前最后一批功能集中开发** | **进行中（2026-10-06）** |
 | 企业版（多租户 / 网关层 / 审计） | 规划中，归 Portico 控制面，未动工 |
 

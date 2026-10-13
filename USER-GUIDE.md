@@ -4,7 +4,7 @@ Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md
 This file is part of the multi-proxy project.
 -->
 
-# Proxy Rebuild — 新用户完整上手指南
+# Multi-Proxy — 新用户完整上手指南
 
 > 面向第一次接触本项目的用户，从安装到验收的完整流程。
 
@@ -12,20 +12,27 @@ This file is part of the multi-proxy project.
 
 ## 一、前置要求
 
-在开始之前，确保你的 Mac 上已安装以下工具：
+在开始之前，确保你的系统已安装以下工具：
 
 ```bash
-# 检查 Node.js（≥ 16）
+# 检查 Node.js（≥ 20，测试建议 24）
 node --version
 
-# 检查 Python3（≥ 3.8）
+# 检查 Python3（≥ 3.8，Hermes 需要）
 python3 --version
-
-# 如果没有，安装
-brew install node python
 ```
 
-> 如果你使用 nvm 管理 Node 版本，请确保已激活一个 ≥ 16 的版本。
+各平台安装方式：
+
+| 平台 | Node.js + Python3 安装 |
+| --- | --- |
+| macOS | `brew install node python` |
+| Linux (Debian/Ubuntu) | `sudo apt install nodejs npm python3`（RHEL 系用 `dnf`，Arch 用 `pacman -S nodejs python`） |
+| Windows | 官网安装包：<https://nodejs.org/> 与 <https://www.python.org/> |
+
+> 本项目支持 macOS / Linux / Windows 三端。macOS 用 launchd、Linux 用 systemd --user、Windows 用 PowerShell + 计划任务。下文默认以 bash 命令演示；Windows 请改用 `manage.ps1` / `install.ps1`。
+
+> 如果你使用 nvm 管理 Node 版本，请确保已激活一个 ≥ 20 的版本。
 
 ---
 
@@ -33,8 +40,8 @@ brew install node python
 
 ```bash
 cd ~/projects   # 或你喜欢的任意目录
-git clone <你的仓库地址> proxy-rebuild
-cd proxy-rebuild
+git clone <你的仓库地址> multi-proxy
+cd multi-proxy
 ```
 
 项目包含四个模块，扁平目录结构：
@@ -258,32 +265,49 @@ bash manage.sh restart manager
 
 ## 八、开机自启
 
-### 启用
+开机自启按平台不同：
+
+### macOS（launchd）
 
 ```bash
-bash install.sh --autostart
+bash install.sh --autostart    # 启用
+bash install.sh --autostop     # 禁用
 ```
 
 这会在 `~/Library/LaunchAgents/com.multi-proxy-manager.plist` 创建一个 LaunchAgent，登录后自动启动所有服务。脚本会自动检测 nvm/pyenv 路径并写入 PATH。
 
-### 禁用
-
+诊断：
 ```bash
-bash install.sh --autostop
-```
-
-### 诊断
-
-```bash
-# 检查 plist 是否存在
 ls ~/Library/LaunchAgents/com.multi-proxy-manager.plist
-
-# 手动加载
 launchctl load ~/Library/LaunchAgents/com.multi-proxy-manager.plist
-
-# 查看 PATH
 launchctl getenv PATH
 ```
+
+### Linux（systemd 用户服务）
+
+```bash
+bash install.sh --autostart    # 启用
+bash install.sh --autostop     # 禁用
+```
+
+会写入 `~/.config/systemd/user/multi-proxy-manager.service`，登录时自启。
+
+诊断：
+```bash
+systemctl --user status multi-proxy-manager
+systemctl --user restart multi-proxy-manager
+# 若希望无登录也常驻：
+loginctl enable-linger "$USER"
+```
+
+### Windows（计划任务）
+
+```powershell
+.\install.ps1            # 安装并自动配置登录自启
+.\install.ps1 -Uninstall # 移除自启任务
+```
+
+自启通过当前用户的登录计划任务 `MultiProxyManager` 实现，无需管理员权限。
 
 ---
 
@@ -350,7 +374,7 @@ bash install.sh --uninstall
 如需彻底删除，手动删除整个项目目录：
 
 ```bash
-rm -rf ~/projects/proxy-rebuild
+rm -rf ~/projects/multi-proxy
 ```
 
 ---
@@ -424,11 +448,11 @@ cd cursor-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
 
 | 检查项 | 预期结果 |
 |--------|---------|
-| Manager 测试 | 80/80 通过 |
-| Codex 测试 | 36/36 通过 |
-| Hermes 测试 | 41/41 通过 |
-| Cursor 测试 | 49/49 通过 |
-| **总计** | **206/206 通过** |
+| Manager 测试 | 1458/1458 通过（94 suites） |
+| Codex 测试 | 159/159 通过（14 suites） |
+| Hermes 测试 | 77/77 通过（4 files） |
+| Cursor 测试 | 250/250 通过（21 suites） |
+| **总计** | **1944/1944 通过** |
 
 ### 3. 功能验收
 
@@ -447,7 +471,7 @@ cd cursor-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
 ## 十四、项目结构速览
 
 ```
-proxy-rebuild/
+multi-proxy/
 ├── manage.sh              # 服务管理脚本（启停、状态、日志）
 ├── install.sh             # 安装/卸载/自启脚本
 ├── README.md              # 项目文档

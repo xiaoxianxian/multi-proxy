@@ -22,11 +22,11 @@ This file is part of the multi-proxy project.
 | 密码哈希 | `bcryptjs`（bcrypt，非明文） | `lib/auth.js:3` |
 | 管理面板密码 | `MANAGER_PASSWORD`（可选，未设则 Web UI 首次引导设） | `.env.example` |
 
-### 1.2 前端安全头（CSP 三件套，齐全）
-`server.js:44-51` 全局中间件，每响应注入：
+### 1.2 前端安全头（CSP 等，齐全但 script-src 未达纯 'self'）
+`server.js:56-58` 全局中间件，每响应注入：
 | 头 | 值 | 作用 |
 |---|---|---|
-| `Content-Security-Policy` | `default-src 'self'; ... object-src 'none'; base-uri 'self'; form-action 'self'` | 防 XSS / 注入外部脚本 |
+| `Content-Security-Policy` | 实测 `default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'` | 防 XSS；**`connect-src 'self'` 锁死浏览器外联（防数据 exfil）**；但 `script-src` 含 `'unsafe-inline'` + 2 个指定 CDN，**未达「纯 'self'」**——根因是前端内联脚本，须抽 external JS 后才能收紧（见 roadmap / code-review P1-2）。 |
 | `X-Content-Type-Options` | `nosniff` | 防 MIME 嗅探 |
 | `X-Frame-Options` | `DENY` | 防点击劫持 |
 | `X-XSS-Protection` | `1; mode=block` | 旧浏览器 XSS 过滤 |
@@ -55,9 +55,9 @@ This file is part of the multi-proxy project.
 
 ## 二、[现状缺口 / 待拍板] 诚实标注
 
-| 项 | 现状（据实，grep+ls 实证） | 风险 | 待拍板（明早维护者定） |
+| 项 | 现状（据实，grep+ls 实证） | 风险 | 待拍板 / 状态 |
 |---|---|---|---|
-| **服务绑定地址** | `multi-proxy-manager` `app.listen(PORT)` **不带 host = 0.0.0.0 全网卡**（`server.js:131`，Node 默认）；`hermes-proxy` 默认 `127.0.0.1`（`proxy.py:704`，可 `BIND_HOST` 改） | 管理面板全网卡可达；**缓解**：有 JWT 保护，无 token 打不到受保护 API | **是否统一收 127.0.0.1**？或保持 0.0.0.0 + JWT 双保险？ |
+| **服务绑定地址** | ✅ 已默认 `127.0.0.1`：`multi-proxy-manager` `app.listen(PORT, BIND_HOST||'127.0.0.1')`（`server.js:253`，仅 Docker/跨机显式 `BIND_HOST=0.0.0.0`）；`hermes-proxy` 默认 `127.0.0.1`（`proxy.py:704`，可 `BIND_HOST` 改） | 面板默认只收本机回环；跨机部署才暴露 | **已解决**（2026-10-13 复核）；Docker/跨机场景文档已覆盖 `BIND_HOST` |
 | **日志脱敏** | route 决策日志记 `taskPrompt` 截前 50 字（`route-engine.js` decision ring）；**无 `log_redaction` 三档配置** | shadow 日志可能含任务内容摘要 | 是否加 `log_redaction: full / metadata_only / off` 三档？ |
 | **路由覆盖硬规则** | 未实现（`routing_overrides`/`force_provider` 全仓 0 命中） | 用户无法"某些任务锁强模型" | 是否实现 `routing_overrides` 配置形（DeepSeek 建议） |
 | **跨机访问** | 无 SSH 隧道文档 | 远程看面板需暴露端口 | README 附 SSH 隧道命令示例（文档级，零代码风险） |
@@ -66,7 +66,7 @@ This file is part of the multi-proxy project.
 
 ## 三、给用户的即时建议（现状即可）
 
-1. **管理面板只开本机能访问**：建议把 `multi-proxy-manager` 绑定收到 127.0.0.1（`server.js:131` 加 host 参数）或走 SSH 隧道；当前 0.0.0.0 靠 JWT 兜底，但多一层隔离更稳。**（待维护者拍板后我改，热路径 server.js 不擅自动）**
+1. **管理面板默认已只开本机**：`multi-proxy-manager` 默认 `BIND_HOST||'127.0.0.1'`（`server.js:253`），无需改动；仅 Docker/跨机显式 `BIND_HOST=0.0.0.0`。远程看面板走 SSH 隧道（见 README）。**（2026-10-13 复核：旧「待拍板」已落地，本条为文档同步）**
 2. **改 JWT_SECRET**：`.env` 里 `JWT_SECRET` 已从 `.env.example` 模板值（`change-me-to-a-random-string`）改成本机随机值（见 §1.1，持久化 0o600）；生产环境务必保持非默认。
 3. **`.env` 永不入库**：已 gitignore + 0o600，保持。
 4. **agent 侧按铁律**：用 `agent-proxy-switch` 切代理，不手改 config、不碰 launchd。
@@ -79,10 +79,10 @@ This file is part of the multi-proxy project.
 |---|---|
 | JWT + secret 0o600 | `lib/auth.js:2,10,34,36` |
 | bcrypt 密码哈希 | `lib/auth.js:3` |
-| CSP 三件套 | `server.js:44-51` |
+| CSP（含 connect-src 'self'，script-src 含 unsafe-inline + 2 CDN） | `server.js:56-58` |
 | 错误不泄堆栈 | `server.js:91-98` |
 | .env / result.json gitignore + 0o600 | `.gitignore:6,22`；`ls .env` |
-| manager 0.0.0.0 / hermes 127.0.0.1 | `server.js:131`；`hermes-proxy/proxy.py:704` |
+| manager 默认 127.0.0.1 / hermes 127.0.0.1 | `server.js:253`；`hermes-proxy/proxy.py:704` |
 | 无 log_redaction / 无 routing_overrides | grep 全仓 0 命中 |
 
 _落盘：2026-09-21 · 作者：贾维斯（Hermes Agent）· 据实 grep+ls 实证 · 缺口诚实标注 · 热路径 server.js 仅文档引用、未改_
