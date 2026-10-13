@@ -75,6 +75,8 @@ const DEMO_TAGS = {
     'cost.demo.js': ['governance', 'cost'],
     'health-monitor.demo.js': ['governance'],
     'health-store.demo.js': ['governance', 'resilience'],
+    'usage-rollup.demo.js': ['governance', 'cost'],
+    'profiles-store.demo.js': ['governance', 'resilience', 'config'],
     'l2-bootstrap.demo.js': ['bootstrap', 'orchestrator', 'route', 'registry'],
     'mcp-orchestrate-llm.demo.js': ['mcp'],
     'mcp-orchestrate-real.demo.js': ['mcp'],
@@ -100,6 +102,8 @@ const DEMO_TAGS = {
     'cost-watchdog.demo.js': ['governance', 'cost'],
     'savings-gateway.demo.js': ['gateway', 'cost', 'routing'],
     'charge-confirm.demo.js': ['gateway', 'cost', 'governance'],
+    // SSE 透传（2026-10-13）：dsh / Cursor 这类默认 stream:true 的客户端全靠它 —— 挂了就是「连得上、一条用不了」
+    'stream-forward.demo.js': ['gateway', 'cost', 'routing', 'stream'],
     'model-catalog-emitter.demo.js': ['catalog', 'adapter'],
 };
 

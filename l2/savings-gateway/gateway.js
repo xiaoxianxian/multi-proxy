@@ -488,6 +488,79 @@ function createForwardExecutor(upstreamBase, opts2 = {}) {
     };
 }
 
+// SSE 透传给上游的执行器（2026-10-13 补）。
+//
+// 为什么非补不可：18796 要接的真实客户端（dsh 桌面端、Cursor、以及任何 OpenAI 兼容
+// agent）**默认走流式**，`stream:true` 是常态不是边角。JSON-only 执行器撞上上游
+// text/event-stream 只能判 unsupported ⇒ 现场现象是「连得上、每个请求 501」——
+// 比连不上更糟：客户端看得到服务端，但一条都用不了。
+//
+// 契约与 createForwardExecutor 完全对齐（done / failed / client_error / unsupported），
+// 只多一个 'streamed'：表示响应头已写给客户端、字节已 pipe 完，**调用方不得再写 res**。
+// 🔴 只有 body.stream 为真时才可能被调用 —— 非流式路径与今天逐字节一致（零行为变更）。
+//
+// ⚠️ 已知取舍（如实记，别以后当成 bug）：流式这条省钱账是**估算**的 —— 拿不到上游
+//   真实 usage（除非客户端带 stream_options.include_usage 且上游回传）。所以流的账
+//   只能回答「路由到哪个档位」，不能当账单用。要真账请走非流式。
+function createStreamForwardExecutor(upstreamBase, opts2 = {}) {
+    const base = String(upstreamBase || 'http://127.0.0.1:18790').replace(/\/+$/, '');
+    const timeoutMs = Number.isFinite(opts2.timeoutMs) ? opts2.timeoutMs : 120000;
+    return async function streamForwardExecutor(adapterId, body, meta = {}, res = null) {
+        const auth = meta && meta.auth;
+        const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+        if (auth) headers.Authorization = auth;
+        let upstream;
+        try {
+            upstream = await fetch(`${base}/v1/chat/completions`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(timeoutMs),
+            });
+        } catch (e) {
+            return { status: 'failed', error: `upstream unreachable: ${e.message}` };
+        }
+        const ctype = upstream.headers.get('content-type') || '';
+        // 上游没给事件流（含 4xx/5xx 的 JSON 错误体）⇒ 退回与非流式同一套状态机，
+        // 让 server 层照原样回 JSON 错误；这里一个字节都还没写给客户端，安全。
+        if (!upstream.ok || !/text\/event-stream/i.test(ctype)) {
+            const text = await upstream.text().catch(() => '');
+            if (upstream.status >= 400 && upstream.status < 500 && upstream.status !== 429 && upstream.status !== 408) {
+                return { status: 'client_error', statusCode: upstream.status, error: text.slice(0, 200), raw: text };
+            }
+            return { status: 'failed', statusCode: upstream.status, error: text.slice(0, 200) || 'upstream returned non-stream response', raw: text };
+        }
+        if (!res || typeof res.writeHead !== 'function') {
+            return { status: 'unsupported', statusCode: upstream.status, error: 'no writable response to pipe stream into' };
+        }
+        res.writeHead(upstream.status, {
+            'Content-Type': ctype,
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            // 关掉中间层缓冲（nginx 之类），否则流式会攒成一坨最后一次性到
+            'X-Accel-Buffering': 'no',
+        });
+        try {
+            const reader = upstream.body.getReader();
+            try {
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    res.write(value);
+                }
+            } finally {
+                if (typeof reader.releaseLock === 'function') reader.releaseLock();
+            }
+        } catch (e) {
+            // 半途断流：头已写、不能再改状态码，只能尽力收尾并如实回报
+            try { res.end(); } catch { /* 客户端已断开 */ }
+            return { status: 'stream_error', error: `stream pipe failed: ${e.message}` };
+        }
+        res.end();
+        return { status: 'streamed' };
+    };
+}
+
 // chosen.modelTier 缺失时的兜底（seed 的三档都显式声明了 modelTier，此处防御未知 profile）
 function DEFAULT_TIER_NAME(chosen) {
     if (chosen.adapterId === 'agnes') return 'small';
@@ -511,6 +584,8 @@ module.exports = {
     RECOMMENDED_CIRCUIT_CONFIG: RECOMMENDED_CONFIG,
     // 二期缝（2026-10-08）：真实执行器工厂，server 层 PROXY_SAVINGS_EXECUTOR=forward 时启用
     createForwardExecutor,
+    // SSE 透传执行器（2026-10-13）：同上，只在 body.stream 为真时被调用，非流式零变更
+    createStreamForwardExecutor,
     // 单例转发
     handleChatCompletions: _gw.handleChatCompletions,
     savingsReport: _gw.savingsReport,

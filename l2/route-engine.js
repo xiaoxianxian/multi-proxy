@@ -29,6 +29,9 @@ const {
     judgeRisk,
     DEFAULT_TIMEOUT_MS: DEFAULT_JUDGE_TIMEOUT,
 } = require('./decision-judge.js');
+// shadow 日志算钱（route-engine-spec.md:90）：复用 cost.js 的 token→钱 口径（CNY / 百万 token），
+// 不另立一套价目算法——价目表仍由调用方注入，缺价返回 null（cost.js 同款「不拿 0 冒充」纪律）。
+const { tokenCost } = require('./cost.js');
 
 // §4/§5 交接触发器契约 + 循环熔断（agent-infra/handoff-contract.md）。
 // 默认 null = 不观测（零行为变更铁律：不注入就不改任何现有行为）。
@@ -42,9 +45,19 @@ const DEFAULT_LOG_CAPACITY = 100;
 // 门控默认 full：符合「门控默认关 / 不改变现有行为」非侵入铁律——脱敏是可选增强，默认零变化。
 const DEFAULT_LOG_REDACTION = 'full';
 
+// 本期两项缺口的门控（默认关 = 与今天逐字节一致）。
+//   PROXY_ROUTE_HARD_RULES  → force_provider / exclude_providers 硬规则覆盖（spec:87 / ADR-0005:28-29）
+//   PROXY_ROUTE_SHADOW_COST → shadow 日志算「可省 ¥X」（spec:90）
+// 读法与 routing-base / cost.js 同款：'1' | 'true' | 'on' 开，其余（含不设）关。
+function envOn(name) {
+    const v = String(process.env[name] ?? '').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'on';
+}
+
 class RouteEngine {
     constructor({ registry, pluginRuntime, shadowMode = true, logCapacity = DEFAULT_LOG_CAPACITY, executor = null, semanticReview = false, semanticThrow = false, noCandidateStrategy = null, llmJudge = false, riskGate = false,
-        riskTimeoutMs = DEFAULT_JUDGE_TIMEOUT, handoffGuard = null } = {}) {
+        riskTimeoutMs = DEFAULT_JUDGE_TIMEOUT, handoffGuard = null,
+        hardRules = null, shadowCost = null, pricing = null } = {}) {
         this.registry = registry;
         this.pluginRuntime = pluginRuntime || { listCapabilities: () => [] };
         this.shadowMode = shadowMode;
@@ -79,6 +92,14 @@ class RouteEngine {
         // route() 只在 decision.handoff 写「该不该切 / 卡在乒乓还是预算」的观测，
         // **不改档位、不自动切**——切模型所有权归调用方（N3 纯决策铁律不破）。
         this.handoffGuard = handoffGuard;
+        // 硬规则覆盖（spec:87 / ADR-0005:28-29 / security-whitepaper.md:62）：
+        // 调用方可用 force_provider / exclude_providers 压过引擎建议。默认关（env 或显式开）→ 零行为变更。
+        this.hardRules = hardRules == null ? envOn('PROXY_ROUTE_HARD_RULES') : !!hardRules;
+        // shadow 日志算钱（spec:90）：默认关 → 只记建议、不算钱（现状不变）。
+        this.shadowCost = shadowCost == null ? envOn('PROXY_ROUTE_SHADOW_COST') : !!shadowCost;
+        // 价目表：{ [adapterId]: { input, output } }（CNY / 百万 token，与 cost.js tokenCost 同口径），
+        // 由调用方注入。引擎**不内置**任何价格——内置就是编数，缺价一律记 null。
+        this.pricing = pricing;
       }
 
      // 按任务类型路由：返回候选 adapter 列表 + 路由决策日志
@@ -181,8 +202,17 @@ class RouteEngine {
              }
          }
 
+         // 硬规则覆盖（门控 PROXY_ROUTE_HARD_RULES，默认关 → pool 就是原候选，排序/选中逐字节不变）：
+         // exclude_providers 先剔除、force_provider 再在**剩余**候选里强制选中——排除优先于强制，
+         // 因为「不许用」是硬约束，被排除者不该因 force 复活（规格未写两者优先级，取此最小解释）。
+        let pool = [...candidateMap.values()];
+        if (this.hardRules) {
+            const hr = this._hardRules(task, pool);
+            if (hr) { decision.hardRule = hr.rule; pool = hr.pool; }
+        }
+
          // 排序：modelTypeMatch（真 > 假）→ tierMatch（真 > 假）→ confidence
-        decision.candidates = [...candidateMap.values()].sort((a, b) => {
+        decision.candidates = pool.sort((a, b) => {
             if (a.modelTypeMatch !== b.modelTypeMatch) {
                 return a.modelTypeMatch ? -1 : 1;
              }
@@ -191,7 +221,7 @@ class RouteEngine {
              }
             return b.confidence - a.confidence;
          });
-        decision.chosen = decision.candidates[0] || null;
+        decision.chosen = (decision.hardRule && decision.hardRule.forced) || decision.candidates[0] || null;
 
         // 无候选兜底策略（质量工程 §四 待办②）：把此前隐式的「chosen=null 却照样执行」
         // 显式化、可审计、可配置。默认 observe —— 与既有行为逐字一致（零行为变更铁律）。
@@ -246,6 +276,14 @@ class RouteEngine {
         if (this.handoffGuard && decision.chosen) {
             const next = decision.chosen.adapterId;
             decision.handoff = this.handoffGuard.shouldHandoff(next);
+        }
+
+        // shadow 日志算钱（spec:90，门控 PROXY_ROUTE_SHADOW_COST，默认关）：
+        // 影子路由记的是「建议走 A 但实际走 B」，这里顺带把两者价差算成 savings（可省 ¥X）。
+        // 只在 shadow 下算——非 shadow 是已经派发过的真请求，价差不再是「可省」而是「已花」，
+        // 语义不同，本期不碰（最小解释）。
+        if (this.shadowCost && this.shadowMode && decision.chosen) {
+            decision.shadowCost = this._shadowCost(task, decision.chosen.adapterId);
         }
 
         this._pushLog(decision);
@@ -308,6 +346,63 @@ class RouteEngine {
         if (tierMatch) score += 1;
         return score;
      }
+
+    // 硬规则覆盖（默认关）。task 字段按规格原形 snake_case（force_provider / exclude_providers），
+    // camelCase 同义——调用方两种写法都收（task 上其它字段本来就是 camelCase）。
+    // 最小解释：force 只在**剔除后的候选**里挑，不在候选里就不凭空造候选（记 forced=null + reason），
+    // 由调用方从 decision.hardRule 看出来「规则没生效」，而不是静默当作没写。
+    _hardRules(task, pool) {
+        const force = task.forceProvider || task.force_provider || null;
+        const rawExclude = task.excludeProviders || task.exclude_providers || null;
+        const exclude = [].concat(rawExclude || []).filter((x) => typeof x === 'string' && x);
+        if (!force && !exclude.length) return null;
+        const excluded = new Set(exclude);
+        const kept = excluded.size ? pool.filter((c) => !excluded.has(c.adapterId)) : pool;
+        const forced = force ? kept.find((c) => c.adapterId === force) || null : null;
+        return {
+            // rule 进 decision（日志/审计看得见）；pool 只回给 route() 重新排序，不进日志。
+            rule: {
+                forceProvider: force,
+                excludeProviders: exclude,
+                forced,                   // route() 据此覆盖 chosen；null = 未强制
+                reason: force && !forced ? `force_provider "${force}" not in candidates (kept ${kept.length})` : null,
+            },
+            pool: kept,
+        };
+    }
+
+    // 「建议 A vs 实际 B」的价差（门控 PROXY_ROUTE_SHADOW_COST）。
+    // baseline 取 task.actualProvider（实际走的那家）；token 取 task.tokens。
+    // 缺任一项 → savings=null + reason，绝不填 0 冒充「没省钱」（cost.js 同款纪律）。
+    _shadowCost(task, suggested) {
+        const baseline = task.actualProvider || task.actual_provider || null;
+        const out = { suggested, baseline, currency: 'CNY', savings: null, priced: false, reason: null };
+        if (!baseline) { out.reason = 'no baseline provider (task.actualProvider)'; return out; }
+        if (!task.tokens) { out.reason = 'no token usage (task.tokens)'; return out; }
+        const pSug = this.pricing && this.pricing[suggested] || null;
+        const pBase = this.pricing && this.pricing[baseline] || null;
+        if (!pSug || !pBase) { out.reason = `missing pricing for ${!pSug ? suggested : baseline}`; return out; }
+        const cSug = tokenCost(task.tokens, pSug);
+        const cBase = tokenCost(task.tokens, pBase);
+        if (cSug == null || cBase == null) { out.reason = 'unpriced (invalid tokens/pricing)'; return out; }
+        out.suggestedCost = Math.round(cSug * 1e6) / 1e6;
+        out.baselineCost = Math.round(cBase * 1e6) / 1e6;
+        out.savings = Math.round((cBase - cSug) * 1e6) / 1e6;   // 正数 = 建议更省（可省 ¥X）
+        out.priced = true;
+        return out;
+    }
+
+    // shadow 日志汇总：回答「智能路由到底省不省钱」——把 ring buffer 里算得出价的条目累加。
+    // 只统计 priced 条目，算不出的单独计数（unpriced），免得被 null 污染成「省了 0」。
+    savingsSummary() {
+        let savings = 0, priced = 0, unpriced = 0;
+        for (const d of this.log) {
+            const c = d && d.shadowCost;
+            if (!c) continue;
+            if (c.priced) { savings += c.savings; priced++; } else { unpriced++; }
+        }
+        return { entries: this.log.length, priced, unpriced, currency: 'CNY', savings: Math.round(savings * 1e6) / 1e6 };
+    }
 
      _pushLog(decision) {
          this.log.push(decision);

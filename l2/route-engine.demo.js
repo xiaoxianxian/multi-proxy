@@ -94,6 +94,33 @@ async function main() {
         console.log(`  - ${log.timestamp}: ${log.taskType} → ${log.chosen ? log.chosen.adapterId : 'none'} (${log.action})`);
     }
 
+    console.log('\n[6] 硬规则覆盖（门控 PROXY_ROUTE_HARD_RULES，默认关；此处显式开）');
+    const hrEngine = new RouteEngine({ registry: registryWithTier, pluginRuntime, shadowMode: true, hardRules: true });
+    const base = { id: 'hr', type: 'text', complexity: 'low', prompt: '简单翻译' };
+    const forcedR = hrEngine.route({ ...base, id: 'hr-1', force_provider: 'qwen' });
+    console.log(`  force_provider=qwen → chosen=${forcedR.chosen.adapterId}（无规则时是 agnes）`);
+    const excludedR = hrEngine.route({ ...base, id: 'hr-2', exclude_providers: ['agnes'] });
+    console.log(`  exclude_providers=[agnes] → chosen=${excludedR.chosen.adapterId}`);
+    const forceMissR = hrEngine.route({ ...base, id: 'hr-3', force_provider: 'godzilla' });
+    console.log(`  force 不在候选 → chosen=${forceMissR.chosen.adapterId}，reason=${forceMissR.hardRule.reason}`);
+    const noRuleR = hrEngine.route({ ...base, id: 'hr-4' });
+    console.log(`  没写规则（门控开着）→ chosen=${noRuleR.chosen.adapterId}，hardRule 字段存在=${noRuleR.hardRule !== undefined}（应为 false）`);
+
+    console.log('\n[7] shadow 日志算钱（门控 PROXY_ROUTE_SHADOW_COST，默认关；此处显式开）');
+    // 价目表由调用方注入（CNY / 百万 token）——引擎不内置价格，此处是 demo 造的示意价。
+    const costEngine = new RouteEngine({
+        registry: registryWithTier, pluginRuntime, shadowMode: true, shadowCost: true,
+        pricing: { agnes: { input: 2, output: 8 }, qwen: { input: 20, output: 80 } },
+    });
+    const costR = costEngine.route({
+        id: 'cost-1', type: 'text', complexity: 'low', prompt: '简单翻译',
+        actualProvider: 'qwen', tokens: { promptTokens: 100000, completionTokens: 20000 },
+    });
+    const c = costR.shadowCost;
+    console.log(`  建议 ${c.suggested}（¥${c.suggestedCost}）vs 实际 ${c.baseline}（¥${c.baselineCost}）→ 可省 ¥${c.savings}`);
+    console.log(`  汇总: ${JSON.stringify(costEngine.savingsSummary())}`);
+    console.log(`  门控关时: shadowCost 字段存在=${tierEngine.route({ ...base, id: 'cost-2' }).shadowCost !== undefined}（应为 false）`);
+
     console.log('\n✅ Demo complete');
 }
 

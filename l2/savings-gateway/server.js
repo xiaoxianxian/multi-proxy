@@ -47,6 +47,15 @@ function resolveExecutorOpt() {
   return createForwardExecutor(upstream);
 }
 
+// 流式（SSE）透传执行器（2026-10-13）：与上面的 forward 执行器**同源开关**
+// （PROXY_SAVINGS_EXECUTOR=forward + PROXY_SAVINGS_UPSTREAM），没开 forward 就不存在
+// ⇒ 默认关时 body.stream 仍走原来的 501 路径，逐字节不变。
+function resolveStreamExecutorOpt() {
+  if ((process.env.PROXY_SAVINGS_EXECUTOR || '').toLowerCase() !== 'forward') return undefined;
+  const { createStreamForwardExecutor } = require('./gateway.js');
+  return createStreamForwardExecutor(process.env.PROXY_SAVINGS_UPSTREAM || 'http://127.0.0.1:18790');
+}
+
 // 收费确认闸门（MPT 契约 2026-10-12）：默认关 = 不注入 = 网关零行为变更。
 // 设 PROXY_SAVINGS_CHARGE_CONFIRM=1/true/on 才构造闸门并注入 gateway；付费路由（真执行）
 // 需客户端显式带 X-Charge-Confirm 头（1/true/on）才放行，否则内核抛 402。
@@ -89,6 +98,7 @@ function openaiError(res, status, message, type) {
 
 function createServer(opts = {}) {
     const executor = opts.executor !== undefined ? opts.executor : resolveExecutorOpt();
+    const streamExecutor = opts.streamExecutor !== undefined ? opts.streamExecutor : resolveStreamExecutorOpt();
     const chargeConfirm = opts.chargeConfirm !== undefined ? opts.chargeConfirm : resolveChargeConfirmOpt();
     const gateway = opts.gateway || createSavingsGateway({
         circuitBreaker: opts.circuitBreaker || resolveCircuitBreakerOpt(),
@@ -106,7 +116,7 @@ function createServer(opts = {}) {
         if (req.method === 'GET' && pathname === '/health') {
             const cb = gateway.getCircuitBreaker();
             const circuit = cb ? { enabled: true, mode: (opts.circuitMode || resolveCircuitModeOpt()), ...cb.getStateSnapshot() } : { enabled: false };
-            return json(res, 200, { ok: true, module: 'savings-gateway', gateOpen: gateOpen(), shadow: gateway.isShadow(), executor: gateway.getExecutor() ? 'forward' : 'none', circuit });
+            return json(res, 200, { ok: true, module: 'savings-gateway', gateOpen: gateOpen(), shadow: gateway.isShadow(), executor: gateway.getExecutor() ? 'forward' : 'none', stream: streamExecutor ? 'forward' : 'none', circuit });
         }
 
         if (req.method === 'GET' && pathname === '/savings/report') {
@@ -150,6 +160,42 @@ function createServer(opts = {}) {
                 const entries = gateway.getSavingsLog();
                 const lastEntry = entries[entries.length - 1];
                 if (lastEntry) watchdog.record(lastEntry);
+                // ---- 流式透传（2026-10-13 补）----
+                // 谁会走到这：dsh 桌面端 / Cursor 这类 OpenAI 兼容客户端**默认** stream:true。
+                // 之前这条路径只能 501（内核 JSON-only），等于「连得上但一条都用不了」。
+                // 决策与省账在上面已记 —— ⚠️ 流式拿不到上游 usage，这条账是**估算**，
+                // 只能回答「路由到哪档」，不能当账单（要真账走非流式），gateway.js 有同款说明。
+                if (body.stream === true) {
+                    if (!streamExecutor) {
+                        return openaiError(res, 501, 'savings-gateway has no stream executor (set PROXY_SAVINGS_EXECUTOR=forward)', 'stream_unsupported');
+                    }
+                    let sr;
+                    try {
+                        sr = await streamExecutor(out.model, body, { auth: key }, res);
+                    } catch (se) {
+                        const cbs0 = gateway.getCircuitBreaker();
+                        if (cbs0) cbs0.recordFailure(out.model);
+                        return openaiError(res, 502, `savings-gateway upstream error: ${se.message}`, 'upstream_unreachable');
+                    }
+                    const cbs = gateway.getCircuitBreaker();
+                    if (cbs) {
+                        // 喂熔断的纪律与非流式一致：只有上游自身故障才记失败，
+                        // 坏 key（client_error）/ 半途断流（stream_error）不算上游不健康。
+                        if (sr.status === 'streamed') cbs.recordSuccess(out.model);
+                        else if (sr.status === 'failed') cbs.recordFailure(out.model);
+                    }
+                    if (sr.status === 'streamed') return undefined;          // 字节已 pipe 完，别再写 res
+                    if (sr.status === 'stream_error') return undefined;      // 头已写、已尽力 res.end()
+                    if (sr.status === 'failed') {
+                        return openaiError(res, 502, `savings-gateway upstream error: ${sr.error || 'upstream failed'}`, 'upstream_unreachable');
+                    }
+                    if (sr.status === 'client_error') {
+                        const sc = Number.isFinite(sr.statusCode) ? sr.statusCode : 400;
+                        res.writeHead(sc, { 'Content-Type': 'application/json' });
+                        return res.end(sr.raw || JSON.stringify({ error: { message: sr.error, type: 'upstream_client_error', code: null } }));
+                    }
+                    return openaiError(res, 501, sr.error || 'stream unsupported', 'stream_unsupported');
+                }
                 // 二期缝（2026-10-08）：真实 executor 异步转发 + 喂熔断 outcome。
                 // 仅当注入了 executor 且非 shadow 才走（默认 shadow → 跳过，零行为变更）。
                 if (gateway.getExecutor() && !gateway.isShadow()) {
