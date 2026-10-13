@@ -355,12 +355,74 @@ function captureTrace(opts: {
 /**
  * 转发请求到上游 Provider
  */
+// D4=C · 路由 override + M6 影子路由的决策链（非流式 handleChat / 流式 handleChatStream 共用）
+//
+// 2026-10-12 抽函数动机：这段原先只存在于非流式路径，而 Cursor 的主要请求形态是流式，
+// 等于 override 灰度与 routing_feedback 采样只覆盖到小一半流量 —— 用脏样本拍 M6 会拍错。
+// 抽出后两条入口共用同一条决策链。
+//
+// 门控关闭时（默认）：override 段整段跳过、shadow-only 块照常跑，热路径行为逐字节不变。
+export interface RoutingResult {
+  overrideApplied: boolean;
+  /** P0-2：recordShadowFeedback 返回的 rowid；门控关时 recordShadowFeedback 内部早退返回 -1。 */
+  feedbackRowId: number;
+}
+
+export async function applyRouting(
+  reqBody: any,
+  model: string,
+  messages: any[],
+  providerConfig: any
+): Promise<RoutingResult> {
+  let overrideApplied = false;
+  let feedbackRowId = -1;
+  if (isRouteOverrideEnabled()) {
+    const shadowSuggestion = routeShadow(model, messages);
+    const targetModel = shadowSuggestion.suggestion;
+    if (targetModel != null && targetModel !== model) {
+      // D5 对齐：findProviderByType 靠 provider_id 类型选对 provider（不写 DB）。
+      const newConfig = findProviderByType(targetModel);
+      if (newConfig != null) {
+        Object.assign(providerConfig, newConfig);
+        reqBody.model = targetModel;
+        overrideApplied = true;
+        recordOverrideEntry({
+          timestamp: new Date().toISOString(),
+          requestModel: model,
+          engineTaskType: shadowSuggestion.taskType,
+          overrideModel: targetModel,
+          provider: newConfig.name,
+          applied: true,
+        });
+        console.log(`[ChatHandler][Override] model=${model} → ${targetModel} (provider=${newConfig.name}, task=${shadowSuggestion.taskType})`);
+      }
+    }
+  }
+  if (!overrideApplied) {
+    // M6 影子路由建议（dry-run，不改变真实路由；仅 PROXY_ROUTING_SHADOW=1 时落日志）
+    try {
+      const shadow = routeShadow(model, messages);
+      // P0-2 反馈闭环落库（门控 PROXY_ROUTING_FEEDBACK=1，默认关；门控关时 recordShadowFeedback 内部早退返回 -1，零写入）
+      feedbackRowId = recordShadowFeedback({
+        taskType: shadow.taskType,
+        model,
+        suggestion: shadow.suggestion,
+        defaultModel: model,
+      });
+    } catch {
+      // 影子模式 + 反馈观测绝不影响主链路——异常即静默忽略
+    }
+  }
+  return { overrideApplied, feedbackRowId };
+}
+
 export async function forwardToProvider(
   reqBody: any,
   providerConfig: ProviderConfig,
   res: Response,
   stream: boolean,
-  req?: Request
+  req?: Request,
+  feedbackRowId = -1
 ): Promise<void> {
   const registry = ProviderRegistry.getInstance();
   const adapter = registry.get(providerConfig.providerId);
@@ -380,12 +442,14 @@ export async function forwardToProvider(
     upstreamHeaders['Authorization'] = `Bearer ${providerConfig.apiKey}`;
   }
 
+  const t0 = Date.now();
   const upstreamResponse = await fetch(upstreamUrl, {
     method: 'POST',
     headers: upstreamHeaders,
     body: JSON.stringify(upstreamRequest),
     signal: AbortSignal.timeout(120000),
   });
+  const latencyMs = Date.now() - t0;
 
   if (!upstreamResponse.ok) {
    const errText = await upstreamResponse.text();
@@ -395,6 +459,12 @@ export async function forwardToProvider(
    res.status(upstreamResponse.status).json({ success: false, error: 'Upstream provider error', code: 'UPSTREAM_ERROR' });
     return;
   }
+
+  // P0-2 反馈闭环：门控 PROXY_ROUTING_FEEDBACK=1 且 feedbackRowId>0 时回填真实转发延迟（本路径无重试，retried 置 false）。
+  // recordRuntimeUpdate 内部已查 gate + rowid<=0 早退；门控关时零写入（AGENTS §3 非侵入，绝不阻塞主链路）。
+  try {
+    recordRuntimeUpdate(feedbackRowId, { latencyMs, retried: false });
+  } catch { /* best-effort，绝不阻塞主链路 */ }
 
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -470,54 +540,13 @@ export async function handleChatCompletion(req: Request, res: Response): Promise
 
   console.log(`[ChatHandler] model=${model}, provider=${providerConfig.name}, stream=${stream}`);
 
-   // D4=C · 路由 override（PROXY_ROUTE_OVERRIDE=1 时引擎建议接管真实路由，默认关）
-   // 设计原则：门控关闭时整段跳过，shadow-only 块照常跑，热路径与今天逐字节一致；
-   //   门控开启时，引擎建议的 model 经 findProviderConfig（D5 对齐：models.name→provider）
-   //   重新解析 ProviderConfig 并写入 reqBody.model（Q2=① 发给上游的 model 用引擎建议名）。
-   // 复用 routeShadow()（它负责写 getShadowLog 不变式表）：override 命中即跳过下方 shadow-only 块，
-   //   保证单请求一次 shadow 条目，不破坏 D2 不变式。
-   let overrideApplied = false;
-   if (isRouteOverrideEnabled()) {
-     const shadowSuggestion = routeShadow(model, messages as any[]);
-     const targetModel = shadowSuggestion.suggestion;
-     if (targetModel != null && targetModel !== model) {
-       // D5 对齐：findProviderConfig 查 models 表（0 行 → fallback 首个 enabled，无法
-       // 按真实 model 名路由）。findProviderByType 靠 provider_id 类型选对 provider（不写 DB）。
-       const newConfig = findProviderByType(targetModel);
-       if (newConfig != null) {
-         Object.assign(providerConfig, newConfig);
-         req.body.model = targetModel;
-         overrideApplied = true;
-         recordOverrideEntry({
-           timestamp: new Date().toISOString(),
-           requestModel: model,
-           engineTaskType: shadowSuggestion.taskType,
-           overrideModel: targetModel,
-           provider: newConfig.name,
-           applied: true,
-         });
-         console.log(`[ChatHandler][Override] model=${model} → ${targetModel} (provider=${newConfig.name}, task=${shadowSuggestion.taskType})`);
-       }
-     }
-   }
-   if (!overrideApplied) {
-      // M6 影子路由建议（dry-run，不改变真实路由；仅 PROXY_ROUTING_SHADOW=1 时落日志）
-     try {
-       const shadow = routeShadow(model, messages as any[]);
-        // P0-2 反馈闭环落库（门控 PROXY_ROUTING_FEEDBACK=1，默认关；门控关时 recordShadowFeedback 直接跳过，零写入）
-       recordShadowFeedback({
-          taskType: shadow.taskType,
-          model,
-          suggestion: shadow.suggestion,
-          defaultModel: model,
-        });
-      } catch {
-        // 影子模式 + 反馈观测绝不影响主链路——异常即静默忽略
-      }
-    }
+   // D4=C · 路由 override + M6 影子路由 —— 已抽成公共函数 applyRouting（见 forwardToProvider 上方）。
+   // 2026-10-12 修：这段逻辑原先只写在非流式路径里，流式入口（Cursor 的主要请求形态）
+   // 完全绕过 override ⇒ 灰度命中面远小于预期，M6 的观测与拍板依据被污染。
+   const routing = await applyRouting(req.body, model, messages as any[], providerConfig);
 
   try {
-    await forwardToProvider(req.body, providerConfig, res, stream, req);
+    await forwardToProvider(req.body, providerConfig, res, stream, req, routing.feedbackRowId);
   } catch (e: any) {
     console.error(`[ChatHandler] Error: ${e.message}`);
     try {

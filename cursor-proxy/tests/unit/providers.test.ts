@@ -18,6 +18,40 @@ const config = {
   enabled: true,
 };
 
+// 2026-10-12 P0 回归 pin：4/5 adapter 曾只点名返回 model/messages/stream，
+// 把 tools / tool_choice / temperature / response_format **静默丢弃** —— 请求返回 200、
+// 正常回话、零工具调用、无任何日志，而 supportsTools() 对外宣称 true。
+// 这条 pin 保证任何 adapter 改回"白名单式 return"都会被测试挡住。
+describe('tools passthrough regression (P0)', () => {
+  const adapters = [
+    { name: 'openai-compatible', p: new OpenAICompatibleProvider() },
+    { name: 'anthropic', p: new AnthropicProvider() },
+    { name: 'google-gemini', p: new GoogleGeminiProvider() },
+    { name: 'ollama', p: new OllamaProvider() },
+    { name: 'generic', p: new GenericProvider() },
+  ];
+
+  const req = {
+    model: 'm1',
+    messages: [{ role: 'user', content: 'hi' }],
+    stream: false,
+    tools: [{ type: 'function', function: { name: 'grep' } }],
+    tool_choice: 'auto',
+    temperature: 0.2,
+    response_format: { type: 'json_object' },
+  };
+
+  for (const a of adapters) {
+    it(`${a.name}: tools 及其余字段抵达上游`, async () => {
+      const out: any = await a.p.normalizeRequest(req, config);
+      expect(out.tools).toEqual(req.tools);
+      expect(out.tool_choice).toBe('auto');
+      expect(out.temperature).toBe(0.2);
+      expect(out.response_format).toEqual({ type: 'json_object' });
+    });
+  }
+});
+
 describe('OpenAICompatibleProvider', () => {
   const p = new OpenAICompatibleProvider();
 

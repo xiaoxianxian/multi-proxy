@@ -11,8 +11,11 @@ export class AnthropicProvider implements ProviderAdapter {
   readonly wireApi: 'anthropic' = 'anthropic';
 
   async normalizeRequest(chatRequest: any, config: ProviderConfig): Promise<UpstreamRequest> {
-    // Anthropic Messages API 请求转换
+    // Anthropic Messages API 请求转换。
+    // 2026-10-12 修（P0 静默降级）：展开原请求兜底，否则 tools 等字段被静默丢弃
+    // （详见 openai-compatible.ts 同处注释）；system/max_tokens 仍按 Anthropic 语义覆盖。
     return {
+      ...chatRequest,
       model: chatRequest.model,
       messages: chatRequest.messages,
       system: chatRequest.system,

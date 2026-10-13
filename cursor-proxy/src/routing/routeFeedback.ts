@@ -79,6 +79,20 @@ export function recordRuntimeUpdate(
  * 周报聚合：taskType × model → 计数 / 平均延迟 / 重试率 / 成功率占比。
  * 只读查询，供 admin 端点或面板消费；门控无关（查询本身不写）。
  */
+/**
+ * aggregateFeedback 返回的聚合行（task_type × model 分组）。
+ * capability-derive.ts 消费此形状推导能力证据；抽成命名类型，避免两个模块各造一份字面量漂移。
+ * 字段与 aggregateFeedback 的 SELECT 严格对齐（n / avg_latency_ms / retry_rate / forwarded）。
+ */
+export interface AggregateFeedbackRow {
+  task_type: string;
+  model: string;
+  n: number;
+  avg_latency_ms: number | null;
+  retry_rate: number | null;
+  forwarded: number;
+}
+
 export function aggregateFeedback(
   sinceDays = 7,
 ): Array<Record<string, unknown>> {

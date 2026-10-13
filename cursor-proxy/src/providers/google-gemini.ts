@@ -11,7 +11,10 @@ export class GoogleGeminiProvider implements ProviderAdapter {
   readonly wireApi: 'gemini' = 'gemini';
 
   async normalizeRequest(chatRequest: any, config: ProviderConfig): Promise<UpstreamRequest> {
+    // 2026-10-12 修（P0 静默降级）：展开原请求兜底，否则 tools 等字段被静默丢弃
+    // （详见 openai-compatible.ts 同处注释）；contents/systemInstruction 仍按 Gemini 语义覆盖。
     return {
+      ...chatRequest,
       model: chatRequest.model,
       messages: chatRequest.messages,
       contents: chatRequest.messages,

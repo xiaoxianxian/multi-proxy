@@ -15,8 +15,13 @@ export class OpenAICompatibleProvider implements ProviderAdapter {
   readonly wireApi: 'openai' = 'openai';
 
   async normalizeRequest(chatRequest: any, config: ProviderConfig): Promise<UpstreamRequest> {
-    // OpenAI 兼容型 Provider 直通，不做协议转换
+    // OpenAI 兼容型 Provider 直通，不做协议转换。
+    // 2026-10-12 修（P0 静默降级）：原先只点名 model/messages/stream 三个字段，
+    // 其余（tools / tool_choice / temperature / response_format …）被**静默丢弃** ——
+    // 请求返回 200、正常回话，但零工具调用且无任何日志，而 supportsTools() 对外宣称 true。
+    // 改为「先展开原请求、再用本 provider 的特有字段覆盖」，与 generic.ts 行为基准一致。
     return {
+      ...chatRequest,
       model: chatRequest.model,
       messages: chatRequest.messages,
       stream: chatRequest.stream,
