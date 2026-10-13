@@ -80,6 +80,22 @@ printf '%s\n' "$l2out" | tail -4
 SUMMARY+=("$(printf '%-22s %s [rc=%s]' "l2 编排" "$(printf '%s' "$l2out" | grep -cE 'PASS') 个 demo PASS" "$l2rc")")
 [ $l2rc -ne 0 ] && rc_total=1
 
+# 5b) l2 新模块单测（node:test，零依赖；usage-rollup / profiles-store）
+echo ""
+echo "=================== l2 单测 ==================="
+l2tout="$( ( cd l2 && node --test tests/usage-rollup.test.js tests/profiles-store.test.js ) 2>&1 )"; l2trc=$?
+printf '%s\n' "$l2tout" | tail -4
+SUMMARY+=("$(printf '%-22s %s [rc=%s]' "l2 单测(node:test)" "$(printf '%s' "$l2tout" | grep -cE '^ok ') ok / $(printf '%s' "$l2tout" | grep -cE '^not ok ') fail" "$l2trc")")
+[ $l2trc -ne 0 ] && rc_total=1
+
+# 5c) dsh-proxy 单测（node:test，零依赖；routing-policy）
+echo ""
+echo "=================== dsh-proxy 单测 ==================="
+dshtout="$( ( cd dsh-proxy && node --test tests/*.test.js ) 2>&1 )"; dshrc=$?
+printf '%s\n' "$dshtout" | tail -4
+SUMMARY+=("$(printf '%-22s %s [rc=%s]' "dsh-proxy 单测" "$(printf '%s' "$dshtout" | grep -cE '^ok ') ok / $(printf '%s' "$dshtout" | grep -cE '^not ok ') fail" "$dshrc")")
+[ $dshrc -ne 0 ] && rc_total=1
+
 # 6) shell 行为
 echo ""
 echo "=================== tests/shell ==================="

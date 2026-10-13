@@ -3,7 +3,8 @@
   "version": "1.1.0",
   "type": "commonjs",
   "scripts": {
-    "start": "node proxy.js"
+    "start": "node proxy.js",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.0",
