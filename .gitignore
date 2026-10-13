@@ -131,3 +131,15 @@ client/build/
 # ===== 内部资产：调研/内部建议文档（2026-10-13 转公开前 untrack，工作区保留供 agent 读）=====
 docs/JEV*.md
 路由能力矩阵与开发建议-*.md
+# 2026-10-14 增补：过程资产文档（双轴审计=过程资产，维护者授权按建议清单 untrack）
+# · 状态快报 / 任务队列 / 签收单 / 运维 runbook / 跨会话交接与协同 / 验证记录（7 篇建议清单）
+# · cc-switch 逆向对照研究（与 JEV 稿同类的内部调研）/ demo 视频制作手册（非产品使用所需）
+STATUS-REPORT-*.md
+docs/QUEUE.md
+docs/M6-REAL-ROUTING-SIGNOFF.md
+docs/M6-SECOND-INSTANCE-RUNBOOK.md
+docs/04-tech/o1-cursor-18794-handoff-*.md
+docs/MULTI-SESSION-COORDINATION.md
+docs/M7-DASHBOARD-ABORT-RESUME-VERIFIED.md
+docs/cc-switch-对照研究-*.md
+scripts/工具实录-执行手册-*.md
