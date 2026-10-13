@@ -124,3 +124,6 @@ client/build/
 *.mp4
 # L2 协议文档例外：MEMORY-*.md 的 glob 在大小写不敏感 FS 上会误伤本文件（它不是记忆文件，是与 adapter-protocol.md 并列的 L2 协议文档，应入库）
 !l2/memory-alignment-protocol.md
+
+# 本地备份 / trash 目录（agent 或人工改动前的备份），非源码，防 git add 夹带
+**/.trash-*/

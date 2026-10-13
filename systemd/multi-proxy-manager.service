@@ -1,0 +1,14 @@
+[Unit]
+Description=Multi-Proxy Manager (user)
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=__ROOT_DIR__
+ExecStart=__ROOT_DIR__/manage.sh start
+ExecStop=__ROOT_DIR__/manage.sh stop
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

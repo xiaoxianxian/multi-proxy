@@ -58,6 +58,20 @@ MANAGER_PORT=18792
 # 服务名（用于 launchd）
 LAUNCHD_NAME="com.multi-proxy-manager"
 
+# ===================== OS 检测（跨平台支持，2026-10-13）=====================
+# 返回: darwin | linux | windows | unknown
+detect_os() {
+  local u
+  u="$(uname -s 2>/dev/null || echo unknown)"
+  case "$u" in
+    Darwin*)               echo "darwin" ;;
+    Linux*)                echo "linux" ;;
+    MINGW*|MSYS*|CYGWIN*)  echo "windows" ;;
+    *)                     echo "unknown" ;;
+  esac
+}
+OS="$(detect_os)"
+
 # LaunchAgents 目录：默认 $HOME/Library/LaunchAgents，允许测试注入临时目录（非全局 env 注入，仅脚本内 local 覆盖）
 LAUNCHD_DIR="${LAUNCHD_DIR:-$HOME/Library/LaunchAgents}"
 
@@ -73,9 +87,21 @@ LAUNCHD_DRY_RUN="${LAUNCHD_DRY_RUN:-}"
 
 # ===================== 工具函数 =====================
 
+# 端口占用检测：优先 lsof（macOS / 多数 Linux），回退 ss，再回退 /proc/net/tcp（Linux 裸环境）
 is_port_in_use() {
-  /usr/sbin/lsof -i :$1 >/dev/null 2>&1
-  return $?
+  local port=$1
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -i :"$port" >/dev/null 2>&1 && return 0
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -q "[:.]${port}[[:space:]]" && return 0
+  fi
+  if [ -f /proc/net/tcp ] 2>/dev/null; then
+    local hex
+    hex="$(printf '%04X' "$port" 2>/dev/null)"
+    [ -n "$hex" ] && grep -i -q ":$hex " /proc/net/tcp 2>/dev/null && return 0
+  fi
+  return 1
 }
 
 has_node() { command -v node &>/dev/null; }
@@ -97,9 +123,17 @@ check_deps() {
 
   if [ ${#missing[@]} -gt 0 ]; then
     print_err "缺少依赖: ${missing[*]}"
-    print_info "请先安装: brew install node python"
+    case "$OS" in
+      darwin) print_info "请先安装: brew install node python" ;;
+      linux)  print_info "请先安装: sudo apt install nodejs npm python3   # RHEL 系用 dnf/yum，Arch 用 pacman -S nodejs python" ;;
+      *)      print_info "请先安装 Node.js 与 Python3" ;;
+    esac
     if [ -f "$ROOT_DIR/docker-compose.yml" ]; then
-      print_info "Docker 模式需要 Docker + Docker Compose: brew install --cask docker"
+      case "$OS" in
+        darwin) print_info "Docker 模式需要 Docker + Docker Compose: brew install --cask docker" ;;
+        linux)  print_info "Docker 模式需要 Docker + Docker Compose: 见 https://docs.docker.com/engine/install/" ;;
+        *)      print_info "Docker 模式需要 Docker + Docker Compose" ;;
+      esac
     fi
     return 1
   fi
@@ -228,6 +262,11 @@ install_manager() {
       print_ok "Multi-Proxy Manager 依赖安装完成"
     fi
   fi
+
+  if [ ! -f "$dir/.env" ]; then
+    cp "$dir/.env.example" "$dir/.env" 2>/dev/null || true
+    print_info "已创建 Manager .env，请编辑 $dir/.env（可设 MANAGER_PASSWORD / MANAGER_AGENT_TOKEN）"
+  fi
 }
 
 # ===================== 卸载 =====================
@@ -258,16 +297,21 @@ uninstall_manager() {
   print_info "$(fmt "Multi-Proxy Manager 文件保留（如需完全删除请手动 rm -rf %s）" "$dir")"
 }
 
-# 提取 plist 的 Label（python3 plistlib，macOS 标配；plutil -extract 在 macOS27 不可靠故回退）
+# 提取 plist 的 Label：plutil 优先（对含特殊字符注释的 plist 最稳），python3 兜底，grep 终极兜底
 plist_label() {
-  /usr/bin/python3 - "$1" <<'PY' 2>/dev/null
+  local f="$1" l=""
+  l="$(/usr/bin/plutil -extract Label raw "$f" 2>/dev/null)"
+  [ -n "$l" ] && { printf '%s' "$l"; return 0; }
+  l="$(/usr/bin/python3 - "$f" <<'PY' 2>/dev/null
 import sys, plistlib
 try:
-    d = plistlib.load(open(sys.argv[1], 'rb'))
-    print(d.get('Label', ''))
+    print(plistlib.load(open(sys.argv[1], 'rb')).get('Label', ''))
 except Exception:
-    sys.exit(1)
+    pass
 PY
+)"
+  [ -n "$l" ] && { printf '%s' "$l"; return 0; }
+  grep -A1 '<key>Label</key>' "$f" 2>/dev/null | grep -o '<string>[^<]*</string>' | head -1 | sed 's/<string>//; s|</string>||'
 }
 
 # 判定 label 是否属本项目家族（可安全自动清理）：含 "multi-proxy" 且非 com.apple.*
@@ -324,6 +368,36 @@ uninstall_launchd() {
     print_info "未发现本机 launchd 开机自启 plist"
   fi
   print_info "清理 $cleared 个 / 检测 $detected 个疑似 / 跳过 $skipped 个"
+}
+
+# 清理跨目录/用户级残留（修复 §十六 #2 卸载不完整）
+# 安全：不删第三方工具主目录 ~/.dsh（只删本项目建的 shim 并警告手动清）；所有删除走 --dry-run 预览
+uninstall_residues() {
+  print_step "清理残留文件..."
+  local residues=(
+    "$HOME/.multi-proxy-manager"
+    "$ROOT_DIR/codex-proxy/logs"
+    "$ROOT_DIR/codex-proxy/trace"
+    "$ROOT_DIR/hermes-proxy/.env"
+    "$ROOT_DIR/multi-proxy-manager/.env"
+    "$HOME/.local/bin/dsh-curator"
+  )
+  local removed=0
+  for r in "${residues[@]}"; do
+    if [ -e "$r" ]; then
+      if [ -n "$LAUNCHD_DRY_RUN" ]; then
+        echo "   [dry-run] 将清理: $r"
+      else
+        rm -rf "$r" && print_ok "已清理 $r"
+      fi
+      removed=$((removed+1))
+    fi
+  done
+  # 第三方工具主目录：只警告，不自动删（避免误伤 dsh 自身数据）
+  if [ -e "$HOME/.dsh" ]; then
+    print_warn "检测到 ~/.dsh（dsh 为第三方工具主目录，未自动删除；如需清理其中的 multi-proxy 集成，请手动处理）"
+  fi
+  [ "$removed" -eq 0 ] && print_info "未发现额外残留"
 }
 
 # ===================== 启动/停止 =====================
@@ -412,22 +486,41 @@ show_status() {
     print_err "Manager Shell  - 未运行"
   fi
 
-  # 检查开机自启
-  local plist="$HOME/Library/LaunchAgents/$LAUNCHD_NAME.plist"
-  if [ -f "$plist" ]; then
-    print_ok "开机自启 - 已启用"
-  else
-    print_info "开机自启 - 未启用 (运行 ./install.sh --autostart 启用)"
-  fi
+  # 检查开机自启（按系统判定）
+  case "$OS" in
+    darwin)
+      if [ -f "$HOME/Library/LaunchAgents/$LAUNCHD_NAME.plist" ]; then
+        print_ok "开机自启 - 已启用 (launchd)"
+      else
+        print_info "开机自启 - 未启用 (运行 ./install.sh --autostart 启用)"
+      fi ;;
+    linux)
+      if systemctl --user is-enabled multi-proxy-manager.service >/dev/null 2>&1; then
+        print_ok "开机自启 - 已启用 (systemd)"
+      else
+        print_info "开机自启 - 未启用 (运行 ./install.sh --autostart 启用)"
+      fi ;;
+    *)
+      print_info "开机自启 - 当前系统不支持" ;;
+  esac
   echo ""
 }
 
 # ===================== 开机自启 =====================
 
 setup_autostart() {
+  case "$OS" in
+    darwin)  setup_autostart_launchd ;;
+    linux)   setup_autostart_systemd ;;
+    windows) print_warn "Windows 请运行 install.ps1 配置开机自启（见仓库 README 的 Windows 段落）"; return 0 ;;
+    *)       print_warn "未知系统，跳过开机自启配置"; return 0 ;;
+  esac
+}
+
+setup_autostart_launchd() {
   local plist="$HOME/Library/LaunchAgents/$LAUNCHD_NAME.plist"
 
-  print_step "配置开机自启..."
+  print_step "配置开机自启 (launchd)..."
 
   mkdir -p "$HOME/Library/LaunchAgents"
 
@@ -502,6 +595,15 @@ PLIST_EOF
 }
 
 remove_autostart() {
+  case "$OS" in
+    darwin)  remove_autostart_launchd ;;
+    linux)   remove_autostart_systemd ;;
+    windows) print_warn "Windows 请运行 install.ps1 管理开机自启"; return 0 ;;
+    *)       print_warn "未知系统，跳过"; return 0 ;;
+  esac
+}
+
+remove_autostart_launchd() {
   local plist="$HOME/Library/LaunchAgents/$LAUNCHD_NAME.plist"
   if [ -f "$plist" ]; then
     launchctl unload "$plist" 2>/dev/null || true
@@ -510,6 +612,66 @@ remove_autostart() {
   else
     print_info "开机自启未启用"
   fi
+}
+
+# ===================== Linux systemd 用户服务 =====================
+setup_autostart_systemd() {
+  local unit_dir="$HOME/.config/systemd/user"
+  local unit="$unit_dir/multi-proxy-manager.service"
+  print_step "配置开机自启 (systemd --user)..."
+  mkdir -p "$unit_dir"
+
+  # 探测 nvm / pyenv 以补全 PATH
+  local nvm_path="" pyenv_path=""
+  [ -d "$HOME/.nvm" ] && nvm_path="$(ls -d "$HOME/.nvm/versions/node/"*/bin 2>/dev/null | tail -1)"
+  [ -d "$HOME/.pyenv" ] && pyenv_path="$HOME/.pyenv/shims:$HOME/.pyenv/bin"
+  local base_path="/usr/local/bin:/usr/bin:/bin"
+  local full_path="$base_path"
+  [ -n "$nvm_path" ] && full_path="$full_path:$nvm_path"
+  [ -n "$pyenv_path" ] && full_path="$full_path:$pyenv_path"
+
+  cat > "$unit" << UNIT_EOF
+[Unit]
+Description=Multi-Proxy Manager (user)
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=$ROOT_DIR
+ExecStart=$ROOT_DIR/manage.sh start
+ExecStop=$ROOT_DIR/manage.sh stop
+Environment=PATH=$full_path
+
+[Install]
+WantedBy=default.target
+UNIT_EOF
+
+  systemctl --user daemon-reload 2>/dev/null || true
+  systemctl --user enable multi-proxy-manager.service 2>/dev/null || true
+  systemctl --user start multi-proxy-manager.service 2>/dev/null || true
+  print_ok "systemd 用户服务已启用（登录时自启）"
+  print_info "状态查看: systemctl --user status multi-proxy-manager"
+  print_info "若希望无登录也常驻: loginctl enable-linger \"\$USER\""
+}
+
+remove_autostart_systemd() {
+  local unit="$HOME/.config/systemd/user/multi-proxy-manager.service"
+  if [ -f "$unit" ]; then
+    systemctl --user stop multi-proxy-manager.service 2>/dev/null || true
+    systemctl --user disable multi-proxy-manager.service 2>/dev/null || true
+    rm -f "$unit"
+    systemctl --user daemon-reload 2>/dev/null || true
+    print_ok "systemd 开机自启已禁用"
+  else
+    print_info "systemd 开机自启未启用"
+  fi
+}
+
+# 卸载时清理 systemd（仅 Linux）
+uninstall_systemd() {
+  [ "$OS" = "linux" ] || return 0
+  remove_autostart_systemd
 }
 
 # ===================== 交互安装 =====================
@@ -818,6 +980,7 @@ usage() {
   echo "  $0 --uninstall      # 卸载（仅移除 .env，保留 node_modules）"
   echo ""
   print_info "注意: 安装后请先编辑各代理的 .env 文件配置 API Key"
+  print_info "跨平台: macOS 用 launchd；Linux 用 systemd --user；Windows 请运行 install.ps1"
   print_info "更新只增不覆盖：pull 前先备份本地改动到 ~/.multi-proxy-manager/backup/"
   echo ""
 }
@@ -935,6 +1098,8 @@ main() {
       uninstall_cursor
       uninstall_manager
       uninstall_launchd
+      uninstall_systemd
+      uninstall_residues
 
       echo ""
       print_bold "============================================"

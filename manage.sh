@@ -18,12 +18,14 @@ fi
 CODEx_PROXY_DIR="$SCRIPT_DIR/codex-proxy"
 HERMES_PROXY_DIR="$SCRIPT_DIR/hermes-proxy"
 CURSOR_PROXY_DIR="$SCRIPT_DIR/cursor-proxy"
+DSH_PROXY_DIR="$SCRIPT_DIR/dsh-proxy"
 MANAGER_DIR="$SCRIPT_DIR/multi-proxy-manager"
 
 # 端口
 CODEx_PORT=18790
 HERMES_PORT=18793
 CURSOR_PORT=18794
+DSH_PORT=18797
 MANAGER_PORT=18792
 
 # 颜色输出
@@ -38,10 +40,31 @@ print_status() { printf "${GREEN}[✓]${NC} %s\n" "$1"; }
 print_error()  { printf "${RED}[✗]${NC} %s\n" "$1"; }
 print_warning() { printf "${YELLOW}[!]${NC} %s\n" "$1"; }
 
-# 检查端口是否被占用
+# 检查端口是否被占用（跨平台：优先 lsof，回退 ss，再回退 /proc/net/tcp）
 is_port_in_use() {
-  /usr/sbin/lsof -i :$1 >/dev/null 2>&1
-  return $?
+  local port=$1
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -i :"$port" >/dev/null 2>&1 && return 0
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -q "[:.]${port}[[:space:]]" && return 0
+  fi
+  if [ -f /proc/net/tcp ] 2>/dev/null; then
+    local hex
+    hex="$(printf '%04X' "$port" 2>/dev/null)"
+    [ -n "$hex" ] && grep -i -q ":$hex " /proc/net/tcp 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+# 取占用端口的 PID（跨平台）
+pid_on_port() {
+  local port=$1
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti :"$port" 2>/dev/null | head -1
+  elif command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep -oE ":$port[[:space:]]" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
+  fi
 }
 
 # 等待端口绑定（轮询 lsof，最长 WAIT_FOR_PORT_TIMEOUT 毫秒，默认 10 秒）
@@ -95,6 +118,48 @@ start_codex() {
   else
     print_error "Codex Proxy 启动失败"
     print_warning "查看日志: ./manage.sh logs codex"
+    return 1
+  fi
+}
+
+# 启动 DSH Proxy（DSH 桌面端专属 lane，2026-10-13 建）
+# 背景：DSH 原先借用 codex lane（18790），与 Codex 混日志/混成本/混模型列表，
+# 且 codex lane 会读 ~/.codex/config.toml 当 provider 源（agent 耦合）。
+# 本 lane 与 codex-proxy 同引擎（proxy.js 拷贝），端口独立、配置独立（.env PORT=18797）。
+start_dsh() {
+  if [ ! -f "$DSH_PROXY_DIR/proxy.js" ]; then
+    print_warning "DSH Proxy 未安装: $DSH_PROXY_DIR/proxy.js 不存在"
+    return 1
+  fi
+
+  # Check and install dependencies if node_modules missing
+  if [ ! -d "$DSH_PROXY_DIR/node_modules" ]; then
+    print_warning "DSH Proxy 依赖未安装，正在安装..."
+    (cd "$DSH_PROXY_DIR" && npm install --production --no-audit --no-fund) 2>/dev/null
+    if [ $? -ne 0 ]; then
+      print_error "DSH Proxy 依赖安装失败"
+      return 1
+    fi
+    print_status "DSH Proxy 依赖安装完成"
+  fi
+
+  if is_port_in_use $DSH_PORT; then
+    print_warning "DSH Proxy 已在运行 (端口 $DSH_PORT)"
+    return 0
+  fi
+
+  cd "$DSH_PROXY_DIR" || exit 1
+  print_status "启动 DSH Proxy..."
+  nohup node proxy.js > "$LOG_DIR/dsh-proxy.log" 2>&1 &
+  local pid=$!
+  sleep 1
+
+  if wait_for_port $DSH_PORT; then
+    print_status "DSH Proxy 启动成功 (PID: $pid, 端口: $DSH_PORT)"
+    return 0
+  else
+    print_error "DSH Proxy 启动失败"
+    print_warning "查看日志: ./manage.sh logs dsh"
     return 1
   fi
 }
@@ -243,7 +308,7 @@ stop_service() {
     return 0
   fi
 
-  local pid=$(/usr/sbin/lsof -ti :$port 2>/dev/null)
+  local pid=$(pid_on_port $port)
   if [ -n "$pid" ]; then
     print_status "停止 $name (PID: $pid)..."
     kill $pid 2>/dev/null
@@ -261,12 +326,14 @@ stop_service() {
 stop_codex() { stop_service "Codex Proxy" $CODEx_PORT; }
 stop_hermes() { stop_service "Hermes Proxy" $HERMES_PORT; }
 stop_cursor() { stop_service "Cursor Proxy" $CURSOR_PORT; }
+stop_dsh() { stop_service "DSH Proxy" $DSH_PORT; }
 stop_manager() { stop_service "Manager Shell" $MANAGER_PORT; }
 
 # 重启服务
 restart_codex() { stop_codex; sleep 1; start_codex; }
 restart_hermes() { stop_hermes; sleep 1; start_hermes; }
 restart_cursor() { stop_cursor; sleep 1; start_cursor; }
+restart_dsh() { stop_dsh; sleep 1; start_dsh; }
 restart_manager() { stop_manager; sleep 1; start_manager; }
 
 # 查看状态
@@ -278,7 +345,7 @@ show_status() {
 
   # Codex Proxy
   if is_port_in_use $CODEx_PORT; then
-    local codex_pid=$(/usr/sbin/lsof -ti :$CODEx_PORT 2>/dev/null)
+    local codex_pid=$(pid_on_port $CODEx_PORT)
     echo -e "${GREEN}✓ Codex Proxy${NC} - 运行中 (PID: $codex_pid, 端口: $CODEx_PORT)"
   else
     echo -e "${RED}✗ Codex Proxy${NC} - 未运行"
@@ -286,7 +353,7 @@ show_status() {
 
   # Hermes Proxy
   if is_port_in_use $HERMES_PORT; then
-    local hermes_pid=$(/usr/sbin/lsof -ti :$HERMES_PORT 2>/dev/null)
+    local hermes_pid=$(pid_on_port $HERMES_PORT)
     echo -e "${GREEN}✓ Hermes Proxy${NC} - 运行中 (PID: $hermes_pid, 端口: $HERMES_PORT)"
   else
     echo -e "${RED}✗ Hermes Proxy${NC} - 未运行"
@@ -294,15 +361,23 @@ show_status() {
 
   # Cursor Proxy
   if is_port_in_use $CURSOR_PORT; then
-    local cursor_pid=$(/usr/sbin/lsof -ti :$CURSOR_PORT 2>/dev/null)
+    local cursor_pid=$(pid_on_port $CURSOR_PORT)
     echo -e "${GREEN}✓ Cursor Proxy${NC} - 运行中 (PID: $cursor_pid, 端口: $CURSOR_PORT)"
   else
     echo -e "${RED}✗ Cursor Proxy${NC} - 未运行"
   fi
 
+  # DSH Proxy
+  if is_port_in_use $DSH_PORT; then
+    local dsh_pid=$(pid_on_port $DSH_PORT)
+    echo -e "${GREEN}✓ DSH Proxy${NC} - 运行中 (PID: $dsh_pid, 端口: $DSH_PORT)"
+  else
+    echo -e "${RED}✗ DSH Proxy${NC} - 未运行"
+  fi
+
   # Manager Shell
   if is_port_in_use $MANAGER_PORT; then
-    local manager_pid=$(/usr/sbin/lsof -ti :$MANAGER_PORT 2>/dev/null)
+    local manager_pid=$(pid_on_port $MANAGER_PORT)
     echo -e "${GREEN}✓ Manager Shell${NC} - 运行中 (PID: $manager_pid, 端口: $MANAGER_PORT)"
     echo -e "  访问地址: ${YELLOW}http://localhost:$MANAGER_PORT${NC}"
   else
@@ -329,6 +404,10 @@ show_logs() {
     cursor)
       echo "=== Cursor Proxy 日志 ==="
       tail -50 "$LOG_DIR/cursor-proxy.log" 2>/dev/null || echo "日志文件不存在"
+      ;;
+    dsh)
+      echo "=== DSH Proxy 日志 ==="
+      tail -50 "$LOG_DIR/dsh-proxy.log" 2>/dev/null || echo "日志文件不存在"
       ;;
     manager)
       echo "=== Manager Shell 日志 ==="
@@ -374,6 +453,12 @@ run_target() {
         stop) stop_cursor ;;
         restart) restart_cursor ;;
        esac ;;
+    dsh)
+      case $verb in
+        start) start_dsh ;;
+        stop) stop_dsh ;;
+        restart) restart_dsh ;;
+       esac ;;
     manager)
       case $verb in
         start) start_manager ;;
@@ -386,24 +471,27 @@ run_target() {
           start_codex || true
           start_hermes || true
           start_cursor || true
+          start_dsh || true
           start_manager
           ;;
         stop)
           stop_codex
           stop_hermes
           stop_cursor
+          stop_dsh
           stop_manager
           ;;
         restart)
           restart_codex || true
           restart_hermes || true
           restart_cursor || true
+          restart_dsh || true
           restart_manager
           ;;
        esac ;;
     *)
       print_error "未知目标: $target"
-      echo "用法: $0 {start|stop|restart} [codex|hermes|cursor|manager|all]"
+      echo "用法: $0 {start|stop|restart} [codex|hermes|cursor|dsh|manager|all]"
       return 1 ;;
   esac
 }
@@ -417,8 +505,8 @@ if [ "${BASH_SOURCE[0]:-$0}" != "$0" ]; then
 fi
 case "${1:-status}" in
   start)
-    print_status "启动所有服务..."
-    run_target start
+    print_status "启动服务${2:+ ($2)}..."
+    run_target start "$2"
     echo ""
     show_status
      ;;
@@ -472,22 +560,38 @@ case "${1:-status}" in
       *) print_error "未知命令: $2"; echo "用法: $0 hermes [start|stop|restart|status|logs]" ;;
     esac
     ;;
-  cursor)
-    case "${2:-status}" in
-      start) start_cursor ;;
-      stop) stop_cursor ;;
-      restart) restart_cursor ;;
-      status)
-        if is_port_in_use $CURSOR_PORT; then
-          echo -e "${GREEN}✓ Cursor Proxy${NC} - 运行中"
-        else
-          echo -e "${RED}✗ Cursor Proxy${NC} - 未运行"
-        fi
-        ;;
-      logs) show_logs cursor ;;
-      *) print_error "未知命令: $2"; echo "用法: $0 cursor [start|stop|restart|status|logs]" ;;
-    esac
-    ;;
+    cursor)
+      case "${2:-status}" in
+        start) start_cursor ;;
+        stop) stop_cursor ;;
+        restart) restart_cursor ;;
+        status)
+          if is_port_in_use $CURSOR_PORT; then
+            echo -e "${GREEN}✓ Cursor Proxy${NC} - 运行中"
+          else
+            echo -e "${RED}✗ Cursor Proxy${NC} - 未运行"
+          fi
+          ;;
+        logs) show_logs cursor ;;
+        *) print_error "未知命令: $2"; echo "用法: $0 cursor [start|stop|restart|status|logs]" ;;
+      esac
+      ;;
+    dsh)
+      case "${2:-status}" in
+        start) start_dsh ;;
+        stop) stop_dsh ;;
+        restart) restart_dsh ;;
+        status)
+          if is_port_in_use $DSH_PORT; then
+            echo -e "${GREEN}✓ DSH Proxy${NC} - 运行中"
+          else
+            echo -e "${RED}✗ DSH Proxy${NC} - 未运行"
+          fi
+          ;;
+        logs) show_logs dsh ;;
+        *) print_error "未知命令: $2"; echo "用法: $0 dsh [start|stop|restart|status|logs]" ;;
+      esac
+      ;;
   manager)
     case "${2:-status}" in
       start) start_manager ;;
@@ -531,6 +635,7 @@ case "${1:-status}" in
     echo "  $0 codex [start|stop|restart|status|logs]"
     echo "  $0 hermes [start|stop|restart|status|logs]"
     echo "  $0 cursor [start|stop|restart|status|logs]"
+    echo "  $0 dsh [start|stop|restart|status|logs]"
     echo "  $0 manager [start|stop|restart|status|logs]"
     exit 1
     ;;
