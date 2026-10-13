@@ -17,6 +17,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const request = require('supertest');
+// ⚠️ jest.resetModules() 后重 require proxy.js 会跑 loadProxy()，含异步模型目录拉取，
+//    实测 ~14s；默认 5s 超时不够。给足 30s，不掩盖逻辑——只放开时钟。
+jest.setTimeout(30000);
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-p6-'));
 process.env.HOME = tmp;

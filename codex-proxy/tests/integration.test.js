@@ -29,7 +29,7 @@ const UPSTREAM_MODELS = [
     name: 'Agnes',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     apiKey: 'sk-test-agnes',
-    availableModels: ['agnes-3.0-flash', 'agnes-1.5-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0'],
+    availableModels: ['agnes-3.0-flash', 'agnes-image-2.0-flash', 'agnes-image-2.1-flash', 'agnes-video-v2.0'],
   }
 ];
 
