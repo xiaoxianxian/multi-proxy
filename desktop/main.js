@@ -26,8 +26,14 @@ const MANAGER_URL = `http://127.0.0.1:${MANAGER_PORT}`;
 function resolveRepoRoot() {
   if (process.env.PROXY_MANAGER_REPO) return process.env.PROXY_MANAGER_REPO;
   const home = app.getPath('home');
+  // 2026-10-12 修：打包版候选只有 ~/multi-proxy，而真仓在 ~/Documents/AI项目/multi-proxy
+  // （README 里写的 ~/proxy-rebuild 也不存在）⇒ 打包壳双击必弹「找不到服务代码」。
+  // 加真仓路径候选；顺序仍以显式 env 优先。
   const candidates = app.isPackaged
-    ? [path.join(home, 'multi-proxy')]
+    ? [
+        path.join(home, 'multi-proxy'),
+        path.join(home, 'Documents', 'AI项目', 'multi-proxy'),
+      ]
     : [path.join(__dirname, '..')];
   for (const c of candidates) {
     if (fs.existsSync(path.join(c, 'multi-proxy-manager', 'server.js'))) return c;
