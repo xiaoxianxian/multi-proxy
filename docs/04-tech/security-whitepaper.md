@@ -39,7 +39,7 @@ This file is part of the multi-proxy project.
 | 项 | 现状 | 证据 |
 |---|---|---|
 | `.env` 不入库 | `.gitignore` 第 6 行 | `.gitignore:6` |
-| `result.json` 不入库 | `.gitignore` 第 22 行（ 产物） | `.gitignore:22` |
+| `result.json` 不入库 | `.gitignore` 第 22 行（产物） | `.gitignore:22` |
 | `.env` 权限 | `0o600`（`-rw-------`） | `ls .env` |
 | JWT secret 权限 | `0o600` | `lib/auth.js:36` |
 

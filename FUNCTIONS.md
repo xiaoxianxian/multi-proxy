@@ -4,7 +4,7 @@ Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md
 This file is part of the multi-proxy project.
 -->
 
-# Proxy Rebuild v1.0.0 — 功能说明书
+# multi-proxy v1.0.0 — 功能说明书
 
 > 多代理管理系统 · 统一管理 Codex / Hermes / Cursor 三个 AI 代理服务
 

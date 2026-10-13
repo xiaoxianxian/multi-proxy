@@ -16,7 +16,7 @@ providers.json
 # Hermes agent 运行时产物（plans / 临时状态），非项目源码
 .hermes/
 
-# Python / pytest 产物（ l2/python-middleware 实测；防 git add . 夹带缓存）
+# Python / pytest 产物（l2/python-middleware 实测；防 git add . 夹带缓存）
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -28,7 +28,7 @@ __pycache__/
 PROJECT-STATE/
 logs/
 
-# 子代理运行时 dump（ 的 17/17 测试结果 JSON，内容已存 IMPLEMENTATION_REPORT.md，非源码）
+# 子代理运行时 dump（的 17/17 测试结果 JSON，内容已存 IMPLEMENTATION_REPORT.md，非源码）
 l2/python-middleware/result.json
 
 # 质量层 capture 运行产物（2026-10-06 随 captureTrace 引入）：PROXY_TRACE_DIR 指向的落盘目录，
@@ -127,3 +127,7 @@ client/build/
 
 # 本地备份 / trash 目录（agent 或人工改动前的备份），非源码，防 git add 夹带
 **/.trash-*/
+
+# ===== 内部资产：调研/内部建议文档（2026-10-13 转公开前 untrack，工作区保留供 agent 读）=====
+docs/JEV*.md
+路由能力矩阵与开发建议-*.md
