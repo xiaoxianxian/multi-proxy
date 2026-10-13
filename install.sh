@@ -87,11 +87,22 @@ LAUNCHD_DRY_RUN="${LAUNCHD_DRY_RUN:-}"
 
 # ===================== 工具函数 =====================
 
+# lsof 可执行文件解析（ADR-0001 + 2026-10-13 跨平台修订）：
+# launchd 启动的进程 PATH 可能不含 /usr/sbin，裸 lsof 会 ENOENT → 端口检测静默误判。
+# macOS 优先绝对路径 /usr/sbin/lsof；Linux 回退 PATH 查找；都没有则回退 ss / /proc/net/tcp。
+if [ -x /usr/sbin/lsof ]; then
+  LSOF=/usr/sbin/lsof
+elif command -v lsof >/dev/null 2>&1; then
+  LSOF=lsof
+else
+  LSOF=""
+fi
+
 # 端口占用检测：优先 lsof（macOS / 多数 Linux），回退 ss，再回退 /proc/net/tcp（Linux 裸环境）
 is_port_in_use() {
   local port=$1
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -i :"$port" >/dev/null 2>&1 && return 0
+  if [ -n "$LSOF" ]; then
+    "$LSOF" -i :"$port" >/dev/null 2>&1 && return 0
   fi
   if command -v ss >/dev/null 2>&1; then
     ss -ltn 2>/dev/null | grep -q "[:.]${port}[[:space:]]" && return 0
@@ -452,10 +463,20 @@ start_manager() {
   is_port_in_use $MANAGER_PORT && print_ok "Manager Shell 已启动" || print_err "Manager Shell 启动失败"
 }
 
-stop_codex()  { /usr/sbin/lsof -ti :$CODEx_PORT | xargs -r kill -9 2>/dev/null; true; }
-stop_hermes() { /usr/sbin/lsof -ti :$HERMES_PORT | xargs -r kill -9 2>/dev/null; true; }
-stop_cursor() { /usr/sbin/lsof -ti :$CURSOR_PORT | xargs -r kill -9 2>/dev/null; true; }
-stop_manager() { /usr/sbin/lsof -ti :$MANAGER_PORT | xargs -r kill -9 2>/dev/null; true; }
+# 取占用端口的 PID（跨平台，与 manage.sh 同构；供 stop_* 使用）
+pid_on_port() {
+  local port=$1
+  if [ -n "$LSOF" ]; then
+    "$LSOF" -ti :"$port" 2>/dev/null | head -1
+  elif command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep -oE ":$port[[:space:]]" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
+  fi
+}
+
+stop_codex()  { local pid; pid="$(pid_on_port $CODEx_PORT)";  [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null; true; }
+stop_hermes() { local pid; pid="$(pid_on_port $HERMES_PORT)"; [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null; true; }
+stop_cursor() { local pid; pid="$(pid_on_port $CURSOR_PORT)"; [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null; true; }
+stop_manager() { local pid; pid="$(pid_on_port $MANAGER_PORT)"; [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null; true; }
 
 show_status() {
   print_bold "=== Multi-Proxy Manager 状态 ==="

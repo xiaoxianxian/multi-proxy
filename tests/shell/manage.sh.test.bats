@@ -118,13 +118,14 @@ setup() {
   grep -q '18792' "$MANAGE_SH"
 }
 
-@test "manage.sh uses absolute lsof path throughout" {
-  # Per CLAUDE.md constraint: all lsof calls must use /usr/sbin/lsof
-  # Check that any lsof reference uses the full path
-  local lsof_refs
-  # grep -n prefixes "N:" to each line, so plain `grep -v '^#'` can't strip
-  # comment lines (they read "45:# ..."). Match numbered comment lines explicitly.
-  lsof_refs=$(grep -n 'lsof' "$MANAGE_SH" | grep -vE '^[0-9]+:[[:space:]]*#' | grep -v '/usr/sbin/lsof' || true)
-   # No bare (non-absolute, non-comment) lsof references should exist
-  [[ -z "$lsof_refs" ]]
+@test "manage.sh resolves lsof via absolute path first (ADR-0001 amended)" {
+  # ADR-0001 (amended 2026-10-13 for cross-platform): launchd PATH may lack
+  # /usr/sbin, so the macOS absolute path must be resolved FIRST; bare lsof is
+  # allowed only inside the resolution block (command -v fallback for Linux);
+  # every invocation goes through $LSOF.
+  grep -q '/usr/sbin/lsof' "$MANAGE_SH"
+  local bare_invocations
+  bare_invocations=$(grep -nE '(^|[^A-Za-z0-9_$/."-])lsof[[:space:]]+-' "$MANAGE_SH" | grep -v '\$LSOF' || true)
+  # No bare (not via $LSOF) lsof invocations should exist
+  [[ -z "$bare_invocations" ]]
 }

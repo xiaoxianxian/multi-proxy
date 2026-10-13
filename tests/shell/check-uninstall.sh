@@ -115,8 +115,8 @@ done
 [ -f "$L2/broken.plist" ] && pass "broken plist preserved (skipped)" || fail "broken plist wrongly handled"
 # 检测到跨家族
 echo "$out5" | grep -q "疑似相关残留" && pass "cross-family detected" || fail "cross-family not detected"
-# 坏 plist 被跳过
-echo "$out5" | grep -q "无法解析\|跳过" && pass "broken plist skipped" || fail "broken plist not skipped"
+# 坏 plist 被跳过（用 -E 不用 BRE 的 \|：BSD grep 的 \|  alternation 遇多字节中文静默不匹配，历史假红）
+echo "$out5" | grep -qE "无法解析|跳过" && pass "broken plist skipped" || fail "broken plist not skipped"
 
 # 6. 空目录优雅跳过
 echo "6. empty LaunchAgents dir (graceful skip)..."
@@ -125,7 +125,7 @@ LAUNCHD_DIR="$L3"; export LAUNCHD_DRY_RUN=""
 out6=$(uninstall_launchd 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] && pass "empty dir returns 0" || fail "empty dir rc=$rc"
-echo "$out6" | grep -q "未发现\|跳过" && pass "empty dir reported gracefully" || fail "empty dir not handled"
+echo "$out6" | grep -qE "未发现|跳过" && pass "empty dir reported gracefully" || fail "empty dir not handled"
 
 # 7. label 判定单测
 echo "7. label classification unit checks..."

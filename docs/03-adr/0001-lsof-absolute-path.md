@@ -63,3 +63,24 @@ Node.js spawn 子进程时 `PATH` 通常继承自 shell，但 `launchd`（Launch
 
 ### 后续工作
 - [ ] Docker 模式下用 `docker container inspect` 替代 lsof（已有，见 04-tech / 07-ops/ENV-NOTES.md）
+
+---
+
+## 修订（2026-10-13，跨平台移植后）
+
+**状态**： accepted（原决策在 macOS 上不变，裁决扩展为「绝对路径优先 + 平台回退」）。
+
+**背景变化**：manage.sh / install.sh 移植到 Linux（systemd）与 Windows（PowerShell）后，
+Linux 的 lsof 在 `/usr/bin/lsof`（不在 `/usr/sbin`），原「全仓只准 `/usr/sbin/lsof`」
+的字面规则会让 Linux 路径直接坏掉；而 Windows 根本没有 lsof（ss / netstat 也没有，
+端口检测走 `Get-NetTCPConnection`，见 manage.ps1）。
+
+**修订后裁决**：
+1. macOS / launchd 场景**仍然优先绝对路径**：`[ -x /usr/sbin/lsof ] && LSOF=/usr/sbin/lsof`，
+   ADR 原始动机（PATH 缺 /usr/sbin → ENOENT → 静默误判）原样保留。
+2. 其余平台回退 `command -v lsof`（Linux 的 /usr/bin/lsof 由 PATH 找到）。
+3. 两者都没有（Windows / 极简容器）→ `LSOF=""`，端口检测回退 `ss` → `/proc/net/tcp`
+   （manage.ps1 走 Get-NetTCPConnection）。
+4. **所有调用必须经 `$LSOF` 变量**，禁止再出现裸 `lsof -<flag>` 调用——
+   `tests/shell/check.sh` 与 `manage.sh.test.bats` 的规则已同步改为：
+   「`/usr/sbin/lsof` 必须出现 + 禁止裸调用」双断言。

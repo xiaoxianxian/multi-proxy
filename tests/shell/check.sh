@@ -59,13 +59,24 @@ for func in is_port_in_use show_status show_logs start_codex start_hermes start_
   fi
 done
 
-# 3. Verify lsof uses absolute path (critical constraint)
-echo "3. Checking lsof paths (critical constraint)..."
-bare_lsof=$(grep -n 'lsof' "$MANAGE_SH" | grep -v '/usr/sbin/lsof' | grep -v '^#' | grep -v '#' || true)
-if [ -z "$bare_lsof" ]; then
-  pass "All lsof references use /usr/sbin/lsof"
+# 3. Verify lsof usage honors ADR-0001 (2026-10-13 cross-platform amendment)
+#    Amended rule: macOS still resolves the ABSOLUTE path /usr/sbin/lsof first
+#    (launchd PATH may lack /usr/sbin -> bare lsof ENOENT -> silent false
+#    "not running"); bare lsof is allowed ONLY in the resolution block
+#    (command -v fallback for Linux). All invocations go through $LSOF.
+echo "3. Checking lsof paths (ADR-0001 amended)..."
+if grep -q '/usr/sbin/lsof' "$MANAGE_SH"; then
+  pass "lsof absolute path /usr/sbin/lsof present (ADR-0001)"
 else
-  fail "Found bare lsof references (must use /usr/sbin/lsof):"
+  fail "Missing /usr/sbin/lsof absolute path (ADR-0001)"
+fi
+# bare invocation = `lsof -<flag>` not preceded by $LSOF / /usr/sbin/ (resolution
+# lines like `LSOF=lsof` / `command -v lsof` carry no dash flag, so they don't match)
+bare_lsof=$(grep -nE '(^|[^A-Za-z0-9_$/."-])lsof[[:space:]]+-' "$MANAGE_SH" | grep -v '\$LSOF' || true)
+if [ -z "$bare_lsof" ]; then
+  pass "All lsof invocations go through \$LSOF"
+else
+  fail "Found bare lsof invocations (must use \$LSOF):"
   echo "   $bare_lsof"
 fi
 

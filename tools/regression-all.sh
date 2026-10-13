@@ -102,10 +102,10 @@ echo "=================== tests/shell ==================="
 if command -v bats >/dev/null 2>&1; then
   shout="$( ( cd tests/shell && bats *.bats ) 2>&1 )"; shrc=$?
 else
-  shout="$( ( cd tests/shell && bash check.sh ) 2>&1 )"; shrc=$?
+  shout="$( ( cd tests/shell && bash check.sh && bash check-uninstall.sh ) 2>&1 )"; shrc=$?
 fi
 printf '%s\n' "$shout" | tail -4
-SUMMARY+=("$(printf '%-22s %s [rc=%s]' "tests/shell" "$(printf '%s' "$shout" | grep -cE '^ok ') ok" "$shrc")")
+SUMMARY+=("$(printf '%-22s %s [rc=%s]' "tests/shell" "$(printf '%s' "$shout" | grep -cE '^ok |PASS:') ok / $(printf '%s' "$shout" | grep -ciE '^not ok |FAIL:') fail" "$shrc")")
 [ $shrc -ne 0 ] && rc_total=1
 
 # ---- 汇总 ----

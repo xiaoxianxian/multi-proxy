@@ -40,11 +40,24 @@ print_status() { printf "${GREEN}[✓]${NC} %s\n" "$1"; }
 print_error()  { printf "${RED}[✗]${NC} %s\n" "$1"; }
 print_warning() { printf "${YELLOW}[!]${NC} %s\n" "$1"; }
 
+# lsof 可执行文件解析（ADR-0001 + 2026-10-13 跨平台修订）：
+# launchd 启动的进程 PATH 可能不含 /usr/sbin，裸 lsof 会 ENOENT → isProcessRunning
+# 静默误判「未运行」（历史事故，见 docs/03-adr/0001）。跨平台移植后裁决更新为：
+# macOS 仍优先绝对路径 /usr/sbin/lsof；Linux 等平台 lsof 在 PATH 中（/usr/bin/lsof），
+# 回退 command -v 查找；找不到则 LSOF 为空，端口检测回退 ss / /proc/net/tcp。
+if [ -x /usr/sbin/lsof ]; then
+  LSOF=/usr/sbin/lsof
+elif command -v lsof >/dev/null 2>&1; then
+  LSOF=lsof
+else
+  LSOF=""
+fi
+
 # 检查端口是否被占用（跨平台：优先 lsof，回退 ss，再回退 /proc/net/tcp）
 is_port_in_use() {
   local port=$1
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -i :"$port" >/dev/null 2>&1 && return 0
+  if [ -n "$LSOF" ]; then
+    "$LSOF" -i :"$port" >/dev/null 2>&1 && return 0
   fi
   if command -v ss >/dev/null 2>&1; then
     ss -ltn 2>/dev/null | grep -q "[:.]${port}[[:space:]]" && return 0
@@ -60,8 +73,8 @@ is_port_in_use() {
 # 取占用端口的 PID（跨平台）
 pid_on_port() {
   local port=$1
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -ti :"$port" 2>/dev/null | head -1
+  if [ -n "$LSOF" ]; then
+    "$LSOF" -ti :"$port" 2>/dev/null | head -1
   elif command -v ss >/dev/null 2>&1; then
     ss -ltnp 2>/dev/null | grep -oE ":$port[[:space:]]" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
   fi
