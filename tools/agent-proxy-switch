@@ -4,7 +4,7 @@
 # =====================================================================
 # 作用：
 #   在 proxy-rebuild 与「另一候选」之间，安全切换某个 agent 的模型代理
-#   base_url。支持 codex / hermes / cursor 三个 agent。
+#   base_url。支持 codex / hermes / cursor / dsh 四个 agent。
 #
 # 为什么需要它（一次真实事故总结）：
 #   本机曾同时有 cc-switch 与 proxy-rebuild 两套代理工具。若两者同时
@@ -74,6 +74,24 @@
 #     cursor 由 Dock/launchd 起进程，外部注入不了环境变量。这两者仍走写配置路径（`mode:"config"`），
 #     状态行会标出来。治不掉的就别嘴上说治掉了。
 #
+# 🔴🔴 2026-10-13 **上段边界已被推翻（仅限 dsh，cursor 依然成立）** —— 维护者原话：
+#   「不应该是我手动去 dsh 里改，应该是在 multi-proxy 里配好就能用，而且不能污染 dsh 里
+#    原本配的模型。」
+#   为什么 dsh 现在能做零写入（两个事实，不是推测）：
+#     ① dsh 的配置**全部**落在 `~/.dsh/` 一棵目录下（`~/.dsh/profiles/<name>/cordis.patch.yml`）；
+#     ② dsh 桌面端是 Electron 且本机走 dev:desktop **无签名** ⇒ 没有「改 .app 破坏签名」这个代价。
+#   做法 = **HOME 隔离**（不需要 dsh 支持任何我们发明的环境变量）：
+#     把整个 `~/.dsh` 拷进隔离 home，只改**副本**里的端点，shim 跑
+#     `exec env HOME=<隔离home> <真二进制> "$@"`。原 `~/.dsh` 一个字节不动。
+#   「不污染原本配的模型」由**不写文件**保证，不是靠改的时候小心一点：
+#     原 provider（agnes / ollama）及其 models 白名单在副本里逐字保留，
+#     只**新增**一个指向桥的 provider，并把 agent-default-model 的 provider 指过去、
+#     **model 名保持维护者原来那个不变**（原本 agnes-3.0-flash，接上桥后还是 agnes-3.0-flash）。
+#   ⚠️ 仍成立的边界（别顺嘴说成全自动）：HOME 隔离对**终端拉起**生效；
+#     Dock 双击的父进程是 launchd，拿不到 shim 注入的 HOME ⇒ 双击仍走原生配置。
+#     要双击也走桥，得用 B 路线改 `.app` 的 CFBundleExecutable（dsh 无签名 ⇒ 代价远小于 ChatGPT.app，
+#     但仍属不可逆类，须维护者 signoff，本工具不擅自做）。
+#
 # 给 dsh 接的注意点（实测自 ~/.dsh/profiles/desktop/cordis.patch.yml）：
 #   dsh 是「provider 注册表」型客户端，端点写在
 #   `- id: llm-pi-ai / config: providers: <名字>: { api, baseURL, apiKeyEnv, models }`。
@@ -101,8 +119,10 @@ CURATOR_PORT=18795
 CURATOR_URL="http://127.0.0.1:18795/v1"
 # dsh：provider 注册表里的目标 provider 名（可用 DSH_PROVIDER= 覆盖）
 DSH_PROVIDER="${DSH_PROVIDER:-agnes}"
-# 🔴 dsh 切 curator 时默认模型的落点：维护者要验的是「dsh + DeepSeek 自家模型」，
-#    所以默认给 deepseek-v4-flash（该名字必须已在 curator provider 的 models 白名单里）。
+# ⚠️ 2026-10-13：dsh 走「零写入 + 模型名原样保留」后，这个变量**已不再参与默认路径**
+#    （ensure_dsh_profile 只换 provider、model 名照抄原值）。它现在只作两处兜底：
+#    ① 老记录回滚时 rmodel 为空的极端情况；② 你显式要换模型时 DSH_CURATOR_MODEL=<名> 覆盖。
+#    默认不动它 —— 改模型名即污染，这正是维护者否掉的那件事。
 DSH_CURATOR_MODEL="${DSH_CURATOR_MODEL:-deepseek-v4-flash}"
 DSH_CFG="${DSH_PROFILE:-$HOME/.dsh/profiles/desktop}/cordis.patch.yml"
 # curator/off 的切换状态（off = undo 到这条记录的上一个 owner）
@@ -123,6 +143,18 @@ SWITCH_STATE="${SWITCH_STATE:-$STATE_DIR/curator-switch-state.json}"
 PROFILE_DIR="${PROFILE_DIR:-$HOME/.multi-proxy-manager/profiles}"
 CODEX_PROFILE="$PROFILE_DIR/codex-curator"
 HERMES_PROFILE="$PROFILE_DIR/hermes-curator"
+
+# ---- dsh 零写入 profile（2026-10-13 加）----
+# 🔴 与 codex / hermes 的区别：那两个有**官方** home 环境变量（CODEX_HOME / HERMES_HOME），
+#    dsh 没有 ⇒ 改用通用的 **HOME 隔离**：把整棵 ~/.dsh 拷进隔离 home，只改副本里的端点。
+#    这样不依赖 dsh 认任何我们发明的变量，也不会出现「变量拼错了但静默生效到真配置」。
+DSH_HOME_PROFILE="$PROFILE_DIR/dsh-curator-home"
+# ~/.dsh/profiles/<name>/cordis.patch.yml 里的 <name>
+DSH_PROFILE_NAME="${DSH_PROFILE_NAME:-desktop}"
+# 桥端点（要改指别的端口就覆盖它，例：DSH_TARGET_URL=http://127.0.0.1:18790/v1）
+DSH_TARGET_URL="${DSH_TARGET_URL:-$CURATOR_URL}"
+# 真二进制（dsh 没上 PATH 时显式给：DSH_BIN=/Applications/dsh-desktop.app/Contents/MacOS/dsh-desktop）
+DSH_BIN="${DSH_BIN:-}"
 
 # ---- 各 owner 的目标 URL ----
 CC_SWITCH_URL="http://127.0.0.1:15721/v1"
@@ -640,7 +672,131 @@ else:
 PY
 }
 
-# profile 模式的 shim：装一个独立可执行文件，跑它就自动带 CODEX_HOME/HERMES_HOME。
+# ---- dsh：整棵 ~/.dsh 拷进隔离 home，只在**副本**里新增指向桥的 provider（零写入）----
+# 🔴 三条纪律（2026-10-13 立，改这段代码前先读）：
+#   1. 只写 $DSH_HOME_PROFILE，**绝不写 $HOME/.dsh**（那是 agent 家目录）。
+#   2. 原 provider（agnes / ollama）及其 models 白名单在副本里**逐字保留**，只**新增**一个
+#      curator provider ⇒ 「不污染原本配的模型」由结构保证，不是靠改的时候小心。
+#   3. agent-default-model 只换 provider，**model 名保持维护者原来那个**（原 agnes-3.0-flash
+#      ⇒ 接上桥后还是 agnes-3.0-flash）。改模型名 = 污染，本工具不做。
+ensure_dsh_profile() {
+  [ -d "$HOME/.dsh" ] || { echo "  [错误] 未找到 ~/.dsh —— 没有可拷贝的原始配置，拒绝凭空生成。" >&2; return 1; }
+  # 源配置若已被接管过（baseURL 是本机常量），副本会原样带走 ⇒ 如实告知，不静默复制污染值。
+  local src_url
+  src_url="$(DSH_CFG="$HOME/.dsh/profiles/$DSH_PROFILE_NAME/cordis.patch.yml" dsh_patch_scan read 2>/dev/null || true)"
+  if printf '%s' "$src_url" | grep -qE '127\.0\.0\.1|localhost'; then
+    echo "  ⚠️ 源配置里 $DSH_PROVIDER.baseURL 已是本机常量（$src_url）—— 你这份 ~/.dsh 已被接管过。"
+    echo "     副本会原样带走它。想让副本里的 $DSH_PROVIDER 回到真 upstream："
+    echo "       先 \`agent-proxy-switch dsh off\`（真值在我们库里，不用你记得原值），再切 curator。"
+  fi
+  rm -rf "$DSH_HOME_PROFILE"
+  mkdir -p "$DSH_HOME_PROFILE"
+  cp -R "$HOME/.dsh" "$DSH_HOME_PROFILE/.dsh"
+  local patch="$DSH_HOME_PROFILE/.dsh/profiles/$DSH_PROFILE_NAME/cordis.patch.yml"
+  [ -f "$patch" ] || {
+    echo "  [错误] 副本里没找到 $patch" >&2
+    echo "        DSH_PROFILE_NAME=$DSH_PROFILE_NAME 与实际目录名对不对？（ls ~/.dsh/profiles）" >&2
+    return 1
+  }
+  DSH_PATCH="$patch" DSH_SRC_PROV="$DSH_PROVIDER" DSH_URL="$DSH_TARGET_URL" python3 - <<'PY'
+import os, re, sys
+
+path = os.environ['DSH_PATCH']; prov = os.environ['DSH_SRC_PROV']; url = os.environ['DSH_URL']
+lines = open(path).read().split('\n')
+
+def ind(l):
+    return (len(l) - len(l.lstrip(' '))) if l.strip() else 10 ** 6
+
+# 1) 定位 llm-pi-ai → providers 块
+start = -1
+for i, l in enumerate(lines):
+    if re.match(r'^\s*-\s*id:\s*llm-pi-ai\s*$', l):
+        start = i; break
+if start < 0: sys.exit('未找到 llm-pi-ai entry，副本结构与我认知的不一致，拒绝改')
+pstart = -1
+for i in range(start, len(lines)):
+    if re.match(r'^\s*providers:\s*$', lines[i]):
+        pstart = i; break
+if pstart < 0: sys.exit('未找到 providers: 块')
+pind = ind(lines[pstart])
+pend = len(lines)
+for i in range(pstart + 1, len(lines)):
+    if lines[i].strip() and ind(lines[i]) <= pind:
+        pend = i; break
+
+# 2) 逐字带走源 provider 的 apiKeyEnv / api / models（模型名单一个字不改）
+ps = -1
+for i in range(pstart + 1, pend):
+    if re.match(r'^\s*%s:\s*$' % re.escape(prov), lines[i]):
+        ps = i; break
+if ps < 0: sys.exit('providers 块里没有 %s —— DSH_PROVIDER 对不对？不猜' % prov)
+sind = ind(lines[ps])
+keyenv = ''; api = ''; models = []; in_models = False
+for j in range(ps + 1, pend):
+    l = lines[j]
+    if l.strip() and ind(l) <= sind: break
+    s = l.strip()
+    m = re.match(r'^apiKeyEnv:\s*(\S+)\s*$', s)
+    if m: keyenv = m.group(1)
+    m = re.match(r'^api:\s*(\S+)\s*$', s)
+    if m: api = m.group(1)
+    if s == 'models:':
+        in_models = True; continue
+    if in_models:
+        mm = re.match(r'^-\s*id:\s*(\S+)\s*$', s)
+        if mm:
+            models.append(mm.group(1)); continue
+        in_models = False
+if not models:
+    sys.exit('%s 的 models 白名单读不出来 —— 不猜模型名，拒绝生成' % prov)
+
+# 3) 块**末尾**新增 curator（同级兄弟，不插到既有 provider 中间去切断它）
+block = [' ' * sind + 'curator:']
+if keyenv: block.append(' ' * (sind + 2) + 'apiKeyEnv: %s' % keyenv)
+block.append(' ' * (sind + 2) + 'api: %s' % (api or 'openai-completions'))
+block.append(' ' * (sind + 2) + 'baseURL: %s' % url)
+block.append(' ' * (sind + 2) + 'models:')
+for m in models:
+    block.append(' ' * (sind + 4) + '- id: %s' % m)
+    block.append(' ' * (sind + 6) + 'name: %s' % m)
+lines[pend:pend] = block
+
+# 4) agent-default-model：只换 provider，model 名原样保留
+dstart = -1
+for i, l in enumerate(lines):
+    if re.match(r'^\s*-\s*id:\s*agent-default-model\s*$', l):
+        dstart = i; break
+if dstart < 0: sys.exit('未找到 agent-default-model')
+old_model = ''
+for j in range(dstart, min(dstart + 20, len(lines))):
+    m2 = re.match(r'^\s*model:\s*(.*?)\s*$', lines[j])
+    if m2:
+        old_model = m2.group(1); break
+hp = False
+for j in range(dstart, min(dstart + 20, len(lines))):
+    m = re.match(r'^(\s*provider:\s*).*$', lines[j])
+    if m:
+        lines[j] = m.group(1) + 'curator'; hp = True; break
+if not hp: sys.exit('agent-default-model 下没找到 provider 行')
+open(path, 'w').write('\n'.join(lines))
+print('  已生成隔离 profile：%s' % path)
+print('    新增 providers.curator → %s' % url)
+print('      apiKeyEnv=%s  models=%s（从 %s 逐字拷贝，名单没动）' % (keyenv or '(无)', ','.join(models), prov))
+print('    agent-default-model → provider=curator / model=%s（模型名没动）' % (old_model or '(空)'))
+PY
+}
+
+# dsh 真二进制：找不到就拒绝装 shim（设计原则 4「不死链」—— 别造一个指向空路径的 shim）
+dsh_bin() {
+  local b="${DSH_BIN:-}"
+  [ -z "$b" ] && b="$(command -v dsh 2>/dev/null || true)"
+  [ -z "$b" ] && [ -d "/Applications/dsh-desktop.app/Contents/MacOS" ] && \
+    b="/Applications/dsh-desktop.app/Contents/MacOS/dsh-desktop"
+  [ -n "$b" ] && [ -e "$b" ] || return 1
+  echo "$b"
+}
+
+# profile 模式的 shim：装一个独立可执行文件，跑它就自动带 CODEX_HOME/HERMES_HOME/HOME。
 # 🔴 刻意**不**覆盖 PATH 上的 `codex` / `hermes` 本体 —— 劫持全局入口等于把侵入从
 #    config 挪到 PATH，没治根，还会让 WorkBuddy 等宿主 spawn codex 时被动改道。
 gen_shim() {
@@ -751,15 +907,19 @@ status_one() {
       return 0
     fi
     case "$agent" in
-      codex|hermes)
+      codex|hermes|dsh)
         if [ "$st_mode" = "profile" ]; then
           echo "  curator 开关状态       = 已开启（profile 注入 · 零写入，全局配置未改动）"
-          echo "  生效方式               = 跑 codex-curator / hermes-curator（shim 已装）"
+          echo "  生效方式               = 跑 ${agent}-curator（shim 已装）"
+          if [ "$agent" = "dsh" ]; then
+            echo "  隔离 home              = $DSH_HOME_PROFILE（~/.dsh 未动；仅终端拉起生效）"
+          fi
         else
           echo "  curator 开关状态       = 已开启（写配置模式，会改全局配置）"
         fi ;;
       *)
-        echo "  curator 开关状态       = 已开启（写配置模式，GUI 常驻型没有零写入这条路）" ;;
+        # 2026-10-13：dsh 已移出这一档（HOME 隔离能做到零写入），现在只剩 cursor 真的没有这条路。
+        echo "  curator 开关状态       = 已开启（写配置模式，cursor 是纯 GUI 手动改，没有零写入这条路）" ;;
     esac
     echo "  切换记录               = ${st%|*}"
     echo "  关闭方法               = agent-proxy-switch $1 off"
@@ -840,8 +1000,10 @@ switch_one() {
       # ---------------------------------------------------------------
       # 2026-10-02 改：CLI 型 agent（codex / hermes）走 **profile 注入 = 零写入**。
       # 用各自官方的 home 环境变量（codex=CODEX_HOME / hermes=HERMES_HOME），把手写
-      # 全局配置的路径整个绕开。dsh 桌面端与 cursor 是 GUI 常驻、注入不了环境变量，
-      # 只能继续写配置（mode=config），如实分流，不一刀切炫技。
+      # 全局配置的路径整个绕开。
+      # 🔴 2026-10-13 更正：dsh **已不再**属于「做不到零写入」那一档 —— HOME 隔离做到了
+      #    （整棵 ~/.dsh 拷进隔离 home + shim 注入 HOME），见下面 dsh 分支。
+      #    现在只剩 **cursor** 真的没有这条路（纯 GUI 手动改，无文件可接管，也不认 home 变量）。
       # ---------------------------------------------------------------
       if [ "$agent" = "codex" ]; then
         mode="profile"
@@ -863,6 +1025,32 @@ switch_one() {
         echo "  ✅ hermes 已切到 curator（${CURATOR_URL}）"
         echo "     生效方式：直接跑 \`hermes-curator …\`（= HERMES_HOME=$HERMES_PROFILE hermes …）"
         echo "     关闭：agent-proxy-switch hermes off —— 只删 profile 与 shim，全局配置不动"
+        return 0
+      fi
+
+      # dsh —— 2026-10-13 升级为**零写入**（HOME 隔离）。
+      # 维护者订正：「不应该是我手动去 dsh 里改，应该是在 multi-proxy 里配好就能用，而且不能污染
+      # dsh 里原本配的模型。」⇒ 写配置那条路（及 takeover 那种「覆盖原值再记库」）对 dsh 作废，
+      # 改成：整棵 ~/.dsh 拷进隔离 home，只改副本，原配置零写入。
+      if [ "$agent" = "dsh" ]; then
+        mode="profile"
+        echo "  [零写入] dsh 走 HOME 隔离 —— ~/.dsh 一个字节都不动。"
+        ensure_dsh_profile || return 1
+        local dbin
+        if ! dbin="$(dsh_bin)"; then
+          echo "  [错误] 找不到 dsh 真二进制，拒绝装 shim（设计原则 4：不留死链）。" >&2
+          echo "     用 DSH_BIN=<真二进制绝对路径> 显式指定后重跑。" >&2
+          echo "     例：DSH_BIN=/Applications/dsh-desktop.app/Contents/MacOS/dsh-desktop agent-proxy-switch dsh curator" >&2
+          return 1
+        fi
+        gen_shim dsh "$HOME/.local/bin/dsh-curator" "$dbin" HOME "$DSH_HOME_PROFILE"
+        record_switch dsh "${prev:-unknown}" "$prev_url" "$prev_model" "$prev_prov" profile
+        echo "  ✅ dsh 已切到 curator（${DSH_TARGET_URL}）"
+        echo "     生效方式：终端跑 \`dsh-curator\`（= HOME=$DSH_HOME_PROFILE <真 dsh>）"
+        echo "     原生 \`dsh\` 照常读自己的 ~/.dsh，两者互不影响。"
+        echo "  ⚠️ HOME 隔离只对**终端拉起**生效：Dock 双击的父进程是 launchd，拿不到注入的 HOME，"
+        echo "     双击仍走原生配置（要双击也走桥须改 .app，属不可逆，须单独 signoff，本工具不做）。"
+        echo "     关闭：agent-proxy-switch dsh off —— 只删隔离 home 与 shim，~/.dsh 不动"
         return 0
       fi
 
@@ -890,6 +1078,13 @@ switch_one() {
   if [ "$owner" = "takeover" ]; then
     case "$agent" in
       dsh)
+        # 🔴 2026-10-13：takeover 对 dsh **降级为「历史污染清理」专用**，新接入一律走 curator（零写入）。
+        #    它会**写 dsh 自己的配置文件**（把 baseURL 覆盖成本机常量）—— 这正是维护者否掉的那种做法。
+        #    现在保留它只有一个用途：本机 ~/.dsh 在 2026-10-11 被 takeover 写过（agnes.baseURL=127.0.0.1:18790），
+        #    `agent-proxy-switch dsh off` 要靠这条记录把真 upstream（https://apihub.agnes-ai.cn/v1）写回去。
+        #    清完这次就别再用它了。
+        echo "  ⚠️ takeover 会写 dsh 自己的配置（覆盖原值）—— 2026-10-13 起新接入请用 \`dsh curator\`（零写入）。"
+        echo "     本分支现在只用于：清理 2026-10-11 takeover 留下的污染（off 时把真 upstream 写回）。"
         local cur; cur="$(current_dsh_url 2>/dev/null || true)"
         local upstream="${TAKEOVER_UPSTREAM:-}"
         if [ -z "$upstream" ]; then
@@ -995,7 +1190,12 @@ switch_one() {
           rm -rf "$HERMES_PROFILE"
           rm -f "$HOME/.local/bin/hermes-curator"
           removed="profile=$HERMES_PROFILE + shim=~/.local/bin/hermes-curator" ;;
-        *) echo "  [错误] profile 模式只支持 codex / hermes，[$agent] 请在 GUI 里手动改回。" >&2; return 1 ;;
+        dsh)
+          # 🔴 只删隔离 home 与 shim —— ~/.dsh 从切到关全程没被写过，这里也就不需要「恢复」。
+          rm -rf "$DSH_HOME_PROFILE"
+          rm -f "$HOME/.local/bin/dsh-curator"
+          removed="隔离home=$DSH_HOME_PROFILE + shim=~/.local/bin/dsh-curator（~/.dsh 全程未动）" ;;
+        *) echo "  [错误] profile 模式只支持 codex / hermes / dsh，[$agent] 请在 GUI 里手动改回。" >&2; return 1 ;;
       esac
       # 只删本 agent 那份；老单文件仅在我们就是读它时才一并清（否则会带走别人的记录）
       rm -f "$stf"
@@ -1138,13 +1338,20 @@ usage() {
   <owner>:
     codex  : cc-switch | proxy-rebuild | curator | off
     hermes : proxy-rebuild | direct    | curator | off
+    dsh    : curator（零写入·HOME 隔离）| off | takeover
     cursor : proxy-rebuild | direct    | curator | off   (半自动)
-    dsh    : direct                    | curator | off
 
   curator / off 是「省钱总开关」一对：
     agent-proxy-switch codex  curator   # 切到 curator 桥（18795），开始省
     agent-proxy-switch codex  off       # 回滚到切 curator 之前（不是猜直连）
-    agent-proxy-switch dsh    curator   # dsh 侧改 agent-default-model 的 provider
+    agent-proxy-switch dsh    curator   # 零写入：拷 ~/.dsh 到隔离 home，只改副本（~/.dsh 不动）
+
+  dsh curator 的可配项（都在 multi-proxy 侧，不用去 dsh 里改任何东西）：
+    DSH_TARGET_URL=...   桥端点（默认 $CURATOR_URL）
+    DSH_PROVIDER=...     以哪个原 provider 的模型名单为准（默认 agnes）
+    DSH_BIN=...          dsh 真二进制（没上 PATH 时必填）
+    DSH_PROFILE_NAME=... ~/.dsh/profiles/<name>（默认 desktop）
+  注：HOME 隔离只对终端拉起生效；Dock 双击仍走原生 ~/.dsh。
 
   takeover / off 是「端点接管」一对（2026-10-12 P1，给 GUI 常驻型 agent）：
     agent-proxy-switch dsh takeover     # 真 upstream 存进我们库，配置里只留 127.0.0.1 常量

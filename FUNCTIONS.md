@@ -274,20 +274,21 @@ This file is part of the multi-proxy project.
 
 ## 六、测试覆盖
 
-| 模块 | 测试文件 | 测试数 | 框架 |
-|------|---------|--------|------|
-| Manager | tests/unit/api.test.js | 13 | Jest |
-| Manager | tests/unit/secrets.test.js | 8 | Jest |
-| Manager | tests/unit/providers.test.js | 8 | Jest |
-| Manager | tests/unit/crash-recovery.test.js | 27 | Jest |
-| Manager | tests/unit/e2e-scenarios.test.js | 24 | Jest+supertest |
-| Codex | tests/proxy.test.js | 19 | Jest |
-| Codex | tests/integration.test.js | 17 | Jest+supertest |
-| Hermes | tests/test_proxy_logic.py | 21 | Pytest |
-| Hermes | tests/integration_test.py | 20 | Pytest |
-| Cursor | tests/unit/providers.test.ts | 29 | Jest+TS |
-| Cursor | tests/unit/engine-monitoring.test.ts | 20 | Jest+TS |
-| **总计** | | **206** | |
+> **2026-10-12 全量真跑重写**（原表是 09 月快照「总计 206」，比真值小一个量级）。
+> 铁律（AGENTS.md §4）：数字必须来自真实运行，不得从文档摘录。
+
+| 模块 | 套件 / 文件 | 测试数 | 框架 | 备注 |
+|------|-------------|--------|------|------|
+| Manager | 94 suites（`multi-proxy-manager/tests/unit/**`） | **1458** | Jest | 须 `NODE_OPTIONS=--experimental-vm-modules` |
+| Codex | 14 suites（`codex-proxy/tests/`） | **159** | Jest | |
+| Hermes | 4 files（`hermes-proxy/tests/`） | **77** | pytest | 须 `/usr/bin/python3 -m pytest`（托管 3.13 无 pytest） |
+| Cursor | 19 suites（`cursor-proxy/tests/unit/`） | **241** | Jest+TS | 须 ESM flag；含 2026-10-12 新增 5 条 tools 透传 pin |
+| L2 | `l2/run-demos.js` selected | **53 demo** | node | `ALL GREEN`，real 33.75s |
+| **合计** | | **1935 断言 + 53 demo** | | |
+
+⚠️ **环境坑（2026-10-12 实踩）**：`cursor-proxy` 的 `better-sqlite3` 原生二进制缺失时，
+8 个套件会报 `bindings` 加载失败、外层表现为 `server start timeout`（不是代码 bug）。
+修法：`cd cursor-proxy && npm_config_build_from_source=true npm rebuild better-sqlite3`。
 
 ---
 
