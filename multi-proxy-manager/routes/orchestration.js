@@ -25,6 +25,7 @@ const router = express.Router();
 const { Orchestrator } = require('../../l2/orchestrator.js');
 const { decompose } = require('../../l2/decomposer.js');
 const { makeLlmDecomposer } = require('../../l2/llm-decomposer.js');
+const { createRelayLedger } = require('../../l2/relay-ledger.js');
 
 // 质量层（2.2 需候选信息）的共享 RouteEngine：与 routes/registry.js 共用**同一份** process 级
 // registry 单例（避免 registry 分裂 P2-1）。惰性构造：默认关时不 require、不建对象（零副作用）。
@@ -83,6 +84,21 @@ function getExecutorBind() {
 
 // 长寿命单例：协作历史内存态累积（重启即失；持久化留 P3 dir 落盘）
 let _orchestrator = null;
+// 接力开销账本（P2 观测件 2026-10-13）：门控 PROXY_L2_RELAY_LEDGER 默认关 → null，
+// Orchestrator 不收 ledger、/run 响应不挂 relay 字段（逐字零行为变更）。
+// 开 = 同一实例长寿命注入单例 Orchestrator，逐跳记 usage，/run 附 relay 汇总 + GET /relay 全量报告。
+let _relayLedger = null;
+function getRelayLedger() {
+  if (!isRelayLedgerOpen()) return null;
+  if (!_relayLedger) _relayLedger = createRelayLedger();
+  return _relayLedger;
+}
+
+function isRelayLedgerOpen() {
+  const v = String(process.env.PROXY_L2_RELAY_LEDGER || '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'on';
+}
+
 function getOrchestrator() {
   if (!_orchestrator) {
     const opts = {
@@ -97,6 +113,9 @@ function getOrchestrator() {
       // 故此处用 forOrchestrator(routeEngine) 补上「路由 → 选中 adapter」这一步。
       opts.executor = bind.forOrchestrator(getRouteEngine());
     }
+    // 接力账本：门控开才注入（默认 null → Orchestrator._recordRelay 首行守卫直接返回）
+    const ledger = getRelayLedger();
+    if (ledger) opts.relayLedger = ledger;
     _orchestrator = new Orchestrator(opts);
   }
   return _orchestrator;
@@ -191,11 +210,24 @@ router.post('/run', async (req, res) => {
         fidelityIssues: orch._fidelityIssues || [],   // 2.3 执行保真：透传字段被改样
       };
     }
+    // 接力开销 sidecar（P2 观测件）：门控 PROXY_L2_RELAY_LEDGER 开才附（默认关 → 不挂字段）
+    // 实例取自 orchestrator 单例（注入的同一个），不另造——双实例会分成两本账
+    if (orch.relayLedger && result.history && result.history.runId) {
+      payload.relay = orch.relayLedger.report(result.history.runId);
+    }
     res.json(payload);
   } catch (e) {
     // 环 / 调度不收敛 / 拆解异常：转 400，不冒泡
     res.status(400).json({ error: 'orchestration-run-failed', message: e.message });
   }
+});
+
+// GET /relay → 接力开销全量报告（跨 run 汇总；门控关 → 403，与其它路由同纪律）。
+// 实例同样取自 orchestrator 单例（与 /run sidecar 同一本账）。
+router.get('/relay', (req, res) => {
+  const ledger = getOrchestrator().relayLedger;
+  if (!ledger) return res.status(403).json({ error: 'relay-ledger-gate-closed', hint: 'PROXY_L2_RELAY_LEDGER 未开启（默认关）→ 接力账本不记账；开灰度：PROXY_L2_RELAY_LEDGER=1。' });
+  res.json(ledger.report());
 });
 
 // POST /shadow → 开关 shadowMode
@@ -212,6 +244,6 @@ router.post('/shadow', (req, res) => {
 module.exports = router;
 
 // 测试辅助（不暴露到路由，仅供单测重置单例验证长寿命语义）
-module.exports._resetForTest = () => { _orchestrator = null; };
+module.exports._resetForTest = () => { _orchestrator = null; _relayLedger = null; };
 // 测试/运维辅助：查当前 executor 绑定状态（null = 未接线）
 module.exports._getExecutorBind = () => getExecutorBind();

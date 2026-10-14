@@ -189,6 +189,16 @@ L2 P2 编排引擎（蓝图 4.2 / 5.1）的拆解层 + 调度层，P0 route-engi
 - **真跑**：`node l2/savings-gateway/charge-confirm.demo.js`（**18 PASS**，确定性：免费放行 / shadow 不拦 / 付费未确认拦 / 付费已确认放行 / 名单兜底 / baseline 开关 / 自定义名单）；`node l2/savings-gateway/charge-confirm.e2e.test.js`（**7 PASS**，真起假上游：默认关零变更 → 开+未确认 402 打不到上游 → 开+已确认 200 真打上游 → shadow 不拦）；`run-demos.js` 全量 53 例 + forward e2e 9 例全绿（零回归）。
 - **边界（YAGNI）**：闸门只在「真实执行（非 shadow）」介入；shadow 模拟永远放行（不真花钱不需确认）。名单外 + `usePricingBaseline=true`（默认）下，只要基线价 >0 仍会拦（保守：未知价不冒充免费）；要纯白名单语义需显式 `usePricingBaseline=false`。
 
+## relay-ledger.js — agent 间接力开销账本（P2 观测件 · 2026-10-13 · 门控非侵入）
+
+把「多智能体间接力靠文本是最贵的一环」从外部论文（RecursiveMAS，arXiv 2604.25917v2 / NeurIPS 2026：r=3 时文本递归 MAS 的 output token 比隐空间交互高 75.6%）变成**自己的数**：L2 编排每一跳 agent 调用照实记 usage，回答「接力开销集中在哪一跳」。multi-proxy 不走论文路线（API 层黑盒代理无隐状态 + 铁律「不自训模型」），但先记账才谈得上优化。
+
+- **内核**：`relay-ledger.js`（零依赖）。`extractUsage(value)` 纯函数照实挖 executor 返回链（`value.raw.result.raw.usage`，executor-bind + l1-agent-adapter 真实形状）；挖不到返回 `null`——**绝不填 0 冒充没花**（同 savings-gateway C0-3 纪律）。`summarize(hops)` 出 `hopCount / usageFound / usageMissing / perAdapter / topHops / relayRatio`（全部跳 token ÷ 最后一跳，>1 的部分就是为接力多付的；单跳=1 基线；无分母=null）。
+- **接入缝（非侵入）**：`orchestrator.js` 构造项 `relayLedger`（默认 `null` = `_recordRelay` 首行守卫直接返回，**返回形状逐字不含 relay 键**）；`routes/orchestration.js` 门控 `PROXY_L2_RELAY_LEDGER=1/true/on` 才构造长寿命实例注入单例 Orchestrator，`POST /run` 响应附 `relay` sidecar、`GET /api/orchestration/relay` 出跨 run 全量报告（门控关 → 403）。
+- **诚实口径**：shadow / h3web 任务队列 / 发现调用 / 自定义 executor 的跳照记但 `usageFound=false` 单列——账本里少一个数可以，多一个假数不行。
+- **真跑**：jest `tests/unit/relay-ledger.test.js` **18/18**（extractUsage 四形态 + 垃圾输入不抛 / summarize 诚实性 + 环形裁剪 / Orchestrator 三跳记账 + 未注入零行为变更证明 + fallback 留痕 + 路由门控两侧）；相关既有套件 orchestration-route + executor-bind + mcp-route + mcp-server + provider-isolation-executor **104/104 零回归**。
+- **边界（YAGNI）**：仅内存环形缓冲，默认不落盘（落盘形态留二期，同 savings-gateway 一期纪律）；MCP 入口（`l2/mcp-server.js`）未接，留作二期。
+
 ## 铁律（落地前必读）
 
 - **MCP 消费入口**：想经 MCP 消费 L2 编排能力（routeTask/decompose/orchestrate），见 **`l2/MCP-integration-guide.md`**（DS2 之前唯一可消费面，门控 `PROXY_L2_MCP` 默认关）。

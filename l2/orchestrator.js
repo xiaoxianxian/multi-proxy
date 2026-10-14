@@ -28,11 +28,13 @@ const { validateDag, validateSubtask } = require('./contract.js');
 const { reviewDecomposition, assertSemantic } = require('./semantic-review.js');
 // 执行保真层（质量工程 2.3）：下发 executor 前后比对透传字段（默认关，零行为变更）。
 const { snapshotSubtask, diffFidelity, assertFidelity } = require('./quality-fidelity.js');
+// 接力开销账本（P2 观测件 2026-10-13）：可选的 usage 观测层，注入才启用（默认 null = 零行为变更）。
+const { extractUsage } = require('./relay-ledger.js');
 
 const DEFAULT_MAX_RETRIES = 1;
 
 class Orchestrator {
-    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null, semanticReview = false, semanticThrow = false, fidelityCheck = false, fidelityThrow = false } = {}) {
+    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null, semanticReview = false, semanticThrow = false, fidelityCheck = false, fidelityThrow = false, relayLedger = null } = {}) {
         this.executor = executor;          // 注入：(subtask, ctx, runOpts) => result；shadowMode 下不被调用
         this.routeEngine = routeEngine;    // 注入：非 shadow 时由 executor 用其 route() 选 adapter
         this.decomposer = decomposer;      // 注入：runFromInput 用；否则用内置 templateDecompose
@@ -44,6 +46,7 @@ class Orchestrator {
         this.semanticThrow = semanticThrow;   // 默认关：打开则 error 级语义问题在派发前硬拒
         this.fidelityCheck = fidelityCheck;   // 质量工程 2.3：下发 executor 前后比对透传字段（默认关）
         this.fidelityThrow = fidelityThrow;   // 默认关：打开则透传字段被改样即硬拒
+        this.relayLedger = relayLedger;        // P2 观测件：null=不记账（零行为变更）；注入 relay-ledger 实例才逐跳记 usage
         this.history = [];                 // 协作历史（任务级）
         this._seq = 0;
         this._fidelityIssues = [];         // 2.3 诊断记录（fidelityCheck 开启时累积）
@@ -111,10 +114,15 @@ class Orchestrator {
             subtasks: subtasks.map((s) => ({ id: s.id, type: s.type, status: results[s.id] ? results[s.id].status : 'missing' })),
             shadowMode: this.shadowMode,
          };
+        // 接力开销报告：仅注入 relayLedger 时附加（未注入 = 返回形状与既有逐字一致）
+        const out = { results, report, history: historyEntry };
+        if (this.relayLedger && typeof this.relayLedger.report === 'function') {
+            out.relay = this.relayLedger.report(runId);
+        }
         this.history.push(historyEntry);
         this._persistHistory(historyEntry);
 
-        return { results, report, history: historyEntry };
+        return out;
     }
 
     getHistory() { return this.history; }
@@ -175,6 +183,7 @@ class Orchestrator {
                     : await this._invoke(st, ctx);
                 results[st.id] = { id: st.id, status: 'done', value, attempts };
                 executionOrder.push(st.id);
+                this._recordRelay(st, value, ctx, null);
                 return;
             } catch (e) {
                 lastErr = e;
@@ -190,6 +199,7 @@ class Orchestrator {
                     : await this._invoke(fb, ctx);
                 results[st.id] = { id: st.id, status: 'done', value, attempts, fallbackFrom: st.id, via: fb.id };
                 executionOrder.push(fb.id);
+                this._recordRelay(st, value, ctx, st.id);
                 return;
             } catch (e2) {
                 lastErr = e2 || lastErr;
@@ -198,6 +208,24 @@ class Orchestrator {
 
         results[st.id] = { id: st.id, status: 'failed', attempts, error: String(lastErr && lastErr.message || lastErr) };
         executionOrder.push(st.id);
+    }
+
+    // 接力开销记账（P2 观测件）：仅当注入了 relayLedger 才动作；第一行守卫保证
+    // 未注入时逐字零行为变更（与 semanticReview/fidelityCheck 同一纪律）。
+    // usage 挖不到（shadow / h3web 任务队列 / 自定义 executor）照实记 usageFound=false，不填 0。
+    _recordRelay(st, value, ctx, viaFallback) {
+        if (!this.relayLedger || typeof this.relayLedger.record !== 'function') return null;
+        const adapterId = (value && typeof value === 'object' && (value.adapterId || value.agent)) || null;
+        return this.relayLedger.record({
+            runId: ctx && ctx.runId,
+            subtaskId: st.id,
+            adapterId,
+            tier: (value && typeof value === 'object' && value.tier) || null,
+            attempts: value && typeof value === 'object' && value.attempts != null ? value.attempts : undefined,
+            viaFallback,
+            shadow: this.shadowMode,
+            value,
+        });
     }
 
     async _invoke(st, ctx) {
