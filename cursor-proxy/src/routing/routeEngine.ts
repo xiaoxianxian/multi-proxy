@@ -240,11 +240,17 @@ export const DEFAULT_ROUTE_CONFIG: RouteConfig = {
                                 billingMode: 'subscription', monthlyCny: 199 },
      'kimi-k2.7-code-highspeed': { input: 13, output: 54, cacheHit: 2.6,
                                 billingMode: 'subscription', monthlyCny: 199 },
-     // glm / codex：尚无可靠真实价源，留占位 + 显式标注 TODO，不编造。
-     //   0/0/0 仅为占位（切勿据此计费）；未列入 fallbackChain，不参与比价/路由。
-     //   TODO 待维护者补真实价（API token 价 + coding plan 订阅月费/配额）。
-     'glm-4.5':               { input: 0, output: 0, cacheHit: 0 },  // TODO 待维护者补真实价
-     'codex':                 { input: 0, output: 0, cacheHit: 0 },  // TODO 待维护者补真实价
+     // glm / codex：已查官方真实价（2026-10-14 贾维斯补；回源 Z.AI/智谱 + OpenAI 官方）。
+     //  两模型均未列入 fallbackChain(207行)，不参与 cost-optimization 路由；currency 字段
+     //  仅展示标注，estimateCost 忽略 currency，故改价对路由逐字节不变(仅数据完整)。
+     //  GLM-4.5：Z.AI 国际 API 实测 $0.60 in / $2.20 out / $0.11 cache(USD/1M，2026-08)；
+     //    国内 2026-08 已转 GLM-4.6/4.7/5.x、GLM-4.5 国内停售，故本条标国际 API 价。
+     //  codex：OpenAI gpt-5-codex $1.25 in / $10 out / $0.125 cache(USD/1M，2026-08)；
+     //    另 ChatGPT Plus/Pro 订阅 $20/月含 Codex(coding plan 维度，未单列)。
+     'glm-4.5':                { input: 0.60, output: 2.20, cacheHit: 0.11, currency: 'USD',
+                       source: 'Z.AI/智谱国际API·2026-08(GLM-4.5 国内已转 4.6/4.7/5.x，本条为国际 API 价，未进 fallbackChain 不参与路由)' },
+     'codex':                  { input: 1.25, output: 10, cacheHit: 0.125, currency: 'USD',
+                       source: 'OpenAI gpt-5-codex/官方·2026-08(另有 ChatGPT 订阅 $20/月含 Codex，未进 fallbackChain 不参与路由)' },
     },
 };
 
