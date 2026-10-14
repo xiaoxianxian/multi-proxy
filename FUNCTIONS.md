@@ -4,9 +4,9 @@ Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md
 This file is part of the multi-proxy project.
 -->
 
-# multi-proxy v1.0.0 — 功能说明书
+# multi-proxy v1.1.0 — 功能说明书
 
-> 多代理管理系统 · 统一管理 Codex / Hermes / Cursor 三个 AI 代理服务
+> 多代理管理系统 · 统一管理 Codex / Hermes / Cursor / DSH 四个 AI 代理服务
 
 ---
 
@@ -18,6 +18,7 @@ This file is part of the multi-proxy project.
 | **codex-proxy** | Node.js + Express | 18790 | Codex CLI 代理，转发上游模型请求 |
 | **hermes-proxy** | Python + Flask | 18793 | Hermes Agent 代理，YAML 配置驱动 |
 | **cursor-proxy** | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理，Provider 注册表 + SQLite 持久化 |
+| **dsh-proxy** | Node.js + Express | PORT 可配（默认 18790 槽位） | DeepSeek Harness 客户端代理，per-provider 路由 + 预算预检 + 模型目录同步 |
 
 ---
 
@@ -218,6 +219,26 @@ This file is part of the multi-proxy project.
 - **限流器**：令牌桶算法
 - **健康监控**：定期轮询供应商状态
 - **加密存储**：AES-256-GCM 加密 API Key
+
+---
+
+### 3.4 DSH Proxy
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/chat/completions` | POST | 聊天补全（OpenAI 兼容） |
+| `/v1/models` | GET | 模型目录 |
+| `/api/routing-mode` | GET | 查询当前路由模式 |
+| `/api/set-routing-mode` | POST | 切换路由模式 |
+| `/api/switch-model` | POST | 切换上游模型 |
+| `/api/providers/status` | GET | 各 provider 健康与熔断状态 |
+| `/api/history` | GET | 请求历史 |
+| `/health` | GET | 健康检查 |
+
+高级特性：
+- **per-provider 路由**：单家上游故障不连累其他 provider（熔断按 provider 维度）
+- **预算预检**：请求前校验预算余量，超限快速失败
+- **模型目录同步**：上游模型变更自动同步
 
 ---
 

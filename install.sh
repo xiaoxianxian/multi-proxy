@@ -72,6 +72,32 @@ detect_os() {
 }
 OS="$(detect_os)"
 
+# ===================== Node 运行时检查（2026-10-14 增补）=====================
+# manager / 各 proxy 均要求 Node.js >= 20（node:test runner 等语法）。
+# 缺 node 或版本过低时给出可操作提示，避免后续 npm install 报难懂的错。
+check_node_runtime() {
+  if ! command -v node >/dev/null 2>&1; then
+    print_err "未找到 node。multi-proxy 需要 Node.js >= 20。"
+    print_info "安装：macOS 'brew install node'；Linux/Windows 见 https://nodejs.org/"
+    exit 1
+  fi
+  local raw major
+  raw="$(node -v 2>/dev/null || echo v0.0.0)"
+  major="${raw#v}"
+  major="${major%%.*}"
+  case "$major" in
+    ''|*[!0-9]*)
+      print_err "无法解析 Node 版本：$raw。请确认 'node -v' 输出正常后重试。"
+      exit 1 ;;
+  esac
+  if [ "$major" -lt 20 ]; then
+    print_err "Node 版本过低：$raw（multi-proxy 需要 >= 20）。请升级后重试。"
+    exit 1
+  fi
+  print_ok "Node 运行时：$raw"
+}
+check_node_runtime
+
 # LaunchAgents 目录：默认 $HOME/Library/LaunchAgents，允许测试注入临时目录（非全局 env 注入，仅脚本内 local 覆盖）
 LAUNCHD_DIR="${LAUNCHD_DIR:-$HOME/Library/LaunchAgents}"
 

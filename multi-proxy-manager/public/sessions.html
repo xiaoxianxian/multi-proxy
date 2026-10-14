@@ -152,9 +152,12 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
 
   // ===== Helpers =====
   function esc(str) {
+    if (str === null || str === undefined) return '';
     var div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+    div.textContent = str;
+    return div.innerHTML
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function showToast(msg, type, duration) {

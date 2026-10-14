@@ -252,6 +252,10 @@ if (process.env.NODE_ENV !== "test") {
   // Docker/跨机部署显式设 BIND_HOST=0.0.0.0，沿用 hermes-proxy 的 BIND_HOST 惯例。
   const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
   app.listen(PORT, BIND_HOST, () => {
+    if (!['127.0.0.1', 'localhost', '::1', '::ffff:127.0.0.1'].includes(BIND_HOST)) {
+      console.warn(`[security] BIND_HOST=${BIND_HOST} 非回环地址：管理台将对该网络可达方开放。` +
+        '请确认 MANAGER_PASSWORD 已设置、且防火墙/反向代理已加访问控制。');
+    }
     console.log('\n========================================');
     console.log('  Multi-Proxy Manager Shell');
     console.log(`  Access: http://${BIND_HOST}:${PORT}`);
