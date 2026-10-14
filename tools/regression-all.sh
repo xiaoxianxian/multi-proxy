@@ -68,6 +68,11 @@ run_suite "codex-proxy" codex-proxy npx jest --forceExit
 run_suite "claude-proxy" claude-proxy npx jest --forceExit --worker=1
 [ $? -ne 0 ] && rc_total=1
 
+# 2c) opencode（159 测试；--worker=1 同上。stream-bypass 的首用例走真 HTTP 回环，
+#      内存争抢下偶发 >30s jest 超时假红——单跑该文件可复绿，非产品 bug）
+run_suite "opencode-proxy" opencode-proxy npx jest --forceExit --worker=1
+[ $? -ne 0 ] && rc_total=1
+
 # 3) cursor（250 测试，需 ESM flag）
 run_suite "cursor-proxy" cursor-proxy env NODE_OPTIONS=--experimental-vm-modules npx jest --forceExit
 [ $? -ne 0 ] && rc_total=1

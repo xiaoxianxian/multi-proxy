@@ -6,7 +6,7 @@ This file is part of the multi-proxy project.
 
 # multi-proxy v1.1.0 — 功能说明书
 
-> 多代理管理系统 · 统一管理 Codex / Claude Code / Hermes / Cursor / DSH 五个 AI 代理服务
+> 多代理管理系统 · 统一管理 Codex / Claude Code / OpenCode / Hermes / Cursor / DSH 六个 AI 代理服务
 
 ---
 
@@ -17,6 +17,7 @@ This file is part of the multi-proxy project.
 | **multi-proxy-manager** | Node.js + Express | 18792 | Web 管理后台（前端 4 页 + 后端 API + 进程管理） |
 | **codex-proxy** | Node.js + Express | 18790 | Codex CLI 代理，转发上游模型请求 |
 | **claude-proxy** | Node.js + Express | 18791 | Claude Code 的 Anthropic 兼容网关，模型别名映射 + 上游池 |
+| **opencode-proxy** | Node.js + Express | 18798 | opencode 的 OpenAI 兼容网关，多 provider 转发 + 成本台账 + 熔断 |
 | **hermes-proxy** | Python + Flask | 18793 | Hermes Agent 代理，YAML 配置驱动 |
 | **cursor-proxy** | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理，Provider 注册表 + SQLite 持久化 |
 | **dsh-proxy** | Node.js + Express | PORT 可配（默认 18790 槽位） | DeepSeek Harness 客户端代理，per-provider 路由 + 预算预检 + 模型目录同步 |
@@ -275,6 +276,53 @@ claude   # 之后 Claude Code 的请求全部经 18791 映射到上游池
 
 ---
 
+### 3.6 OpenCode Proxy
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/chat/completions` | POST | 聊天补全（流式/非流式，OpenAI 兼容主链路） |
+| `/v1/responses` | POST | OpenAI Responses 协议入口 |
+| `/v1/models` | GET | 模型列表 |
+| `/health` | GET | 健康检查 |
+| `/api/providers/status` | GET | 供应商状态 |
+| `/api/routing-mode` | GET/POST | 路由模式查询/设置 |
+| `/api/switch-model` | POST | 切换上游模型 |
+| `/api/history` | GET | 切换历史 |
+| `/api/balances` | GET | 余额查询 |
+
+核心特性：
+- **OpenAI 兼容透传**：opencode 直接写上游真实模型名（如 `deepseek-v4-pro`），本代理按 `findProvider` 选上游后原样转发，不做模型名改写——opencode 侧零适配成本
+- **per-provider 熔断**：连续失败自动熔断、指数退避恢复，单家上游故障不连累其他 provider
+- **预算预检**：请求前校验预算余量，超限快速失败
+- **模型目录同步**：上游模型变更自动同步
+- **成本台账**：流式/非流式均按上游原样 usage 记账（wire 由 manager 侧自动归一）
+
+接入 opencode（客户端侧配置，格式依据 opencode 官方 v2 文档 opencode.ai/v2/docs/providers）：
+
+```jsonc
+// opencode.jsonc（项目目录或 ~/.config/opencode/opencode.jsonc）
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "multi-proxy": {
+      "name": "multi-proxy 本地网关",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:18798/v1"
+      },
+      "models": {
+        "deepseek-v4-pro": { "name": "DeepSeek V4 Pro" }
+      }
+    }
+  }
+}
+```
+
+模型引用为 `multi-proxy/deepseek-v4-pro`；opencode 直接写上游真实模型名，本代理透传转发、不做改写。
+（旧版 opencode 用 `provider` 单数 + `npm` + `options.baseURL` 字段，语义相同；以你本机 opencode 版本的文档为准。）
+
+---
+
 ## 四、安全机制
 
 | 机制 | 实现 | 说明 |
@@ -303,6 +351,7 @@ claude   # 之后 Claude Code 的请求全部经 18791 映射到上游池
 | `manage.sh logs [all\|codex\|claude\|hermes\|cursor\|dsh\|manager]` | 查看日志 |
 | `manage.sh codex start` | 单独管理 Codex |
 | `manage.sh claude restart` | 单独管理 Claude Proxy |
+| `manage.sh opencode start` | 单独管理 OpenCode Proxy |
 | `manage.sh hermes stop` | 单独管理 Hermes |
 | `manage.sh cursor restart` | 单独管理 Cursor |
 | `manage.sh dsh status` | 单独管理 DSH |
@@ -338,10 +387,11 @@ claude   # 之后 Claude Code 的请求全部经 18791 映射到上游池
 | Manager | 94 suites（`multi-proxy-manager/tests/unit/**`） | **1458** | Jest | 须 `NODE_OPTIONS=--experimental-vm-modules` |
 | Codex | 14 suites（`codex-proxy/tests/`） | **159** | Jest | |
 | Claude | 15 suites（`claude-proxy/tests/`） | **174** | Jest | 2026-10-14 新增：14 套件自 codex-proxy 同构拷贝 + `model-alias.test.js` 15 例（别名纯函数 + 端到端） |
+| OpenCode | 14 suites（`opencode-proxy/tests/`） | **159** | Jest | 2026-10-14 新增：14 套件自 codex-proxy 同构拷贝；须 `--worker=1`（全套并发会被内存争抢 SIGTERM） |
 | Hermes | 4 files（`hermes-proxy/tests/`） | **77** | pytest | 须 `/usr/bin/python3 -m pytest`（托管 3.13 无 pytest） |
 | Cursor | 19 suites（`cursor-proxy/tests/unit/`） | **241** | Jest+TS | 须 ESM flag；含 2026-10-12 新增 5 条 tools 透传 pin |
 | L2 | `l2/run-demos.js` selected | **53 demo** | node | `ALL GREEN`，real 33.75s |
-| **合计** | | **2109 断言 + 53 demo** | | |
+| **合计** | | **2268 断言 + 53 demo** | | |
 
 ⚠️ **环境坑（2026-10-12 实踩）**：`cursor-proxy` 的 `better-sqlite3` 原生二进制缺失时，
 8 个套件会报 `bindings` 加载失败、外层表现为 `server start timeout`（不是代码 bug）。
@@ -413,6 +463,15 @@ CLAUDE_ALIAS_SONNET=          # 可选：覆盖 sonnet 档映射目标（默认 
 CLAUDE_ALIAS_HAIKU=           # 可选：覆盖 haiku 档映射目标（默认 agnes-3.0-flash）
 ```
 
+### OpenCode Proxy
+
+```
+PORT=18798                    # 代理端口
+DEEPSEEK_API_KEY=             # DeepSeek API Key
+MOONSHOT_API_KEY=             # Moonshot/Kimi API Key
+AGNES_API_KEY=                # Agnes AI API Key
+```
+
 ### Cursor Proxy
 
 ```
@@ -434,5 +493,5 @@ MANAGER_PASSWORD=             # 可选：预设管理员密码
 
 1. `lsof` 必须使用完整路径 `/usr/sbin/lsof`（macOS 环境）
 2. 代理进程由 Manager 通过端口检测回退判断运行状态
-3. 五个代理均支持完整的供应商 CRUD（Codex/Hermes 的供应商页面已从只读升级为完整 CRUD）
+3. 六个代理均支持完整的供应商 CRUD（Codex/Hermes 的供应商页面已从只读升级为完整 CRUD）
 4. 日志文件输出到 `logs/` 目录（非 `/tmp/`）

@@ -20,6 +20,7 @@ HERMES_PROXY_DIR="$SCRIPT_DIR/hermes-proxy"
 CURSOR_PROXY_DIR="$SCRIPT_DIR/cursor-proxy"
 DSH_PROXY_DIR="$SCRIPT_DIR/dsh-proxy"
 CLAUDE_PROXY_DIR="$SCRIPT_DIR/claude-proxy"
+OPENCODE_PROXY_DIR="$SCRIPT_DIR/opencode-proxy"
 MANAGER_DIR="$SCRIPT_DIR/multi-proxy-manager"
 
 # 端口
@@ -28,6 +29,7 @@ HERMES_PORT=18793
 CURSOR_PORT=18794
 DSH_PORT=18797
 CLAUDE_PORT=18791
+OPENCODE_PORT=18798
 MANAGER_PORT=18792
 
 # 颜色输出
@@ -381,6 +383,46 @@ start_claude() {
 
 stop_claude() { stop_service "Claude Proxy" $CLAUDE_PORT; }
 
+start_opencode() {
+  if [ ! -f "$OPENCODE_PROXY_DIR/proxy.js" ]; then
+    print_warning "OpenCode Proxy 未安装: $OPENCODE_PROXY_DIR/proxy.js 不存在"
+    return 1
+  fi
+
+  # Check and install dependencies if node_modules missing
+  if [ ! -d "$OPENCODE_PROXY_DIR/node_modules" ]; then
+    print_warning "OpenCode Proxy 依赖未安装，正在安装..."
+    (cd "$OPENCODE_PROXY_DIR" && npm install --production --no-audit --no-fund) 2>/dev/null
+    if [ $? -ne 0 ]; then
+      print_error "OpenCode Proxy 依赖安装失败"
+      return 1
+    fi
+    print_status "OpenCode Proxy 依赖安装完成"
+  fi
+
+  if is_port_in_use $OPENCODE_PORT; then
+    print_warning "OpenCode Proxy 已在运行 (端口 $OPENCODE_PORT)"
+    return 0
+  fi
+
+  cd "$OPENCODE_PROXY_DIR" || exit 1
+  print_status "启动 OpenCode Proxy..."
+  nohup node proxy.js > "$LOG_DIR/opencode-proxy.log" 2>&1 &
+  local pid=$!
+  sleep 1
+
+  if wait_for_port $OPENCODE_PORT; then
+    print_status "OpenCode Proxy 启动成功 (PID: $pid, 端口: $OPENCODE_PORT)"
+    return 0
+  else
+    print_error "OpenCode Proxy 启动失败"
+    print_warning "查看日志: ./manage.sh logs opencode"
+    return 1
+  fi
+}
+
+stop_opencode() { stop_service "OpenCode Proxy" $OPENCODE_PORT; }
+
 stop_dsh() { stop_service "DSH Proxy" $DSH_PORT; }
 stop_manager() { stop_service "Manager Shell" $MANAGER_PORT; }
 
@@ -390,6 +432,7 @@ restart_hermes() { stop_hermes; sleep 1; start_hermes; }
 restart_cursor() { stop_cursor; sleep 1; start_cursor; }
 restart_dsh() { stop_dsh; sleep 1; start_dsh; }
 restart_claude() { stop_claude; sleep 1; start_claude; }
+restart_opencode() { stop_opencode; sleep 1; start_opencode; }
 restart_manager() { stop_manager; sleep 1; start_manager; }
 
 # 查看状态
@@ -439,6 +482,14 @@ show_status() {
     echo -e "${RED}✗ Claude Proxy${NC} - 未运行"
   fi
 
+  # OpenCode Proxy
+  if is_port_in_use $OPENCODE_PORT; then
+    local opencode_pid=$(pid_on_port $OPENCODE_PORT)
+    echo -e "${GREEN}✓ OpenCode Proxy${NC} - 运行中 (PID: $opencode_pid, 端口: $OPENCODE_PORT)"
+  else
+    echo -e "${RED}✗ OpenCode Proxy${NC} - 未运行"
+  fi
+
   # Manager Shell
   if is_port_in_use $MANAGER_PORT; then
     local manager_pid=$(pid_on_port $MANAGER_PORT)
@@ -477,6 +528,10 @@ show_logs() {
       echo "=== Claude Proxy 日志 ==="
       tail -50 "$LOG_DIR/claude-proxy.log" 2>/dev/null || echo "日志文件不存在"
       ;;
+    opencode)
+      echo "=== OpenCode Proxy 日志 ==="
+      tail -50 "$LOG_DIR/opencode-proxy.log" 2>/dev/null || echo "日志文件不存在"
+      ;;
     manager)
       echo "=== Manager Shell 日志 ==="
       tail -50 "$LOG_DIR/manager.log" 2>/dev/null || echo "日志文件不存在"
@@ -484,6 +539,12 @@ show_logs() {
     all)
       echo "=== Codex Proxy 日志 ==="
       tail -20 "$LOG_DIR/codex-proxy.log" 2>/dev/null || echo "日志文件不存在"
+      echo ""
+      echo "=== Claude Proxy 日志 ==="
+      tail -20 "$LOG_DIR/claude-proxy.log" 2>/dev/null || echo "日志文件不存在"
+      echo ""
+      echo "=== OpenCode Proxy 日志 ==="
+      tail -20 "$LOG_DIR/opencode-proxy.log" 2>/dev/null || echo "日志文件不存在"
       echo ""
       echo "=== Hermes Proxy 日志 ==="
       tail -20 "$LOG_DIR/hermes-proxy.log" 2>/dev/null || echo "日志文件不存在"
@@ -533,6 +594,12 @@ run_target() {
         stop) stop_claude ;;
         restart) restart_claude ;;
        esac ;;
+    opencode)
+      case $verb in
+        start) start_opencode ;;
+        stop) stop_opencode ;;
+        restart) restart_opencode ;;
+       esac ;;
     manager)
       case $verb in
         start) start_manager ;;
@@ -547,6 +614,7 @@ run_target() {
           start_cursor || true
           start_dsh || true
           start_claude || true
+          start_opencode || true
           start_manager
           ;;
         stop)
@@ -555,6 +623,7 @@ run_target() {
           stop_cursor
           stop_dsh
           stop_claude
+          stop_opencode
           stop_manager
           ;;
         restart)
@@ -563,12 +632,13 @@ run_target() {
           restart_cursor || true
           restart_dsh || true
           restart_claude || true
+          restart_opencode || true
           restart_manager
           ;;
        esac ;;
     *)
       print_error "未知目标: $target"
-      echo "用法: $0 {start|stop|restart} [codex|hermes|cursor|dsh|manager|all]"
+      echo "用法: $0 {start|stop|restart} [codex|claude|hermes|cursor|dsh|opencode|manager|all]"
       return 1 ;;
   esac
 }
@@ -667,6 +737,38 @@ case "${1:-status}" in
           ;;
         logs) show_logs dsh ;;
         *) print_error "未知命令: $2"; echo "用法: $0 dsh [start|stop|restart|status|logs]" ;;
+      esac
+      ;;
+    claude)
+      case "${2:-status}" in
+        start) start_claude ;;
+        stop) stop_claude ;;
+        restart) restart_claude ;;
+        status)
+          if is_port_in_use $CLAUDE_PORT; then
+            echo -e "${GREEN}✓ Claude Proxy${NC} - 运行中"
+          else
+            echo -e "${RED}✗ Claude Proxy${NC} - 未运行"
+          fi
+          ;;
+        logs) show_logs claude ;;
+        *) print_error "未知命令: $2"; echo "用法: $0 claude [start|stop|restart|status|logs]" ;;
+      esac
+      ;;
+    opencode)
+      case "${2:-status}" in
+        start) start_opencode ;;
+        stop) stop_opencode ;;
+        restart) restart_opencode ;;
+        status)
+          if is_port_in_use $OPENCODE_PORT; then
+            echo -e "${GREEN}✓ OpenCode Proxy${NC} - 运行中"
+          else
+            echo -e "${RED}✗ OpenCode Proxy${NC} - 未运行"
+          fi
+          ;;
+        logs) show_logs opencode ;;
+        *) print_error "未知命令: $2"; echo "用法: $0 opencode [start|stop|restart|status|logs]" ;;
       esac
       ;;
   manager)

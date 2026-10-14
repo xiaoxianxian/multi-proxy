@@ -1,0 +1,8 @@
+# 与 codex-proxy/.gitignore 对齐。
+# 注意：node_modules 无尾斜杠——本地它是 symlink（指向 ../codex-proxy/node_modules），
+# 带尾斜杠的 `node_modules/` 只匹配目录、命中不了 symlink（2026-10-14 实测 git status 会露出来）。
+node_modules
+.env
+sessions/
+routing-mode.json
+deployment-status.json
