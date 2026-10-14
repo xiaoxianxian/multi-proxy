@@ -19,6 +19,7 @@ CODEx_PROXY_DIR="$SCRIPT_DIR/codex-proxy"
 HERMES_PROXY_DIR="$SCRIPT_DIR/hermes-proxy"
 CURSOR_PROXY_DIR="$SCRIPT_DIR/cursor-proxy"
 DSH_PROXY_DIR="$SCRIPT_DIR/dsh-proxy"
+CLAUDE_PROXY_DIR="$SCRIPT_DIR/claude-proxy"
 MANAGER_DIR="$SCRIPT_DIR/multi-proxy-manager"
 
 # 端口
@@ -26,6 +27,7 @@ CODEx_PORT=18790
 HERMES_PORT=18793
 CURSOR_PORT=18794
 DSH_PORT=18797
+CLAUDE_PORT=18791
 MANAGER_PORT=18792
 
 # 颜色输出
@@ -339,6 +341,46 @@ stop_service() {
 stop_codex() { stop_service "Codex Proxy" $CODEx_PORT; }
 stop_hermes() { stop_service "Hermes Proxy" $HERMES_PORT; }
 stop_cursor() { stop_service "Cursor Proxy" $CURSOR_PORT; }
+start_claude() {
+  if [ ! -f "$CLAUDE_PROXY_DIR/proxy.js" ]; then
+    print_warning "Claude Proxy 未安装: $CLAUDE_PROXY_DIR/proxy.js 不存在"
+    return 1
+  fi
+
+  # Check and install dependencies if node_modules missing
+  if [ ! -d "$CLAUDE_PROXY_DIR/node_modules" ]; then
+    print_warning "Claude Proxy 依赖未安装，正在安装..."
+    (cd "$CLAUDE_PROXY_DIR" && npm install --production --no-audit --no-fund) 2>/dev/null
+    if [ $? -ne 0 ]; then
+      print_error "Claude Proxy 依赖安装失败"
+      return 1
+    fi
+    print_status "Claude Proxy 依赖安装完成"
+  fi
+
+  if is_port_in_use $CLAUDE_PORT; then
+    print_warning "Claude Proxy 已在运行 (端口 $CLAUDE_PORT)"
+    return 0
+  fi
+
+  cd "$CLAUDE_PROXY_DIR" || exit 1
+  print_status "启动 Claude Proxy..."
+  nohup node proxy.js > "$LOG_DIR/claude-proxy.log" 2>&1 &
+  local pid=$!
+  sleep 1
+
+  if wait_for_port $CLAUDE_PORT; then
+    print_status "Claude Proxy 启动成功 (PID: $pid, 端口: $CLAUDE_PORT)"
+    return 0
+  else
+    print_error "Claude Proxy 启动失败"
+    print_warning "查看日志: ./manage.sh logs claude"
+    return 1
+  fi
+}
+
+stop_claude() { stop_service "Claude Proxy" $CLAUDE_PORT; }
+
 stop_dsh() { stop_service "DSH Proxy" $DSH_PORT; }
 stop_manager() { stop_service "Manager Shell" $MANAGER_PORT; }
 
@@ -347,6 +389,7 @@ restart_codex() { stop_codex; sleep 1; start_codex; }
 restart_hermes() { stop_hermes; sleep 1; start_hermes; }
 restart_cursor() { stop_cursor; sleep 1; start_cursor; }
 restart_dsh() { stop_dsh; sleep 1; start_dsh; }
+restart_claude() { stop_claude; sleep 1; start_claude; }
 restart_manager() { stop_manager; sleep 1; start_manager; }
 
 # 查看状态
@@ -388,6 +431,14 @@ show_status() {
     echo -e "${RED}✗ DSH Proxy${NC} - 未运行"
   fi
 
+  # Claude Proxy
+  if is_port_in_use $CLAUDE_PORT; then
+    local claude_pid=$(pid_on_port $CLAUDE_PORT)
+    echo -e "${GREEN}✓ Claude Proxy${NC} - 运行中 (PID: $claude_pid, 端口: $CLAUDE_PORT)"
+  else
+    echo -e "${RED}✗ Claude Proxy${NC} - 未运行"
+  fi
+
   # Manager Shell
   if is_port_in_use $MANAGER_PORT; then
     local manager_pid=$(pid_on_port $MANAGER_PORT)
@@ -421,6 +472,10 @@ show_logs() {
     dsh)
       echo "=== DSH Proxy 日志 ==="
       tail -50 "$LOG_DIR/dsh-proxy.log" 2>/dev/null || echo "日志文件不存在"
+      ;;
+    claude)
+      echo "=== Claude Proxy 日志 ==="
+      tail -50 "$LOG_DIR/claude-proxy.log" 2>/dev/null || echo "日志文件不存在"
       ;;
     manager)
       echo "=== Manager Shell 日志 ==="
@@ -472,6 +527,12 @@ run_target() {
         stop) stop_dsh ;;
         restart) restart_dsh ;;
        esac ;;
+    claude)
+      case $verb in
+        start) start_claude ;;
+        stop) stop_claude ;;
+        restart) restart_claude ;;
+       esac ;;
     manager)
       case $verb in
         start) start_manager ;;
@@ -485,6 +546,7 @@ run_target() {
           start_hermes || true
           start_cursor || true
           start_dsh || true
+          start_claude || true
           start_manager
           ;;
         stop)
@@ -492,6 +554,7 @@ run_target() {
           stop_hermes
           stop_cursor
           stop_dsh
+          stop_claude
           stop_manager
           ;;
         restart)
@@ -499,6 +562,7 @@ run_target() {
           restart_hermes || true
           restart_cursor || true
           restart_dsh || true
+          restart_claude || true
           restart_manager
           ;;
        esac ;;

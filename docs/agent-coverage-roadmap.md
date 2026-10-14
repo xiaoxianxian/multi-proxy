@@ -33,11 +33,11 @@ This file is part of the multi-proxy project.
 
 ## 二、覆盖矩阵与接入顺序
 
-multi-proxy 现有代理：**codex-proxy（Codex CLI）· cursor-proxy（Cursor）· hermes-proxy（Hermes）· dsh-proxy（DeepSeek Harness）**。
+multi-proxy 现有代理：**codex-proxy（Codex CLI）· claude-proxy（Claude Code）· cursor-proxy（Cursor）· hermes-proxy（Hermes）· dsh-proxy（DeepSeek Harness）**。
 
 | 优先级 | Agent | 热度依据 | 协议 | 接入路径 | 状态 |
 |--------|-------|---------|------|---------|------|
-| P0 | **Claude Code** | 市占/产出双第一 | Anthropic `/v1/messages` | 复用 codex-proxy 已实现的 messages 协议路径（含 `anthropicBaseUrl` 逃生口），新增 claude-proxy | 🎯 下一步 |
+| P0 | **Claude Code** | 市占/产出双第一 | Anthropic `/v1/messages` | 复用 codex-proxy 已实现的 messages 协议路径（含 `anthropicBaseUrl` 逃生口），新增 claude-proxy | ✅ 已完成（2026-10-14） |
 | P1 | **opencode** | 星数第一（21.2万），MIT，模型无关 | OpenAI 兼容 + 自定义 provider | 原生支持自定义 base_url；proxy 增量在成本台账/熔断/统一面板 | 规划中 |
 | P2 | **Cline / Aider / OpenHands** | 58k / 44k / 90.8k 星，开源阵营装机量大（Cline 500万+、Aider 680万+ 安装） | 均为 OpenAI 兼容 | **一个通用 OpenAI 兼容适配器批量覆盖** | 规划中 |
 | P3 | Roo Code / Goose | 榜上有名，开源 | OpenAI 兼容 | 随 P2 适配器顺带覆盖 | 观望 |
@@ -78,3 +78,4 @@ Agent（任意形态）──▶ 对应 proxy（L1 网关）──▶ 上游 pro
 ## 变更日志
 
 - 2026-10-14：初版。市场数据抓取于 2026-10-06 ~ 2026-10-13；确定 P0=Claude Code、P1=opencode、P2=OpenAI 兼容三件套。
+- 2026-10-14：P0 落地。claude-proxy（18791）交付——174 例 jest 全绿（14 套件同构拷贝 codex-proxy + `model-alias.test.js` 15 例新增）；真机烟测通过：`claude-sonnet-4-5` 经别名映射为 `deepseek-v4-pro` → DeepSeek `/anthropic/v1/messages` 真实返回 OK（87 in / 24 out，Anthropic 协议形状完整）；已纳入 `manage.sh` 与 `tools/regression-all.sh`。接入方式：`ANTHROPIC_BASE_URL=http://127.0.0.1:18791`。

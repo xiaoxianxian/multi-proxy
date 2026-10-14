@@ -6,7 +6,7 @@ This file is part of the multi-proxy project.
 
 # multi-proxy v1.1.0 — 功能说明书
 
-> 多代理管理系统 · 统一管理 Codex / Hermes / Cursor / DSH 四个 AI 代理服务
+> 多代理管理系统 · 统一管理 Codex / Claude Code / Hermes / Cursor / DSH 五个 AI 代理服务
 
 ---
 
@@ -16,6 +16,7 @@ This file is part of the multi-proxy project.
 |------|--------|------|------|
 | **multi-proxy-manager** | Node.js + Express | 18792 | Web 管理后台（前端 4 页 + 后端 API + 进程管理） |
 | **codex-proxy** | Node.js + Express | 18790 | Codex CLI 代理，转发上游模型请求 |
+| **claude-proxy** | Node.js + Express | 18791 | Claude Code 的 Anthropic 兼容网关，模型别名映射 + 上游池 |
 | **hermes-proxy** | Python + Flask | 18793 | Hermes Agent 代理，YAML 配置驱动 |
 | **cursor-proxy** | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理，Provider 注册表 + SQLite 持久化 |
 | **dsh-proxy** | Node.js + Express | PORT 可配（默认 18790 槽位） | DeepSeek Harness 客户端代理，per-provider 路由 + 预算预检 + 模型目录同步 |
@@ -242,6 +243,38 @@ This file is part of the multi-proxy project.
 
 ---
 
+### 3.5 Claude Proxy
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/messages` | POST | Anthropic Messages 协议入口（Claude Code 主链路），模型别名映射后转发 |
+| `/v1/models` | GET | 模型列表（含 6 个 claude-* 别名条目） |
+| `/v1/messages/count_tokens` | POST | token 计数（本地保守估算：JSON 长度 / 3） |
+| `/v1/chat/completions` | POST | OpenAI 兼容入口 |
+| `/v1/responses` | POST | OpenAI Responses 协议入口 |
+| `/health` | GET | 健康检查 |
+| `/api/providers/status` | GET | 供应商状态 |
+| `/api/routing-mode` | GET/POST | 路由模式查询/设置 |
+| `/api/switch-model` | POST | 切换上游模型 |
+| `/api/history` | GET | 切换历史 |
+| `/api/balances` | GET | 余额查询 |
+
+核心特性：
+- **模型别名映射**：客户端照写 `claude-*` 模型名，代理按档位就地改写为上游真名再转发——opus / sonnet → `deepseek-v4-pro`，haiku → `agnes-3.0-flash`；`CLAUDE_ALIAS_OPUS` / `CLAUDE_ALIAS_SONNET` / `CLAUDE_ALIAS_HAIKU` 环境变量可覆盖默认映射
+- **Anthropic 协议路径复用**：`anthropicMessagesUrl()` 三级挂载判定（`provider.anthropicBaseUrl` 显式指定 → deepseek / moonshot 走 `/anthropic/v1/messages` → 其余上游走根路径 `/messages`），与 codex-proxy 同一套生产级实现
+- **预算预检 + per-provider 熔断**：请求前校验预算余量，超限快速失败；熔断按 provider 维度，单家上游故障不连累其他
+- **模型目录同步**：上游模型变更自动同步
+
+接入 Claude Code（三行配置）：
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:18791
+export ANTHROPIC_AUTH_TOKEN=<claude-proxy 的 PROXY_AUTH_TOKEN，未设时留空即可>
+claude   # 之后 Claude Code 的请求全部经 18791 映射到上游池
+```
+
+---
+
 ## 四、安全机制
 
 | 机制 | 实现 | 说明 |
@@ -267,10 +300,12 @@ This file is part of the multi-proxy project.
 | `manage.sh stop` | 停止所有服务（SIGTERM → 1s → SIGKILL） |
 | `manage.sh restart` | 重启所有服务 |
 | `manage.sh status` | 查看服务状态（端口检测） |
-| `manage.sh logs [all\|codex\|hermes\|cursor\|manager]` | 查看日志 |
+| `manage.sh logs [all\|codex\|claude\|hermes\|cursor\|dsh\|manager]` | 查看日志 |
 | `manage.sh codex start` | 单独管理 Codex |
+| `manage.sh claude restart` | 单独管理 Claude Proxy |
 | `manage.sh hermes stop` | 单独管理 Hermes |
 | `manage.sh cursor restart` | 单独管理 Cursor |
+| `manage.sh dsh status` | 单独管理 DSH |
 | `manage.sh manager status` | 单独管理 Manager |
 
 ### 5.2 install.sh
@@ -302,10 +337,11 @@ This file is part of the multi-proxy project.
 |------|-------------|--------|------|------|
 | Manager | 94 suites（`multi-proxy-manager/tests/unit/**`） | **1458** | Jest | 须 `NODE_OPTIONS=--experimental-vm-modules` |
 | Codex | 14 suites（`codex-proxy/tests/`） | **159** | Jest | |
+| Claude | 15 suites（`claude-proxy/tests/`） | **174** | Jest | 2026-10-14 新增：14 套件自 codex-proxy 同构拷贝 + `model-alias.test.js` 15 例（别名纯函数 + 端到端） |
 | Hermes | 4 files（`hermes-proxy/tests/`） | **77** | pytest | 须 `/usr/bin/python3 -m pytest`（托管 3.13 无 pytest） |
 | Cursor | 19 suites（`cursor-proxy/tests/unit/`） | **241** | Jest+TS | 须 ESM flag；含 2026-10-12 新增 5 条 tools 透传 pin |
 | L2 | `l2/run-demos.js` selected | **53 demo** | node | `ALL GREEN`，real 33.75s |
-| **合计** | | **1935 断言 + 53 demo** | | |
+| **合计** | | **2109 断言 + 53 demo** | | |
 
 ⚠️ **环境坑（2026-10-12 实踩）**：`cursor-proxy` 的 `better-sqlite3` 原生二进制缺失时，
 8 个套件会报 `bindings` 加载失败、外层表现为 `server start timeout`（不是代码 bug）。
@@ -368,6 +404,15 @@ MOONSHOT_API_KEY=             # Moonshot/Kimi API Key
 AGNES_API_KEY=                # Agnes AI API Key
 ```
 
+### Claude Proxy
+
+```
+PORT=18791                    # 代理端口
+CLAUDE_ALIAS_OPUS=            # 可选：覆盖 opus 档映射目标（默认 deepseek-v4-pro）
+CLAUDE_ALIAS_SONNET=          # 可选：覆盖 sonnet 档映射目标（默认 deepseek-v4-pro）
+CLAUDE_ALIAS_HAIKU=           # 可选：覆盖 haiku 档映射目标（默认 agnes-3.0-flash）
+```
+
 ### Cursor Proxy
 
 ```
@@ -389,5 +434,5 @@ MANAGER_PASSWORD=             # 可选：预设管理员密码
 
 1. `lsof` 必须使用完整路径 `/usr/sbin/lsof`（macOS 环境）
 2. 代理进程由 Manager 通过端口检测回退判断运行状态
-3. 三个代理均支持完整的供应商 CRUD（Codex/Hermes 的供应商页面已从只读升级为完整 CRUD）
+3. 五个代理均支持完整的供应商 CRUD（Codex/Hermes 的供应商页面已从只读升级为完整 CRUD）
 4. 日志文件输出到 `logs/` 目录（非 `/tmp/`）

@@ -64,6 +64,10 @@ run_suite "multi-proxy-manager" multi-proxy-manager npx jest --forceExit
 run_suite "codex-proxy" codex-proxy npx jest --forceExit
 [ $? -ne 0 ] && rc_total=1
 
+# 2b) claude（174 测试；--worker=1：全套并发 jest 会被内存争抢 SIGTERM，分批跑才稳）
+run_suite "claude-proxy" claude-proxy npx jest --forceExit --worker=1
+[ $? -ne 0 ] && rc_total=1
+
 # 3) cursor（250 测试，需 ESM flag）
 run_suite "cursor-proxy" cursor-proxy env NODE_OPTIONS=--experimental-vm-modules npx jest --forceExit
 [ $? -ne 0 ] && rc_total=1

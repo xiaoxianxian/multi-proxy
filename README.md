@@ -6,7 +6,7 @@ This file is part of the multi-proxy project.
 
 # Multi-Proxy — 多 Agent 编排中枢（L2）
 
-> **一句话定位：把 Codex / Hermes / Cursor / DSH 等 AI 编程代理当作「员工」，统一管住它们的配置、记忆、技能与健康，把任务调度到最合适的代理上——不是再做一个模型切换器，切的是「活」，不是「模型」。**
+> **一句话定位：把 Codex / Claude Code / Hermes / Cursor / DSH 等 AI 编程代理当作「员工」，统一管住它们的配置、记忆、技能与健康，把任务调度到最合适的代理上——不是再做一个模型切换器，切的是「活」，不是「模型」。**
 >
 > English: *Project-level orchestration for coding agents — not a model switcher.*
 
@@ -48,8 +48,8 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 │  负载均衡(Failover/RoundRobin/成本优化) · 路由热插拔          │
 ├──────────────────────────────────────────────────────────┤
 │  代理层（L1·核心）                                          │
-│  Codex Proxy (18790) · Hermes Proxy (18793) · Cursor Proxy │
-│   (18794) · manage.sh 进程管理（非侵入：只读各 Agent 配置）   │
+│  Codex (18790) · Claude (18791) · Hermes (18793) ·         │
+│  Cursor (18794) · DSH · manage.sh 进程管理（非侵入）        │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -63,8 +63,10 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 |------|--------|------|------|
 | `multi-proxy-manager/` | Node.js + Express + Electron 桌面壳 | 18792 | Web 管理界面（前端 + 后端 + L2 内核） |
 | `codex-proxy/` | Node.js + Express | 18790 | Codex CLI 代理 |
+| `claude-proxy/` | Node.js + Express | 18791 | Claude Code 代理（Anthropic Messages 协议 + 模型别名映射） |
 | `hermes-proxy/` | Python + Flask | 18793 | Hermes Agent 代理 |
 | `cursor-proxy/` | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理 |
+| `dsh-proxy/` | Node.js + Express | PORT 可配 | DeepSeek Harness 客户端代理 |
 
 **网关层能力**：协议转换（OpenAI Responses ↔ Chat Completions）、负载均衡（Failover / Round Robin）、成本优化路由、路由规则热插拔。
 
@@ -93,7 +95,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 
 ## 四、管理面板功能（Web 18792）
 
-- **概览页** — 实时显示三个代理运行状态（运行中/未运行/未安装）+ 版本信息 + 一键启停 + 自动刷新（5/10/30/60 秒）+ 移动端适配
+- **概览页** — 实时显示各代理运行状态（运行中/未运行/未安装）+ 版本信息 + 一键启停 + 自动刷新（5/10/30/60 秒）+ 移动端适配
 - **日志页** — 全代理日志聚合、多维过滤（类型/级别/关键词/时间）、复制/导出 TXT/CSV/清空
 - **代理配置页** — 供应商 CRUD、模型切换、账户余额查询、切换历史、路由模式（Failover / Round Robin）
 - **登录页** — 首次密码引导（强度指示）、失败 5 次锁 15 分钟、JWT + bcrypt
@@ -101,8 +103,10 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 ### 代理能力详述
 
 - **Codex Proxy** — 上游模型转发（多供应商）、`/v1/models`、`/health`、供应商状态、路由模式、切换历史、余额查询、流式传输
+- **Claude Proxy** — Anthropic `/v1/messages` 协议入口（Claude Code 主链路）、`claude-*` 模型别名映射（opus/sonnet → deepseek-v4-pro、haiku → agnes-3.0-flash，`CLAUDE_ALIAS_*` 可覆盖）、`/v1/messages/count_tokens`、供应商 CRUD、路由模式、余额查询
 - **Hermes Proxy** — YAML 配置解析、`/api/switch-model`、路由模式、健康检查、余额查询、切换历史
 - **Cursor Proxy** — 5 类供应商适配器（OpenAI Compatible / Anthropic / Gemini / Ollama / Generic）、SQLite 持久化、三种路由策略、熔断器、令牌桶限流、流式翻译、AES-256-GCM 加密 API Key
+- **DSH Proxy** — per-provider 路由、预算预检、模型目录同步
 
 ---
 
@@ -203,6 +207,7 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 bash install.sh --all        # 安装依赖 + 从 .env.example 生成各代理 .env
 # 编辑各代理 .env 配置 API Key
 nano codex-proxy/.env
+nano claude-proxy/.env
 nano cursor-proxy/.env
 # Hermes 用 YAML：cp hermes-proxy/config.yaml.example hermes-proxy/config.yaml 后编辑
 bash manage.sh start
@@ -221,7 +226,7 @@ bash manage.sh status
 - Linux：`bash install.sh --autostart`（systemd 用户服务，写 `~/.config/systemd/user/multi-proxy-manager.service`；`systemctl --user status multi-proxy-manager` 查看）
 - Windows：`.\install.ps1` 默认配置登录自启（计划任务 `MultiProxyManager`）；移除 `.\install.ps1 -Uninstall`
 
-**常用命令**：`manage.sh {start|stop|restart|status}` · `manage.sh logs {all|codex|hermes|cursor|manager}` · 单服务 `manage.sh <agent> {start|stop|restart}` · 自启 `install.sh --autostart` · 桌面壳 `desktop/`（Electron，壳 = 启动器 + 窗口，业务代码不进 .app）。Windows 对应 `manage.ps1` / `install.ps1`。
+**常用命令**：`manage.sh {start|stop|restart|status}` · `manage.sh logs {all|codex|claude|hermes|cursor|dsh|manager}` · 单服务 `manage.sh <agent> {start|stop|restart}` · 自启 `install.sh --autostart` · 桌面壳 `desktop/`（Electron，壳 = 启动器 + 窗口，业务代码不进 .app）。Windows 对应 `manage.ps1` / `install.ps1`。
 
 **前置**：Node.js 20+（cursor-proxy 的 TypeScript 测试需 Node 24 + ESM runner）；Python3（Hermes）。端口检测已跨平台（优先 `lsof`，回退 `ss` / `/proc/net/tcp`）。支持 macOS（launchd）/ Linux（systemd --user）/ Windows（PowerShell + 计划任务）。Linux 装依赖：`sudo apt install nodejs npm python3`；Windows 需先装 Node.js 与 Python3。
 
@@ -276,12 +281,13 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十四、测试与验收（manager 1458 / codex 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 · 2026-10-13 实测全绿）
+## 十四、测试与验收（manager 1458 / codex 159 / claude 174 / cursor 250 / hermes 77 / l2 51 demo / shell 11 · 2026-10-14 实测全绿）
 
 | 模块 | 命令 | 结果 |
 |------|------|------|
 | multi-proxy-manager | `cd multi-proxy-manager && npx jest --silent --forceExit` | 1458/1458（94 suites） |
 | codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 159/159（14 suites） |
+| claude-proxy | `cd claude-proxy && npx jest --silent --forceExit --worker=1` | 174/174（15 suites） |
 | cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit` | 250/250（21 suites） |
 | hermes-proxy | `cd hermes-proxy && python3 -m pytest tests/ -q` | 77/77（4 files） |
 | **L2 demo** | `find l2 -name '*.demo.js' -print0 \| xargs -0 -n1 node` | 51/51 demo 跑通 |
@@ -301,8 +307,10 @@ multi-proxy/
 │    ├── public/               # 前端页面
 │    └── tests/                # Jest 测试
 ├── codex-proxy/               # Node.js 代理（18790）
+├── claude-proxy/              # Node.js 代理（18791，Claude Code）
 ├── hermes-proxy/              # Python/Flask 代理（18793）
 ├── cursor-proxy/              # TypeScript/SQLite 代理（18794）
+├── dsh-proxy/                 # Node.js 代理（DeepSeek Harness，PORT 可配）
 ├── desktop/                   # Electron 桌面壳（启动器 + 窗口）
 ├── l2/                        # L2 编排中枢：10+ 内核 + 4 adapter + 29 demo
 │    ├── adapters/             # codex·hermes / h3web / aigc / claude 适配器
@@ -372,12 +380,13 @@ multi-proxy/
 
 | 里程碑 | 状态 |
 |--------|------|
-| L1 代理层（3 代理 + 管理台 + 进程管理） | 完成 |
+| L1 代理层（5 代理：codex / claude / hermes / cursor / dsh + 管理台 + 进程管理） | 完成 |
 | L2 中台内核（10+ 模块 + 4 adapter） | 完成 |
 | 所有权冲突检测（agent-owner + 切换器 + 桌面壳前置检测） | 完成 |
 | DSH 接入通道（`.dsh/skills/`） | 完成 |
+| Claude Code 接入（claude-proxy 18791 + 模型别名映射，174 测试 + 真机烟测通过） | 完成 |
 | P0 安全修复（`P0-FIXES.md`：11 项） | 完成 |
-| 全量测试 manager 1458 / codex 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 全绿（2026-10-13 实测） | 完成 |
+| 全量测试 manager 1458 / codex 159 / claude 174 / cursor 250 / hermes 77 / l2 51 demo / shell 11 全绿（2026-10-14 实测） | 完成 |
 | **交付前最后一批功能集中开发** | **进行中（2026-10-06）** |
 | 企业版（多租户 / 网关层 / 审计） | 规划中，归 Portico 控制面，未动工 |
 

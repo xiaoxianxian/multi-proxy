@@ -44,12 +44,13 @@ git clone <你的仓库地址> multi-proxy
 cd multi-proxy
 ```
 
-项目包含四个模块，扁平目录结构：
+项目包含五个模块，扁平目录结构：
 
 | 目录 | 说明 | 端口 |
 |------|------|------|
 | `multi-proxy-manager/` | Web 管理后台（前端+后端） | 18792 |
 | `codex-proxy/` | Codex CLI 代理 | 18790 |
+| `claude-proxy/` | Claude Code 代理（Anthropic 协议 + 模型别名映射） | 18791 |
 | `hermes-proxy/` | Hermes Agent 代理 | 18793 |
 | `cursor-proxy/` | Cursor IDE 代理 | 18794 |
 
@@ -66,10 +67,11 @@ bash install.sh --all
 这会自动完成：
 1. 检测 Node.js 和 Python3 是否就绪
 2. 为 codex-proxy 安装 npm 依赖
-3. 为 hermes-proxy 安装 pip 依赖
-4. 为 cursor-proxy 安装 npm 依赖并编译 TypeScript
-5. 为 multi-proxy-manager 安装 npm 依赖
-6. 为缺少 `.env` 的模块自动创建 `.env` 副本
+3. 为 claude-proxy 安装 npm 依赖
+4. 为 hermes-proxy 安装 pip 依赖
+5. 为 cursor-proxy 安装 npm 依赖并编译 TypeScript
+6. 为 multi-proxy-manager 安装 npm 依赖
+7. 为缺少 `.env` 的模块自动创建 `.env` 副本
 
 ### 方式 B：交互式安装
 
@@ -84,6 +86,9 @@ bash install.sh
 ```bash
 # Codex
 cd codex-proxy && npm install --production && cd ..
+
+# Claude Code
+cd claude-proxy && npm install --production && cd ..
 
 # Hermes
 cd hermes-proxy && pip3 install -r requirements.txt --break-system-packages && cd ..
@@ -116,7 +121,25 @@ nano codex-proxy/.env
 
 > 不需要的供应商可以留空，不影响其他供应商使用。
 
-### 2. Hermes Proxy (`hermes-proxy/.env`)
+### 2. Claude Proxy (`claude-proxy/.env`)
+
+```bash
+nano claude-proxy/.env
+```
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `PORT` | 代理端口 | `18791` |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key（opus/sonnet 档默认映射目标） | 留空 |
+| `MOONSHOT_API_KEY` | Moonshot/Kimi API Key | 留空 |
+| `AGNES_API_KEY` | Agnes AI API Key（haiku 档默认映射目标） | 留空 |
+| `CLAUDE_ALIAS_OPUS` | 可选：覆盖 opus 档映射目标（默认 `deepseek-v4-pro`） | 留空用默认 |
+| `CLAUDE_ALIAS_SONNET` | 可选：覆盖 sonnet 档映射目标（默认 `deepseek-v4-pro`） | 留空用默认 |
+| `CLAUDE_ALIAS_HAIKU` | 可选：覆盖 haiku 档映射目标（默认 `agnes-3.0-flash`） | 留空用默认 |
+
+> Claude Code 接入方式：设置环境变量 `ANTHROPIC_BASE_URL=http://127.0.0.1:18791` 即可让 Claude Code 的请求经本代理映射到上游池。
+
+### 3. Hermes Proxy (`hermes-proxy/.env`)
 
 ```bash
 nano hermes-proxy/.env
@@ -124,7 +147,7 @@ nano hermes-proxy/.env
 
 变量与 Codex 类似：`PORT`、`DEEPSEEK_API_KEY`、`MOONSHOT_API_KEY`、`AGNES_API_KEY`。
 
-### 3. Cursor Proxy (`cursor-proxy/.env`)
+### 4. Cursor Proxy (`cursor-proxy/.env`)
 
 ```bash
 nano cursor-proxy/.env
@@ -137,7 +160,7 @@ nano cursor-proxy/.env
 
 > 如果留空，系统会在首次启动时自动生成随机密钥并保存到 `.encryption-key` 文件中。更换密钥会导致之前加密的 API Key 无法解密。
 
-### 4. Manager (`multi-proxy-manager/.env`)
+### 5. Manager (`multi-proxy-manager/.env`)
 
 ```bash
 nano multi-proxy-manager/.env
@@ -163,6 +186,7 @@ bash manage.sh start
 
 # 启动单个服务
 bash manage.sh codex start
+bash manage.sh claude start
 bash manage.sh hermes start
 bash manage.sh cursor start
 bash manage.sh manager start
@@ -179,6 +203,9 @@ bash install.sh --start
 ```bash
 # Codex
 cd codex-proxy && node proxy.js
+
+# Claude Code
+cd claude-proxy && node proxy.js
 
 # Hermes
 cd hermes-proxy && python3 proxy.py
@@ -200,6 +227,7 @@ bash manage.sh status
 
 ```
 ✓ Codex Proxy    - 运行中 (PID: xxx, 端口: 18790)
+✓ Claude Proxy   - 运行中 (PID: xxx, 端口: 18791)
 ✓ Hermes Proxy   - 运行中 (PID: xxx, 端口: 18793)
 ✓ Cursor Proxy   - 运行中 (PID: xxx, 端口: 18794)
 ✓ Manager Shell  - 运行中 (PID: xxx, 端口: 18792)
@@ -489,6 +517,11 @@ multi-proxy/
 │   └── tests/             # 测试
 │
 ├── codex-proxy/           # Codex 代理
+│   ├── proxy.js
+│   ├── .env.example
+│   └── tests/
+│
+├── claude-proxy/          # Claude Code 代理（Anthropic 协议 + 模型别名映射）
 │   ├── proxy.js
 │   ├── .env.example
 │   └── tests/

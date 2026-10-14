@@ -1,12 +1,12 @@
 # Multi-Proxy
 
-> Multi-Proxy 是面向 AI 编程代理（Codex / Hermes / Cursor 等）的**非侵入式多 Agent 编排中枢**。它把多个 coding agent 当作「员工」统一编排——切的是「活」，不是「模型」。全程非侵入：agent 感知不到中枢存在；可运行在本地私有栈（Ollama / 自托管 API）之上。
+> Multi-Proxy 是面向 AI 编程代理（Codex / Claude Code / Hermes / Cursor / DSH 等）的**非侵入式多 Agent 编排中枢**。它把多个 coding agent 当作「员工」统一编排——切的是「活」，不是「模型」。全程非侵入：agent 感知不到中枢存在；可运行在本地私有栈（Ollama / 自托管 API）之上。
 
 理解本项目的几个要点：
 
 - 它**不是**模型切换器。cc-switch / Codex++ 这一类解决的是「切模型」；本仓库解决上一层：项目 → 任务 → 分派 → 验收 → 记忆复用。
 - **非侵入**是核心设计原则：只读各 agent 的配置、绝不写回、不托管 agent 进程。
-- 分层架构：桌面壳 → 管理界面 → 中台（L2 能力内核 + 适配器）→ 网关（协议转换 / 负载均衡 / 路由）→ 代理（Codex / Hermes / Cursor Proxy）。
+- 分层架构：桌面壳 → 管理界面 → 中台（L2 能力内核 + 适配器）→ 网关（协议转换 / 负载均衡 / 路由）→ 代理（Codex / Claude Code / Hermes / Cursor / DSH Proxy）。
 - 网关层做 OpenAI Responses ↔ Chat Completions 协议转换，以及 Failover / Round Robin / 成本优化路由。
 - 3 分钟跑通核心 demo：`bash scripts/demo-tour.sh`（零副作用，影子模式）。
 
