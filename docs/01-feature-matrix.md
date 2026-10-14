@@ -16,7 +16,7 @@ This file is part of the multi-proxy project.
 
 | 层级 | 数量 | 测试 | 状态 |
 |------|------|------|------|
-| 代理模块 | 6 (codex/claude/opencode/hermes/cursor/manager) | ✅ 全绿 | ✅ 上线 |
+| 代理模块 | 7 (codex/claude/opencode/generic-openai/hermes/cursor/manager) | ✅ 全绿 | ✅ 上线 |
 | L2 核心模块 | 10 内核 + 3 adapter（另增量 savings-gateway / context-fold / floor-feed 等） | **46 demo 全 PASS**（10-07 `run-demos.js` 实跑，10-01 起 35→42→46 递增）| ✅ 完成 |
 | L2 adapter | 3 (h3web/aigc/l1-agent) | demo 全 PASS | ✅ 完成 |
 | 文档缺口（旧） | — | ✅ 本次补齐 | ✅ 完成 |
@@ -44,6 +44,7 @@ This file is part of the multi-proxy project.
 | 前端 4 页 | `public/dashboard/logs/proxy-config/login.html` | ✅ | 有 jest | 完整 UI + 乐观更新 |
 | Claude Code 接入 | `claude-proxy/proxy.js` | ✅ | 174 jest（2026-10-14 实跑） | 18791；`claude-*` 模型别名映射（opus/sonnet → deepseek-v4-pro、haiku → agnes-3.0-flash，`CLAUDE_ALIAS_*` 可覆盖）；复用 codex-proxy 的 Anthropic messages 协议路径；真机烟测通过 |
 | opencode 接入 | `opencode-proxy/proxy.js` | ✅ | 159 jest（2026-10-14 实跑） | 18798；OpenAI 兼容透传（opencode 写上游真实模型名，不改写）；`/v1/chat/completions` + `/v1/responses` 双入口；复用 per-provider 熔断 / 预算预检 / 模型目录同步 / 成本台账 |
+| Generic OpenAI 接入（Cline/Aider/OpenHands 共用） | `generic-openai-proxy/proxy.js` | ✅ | 159 jest（2026-10-14 实跑） | 18799；一个适配器覆盖三件套（同构分叉 opencode-proxy，逻辑一致、边际成本趋零）；OpenAI 兼容透传（client 写上游真实模型名，不改写）；`/v1/chat/completions` + `/v1/responses` 双入口；按客户端（cline/aider/openhands 或 `x-agent` 头）归因成本台账 |
 
 ---
 
@@ -86,6 +87,7 @@ This file is part of the multi-proxy project.
 | codex-proxy | 8 files / 8 suites | **79 tests** | ✅ 全绿 |
 | claude-proxy | 15 suites | **174 tests** | ✅ 全绿（2026-10-14 实跑；14 套件同构拷贝 codex-proxy + `model-alias.test.js` 15 例新增；须 `--worker=1` 避内存争抢 SIGTERM）|
 | opencode-proxy | 14 suites | **159 tests** | ✅ 全绿（2026-10-14 实跑；14 套件同构拷贝 codex-proxy；须 `--worker=1`，stream-bypass 首用例走真 HTTP 回环，内存争抢下偶发 >30s 假红，单跑复绿）|
+| generic-openai-proxy | 14 suites | **159 tests** | ✅ 全绿（2026-10-14 实跑，P2；14 套件同构拷贝 opencode-proxy；须 `--worker=1`，同内存争抢假红）|
 | hermes-proxy | 4 files | 77 pytest 项 | ✅（1 urllib3 warning，非失败）|
 | L2 demo | 46 .demo.js（`run-demos.js` selected） | 全 PASS | ✅（10-01 起 35→42→46 递增）|
 | shell (bats) | 1 .bats | 11 tests（本机无 `bats` binary，沿用 09-28 历史值，不纳入合计）| 沿用 |
@@ -130,6 +132,9 @@ cd claude-proxy && npx --no-install jest --silent --worker=1
 
 # opencode jest（须 --worker=1，同上）
 cd opencode-proxy && npx --no-install jest --silent --worker=1
+
+# generic-openai jest（P2，须 --worker=1，同上）
+cd generic-openai-proxy && npx --no-install jest --silent --worker=1
 
 # hermes pytest
 cd hermes-proxy && python3 -m pytest tests/ -q

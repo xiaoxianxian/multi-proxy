@@ -73,6 +73,12 @@ run_suite "claude-proxy" claude-proxy npx jest --forceExit --worker=1
 run_suite "opencode-proxy" opencode-proxy npx jest --forceExit --worker=1
 [ $? -ne 0 ] && rc_total=1
 
+# 2d) generic-openai-proxy（159 测试；--worker=1 同上。P2：Cline/Aider/OpenHands 共用的
+#      OpenAI 兼容网关，逻辑与 opencode-proxy 同构（同份 proxy.js 模板分叉），
+#      内存争抢假红表现一致——单跑该模块可复绿，非产品 bug）
+run_suite "generic-openai-proxy" generic-openai-proxy npx jest --forceExit --worker=1
+[ $? -ne 0 ] && rc_total=1
+
 # 3) cursor（250 测试，需 ESM flag）
 run_suite "cursor-proxy" cursor-proxy env NODE_OPTIONS=--experimental-vm-modules npx jest --forceExit
 [ $? -ne 0 ] && rc_total=1

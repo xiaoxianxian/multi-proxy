@@ -33,13 +33,13 @@ This file is part of the multi-proxy project.
 
 ## 二、覆盖矩阵与接入顺序
 
-multi-proxy 现有代理：**codex-proxy（Codex CLI）· claude-proxy（Claude Code）· opencode-proxy（opencode）· cursor-proxy（Cursor）· hermes-proxy（Hermes）· dsh-proxy（DeepSeek Harness）**。
+multi-proxy 现有代理：**codex-proxy（Codex CLI）· claude-proxy（Claude Code）· opencode-proxy（opencode）· generic-openai-proxy（Cline/Aider/OpenHands 共用）· cursor-proxy（Cursor）· hermes-proxy（Hermes）· dsh-proxy（DeepSeek Harness）**。
 
 | 优先级 | Agent | 热度依据 | 协议 | 接入路径 | 状态 |
 |--------|-------|---------|------|---------|------|
 | P0 | **Claude Code** | 市占/产出双第一 | Anthropic `/v1/messages` | 复用 codex-proxy 已实现的 messages 协议路径（含 `anthropicBaseUrl` 逃生口），新增 claude-proxy | ✅ 已完成（2026-10-14） |
 | P1 | **opencode** | 星数第一（21.2万），MIT，模型无关 | OpenAI 兼容 + 自定义 provider | 原生支持自定义 base_url；proxy 增量在成本台账/熔断/统一面板 | ✅ 已完成（2026-10-14） |
-| P2 | **Cline / Aider / OpenHands** | 58k / 44k / 90.8k 星，开源阵营装机量大（Cline 500万+、Aider 680万+ 安装） | 均为 OpenAI 兼容 | **一个通用 OpenAI 兼容适配器批量覆盖** | 规划中 |
+| P2 | **Cline / Aider / OpenHands** | 58k / 44k / 90.8k 星，开源阵营装机量大（Cline 500万+、Aider 680万+ 安装） | 均为 OpenAI 兼容 | **一个通用 OpenAI 兼容适配器批量覆盖**（落地为 generic-openai-proxy，18799；同构分叉 opencode-proxy，159 例 jest 全绿） | ✅ 已完成（2026-10-14） |
 | P3 | Roo Code / Goose | 榜上有名，开源 | OpenAI 兼容 | 随 P2 适配器顺带覆盖 | 观望 |
 | 暂缓 | Gemini CLI / Antigravity | 10.7 万星，但个人版已停 | Google genai 私有协议 | 协议改造成本高、受众收缩 | 暂缓 |
 | 不做 | GitHub Copilot Agent | 市占 22.7% | IDE 深度集成、封闭 | 无可拦截的本地 API 边界 | 不做 |
@@ -80,3 +80,4 @@ Agent（任意形态）──▶ 对应 proxy（L1 网关）──▶ 上游 pro
 - 2026-10-14：初版。市场数据抓取于 2026-10-06 ~ 2026-10-13；确定 P0=Claude Code、P1=opencode、P2=OpenAI 兼容三件套。
 - 2026-10-14：P0 落地。claude-proxy（18791）交付——174 例 jest 全绿（14 套件同构拷贝 codex-proxy + `model-alias.test.js` 15 例新增）；真机烟测通过：`claude-sonnet-4-5` 经别名映射为 `deepseek-v4-pro` → DeepSeek `/anthropic/v1/messages` 真实返回 OK（87 in / 24 out，Anthropic 协议形状完整）；已纳入 `manage.sh` 与 `tools/regression-all.sh`。接入方式：`ANTHROPIC_BASE_URL=http://127.0.0.1:18791`。
 - 2026-10-14：P1 落地。opencode-proxy（18798）交付——由 codex-proxy 同构分叉（OpenAI 兼容系：`/v1/chat/completions` + `/v1/responses` 双入口；opencode 直接写上游真实模型名、透传不改写），复用 per-provider 熔断 / 预算预检 / 模型目录同步 / 成本台账；159 例 jest 全绿（14 套件同构拷贝，首轮 stream-bypass 2 例失败系内存争抢超时假红、重跑复绿）；已纳入 `manage.sh`（含顺手修复 claude 主 dispatch case 遗漏）与 `tools/regression-all.sh`。接入方式：opencode `providers.multi-proxy.settings.baseURL = http://127.0.0.1:18798/v1`（官方 v2 配置格式）。
+- 2026-10-14：P2 落地。generic-openai-proxy（18799）交付——由 opencode-proxy 同构分叉，**一个适配器覆盖 Cline / Aider / OpenHands 三件套**（三家 LLM 配置方式完全一致：`base_url` + `api_key` + `model`，共用网关、逻辑同构、边际成本趋零）；OpenAI 兼容透传（client 直接写上游真实模型名、不改写），复用 per-provider 熔断 / 预算预检 / 模型目录同步 / 成本台账，按客户端（UA 命中 cline/aider/openhands 或显式 `x-agent` 头）归因成本；159 例 jest 全绿（14 套件同构拷贝，须 `--worker=1` 避内存争抢假红）；已纳入 `manage.sh`（`generic` 子命令）与 `tools/regression-all.sh`。接入方式：三家客户端 `baseURL = http://127.0.0.1:18799/v1`。

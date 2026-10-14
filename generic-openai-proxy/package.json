@@ -1,0 +1,18 @@
+{
+  "name": "generic-openai-proxy",
+  "version": "1.1.0",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node proxy.js",
+    "test": "jest --verbose --forceExit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "description": "Cline / Aider / OpenHands 共用的 OpenAI 兼容网关（多 provider 转发 + 成本台账 + 熔断）"
+}

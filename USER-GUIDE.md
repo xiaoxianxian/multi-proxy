@@ -44,7 +44,7 @@ git clone <你的仓库地址> multi-proxy
 cd multi-proxy
 ```
 
-项目包含六个模块，扁平目录结构：
+项目包含七个模块，扁平目录结构：
 
 | 目录 | 说明 | 端口 |
 |------|------|------|
@@ -52,6 +52,7 @@ cd multi-proxy
 | `codex-proxy/` | Codex CLI 代理 | 18790 |
 | `claude-proxy/` | Claude Code 代理（Anthropic 协议 + 模型别名映射） | 18791 |
 | `opencode-proxy/` | opencode 代理（OpenAI 兼容透传） | 18798 |
+| `generic-openai-proxy/` | Cline / Aider / OpenHands 共用代理（OpenAI 兼容透传） | 18799 |
 | `hermes-proxy/` | Hermes Agent 代理 | 18793 |
 | `cursor-proxy/` | Cursor IDE 代理 | 18794 |
 
@@ -70,10 +71,11 @@ bash install.sh --all
 2. 为 codex-proxy 安装 npm 依赖
 3. 为 claude-proxy 安装 npm 依赖
 4. 为 opencode-proxy 安装 npm 依赖
-5. 为 hermes-proxy 安装 pip 依赖
-6. 为 cursor-proxy 安装 npm 依赖并编译 TypeScript
-7. 为 multi-proxy-manager 安装 npm 依赖
-8. 为缺少 `.env` 的模块自动创建 `.env` 副本
+5. 为 generic-openai-proxy 安装 npm 依赖
+6. 为 hermes-proxy 安装 pip 依赖
+7. 为 cursor-proxy 安装 npm 依赖并编译 TypeScript
+8. 为 multi-proxy-manager 安装 npm 依赖
+9. 为缺少 `.env` 的模块自动创建 `.env` 副本
 
 ### 方式 B：交互式安装
 
@@ -94,6 +96,9 @@ cd claude-proxy && npm install --production && cd ..
 
 # OpenCode
 cd opencode-proxy && npm install --production && cd ..
+
+# Generic OpenAI (Cline / Aider / OpenHands 共用)
+cd generic-openai-proxy && npm install --production && cd ..
 
 # Hermes
 cd hermes-proxy && pip3 install -r requirements.txt --break-system-packages && cd ..
@@ -159,7 +164,22 @@ nano opencode-proxy/.env
 
 > opencode 接入方式：在 `opencode.jsonc` 里加一个自定义 provider，`baseURL` 指向 `http://127.0.0.1:18798/v1`，模型直接写上游真实模型名（如 `deepseek-v4-pro`）。完整配置示例见 `FUNCTIONS.md` §3.6。
 
-### 4. Hermes Proxy (`hermes-proxy/.env`)
+### 4. Generic OpenAI Proxy (`generic-openai-proxy/.env`)
+
+```bash
+nano generic-openai-proxy/.env
+```
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `PORT` | 代理端口 | `18799` |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key | 留空 |
+| `MOONSHOT_API_KEY` | Moonshot/Kimi API Key | 留空 |
+| `AGNES_API_KEY` | Agnes AI API Key | 留空 |
+
+> Generic OpenAI Proxy 是 Cline / Aider / OpenHands 共用的 OpenAI 兼容网关（一个适配器覆盖三件套）。三家客户端把 `baseURL` 指向 `http://127.0.0.1:18799/v1`，`api_key` 随便填，模型直接写上游真实模型名（如 `deepseek-v4-pro`）。想让成本台账按客户端归因，可在请求头带 `x-agent: cline|aider|openhands`。完整配置示例见 `FUNCTIONS.md` §3.7。
+
+### 5. Hermes Proxy (`hermes-proxy/.env`)
 
 ```bash
 nano hermes-proxy/.env
@@ -167,7 +187,7 @@ nano hermes-proxy/.env
 
 变量与 Codex 类似：`PORT`、`DEEPSEEK_API_KEY`、`MOONSHOT_API_KEY`、`AGNES_API_KEY`。
 
-### 5. Cursor Proxy (`cursor-proxy/.env`)
+### 6. Cursor Proxy (`cursor-proxy/.env`)
 
 ```bash
 nano cursor-proxy/.env
@@ -180,7 +200,7 @@ nano cursor-proxy/.env
 
 > 如果留空，系统会在首次启动时自动生成随机密钥并保存到 `.encryption-key` 文件中。更换密钥会导致之前加密的 API Key 无法解密。
 
-### 6. Manager (`multi-proxy-manager/.env`)
+### 7. Manager (`multi-proxy-manager/.env`)
 
 ```bash
 nano multi-proxy-manager/.env
@@ -208,6 +228,7 @@ bash manage.sh start
 bash manage.sh codex start
 bash manage.sh claude start
 bash manage.sh opencode start
+bash manage.sh generic start
 bash manage.sh hermes start
 bash manage.sh cursor start
 bash manage.sh manager start
@@ -231,6 +252,9 @@ cd claude-proxy && node proxy.js
 # OpenCode
 cd opencode-proxy && node proxy.js
 
+# Generic OpenAI (Cline / Aider / OpenHands 共用)
+cd generic-openai-proxy && node proxy.js
+
 # Hermes
 cd hermes-proxy && python3 proxy.py
 
@@ -253,6 +277,7 @@ bash manage.sh status
 ✓ Codex Proxy    - 运行中 (PID: xxx, 端口: 18790)
 ✓ Claude Proxy   - 运行中 (PID: xxx, 端口: 18791)
 ✓ OpenCode Proxy - 运行中 (PID: xxx, 端口: 18798)
+✓ Generic OpenAI Proxy - 运行中 (PID: xxx, 端口: 18799)
 ✓ Hermes Proxy   - 运行中 (PID: xxx, 端口: 18793)
 ✓ Cursor Proxy   - 运行中 (PID: xxx, 端口: 18794)
 ✓ Manager Shell  - 运行中 (PID: xxx, 端口: 18792)
@@ -552,6 +577,7 @@ multi-proxy/
 │   └── tests/
 │
 ├── opencode-proxy/        # opencode 代理（OpenAI 兼容透传）
+├── generic-openai-proxy/  # Cline/Aider/OpenHands 共用代理（OpenAI 兼容透传）
 │   ├── proxy.js
 │   ├── .env.example
 │   └── tests/

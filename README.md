@@ -6,7 +6,7 @@ This file is part of the multi-proxy project.
 
 # Multi-Proxy — 多 Agent 编排中枢（L2）
 
-> **一句话定位：把 Codex / Claude Code / OpenCode / Hermes / Cursor / DSH 等 AI 编程代理当作「员工」，统一管住它们的配置、记忆、技能与健康，把任务调度到最合适的代理上——不是再做一个模型切换器，切的是「活」，不是「模型」。**
+> **一句话定位：把 Codex / Claude Code / OpenCode / Generic OpenAI / Hermes / Cursor / DSH 等 AI 编程代理当作「员工」，统一管住它们的配置、记忆、技能与健康，把任务调度到最合适的代理上——不是再做一个模型切换器，切的是「活」，不是「模型」。**
 >
 > English: *Project-level orchestration for coding agents — not a model switcher.*
 
@@ -48,8 +48,8 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 │  负载均衡(Failover/RoundRobin/成本优化) · 路由热插拔          │
 ├──────────────────────────────────────────────────────────┤
 │  代理层（L1·核心）                                          │
-│  Codex (18790) · Claude (18791) · OpenCode (18798) ·       │
-│  Hermes (18793) · Cursor (18794) · DSH · manage.sh（非侵入）│
+│  Codex (18790) · Claude (18791) · OpenCode (18798)       │
+│  Hermes (18793) · Cursor (18794) · DSH · Generic (18799) │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -65,6 +65,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 | `codex-proxy/` | Node.js + Express | 18790 | Codex CLI 代理 |
 | `claude-proxy/` | Node.js + Express | 18791 | Claude Code 代理（Anthropic Messages 协议 + 模型别名映射） |
 | `opencode-proxy/` | Node.js + Express | 18798 | opencode 代理（OpenAI 兼容透传 + 成本台账 + 熔断） |
+| `generic-openai-proxy/` | Node.js + Express | 18799 | Cline / Aider / OpenHands 共用代理（OpenAI 兼容透传 + 成本台账 + 熔断） |
 | `hermes-proxy/` | Python + Flask | 18793 | Hermes Agent 代理 |
 | `cursor-proxy/` | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理 |
 | `dsh-proxy/` | Node.js + Express | PORT 可配 | DeepSeek Harness 客户端代理 |
@@ -106,6 +107,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 - **Codex Proxy** — 上游模型转发（多供应商）、`/v1/models`、`/health`、供应商状态、路由模式、切换历史、余额查询、流式传输
 - **Claude Proxy** — Anthropic `/v1/messages` 协议入口（Claude Code 主链路）、`claude-*` 模型别名映射（opus/sonnet → deepseek-v4-pro、haiku → agnes-3.0-flash，`CLAUDE_ALIAS_*` 可覆盖）、`/v1/messages/count_tokens`、供应商 CRUD、路由模式、余额查询
 - **OpenCode Proxy** — OpenAI 兼容透传（opencode 直接写上游真实模型名，不改写）、`/v1/chat/completions` 与 `/v1/responses` 双入口、per-provider 熔断、预算预检、模型目录同步、成本台账
+- **Generic OpenAI Proxy** — Cline / Aider / OpenHands 共用的 OpenAI 兼容网关（一个适配器覆盖三件套，逻辑与 opencode-proxy 同构）、`/v1/chat/completions` 与 `/v1/responses` 双入口、per-provider 熔断、预算预检、模型目录同步、成本台账，按客户端（cline / aider / openhands 或 `x-agent` 头）归因成本
 - **Hermes Proxy** — YAML 配置解析、`/api/switch-model`、路由模式、健康检查、余额查询、切换历史
 - **Cursor Proxy** — 5 类供应商适配器（OpenAI Compatible / Anthropic / Gemini / Ollama / Generic）、SQLite 持久化、三种路由策略、熔断器、令牌桶限流、流式翻译、AES-256-GCM 加密 API Key
 - **DSH Proxy** — per-provider 路由、预算预检、模型目录同步
@@ -211,6 +213,7 @@ bash install.sh --all        # 安装依赖 + 从 .env.example 生成各代理 .
 nano codex-proxy/.env
 nano claude-proxy/.env
 nano opencode-proxy/.env
+nano generic-openai-proxy/.env
 nano cursor-proxy/.env
 # Hermes 用 YAML：cp hermes-proxy/config.yaml.example hermes-proxy/config.yaml 后编辑
 bash manage.sh start
@@ -229,7 +232,7 @@ bash manage.sh status
 - Linux：`bash install.sh --autostart`（systemd 用户服务，写 `~/.config/systemd/user/multi-proxy-manager.service`；`systemctl --user status multi-proxy-manager` 查看）
 - Windows：`.\install.ps1` 默认配置登录自启（计划任务 `MultiProxyManager`）；移除 `.\install.ps1 -Uninstall`
 
-**常用命令**：`manage.sh {start|stop|restart|status}` · `manage.sh logs {all|codex|claude|opencode|hermes|cursor|dsh|manager}` · 单服务 `manage.sh <agent> {start|stop|restart}` · 自启 `install.sh --autostart` · 桌面壳 `desktop/`（Electron，壳 = 启动器 + 窗口，业务代码不进 .app）。Windows 对应 `manage.ps1` / `install.ps1`。
+**常用命令**：`manage.sh {start|stop|restart|status}` · `manage.sh logs {all|codex|claude|opencode|hermes|cursor|dsh|generic|manager}` · 单服务 `manage.sh <agent> {start|stop|restart}` · 自启 `install.sh --autostart` · 桌面壳 `desktop/`（Electron，壳 = 启动器 + 窗口，业务代码不进 .app）。Windows 对应 `manage.ps1` / `install.ps1`。
 
 **前置**：Node.js 20+（cursor-proxy 的 TypeScript 测试需 Node 24 + ESM runner）；Python3（Hermes）。端口检测已跨平台（优先 `lsof`，回退 `ss` / `/proc/net/tcp`）。支持 macOS（launchd）/ Linux（systemd --user）/ Windows（PowerShell + 计划任务）。Linux 装依赖：`sudo apt install nodejs npm python3`；Windows 需先装 Node.js 与 Python3。
 
@@ -284,7 +287,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十四、测试与验收（manager 1458 / codex 159 / claude 174 / opencode 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 · 2026-10-14 实测全绿）
+## 十四、测试与验收（manager 1458 / codex 159 / claude 174 / opencode 159 / generic 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 · 2026-10-14 实测全绿）
 
 | 模块 | 命令 | 结果 |
 |------|------|------|
@@ -292,6 +295,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 | codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 159/159（14 suites） |
 | claude-proxy | `cd claude-proxy && npx jest --silent --forceExit --worker=1` | 174/174（15 suites） |
 | opencode-proxy | `cd opencode-proxy && npx jest --silent --forceExit --worker=1` | 159/159（14 suites） |
+| generic-openai-proxy | `cd generic-openai-proxy && npx jest --silent --forceExit --worker=1` | 159/159（14 suites） |
 | cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit` | 250/250（21 suites） |
 | hermes-proxy | `cd hermes-proxy && python3 -m pytest tests/ -q` | 77/77（4 files） |
 | **L2 demo** | `find l2 -name '*.demo.js' -print0 \| xargs -0 -n1 node` | 51/51 demo 跑通 |
@@ -313,6 +317,7 @@ multi-proxy/
 ├── codex-proxy/               # Node.js 代理（18790）
 ├── claude-proxy/              # Node.js 代理（18791，Claude Code）
 ├── opencode-proxy/            # Node.js 代理（18798，opencode）
+├── generic-openai-proxy/      # Node.js 代理（18799，Cline/Aider/OpenHands 共用）
 ├── hermes-proxy/              # Python/Flask 代理（18793）
 ├── cursor-proxy/              # TypeScript/SQLite 代理（18794）
 ├── dsh-proxy/                 # Node.js 代理（DeepSeek Harness，PORT 可配）
@@ -385,14 +390,15 @@ multi-proxy/
 
 | 里程碑 | 状态 |
 |--------|------|
-| L1 代理层（6 代理：codex / claude / opencode / hermes / cursor / dsh + 管理台 + 进程管理） | 完成 |
+| L1 代理层（7 代理：codex / claude / opencode / generic-openai / hermes / cursor / dsh + 管理台 + 进程管理） | 完成 |
 | L2 中台内核（10+ 模块 + 4 adapter） | 完成 |
 | 所有权冲突检测（agent-owner + 切换器 + 桌面壳前置检测） | 完成 |
 | DSH 接入通道（`.dsh/skills/`） | 完成 |
 | Claude Code 接入（claude-proxy 18791 + 模型别名映射，174 测试 + 真机烟测通过） | 完成 |
 | opencode 接入（opencode-proxy 18798，OpenAI 兼容透传 + 成本台账 + 熔断） | 完成 |
+| Generic OpenAI 接入（generic-openai-proxy 18799，Cline/Aider/OpenHands 共用 OpenAI 兼容透传 + 成本台账 + 熔断） | 完成 |
 | P0 安全修复（`P0-FIXES.md`：11 项） | 完成 |
-| 全量测试 manager 1458 / codex 159 / claude 174 / cursor 250 / hermes 77 / l2 51 demo / shell 11 全绿（2026-10-14 实测） | 完成 |
+| 全量测试 manager 1458 / codex 159 / claude 174 / opencode 159 / generic 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 全绿（2026-10-14 实测） | 完成 |
 | **交付前最后一批功能集中开发** | **进行中（2026-10-06）** |
 | 企业版（多租户 / 网关层 / 审计） | 规划中，归 Portico 控制面，未动工 |
 
