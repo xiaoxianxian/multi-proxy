@@ -39,6 +39,8 @@ PORT = int(os.environ.get('PORT', 18793))
 HOME = os.environ.get('HOME', str(Path.home()))
 AUTH_TOKEN = os.environ.get('PROXY_AUTH_TOKEN', '')
 CONFIG_YAML_PATH = os.path.join(HOME, '.hermes', 'config.yaml')
+# 模板文件（与 proxy.py 同目录）——配置缺失时按它自动生成，免去手工拷贝
+CONFIG_YAML_EXAMPLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml.example')
 DATA_DIR = os.path.join(HOME, '.multi-proxy-manager')
 ROUTING_MODE_FILE = os.path.join(DATA_DIR, 'routing-mode.json')
 PROVIDERS_FILE = os.path.join(DATA_DIR, 'providers.json')
@@ -151,8 +153,34 @@ def update_routing_mode(mode):
         return False
 
 
+def _generate_config_yaml(target):
+    """按 config.yaml.example 模板生成配置文件（P0-8 原子写 + 0o600）。
+
+    模板缺失或写入失败时降级：只记日志并返回 target，不抛异常中断调用方。
+    """
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        if not os.path.exists(CONFIG_YAML_EXAMPLE):
+            logger.warning(f"模板缺失，无法自动生成配置：{CONFIG_YAML_EXAMPLE}")
+            return target
+        tmp_file = f'{target}.tmp'
+        with open(CONFIG_YAML_EXAMPLE, 'r') as src, open(tmp_file, 'w') as dst:
+            dst.write(src.read())
+        os.chmod(tmp_file, 0o600)
+        os.replace(tmp_file, target)  # 原子替换，避免半截文件
+        logger.info(f"未找到配置文件，已按模板生成：{target}")
+    except Exception as e:
+        logger.error(f"自动生成配置文件失败：{e}")
+    return target
+
+
 def find_config_yaml():
-    """Find the config.yaml file."""
+    """Find the config.yaml file（缺失时自动生成，§F）。
+
+    依次探测候选路径；若都不存在，则以 config.yaml.example 为模板在
+    ~/.hermes/config.yaml 生成一份后返回该路径 —— 免去用户手工拷贝，
+    也让 /health 的 config 检查在全新环境下即为通过。
+    """
     candidates = [
         os.path.join(HOME, '.hermes', 'config.yaml'),
         os.path.join(HOME, 'Library', 'Containers', 'app.nousresearch.hermes', 'Data', '.hermes', 'config.yaml'),
@@ -164,7 +192,7 @@ def find_config_yaml():
             logger.info(f"Found config file: {candidate}")
             return candidate
 
-    return candidates[0]  # Return first candidate as default
+    return _generate_config_yaml(candidates[0])  # 缺失 → 按模板生成
 
 
 def parse_config_yaml(file_path):

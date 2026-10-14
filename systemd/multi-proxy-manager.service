@@ -1,3 +1,6 @@
+# 参考模板：实际安装由 install.sh 的 setup_autostart_systemd() 内联生成
+# （会替换 __ROOT_DIR__ 为真实安装路径，并补全 nvm/pyenv 的 PATH）。
+# 本文件不参与安装流程，仅供阅读/对照，改它不影响已部署的 unit。
 [Unit]
 Description=Multi-Proxy Manager (user)
 After=network.target

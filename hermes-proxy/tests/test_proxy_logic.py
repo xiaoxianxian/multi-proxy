@@ -12,8 +12,11 @@ import pytest
 # Add parent dir to path so we can import proxy module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+import proxy
+
 from proxy import (
     find_provider,
+    find_config_yaml,
     parse_config_yaml,
     get_current_model,
     update_config_yaml,
@@ -189,3 +192,44 @@ class TestKnownBalanceDomains:
         method, path = KNOWN_BALANCE_DOMAINS['api.openai.com']
         assert method == 'GET'
         assert '/dashboard/billing/credit_grants' in path
+
+
+class TestFindConfigYamlAutoGenerate:
+    """§F：配置缺失时按 config.yaml.example 自动生成，免去用户手工拷贝。"""
+
+    def test_generates_from_template_when_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(proxy, 'HOME', str(tmp_path))
+        target = tmp_path / '.hermes' / 'config.yaml'
+        assert not target.exists()
+
+        result = find_config_yaml()
+
+        assert result == str(target)
+        assert target.exists()
+        # 内容应与模板一致
+        assert target.read_text() == open(proxy.CONFIG_YAML_EXAMPLE).read()
+        # 权限收紧到 0o600
+        assert oct(target.stat().st_mode)[-3:] == '600'
+        # 原子写不留 .tmp 残留
+        assert not (tmp_path / '.hermes' / 'config.yaml.tmp').exists()
+
+    def test_returns_existing_without_overwrite(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(proxy, 'HOME', str(tmp_path))
+        d = tmp_path / '.hermes'
+        d.mkdir()
+        target = d / 'config.yaml'
+        original = 'model:\n  default: my-custom-model\n'
+        target.write_text(original)
+
+        result = find_config_yaml()
+
+        assert result == str(target)
+        # 已存在则原样返回，不被模板覆盖
+        assert target.read_text() == original
+
+    def test_generated_config_is_parseable_and_has_model(self, tmp_path, monkeypatch):
+        """生成出来的配置必须能被 parse_config_yaml / get_current_model 正常消费。"""
+        monkeypatch.setattr(proxy, 'HOME', str(tmp_path))
+        path = find_config_yaml()
+        data = parse_config_yaml(path)
+        assert get_current_model(data), '生成配置后应能读出 default model'
