@@ -10,6 +10,11 @@ import { db } from '../db/database.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// 加载 .env —— dotenv 是已声明依赖但此前未接线，导致 .env 里的 PORT / PROXY_AUTH_TOKEN /
+// BIND_HOST 全部不生效（只能靠真实环境变量），文档与行为不一致。接线后 .env 才真正生效。
+// 注意：dotenv 默认不覆盖已存在的环境变量，真实 env 优先级更高。
+import 'dotenv/config';
+
 // P0-C: fail-open WARN — 未设 PROXY_AUTH_TOKEN 时 /admin-api* 对任意可达方开放，仅适合本机。
 if (!process.env.PROXY_AUTH_TOKEN) {
   console.warn('[SECURITY][fail-open] PROXY_AUTH_TOKEN unset — /admin-api* open to anyone reachable; set it before network exposure.');
@@ -60,7 +65,18 @@ if (overrideGate === '1' || overrideGate === 'true' || overrideGate === 'on') {
   console.log('[override-audit] 未启用（PROXY_ROUTE_OVERRIDE 未设置或≠1/true/on，不写盘）');
 }
 
-app.listen(PORT, () => {
-  console.log(`[Proxy Server] 代理服务运行于 http://0.0.0.0:${PORT}`);
-  console.log(`[Proxy Server] 管理面板 http://0.0.0.0:${PORT}/admin-api`);
+// 默认只绑回环 127.0.0.1（与 multi-proxy-manager/server.js 同一纪律）：
+// PROXY_AUTH_TOKEN 未设置时 /admin-api* 对任何可达方开放，绑 0.0.0.0 等于把管理面暴露到局域网。
+// 需要跨机 / 容器 / WSL 访问时显式设 BIND_HOST=0.0.0.0，并务必先设置 PROXY_AUTH_TOKEN。
+const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
+
+app.listen(PORT, BIND_HOST, () => {
+  if (!['127.0.0.1', 'localhost', '::1', '::ffff:127.0.0.1'].includes(BIND_HOST)) {
+    console.warn(
+      `[SECURITY] BIND_HOST=${BIND_HOST} 非回环地址：代理与管理面板将对该网络可达方开放；` +
+      `请确保已设置 PROXY_AUTH_TOKEN，否则 /admin-api* 无鉴权暴露。`
+    );
+  }
+  console.log(`[Proxy Server] 代理服务运行于 http://${BIND_HOST}:${PORT}`);
+  console.log(`[Proxy Server] 管理面板 http://${BIND_HOST}:${PORT}/admin-api`);
 });
