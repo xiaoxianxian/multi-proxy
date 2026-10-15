@@ -24,11 +24,11 @@ router.get('/shadow-map', (_req, res) => {
   if (cached) { res.json(cached); return; }
   try {
     // 懒加载 l2（与 observe-shadow-run.js 同款调用）
-    const { AgentRegistry } = require('../l2/agent-registry.js');
-    const { PluginRuntime } = require('../l2/plugin-runtime.js');
-    const { RouteEngine } = require('../l2/route-engine.js');
-    const { seedDefaultProfiles } = require('../l2/mcp-default-seed.js');
-    const { resolveNoCandidatePolicy } = require('../l2/knowledge-base/routing-base.js');
+    const { AgentRegistry } = require('../../l2/agent-registry.js');
+    const { PluginRuntime } = require('../../l2/plugin-runtime.js');
+    const { RouteEngine } = require('../../l2/route-engine.js');
+    const { seedDefaultProfiles } = require('../../l2/mcp-default-seed.js');
+    const { resolveNoCandidatePolicy } = require('../../l2/knowledge-base/routing-base.js');
 
     const policy = resolveNoCandidatePolicy();
 
