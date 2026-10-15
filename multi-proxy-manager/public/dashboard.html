@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Proxy Manager - Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./shared-styles.css">
+  <!-- 设计系统 v1.0（2026-10-16 迁移）：新 token + 新组件层 + 统一壳。旧两 CSS 保留作别名桥（design-system.test.js 读它们，不删）；新层最后加载 = 视觉默认 -->
+  <link rel="stylesheet" href="./tokens.css">
+  <link rel="stylesheet" href="./components.css">
 </head>
 <style>
 /* ============================================
@@ -401,67 +401,72 @@
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
-    <div class="logo-icon">P</div>
-    <h1>Proxy Manager</h1>
+    <div class="mark logo-icon">P</div>
+    <strong>Proxy Manager</strong>
   </div>
 
   <nav class="sidebar-nav" id="sidebarNav">
-    <div class="nav-section-label">概览</div>
+    <div class="nav-label">概览</div>
     <div class="nav-item active" data-page="dashboard" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
-      总览
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+      <span>总览</span>
     </div>
     <div class="nav-item" data-page="health" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
-      健康状态
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+      <span>健康状态</span>
     </div>
     <div class="nav-item" data-page="alerts" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
-      告警中心
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+      <span>告警中心</span>
     </div>
     <div class="nav-item" data-page="registry" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
-      Agent 注册表
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+      <span>Agent 注册表</span>
     </div>
     <div class="nav-item" data-page="floor" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
-      代理面 Floor
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+      <span>代理面 Floor</span>
     </div>
     <div class="nav-item" data-page="cost" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-      成本
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+      <span>成本</span>
     </div>
     <div class="nav-item" data-page="shadow" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg></span>
-      影子模式
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg></span>
+      <span>影子模式</span>
     </div>
 
-    <div class="nav-section-label">管理</div>
+    <div class="nav-label">管理</div>
     <div class="nav-item" data-page="sessions" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-      任务管理
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      <span>任务管理</span>
     </div>
     <div class="nav-item" data-page="logs" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-      日志
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+      <span>日志</span>
     </div>
     <div class="nav-item" data-page="knowledge" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
-      知识库
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+      <span>知识库</span>
     </div>
     <div class="nav-item" data-page="skills" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg></span>
-      技能
-    </div>
+     <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg></span>
+     <span>技能</span>
+   </div>
+   <!-- v1.0 补 settings 页（外观/关于/更新与备份）；管理组末项 -->
+   <a class="nav-item" data-page="settings" href="/settings" tabindex="0">
+     <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+     <span>设置</span>
+   </a>
   </nav>
 
-  <div class="sidebar-footer">
-    <div class="version-info" id="sidebarVersion">v1.0.0</div>
-    <button class="btn btn-outline btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+  <div class="sidebar-footer sidebar-foot">
+    <div class="ver version-info" id="sidebarVersion">v1.0.0</div>
+    <button class="btn btn-ghost btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
       <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-      暗色模式
+      暗色
     </button>
-    <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="width:100%;margin-top:6px;">登出</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleLogout()" style="width:100%;margin-top:6px;">登出</button>
   </div>
 </aside>
 
@@ -945,6 +950,28 @@
         </div>
       </div>
     </div>
+
+    <!-- 上周账单（Watchtower v1，2026-10-16）：
+         成本页此前只有「余额 + 预算判级」两张卡，账本里躺着的「花了多少 / 省了多少」
+         在面板上根本看不到。这块补上那个读数。口径与 l2/watchtower-report.js 同源：
+         算不出的一律画「—」，绝不折算成 0。 -->
+    <div class="hig-card">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">上周账单</div>
+          <div class="hig-card-subtitle">GET /api/cost/watchtower · 只读，不改任何行为</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadWatchtower()">
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="hig-card-body">
+        <div id="watchtowerSummary"></div>
+        <div id="watchtowerAgents" style="margin-top:14px;"></div>
+        <div id="watchtowerCaveats" style="margin-top:12px;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ==================== Shadow (影子模式) Page ==================== -->
@@ -1117,6 +1144,46 @@
     }, duration);
   }
 
+  // ===== 读失败统一呈现（不猜、不装、不静默）=====
+  // 三问走查结论（2026-10-16）：面板过去的兜底只有两种，且都比报错更糟——
+  //   ① 喂 mock 假数据（getMockStatus / generateMockLogs）：用户看到 pid 12345、
+  //      uptime「2h34m」、不存在的 ERROR 日志这种「像真的」假数据，故障被伪装成正常；
+  //   ② 兜底成空数组（events:[] / agents:[]）：「暂无」和「读不到」长得一模一样。
+  // 两者都违反 multi-proxy 自己的 unknown 态对账纪律。读失败就明说读失败。
+  // 三种空必须分开：真的空 / 没开功能 / 读失败。
+  function fetchJSON(url, opts) {
+    return fetch(url, opts).then(function(res) {
+      if (!res.ok) {
+        return res.json().then(function(body) {
+          var msg = (body && body.error) ? body.error : ('HTTP ' + res.status);
+          var e = new Error(msg); e.httpStatus = res.status; throw e;
+        }, function() {
+          var e = new Error('HTTP ' + res.status); e.httpStatus = res.status; throw e;
+        });
+      }
+      return res.json();
+    });
+  }
+
+  // 读失败块：视觉与 empty-state 同族（不引入新样式体系），但语义是「读不到」而非「没有」。
+  function showReadError(containerId, msg, hint) {
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1;">' +
+        '<div class="empty-icon" style="color:#d97706;">' +
+          '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+        '</div>' +
+        '<div class="empty-text" style="color:#d97706;">读取失败</div>' +
+        '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;max-width:420px;">' +
+          esc(msg || '未知错误') +
+          (hint ? '<br><span style="opacity:.8;">' + esc(hint) + '</span>' : '') +
+        '</div>' +
+        '<button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="' +
+          'this.dispatchEvent(new CustomEvent(\'retry-read\',{bubbles:true}))">重试</button>' +
+      '</div>';
+  }
+
   // ===== Navigation =====
   function switchPage(pageId) {
     // Stop status polling when leaving dashboard
@@ -1147,7 +1214,7 @@
     else if (pageId === 'alerts') loadAlertsPage();
     else if (pageId === 'registry') loadRegistryPage();
     else if (pageId === 'sessions') loadSessions();
-    else if (pageId === 'cost') loadCostPage();
+    else if (pageId === 'cost') { loadCostPage(); loadWatchtower(); }
     else if (pageId === 'shadow') loadShadowPage();
   }
 
@@ -1254,20 +1321,10 @@
   }
 
   // ===== Mock Data =====
-  function getMockStatus() {
-    return {
-      codex: { running: true, port: 18790, pid: 12345, uptime: '2h 34m', health: { status: 'ok', latency: '45ms' } },
-      hermes: { running: true, port: 18793, pid: 12346, uptime: '2h 34m', health: { status: 'ok', latency: '62ms' } },
-      cursor: { running: false, port: 18794, pid: null, uptime: null, health: null }
-    };
-  }
-
-  function getMockVersion() {
-    return {
-      version: '1.0.3',
-      proxies: { codex: 'v1.2.0', hermes: 'v0.9.4', cursor: 'v2.1.0' }
-    };
-  }
+  // 说明：原 getMockStatus() / getMockVersion() 已于 2026-10-16 删除。
+  // 它们过去在 /api/status、/api/version 读失败时兜底，返回 pid 12345 / uptime「2h34m」/
+  // 假版本 '1.0.3' 这类「像真的」假数据，把故障伪装成正常。
+  // 现在的约定是读失败就明说读失败（见上方 fetchJSON / showReadError），不猜、不装、不静默。
 
   // ===== Dashboard Rendering =====
   function updateDashboardDisplay(versionData) {
@@ -1377,22 +1434,32 @@
     var container = document.getElementById('versionInfo');
     var sidebarVer = document.getElementById('sidebarVersion');
 
-    if (container && versionData) {
-      var rows = [];
-      if (versionData.version) rows.push({ label: '管理器版本', value: versionData.version });
-      if (versionData.proxies) {
-        Object.keys(versionData.proxies).forEach(function(key) {
-          var ver = versionData.proxies[key];
-          var config = PROXY_CONFIGS[key];
-          rows.push({ label: config ? config.name : key, value: ver });
-        });
+    if (container) {
+      if (versionData) {
+        var rows = [];
+        if (versionData.version) rows.push({ label: '管理器版本', value: versionData.version });
+        if (versionData.proxies) {
+          Object.keys(versionData.proxies).forEach(function(key) {
+            var ver = versionData.proxies[key];
+            var config = PROXY_CONFIGS[key];
+            rows.push({ label: config ? config.name : key, value: ver });
+          });
+        }
+        container.innerHTML = rows.map(function(row) {
+          return '<div class="version-item"><span class="ver-label">' + row.label + '</span><span class="ver-value">' + row.value + '</span></div>';
+        }).join('');
+      } else {
+        // null = 读失败。不能保留上一次成功的值——那会让用户以为版本没变，
+        // 从而放弃一次本该做的升级。也不能显示空（那像「没有版本信息」）。
+        container.innerHTML =
+          '<div class="version-item"><span class="ver-label">管理器版本</span>' +
+          '<span class="ver-value" style="color:#d97706;">读取失败</span></div>';
       }
-      container.innerHTML = rows.map(function(row) {
-        return '<div class="version-item"><span class="ver-label">' + row.label + '</span><span class="ver-value">' + row.value + '</span></div>';
-      }).join('');
     }
-    if (sidebarVer && versionData && versionData.version) {
-      sidebarVer.textContent = 'Manager ' + versionData.version;
+    if (sidebarVer) {
+      sidebarVer.textContent = (versionData && versionData.version)
+        ? ('Manager ' + versionData.version)
+        : 'Manager —';
     }
   }
 
@@ -1434,14 +1501,20 @@
   // ===== Health Page =====
   function loadHealthPage() {
     showLoading();
+    // 三个请求各自标记读失败：一个挂了不让另外两个也跟着变空白，
+    // 但绝不喂 mock 假数据——挂掉的那段必须显示「读不到」。
     Promise.all([
-      fetch('/api/status').then(function(res) { return res.json(); }).catch(function() { return getMockStatus(); }),
-      fetch('/api/provider-health').then(function(res) { return res.json(); }).catch(function() { return { isolated: [], isolateEnabled: false, threshold: 3 }; }),
-      fetch('/api/health-history?limit=50').then(function(res) { return res.json(); }).catch(function() { return { history: [] }; })
+      fetchJSON('/api/status').catch(function(e) { return { __readError: e }; }),
+      fetchJSON('/api/provider-health').catch(function(e) { return { __readError: e }; }),
+      fetchJSON('/api/health-history?limit=50').catch(function(e) { return { __readError: e }; })
     ]).then(function(results) {
-      proxyStatus = results[0] || {};
-      var phData = results[1] || { isolated: [] };
-      var historyData = results[2] || { history: [] };
+      var statusResult = results[0] || {};
+      var phResult = results[1] || {};
+      var historyResult = results[2] || {};
+      var statusFailed = !!statusResult.__readError;
+      proxyStatus = statusFailed ? {} : (statusResult.proxies || statusResult);
+      var phData = phResult.__readError ? { isolated: [] } : phResult;
+      var historyData = historyResult.__readError ? { history: [] } : historyResult;
 
       // Update stats
       var okCount = 0, degradedCount = 0, downCount = 0;
@@ -1462,10 +1535,17 @@
       // Render proxy health list
       var healthList = el('healthProxyList');
       if (healthList) {
-        var entries = Object.entries(proxyStatus);
-        if (entries.length === 0) {
-          healthList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">暂无代理数据</div></div>';
+        if (statusFailed) {
+          // 读不到 ≠ 没有代理。过去这里兜底成 mock 三代理（pid 12345 / uptime 2h34m），
+          // 故障被伪装成「三个代理都在跑」——这是本轮修掉的最危险一处。
+          showReadError('healthProxyList',
+            statusResult.__readError.message || '未知错误',
+            'manager 的 /api/status 没返回。若 manager 本身没起来，先看 logs 页的启动日志。');
         } else {
+          var entries = Object.entries(proxyStatus);
+          if (entries.length === 0) {
+            healthList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">暂无代理数据</div></div>';
+          } else {
           healthList.innerHTML = entries.map(function(entry) {
             var name = entry[0], status = entry[1];
             var config = PROXY_CONFIGS[name] || { name: name, iconClass: '' };
@@ -1484,6 +1564,7 @@
               '<span style="min-width:100px;text-align:right;font-size:13px;color:var(--color-text-tertiary);">' + esc(uptime) + '</span>' +
             '</div>';
           }).join('');
+          }
         }
       }
 
@@ -1491,6 +1572,14 @@
       var phList = el('healthPagePhList');
       var phSub = el('healthPagePhSubtitle');
       if (phList) {
+        if (phResult.__readError) {
+          // 「所有 Provider 健康」这句话只有在真读到「无隔离项」时才配说。
+          // 读失败时说它，等于替一个没查过的系统开健康证明。
+          if (phSub) phSub.textContent = '—';
+          showReadError('healthPagePhList',
+            phResult.__readError.message || '未知错误',
+            'provider 隔离状态读不到，不代表 Provider 都健康。');
+        } else {
         if (phSub) phSub.textContent = (phData.isolateEnabled ? '自动隔离已开启（live）' : 'observe 模式');
         var list = phData.isolated || [];
         if (list.length === 0) {
@@ -1513,11 +1602,17 @@
             '</div>';
           }).join('');
         }
+        }
       }
 
       // Render health history
       var historyList = el('healthHistoryList');
       if (historyList) {
+        if (historyResult.__readError) {
+          showReadError('healthHistoryList',
+            historyResult.__readError.message || '未知错误',
+            '读不到健康历史，不代表期间没有发生故障。');
+        } else {
         var history = historyData.history || [];
         if (history.length === 0) {
           historyList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="empty-text">暂无健康历史</div></div>';
@@ -1534,11 +1629,16 @@
             '</div>';
           }).join('');
         }
+        }
       }
 
       hideOfflineBanner();
       hideLoading();
-    }).catch(function() {
+    }).catch(function(err) {
+      // 整页读失败：说清楚是哪一路挂了，不要静默 hideLoading 后留一片空白。
+      hideOfflineBanner();
+      showReadError('healthProxyList', err && err.message || '未知错误',
+        'manager 不可达或 /api/status 异常。可点上方「重试」。');
       hideLoading();
     });
   }
@@ -1546,23 +1646,31 @@
   // ===== Alerts Page =====
   function loadAlertsPage() {
     showLoading();
-    var gateOpen = false;
 
+    // 读失败分别标记：告警页最忌「API 挂了 → 显示暂无告警」，
+    // 那等于在真出事的时候告诉用户「没事」。两个请求各自判定，不互相顶包。
     Promise.all([
-      fetch('/api/alert').then(function(res) { gateOpen = true; return res.json(); }).catch(function() { return { events: [], count: 0, ok: false }; }),
-      fetch('/api/alert/config').then(function(res) { gateOpen = true; return res.json(); }).catch(function() { return { gateOpen: false }; })
+      fetchJSON('/api/alert').catch(function(e) { return { __readError: e }; }),
+      fetchJSON('/api/alert/config').catch(function(e) { return { __readError: e }; })
     ]).then(function(results) {
-      var alertData = results[0] || { events: [], count: 0 };
-      var configData = results[1] || { gateOpen: false };
+      var alertResult = results[0] || {};
+      var configResult = results[1] || {};
+      var alertData = alertResult.__readError ? { events: [], count: 0 } : alertResult;
+      var configData = configResult.__readError ? { gateOpen: false } : configResult;
 
       alertEvents = alertData.events || [];
 
       // Update gate status
       var gateEl = document.getElementById('alertGateStatus');
       if (gateEl) {
-        var gateClass = configData.gateOpen ? 'status-badge online' : 'status-badge offline';
-        var gateText = configData.gateOpen ? '门控开启' : '门控关闭';
-        gateEl.innerHTML = '<span class="' + gateClass + '"><span class="dot"></span>' + gateText + '</span>';
+        if (configResult.__readError) {
+          // 读不到门控配置时不显示「门控关闭」——那是把一个未知状态说成已知。
+          gateEl.innerHTML = '<span class="status-badge offline"><span class="dot"></span>读取失败</span>';
+        } else {
+          var gateClass = configData.gateOpen ? 'status-badge online' : 'status-badge offline';
+          var gateText = configData.gateOpen ? '门控开启' : '门控关闭';
+          gateEl.innerHTML = '<span class="' + gateClass + '"><span class="dot"></span>' + gateText + '</span>';
+        }
       }
 
       // Update stats
@@ -1577,11 +1685,19 @@
       if (el('alertCountSubtitle')) el('alertCountSubtitle').textContent = '共 ' + alertEvents.length + ' 条告警';
 
       // Render alert list
-      renderAlertList(alertEvents);
+      if (alertResult.__readError) {
+        // 「暂无告警事件」只有在真读到空列表时才配说。
+        // API 挂掉时显示它，等于在真出事的时候告诉用户「没事」。
+        showReadError('alertList', alertResult.__readError.message || '未知错误',
+          '告警数据读不到。管理端恢复后点「采集告警」或刷新本页。');
+        if (el('alertCountSubtitle')) el('alertCountSubtitle').textContent = '读取失败';
+      } else {
+        renderAlertList(alertEvents);
+      }
       hideOfflineBanner();
       hideLoading();
-    }).catch(function() {
-      renderAlertList([]);
+    }).catch(function(err) {
+      showReadError('alertList', err && err.message || '未知错误', 'manager 不可达。');
       hideLoading();
     });
   }
@@ -1637,24 +1753,26 @@
 
   window.collectAlerts = function() {
     showToast('正在采集告警信号...', 'info');
-    fetch('/api/alert/collect', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' } })
-      .then(function(res) { return res.json(); })
+    fetchJSON('/api/alert/collect', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' } })
       .then(function(data) {
         if (data.ok) {
           showToast('采集完成，新产生 ' + data.collected + ' 条告警', 'success');
           loadAlertsPage();
+        } else {
+          // 无 else 时：后端返回 200 但 ok:false，用户点了按钮什么都不发生，
+          // 只会反复点。采集类操作必须给出「采了但没结果」的原因。
+          showToast(data.error || '采集未执行', 'error');
         }
       })
-      .catch(function() {
-        showToast('采集失败', 'error');
+      .catch(function(err) {
+        showToast('采集失败：' + ((err && err.message) || '未知错误'), 'error');
       });
   };
 
   // ===== Registry Page =====
   function loadRegistryPage() {
     showLoading();
-    fetch('/api/registry/agents')
-      .then(function(res) { return res.json(); })
+    fetchJSON('/api/registry/agents')
       .then(function(data) {
         registryAgents = data.agents || [];
         renderRegistryGrid(registryAgents);
@@ -1662,10 +1780,14 @@
         hideOfflineBanner();
         hideLoading();
       })
-      .catch(function() {
+      .catch(function(err) {
+        // 过去这里 catch 成空列表 → 显示「暂无 Agent · 点击新增创建」。
+        // 那是把「读不到」说成「一个都没有」，会让刚注册的 agent 像凭空消失。
         registryAgents = [];
         renderRegistryGrid([]);
         updateRegistryStats([]);
+        showReadError('registryGrid', err && err.message || '未知错误',
+          'Agent 注册表读不到，不代表注册表是空的。');
         hideLoading();
       });
   }
@@ -1831,14 +1953,22 @@
 
   // ===== Sessions Loading =====
   function loadSessions() {
-    fetch('/api/sessions/running', { headers: { 'x-auth-token': authToken || '' } })
-       .then(function(res) { return res.json(); })
+    fetchJSON('/api/sessions/running', { headers: { 'x-auth-token': authToken || '' } })
        .then(function(data) {
         var sessions = data.sessions || [];
         renderSessionsList(sessions, 'sessionsList');
         renderSessionsList(sessions, 'sessionsListFull');
        })
-       .catch(function() { /* 静默失败 */ });
+       .catch(function(err) {
+        // 过去这里是 `.catch(function() { /* 静默失败 */ })`：API 一挂，会话列表停在旧内容，
+        // 用户以为「没有任务在跑」——而真相可能是「有三个任务在跑但没显示出来」。
+        // 中止一个你看不见的任务，比没有中止按钮更危险。
+        renderSessionsList([], 'sessionsList');
+        renderSessionsList([], 'sessionsListFull');
+        showReadError('sessionsListFull', err && err.message || '未知错误',
+          '会话列表读不到，不代表没有任务在跑。中止操作前请先确认本页能正常加载。');
+        showToast('会话列表读取失败', 'error');
+       });
    }
 
    // ---- P5 成本页：各 provider 余额 + 当前周期预算判级 ----
@@ -1909,6 +2039,112 @@
       .catch(function() { budInfo.innerHTML = '<div class="empty-state"><div class="empty-text">无法获取预算数据</div></div>'; });
    }
 
+  // ---- 上周账单（Watchtower v1，2026-10-16）----
+  // 口径纪律（与 l2/watchtower-report.js 同一套，改一处必须改两处）：
+  //   - 算不出的一律画「—」，**绝不折算成 0**。0 会被读成「没花钱 / 没省下」。
+  //   - 不知道币种就不印货币符号（report.spend.currency 为 null 时）。
+  //   - 「已省金额」是反事实重算（对标花费 − 实际花费），负值如实显示，
+  //     意思是「路由帮你多花了钱」——截断成 0 会把这个信号藏掉。
+  function wtMoney(v, cur) {
+    if (v === null || v === undefined || !isFinite(v)) return '—';
+    var s = (cur ? cur + ' ' : '') + (Math.round(v * 10000) / 10000);
+    return s;
+  }
+  function wtEsc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function loadWatchtower() {
+    var sum = document.getElementById('watchtowerSummary');
+    var ags = document.getElementById('watchtowerAgents');
+    var cav = document.getElementById('watchtowerCaveats');
+    var authHdr = { 'x-auth-token': authToken || '' };
+
+    fetch('/api/cost/watchtower?days=7', { headers: authHdr })
+      .then(function(r) { return r.json(); })
+      .then(function(w) {
+        if (!w || w.ok !== true) {
+          // 读失败必须带出后端原因：只说「周报读取失败」不说为什么，
+          // 读者无法判断是 manager 挂了、账本被锁，还是自己没开记账。
+          sum.innerHTML = '<div class="empty-state">' +
+            '<div class="empty-text" style="color:#d97706;">周报读取失败</div>' +
+            '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;max-width:420px;">' +
+            wtEsc((w && w.error) || '未知错误') + '</div></div>';
+          ags.innerHTML = ''; cav.innerHTML = '';
+          return;
+        }
+        var cur = (w.spend && w.spend.currency) || null;
+        var win = (w.window && w.window.fromDay && w.window.toDay)
+          ? (w.window.fromDay + ' ~ ' + w.window.toDay) : '—';
+        // 门控提示条：PROXY_COST_TRACK 默认关，「没开记账」和「开了但没流量」
+        // 在面板上长得一模一样（都是空），读者会默认前者是工具坏了。
+        // 所以 hint 必须比卡片先出现——先解释为什么空，再给数字。
+        var hintHtml = '';
+        if (w.tracking && w.tracking.hint) {
+          var warn = !w.tracking.enabled;
+          hintHtml =
+            '<div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6;' +
+            'background:' + (warn ? 'rgba(239,68,68,0.08)' : 'var(--color-bg-secondary)') + ';' +
+            'border:1px solid ' + (warn ? 'rgba(239,68,68,0.35)' : 'var(--color-border)') + ';' +
+            'color:' + (warn ? '#ef4444' : 'var(--muted-foreground)') + ';">' +
+            (warn ? '未开启记账 · ' : '') + wtEsc(w.tracking.hint) + '</div>';
+        }
+        var cards = [
+          { label: '实际花费', value: wtMoney(w.spend && w.spend.actualCost, cur),
+            sub: ((w.spend && w.spend.requestCount) || 0) + ' 次请求' },
+          { label: '模型重写已省', value: w.saved && w.saved.computable ? wtMoney(w.saved.byRouting, cur) : '—',
+            sub: w.saved && w.saved.computable
+              ? ('对标花费 ' + wtMoney(w.saved.baselineCost, cur))
+              : ('算不出：' + wtEsc(w.saved && w.saved.reason)) },
+          { label: '零花费请求占比', value: (w.zeroCost && w.zeroCost.ratio !== null && w.zeroCost.ratio !== undefined)
+              ? Math.round(w.zeroCost.ratio * 100) + '%' : '—',
+            sub: ((w.zeroCost && w.zeroCost.requestCount) || 0) + ' / ' + ((w.spend && w.spend.requestCount) || 0) },
+          // 账本完整度：字段缺失比例高时，上面三个数都别太当真。
+          { label: '账本完整度', value: (w.dataQuality && w.dataQuality.unknownModelRatio !== null && w.dataQuality.unknownModelRatio !== undefined)
+              ? Math.round((1 - w.dataQuality.unknownModelRatio) * 100) + '%' : '—',
+            sub: (w.dataQuality
+                ? ('缺模型名 ' + w.dataQuality.unknownModelCount + '/' + w.dataQuality.entryCount + ' 条'
+                   + (w.dataQuality.unknownAgentCount > 0 ? ' · 缺 agent ' + w.dataQuality.unknownAgentCount + ' 条' : ''))
+                : '—') }
+        ];
+        sum.innerHTML = hintHtml +
+          '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px;">窗口 ' + wtEsc(win) + '</div>' +
+          '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
+          cards.map(function(c) {
+            var neg = (c.value.indexOf('-') === 0);
+            return '<div style="flex:1;min-width:150px;padding:14px;background:var(--color-bg-secondary);border-radius:8px;">' +
+              '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:4px;">' + c.label + '</div>' +
+              '<div style="font-size:20px;font-weight:700;color:' + (neg ? '#ef4444' : 'var(--foreground)') + ';">' + wtEsc(c.value) + '</div>' +
+              '<div style="font-size:11px;color:var(--muted-foreground);margin-top:4px;">' + c.sub + '</div>' +
+            '</div>';
+          }).join('') +
+          '</div>';
+
+        if (!w.byAgent || w.byAgent.length === 0) {
+          ags.innerHTML = '<div class="empty-state"><div class="empty-text">本窗口没有账本记录（门控未开 / 代理未上报 / 无流量）</div></div>';
+        } else {
+          ags.innerHTML =
+            '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:6px;">按 agent</div>' +
+            w.byAgent.map(function(a) {
+              return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--color-border);">' +
+                '<span style="font-weight:600;">' + wtEsc(a.agent) + '</span>' +
+                '<span style="color:var(--muted-foreground);">' + wtMoney(a.actualCost, cur) +
+                ' · ' + a.requests + ' 次 · ' + wtEsc(a.topModel || '—') + '</span>' +
+              '</div>';
+            }).join('');
+        }
+
+        cav.innerHTML = (w.caveats && w.caveats.length)
+          ? '<div style="font-size:11px;color:var(--muted-foreground);line-height:1.6;">口径说明：<br>' +
+            w.caveats.map(function(c) { return '· ' + wtEsc(c); }).join('<br>') + '</div>'
+          : '';
+      })
+      .catch(function() {
+        sum.innerHTML = '<div class="empty-state"><div class="empty-text">无法获取周报（manager 未运行或未登录）</div></div>';
+        ags.innerHTML = ''; cav.innerHTML = '';
+      });
+  }
+
   function renderSessionsList(sessions, containerId) {
     var container = document.getElementById(containerId);
     if (!container) return;
@@ -1944,30 +2180,40 @@
 
   window.abortSessionFromDashboard = function(id) {
     if (!confirm('确认中止此任务？')) return;
-    fetch('/api/sessions/' + id + '/abort', {
+    fetchJSON('/api/sessions/' + id + '/abort', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken || '' },
       body: JSON.stringify({ by: 'user' })
     })
-    .then(function(res) { return res.json(); })
     .then(function(data) {
       if (data.ok) {
         showToast('任务已中止', 'success');
         loadSessions();
+      } else {
+        // 无 else 时：任务没被中止，但界面毫无变化。
+        // 用户会以为中止成功而关掉页面，任务继续在后台跑——这是最坏的一种「无反馈」。
+        showToast(data.error || '中止未生效', 'error');
       }
     })
-    .catch(function() {});
+    .catch(function(err) {
+      showToast('中止失败：' + ((err && err.message) || '未知错误'), 'error');
+    });
   };
 
   // ===== Provider Health Loading =====
   function loadProviderHealth() {
-    fetch('/api/provider-health', { headers: { 'x-auth-token': authToken || '' } })
-      .then(function(res) { return res.json(); })
+    fetchJSON('/api/provider-health', { headers: { 'x-auth-token': authToken || '' } })
       .then(function(data) {
         var list = data.isolated || [];
         renderProviderHealth(list, data.isolateEnabled, data.threshold);
       })
-      .catch(function() { /* 静默失败 */ });
+      .catch(function(err) {
+        // 「所有 Provider 健康」这句话不能靠读失败来说。总览卡读不到时显示读失败，
+        // 否则一次网络抖动就会被渲染成「全网健康」的假证明。
+        renderProviderHealth([], null, null);
+        var sub = document.getElementById('phSubtitle');
+        if (sub) sub.innerHTML = '<span style="color:#d97706;">读取失败：' + esc((err && err.message) || '未知错误') + '</span>';
+      });
   }
 
   function renderProviderHealth(list, isolateEnabled, threshold) {
@@ -2004,22 +2250,22 @@
   // ===== Data Loading =====
   function loadStatus() {
     showLoading();
-    fetch('/api/status')
-      .then(function(res) {
-        if (!res.ok) throw new Error('API not available');
-        return res.json();
-      })
+    fetchJSON('/api/status')
       .then(function(data) {
         Object.assign(proxyStatus, data);
         updateDashboardDisplay(versionCache);
         hideOfflineBanner();
         hideDemoBanner();
       })
-      .catch(function() {
+      .catch(function(err) {
+        // 过去这里在 proxyStatus 为空时喂 getMockStatus()——三个假代理，
+        // codex「运行中 pid 12345 uptime 2h34m 延迟 45ms」。
+        // 总览页是用户第一眼看到的地方，在这里显示「像真的」假数据最危险：
+        // 他会以为代理都在跑，直到真的调不通才发现。宁可显示「读不到」。
         if (Object.keys(proxyStatus).length === 0) {
-          proxyStatus = getMockStatus();
           updateDashboardDisplay(versionCache);
           showOfflineBanner();
+          showToast('代理状态读取失败：' + ((err && err.message) || 'manager 不可达'), 'error', 6000);
         }
       })
       .finally(hideLoading);
@@ -2046,20 +2292,20 @@
 
   function loadVersion() {
     showLoading();
-    fetch('/api/version')
-      .then(function(res) {
-        if (!res.ok) throw new Error('API not available');
-        return res.json();
-      })
+    fetchJSON('/api/version')
       .then(function(data) {
         versionCache = data;
         updateVersionDisplay(data);
         hideOfflineBanner();
         hideDemoBanner();
       })
-      .catch(function() {
-        updateVersionDisplay(getMockVersion());
+      .catch(function(err) {
+        // 过去这里兜底 getMockVersion()——假的 '1.0.3' + 三个假子版本号。
+        // 版本号是「我装的是不是最新」的判断依据，喂假值会让用户放弃升级。
+        versionCache = null;
+        updateVersionDisplay(null);
         showOfflineBanner();
+        showToast('版本信息读取失败：' + ((err && err.message) || 'manager 不可达'), 'error', 6000);
       })
       .finally(hideLoading);
   }

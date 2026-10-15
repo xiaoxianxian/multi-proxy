@@ -1,0 +1,128 @@
+/* ============================================================================
+   multi-proxy · Design System Tokens (v1)
+   ----------------------------------------------------------------------------
+   Single source of truth for color / typography / spacing / radius / shadow /
+   motion / status / provider-brand. Light + dark.
+   Reference: nanoMuse 的"简洁专业"视觉（Tailwind 语义层 + 干净中性灰 + 单一蓝色
+   强调色 + Figtree/系统字体）。multi-proxy 是中文运维工具，故字体栈以系统
+   中文栈优先，离线可用、零网络依赖。
+   用法: 每个页面 <link rel="stylesheet" href="./tokens.css">
+   暗色: 通过在 <html> 上切换 data-theme="dark"（兼容旧的 class="dark"）。
+   ========================================================================== */
+
+/* ----------------------------- Design tokens --------------------------------
+   设计 token：语义层。页面与组件只允许引用这些变量，禁止再散落 hex。       */
+:root {
+  color-scheme: light;
+
+  /* === Accent（单一蓝色强调色，来自既有品牌 #2563eb） === */
+  --accent:        #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft-bg: #eef4ff;
+  --accent-soft-fg: #1e40af;
+
+  /* === Semantic status（运维核心：正常/降级/故障） === */
+  --ok:           #16a34a;
+  --ok-soft-bg:   #eaf7ee;
+  --ok-soft-fg:   #0f7a3d;
+  --warn:         #d97706;
+  --warn-soft-bg: #fff4e2;
+  --warn-soft-fg: #9a5a06;
+  --danger:       #dc2626;
+  --danger-soft-bg: #fdecec;
+  --danger-soft-fg: #a11d1d;
+  --info:         #2563eb;
+  --idle:         #667085;   /* stopped / 未运行 / 中性 */
+
+  /* === Neutrals（干净中性灰，替代旧 slate） === */
+  --bg:        #ffffff;
+  --surface:   #ffffff;
+  --surface-2: #f6f7f8;   /* 卡片底 / 分组底 */
+  --surface-3: #eef0f3;   /* hover / 分隔 / 输入底 */
+  --border:      #e4e7ec;
+  --border-strong: #d0d5dd;
+  --fg:        #101828;   /* 主文本 */
+  --muted:     #475467;   /* 次文本 */
+  --subtle:    #667085;   /* 弱化文本 / 说明 */
+  --faint:      #8a93a3;    /* 占位 / 时间戳 / 禁用 — 提对比度至 ≥3:1（WCAG AA inactive/UI 级；正文不用此色） */
+
+  /* === Provider 品牌色（代理卡片 / 徽章 / 图例） === */
+  --prov-codex:    #7c3aed;  --prov-codex-soft:    #f1ecfd;
+  --prov-hermes:   #d97706;  --prov-hermes-soft:   #fdeed6;
+  --prov-cursor:   #6366f1;  --prov-cursor-soft:   #e9e9fd;
+  --prov-generic:  #0d9488;  --prov-generic-soft:  #d8f3ef;
+  --prov-opencode: #0891b2;  --prov-opencode-soft: #d3eef7;
+  --prov-dsh:      #db2777;  --prov-dsh-soft:      #fde0ec;
+  --prov-claude:   #475569;  --prov-claude-soft:   #eaeef3;
+
+  /* === Typography（14px 根；离线系统字体栈，中文优先） === */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular,
+               Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --fs-2xs: 11px;  --fs-xs: 12px;  --fs-sm: 13px;  --fs-base: 14px;
+  --fs-md: 15px;   --fs-lg: 16px;  --fs-xl: 18px;  --fs-2xl: 20px;
+  --fs-3xl: 24px;  --fs-kpi: 28px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+  --lh-tight: 1.25; --lh-body: 1.55;
+
+  /* === Spacing（4px 基准节奏） === */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px;
+  --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
+  --main-pad: 32px;
+  --sidebar-w: 240px;
+
+  /* === Radius === */
+  --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-pill: 999px;
+
+  /* === Shadow（柔和，专业） === */
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.06);
+  --shadow-md: 0 1px 3px rgba(16,24,40,.10), 0 8px 24px rgba(16,24,40,.06);
+  --shadow-lg: 0 12px 40px rgba(16,24,40,.14);
+
+  /* === Motion === */
+  --dur-fast: 120ms; --dur: 180ms; --dur-slow: 300ms;
+  --ease: cubic-bezier(.2,.8,.2,1);
+
+  /* === Z-index === */
+  --z-sticky: 40; --z-overlay: 90; --z-modal: 1000; --z-toast: 9999;
+}
+
+/* ============================ Dark theme ================================== */
+html[data-theme="dark"], html.dark {
+  color-scheme: dark;
+  --accent:        #4d8dff;
+  --accent-strong: #7aabff;
+  --accent-soft-bg: #1a2b4a;
+  --accent-soft-fg: #cddfff;
+
+  --ok:           #4ade80;  --ok-soft-bg:   #0d2a1c;  --ok-soft-fg:   #86efac;
+  --warn:         #fbbf24;  --warn-soft-bg: #3a2708;  --warn-soft-fg: #fde68a;
+  --danger:       #f87171;  --danger-soft-bg: #3a1414; --danger-soft-fg: #fca5a5;
+  --info:         #4d8dff;
+  --idle:         #98a2b3;
+
+  --bg:        #141619;
+  --surface:   #1d1f24;
+  --surface-2: #26292f;
+  --surface-3: #33363d;
+  --border:      #34383f;
+  --border-strong: #454a54;
+  --fg:        #f5f6f8;
+  --muted:     #c3c8d0;
+  --subtle:    #9aa1ad;
+  --faint:      #8b93a0;    /* dark — 对应 light 提对比度至 ≥3:1 */
+
+  --prov-codex:    #a78bfa;  --prov-codex-soft:    #241a3d;
+  --prov-hermes:   #fbbf24;  --prov-hermes-soft:   #2e2410;
+  --prov-cursor:   #818cf8;  --prov-cursor-soft:   #1d1e3a;
+  --prov-generic:  #2dd4bf;  --prov-generic-soft:  #0e2a28;
+  --prov-opencode: #22d3ee;  --prov-opencode-soft: #0e2a30;
+  --prov-dsh:      #f472b6;  --prov-dsh-soft:      #3a1526;
+  --prov-claude:   #94a3b8;  --prov-claude-soft:   #212834;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 1px 3px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.35);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,.55);
+}

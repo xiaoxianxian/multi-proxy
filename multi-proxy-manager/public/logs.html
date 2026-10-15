@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Proxy Manager - 日志</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./shared-styles.css">
+  <!-- 设计系统 v1.0（2026-10-16 迁移）：新 token + 新组件层；旧两 CSS 保留作别名桥；新层最后加载＝视觉默认 -->
+  <link rel="stylesheet" href="./tokens.css">
+  <link rel="stylesheet" href="./components.css">
 </head>
 <style>
 /* ============================================
@@ -127,7 +127,7 @@ body {
   gap: 4px;
 }
 
-.nav-section-label {
+.nav-label {
   padding: 8px 12px 6px;
   font-size: 10px;
   font-weight: 700;
@@ -660,18 +660,18 @@ body {
   </div>
 
   <nav class="sidebar-nav" id="sidebarNav">
-    <div class="nav-section-label">总览</div>
+    <div class="nav-label">总览</div>
     <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
       概览
     </div>
 
-    <div class="nav-section-label" id="proxySectionLabel">代理配置</div>
+    <div class="nav-label" id="proxySectionLabel">代理配置</div>
     <div id="proxyNavItems"></div>
 
-    <div class="nav-section-label">系统</div>
+    <div class="nav-label">系统</div>
     <div class="nav-item active" data-page="logs" data-tooltip="日志" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
       日志
     </div>
   </nav>
@@ -680,7 +680,7 @@ body {
     <div class="version-info" id="sidebarVersion">
       v1.0.0
     </div>
-    <button class="btn btn-outline btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
+    <button class="btn btn-ghost btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
       <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
     </button>
     <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
@@ -902,20 +902,27 @@ body {
 
   // ===== Fetch Logs from API =====
   async function fetchLogs(limit) {
-    try {
-      var res = await fetch('/api/logs?limit=' + (limit || 500), {
-        headers: getAuthHeader()
-      });
-      if (res.ok) {
-        hideOfflineBanner();
-        var data = await res.json();
-        return parseRawLogs(data.logs || '');
-      }
-      throw new Error('not ok');
-    } catch (e) {
+    // 2026-10-16：这个函数过去 catch 后 `return []`，把「读失败」和「真的没日志」
+    // 压成同一个值。调用方于是拿 generateMockLogs() 兜底——空日志时显示一堆
+    // 不存在的 ERROR（'Upstream connection refused: codex-api service unavailable'）。
+    // 排查线上问题时看到不存在的事件，比看不到日志更糟。现在失败就抛，让调用方分开处理。
+    // 抛错要带后端原因：只说「HTTP 500」读者判断不出是 manager 挂了、登录态过期，
+    // 还是日志文件被别的进程占住。
+    var res = await fetch('/api/logs?limit=' + (limit || 500), {
+      headers: getAuthHeader()
+    });
+    if (!res.ok) {
       showOfflineBanner();
-      return [];
+      var reason = 'HTTP ' + res.status;
+      try {
+        var body = await res.json();
+        if (body && body.error) reason = body.error;
+      } catch (e) { /* body 不是 JSON 就用状态码 */ }
+      throw new Error(reason);
     }
+    hideOfflineBanner();
+    var data = await res.json();
+    return parseRawLogs(data.logs || '');
   }
 
   // ===== Parse Raw Log Lines =====
@@ -964,103 +971,25 @@ body {
     }
     return logs;
   }
-
-  // ===== Mock Data (fallback) =====
-  function generateMockLogs() {
-    var now = Date.now();
-    var proxyNames = ['codex', 'hermes', 'cursor'];
-    var levels = ['INFO', 'INFO', 'INFO', 'INFO', 'WARN', 'WARN', 'ERROR'];
-    var messages = {
-      codex: {
-        INFO: [
-          'Request received: POST /v1/chat/completions',
-          'Model switched to gpt-4o, routing mode: fallback',
-          'Health check passed, latency: 23ms',
-          'Configuration reloaded from config.yaml',
-          'Client connected from 127.0.0.1:52341'
-        ],
-        WARN: [
-          'Rate limit approaching: 85% of quota used (425/500)',
-          'Retry attempt 2/3 for upstream request, backing off 1.5s',
-          'Response time exceeded threshold: 3200ms > 2000ms'
-        ],
-        ERROR: [
-          'Upstream connection refused: codex-api service unavailable',
-          'Invalid API key format received from client'
-        ]
-      },
-      hermes: {
-        INFO: [
-          'Agent loop started, waiting for task queue',
-          'Tool execution completed: search_web (duration: 1.2s)',
-          'Memory store synced, 47 entries persisted',
-          'New session created',
-          'WebSocket connection established on proxy channel'
-        ],
-        WARN: [
-          'Task queue depth exceeding threshold: 23 pending tasks',
-          'Tool response validation warning: missing field "confidence"',
-          'Memory usage at 78%, consider garbage collection'
-        ],
-        ERROR: [
-          'Fatal: agent pipeline interrupted - unrecoverable state',
-          'Database connection pool exhausted, max connections: 50'
-        ]
-      },
-      cursor: {
-        INFO: [
-          'IDE extension connected',
-          'Model routing: selected claude-sonnet-4-20250514 (confidence: 0.94)',
-          'Cache hit for prompt template: code_completion_v3',
-          'Provider balance check: OpenAI $12.47, Anthropic $8.32',
-          'Request completed: 142 tokens input, 387 tokens output'
-        ],
-        WARN: [
-          'Provider response slow: anthropic took 4.2s (threshold: 3s)',
-          'Token budget warning: current session using 62% of daily limit',
-          'Fallback activated: switching from claude-opus to claude-sonnet'
-        ],
-        ERROR: [
-          'Provider error: OpenAI returned 429 Too Many Requests',
-          'Model initialization failed: claude-haiku-3 not available in region'
-        ]
-      }
-    };
-
-    var logs = [];
-    var count = 25;
-    for (var i = 0; i < count; i++) {
-      var proxy = proxyNames[Math.floor(Math.random() * proxyNames.length)];
-      var level = levels[Math.floor(Math.random() * levels.length)];
-      var msgs = messages[proxy][level];
-      var msg = msgs[Math.floor(Math.random() * msgs.length)];
-      var timestamp = new Date(now - (count - i) * 30000 + Math.random() * 15000);
-      logs.push({
-        timestamp: timestamp.toISOString().replace('T', ' ').substring(0, 23),
-        proxy: proxy,
-        level: level,
-        message: msg
-      });
-    }
-    return logs.sort(function(a, b) { return a.timestamp.localeCompare(b.timestamp); });
-  }
-
-  // ===== Render Log Line =====
+  // 单行日志渲染。2026-10-16 重建：删 generateMockLogs 死代码时误删了本函数定义，
+  // 只剩 renderLogs 里的 `logsToRender.map(renderLogLine)` 调用点——日志页会直接崩
+  // （ReferenceError: renderLogLine is not defined）。类名严格对齐本文件 CSS：
+  // .log-line / .timestamp / .proxy-tag.{codex,hermes,cursor,system} /
+  // .level-badge.{INFO,WARN,ERROR} / .log-message。
   function renderLogLine(log) {
-    var ts = esc(log.timestamp);
-    var proxyName = esc(PROXY_CONFIGS[log.proxy] ? PROXY_CONFIGS[log.proxy].name : log.proxy.toUpperCase());
-    var msg = esc(log.message);
-    var proxyClass = log.proxy in PROXY_CONFIGS ? log.proxy : 'system';
-
-    return '<span class="log-line" title="点击复制日志内容">' +
-      '<span class="timestamp">' + ts + '</span> ' +
-      '<span class="proxy-tag ' + proxyClass + '">[' + proxyName + ']</span> ' +
-      '<span class="level-badge ' + esc(log.level) + '">' + esc(log.level) + '</span> ' +
-      '<span class="log-message">' + msg + '</span>' +
-      '</span>';
+    var lvl = String((log && log.level) || 'INFO').toUpperCase();
+    var lvlClass = (lvl === 'ERROR' || lvl === 'WARN' || lvl === 'INFO') ? lvl : 'INFO';
+    var proxy = String((log && log.proxy) || 'system').toLowerCase();
+    var proxyClass = (proxy === 'codex' || proxy === 'hermes' || proxy === 'cursor' || proxy === 'system') ? proxy : 'system';
+    var ts = (log && log.timestamp) ? new Date(log.timestamp).toLocaleString('zh-CN') : '-';
+    return '<div class="log-line">' +
+      '<span class="timestamp">' + esc(ts) + '</span> ' +
+      '<span class="proxy-tag ' + proxyClass + '">' + esc(proxy) + '</span> ' +
+      '<span class="level-badge ' + lvlClass + '">' + esc(lvl) + '</span> ' +
+      '<span class="log-message">' + esc((log && log.message) || '') + '</span>' +
+    '</div>';
   }
 
-  // ===== Render Logs =====
   function renderLogs(logsToRender, totalCount, autoScroll) {
     var viewer = document.getElementById('logViewer');
     var countEl = document.getElementById('logCount');
@@ -1141,32 +1070,63 @@ body {
 
     fetchLogs(500).then(function(logs) {
       if (logs.length === 0) {
-        logs = generateMockLogs();
-        showOfflineBanner();
+        // 真的没日志就说没日志。过去这里 `logs = generateMockLogs()`——
+        // 空日志时反而显示 20+ 条不存在的日志，其中还有假 ERROR。
+        hideOfflineBanner();
+        allLogs = [];
+        applyFilters();
+        viewer.innerHTML =
+          '<div class="empty-state">' +
+            '<div class="empty-text">暂无日志</div>' +
+            '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;">' +
+              '代理运行后这里会出现日志。若刚启动，稍等几秒再刷新。' +
+            '</div>' +
+          '</div>';
+        var logViewer = document.getElementById('logViewer');
+        if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
+        return;
       }
       allLogs = logs;
       applyFilters();
 
       var logViewer = document.getElementById('logViewer');
       if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
-    }).catch(function() {
-      allLogs = generateMockLogs();
-      showOfflineBanner();
+    }).catch(function(err) {
+      allLogs = [];
       applyFilters();
+      // 读失败 ≠ 没日志。显示读失败并给排查入口，不喂假日志。
+      viewer.innerHTML =
+        '<div class="empty-state">' +
+          '<div class="empty-text" style="color:#d97706;">日志读取失败</div>' +
+          '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;max-width:520px;">' +
+            esc((err && err.message) || '未知错误') +
+            '<br>常见原因：manager 未启动、登录态过期（会自动跳登录页）、或 /api/logs 报错。' +
+          '</div>' +
+        '</div>';
     }).finally(hideLoading);
   };
 
   // ===== Clear Logs =====
   window.clearLogs = function() {
     if (!confirm('确定要清除所有日志吗？')) return;
+    var viewer = document.getElementById('logViewer');
+    // 过去这里 fetch 失败被 `.catch(function() {})` 吞掉，然后无条件显示「日志已清除」。
+    // 清除失败却报成功，用户会以为日志已清空而停止排查——必须先等后端确认。
     fetch('/api/logs/clear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
-    }).catch(function() {});
-    allLogs = [];
-    document.getElementById('logViewer').innerHTML = '<div class="empty-state">日志已清除</div>';
-    document.getElementById('logCount').innerHTML = '共 <strong>0</strong> 条';
-    showToast('日志已清除', 'success');
+    }).then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function() {
+      allLogs = [];
+      viewer.innerHTML = '<div class="empty-state">日志已清除</div>';
+      var countEl = document.getElementById('logCount');
+      if (countEl) countEl.innerHTML = '共 <strong>0</strong> 条';
+      showToast('日志已清除', 'success');
+    }).catch(function(err) {
+      showToast('清除失败：' + ((err && err.message) || '未知错误'), 'error');
+    });
   };
 
   // ===== Copy Logs =====
@@ -1432,7 +1392,7 @@ body {
     container.innerHTML = proxyNames.map(function(name) {
       var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' };
       return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
-        '<span class="nav-icon">' + config.icon + '</span>' +
+        '<span class="ico nav-icon">' + config.icon + '</span>' +
         esc(config.name) +
         '</a>';
     }).join('');

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>设置 · Multi-Proxy Manager</title>
+   <!-- 旧两 CSS 保留作别名桥（design-system.test.js 读它们），新层最后加载＝视觉默认 -->
+   <link rel="stylesheet" href="./colors_and_type.css">
+   <link rel="stylesheet" href="./shared-styles.css">
+   <link rel="stylesheet" href="./tokens.css">
+   <link rel="stylesheet" href="./components.css">
+</head>
+<body class="theme-dark">
+   <div id="ui-shell" data-shell></div>
+   <main class="content">
+     <header class="page-head">
+       <h1 class="page-title">设置</h1>
+       <p class="page-subtitle">外观 · 关于 · 更新与备份</p>
+     </header>
+
+     <div class="tabs" id="settingsTabs">
+       <button class="tab active" data-tab="appearance">外观</button>
+       <button class="tab" data-tab="about">关于</button>
+       <button class="tab" data-tab="update">更新与备份</button>
+     </div>
+
+     <!-- 外观 -->
+     <section class="tab-panel active" data-panel="appearance">
+       <div class="card">
+         <h3 class="card-h">主题</h3>
+         <div class="row">
+           <div class="row-main">
+             <div class="row-title">暗色模式</div>
+             <div class="row-desc">跟随本机外观或手动固定。状态存本机 localStorage。</div>
+           </div>
+           <button class="toggle" id="appearanceDark" type="button"></button>
+         </div>
+       </div>
+       <div class="card">
+         <h3 class="card-h">字体</h3>
+         <div class="row">
+           <div class="row-main">
+             <div class="row-title">字体族</div>
+             <div class="row-desc">无外部字体加载（v1.0 已移除 Google Fonts 依赖），使用系统字体栈。</div>
+           </div>
+           <span class="badge badge--info">系统字体</span>
+         </div>
+       </div>
+     </section>
+
+     <!-- 关于 -->
+     <section class="tab-panel" data-panel="about">
+       <div class="card">
+         <h3 class="card-h">版本信息</h3>
+         <div class="kv">
+           <div class="kv-row"><span class="kv-k">应用</span><span class="kv-v">Multi-Proxy Manager</span></div>
+           <div class="kv-row"><span class="kv-k">版本</span><span class="kv-v">1.0（v1.0 收尾）</span></div>
+           <div class="kv-row"><span class="kv-k">运行模式</span><span class="kv-v" id="aboutMode">本地管理面板（绑定 127.0.0.1）</span></div>
+           <div class="kv-row"><span class="kv-k">数据目录</span><span class="kv-v">~/.multi-proxy-manager/</span></div>
+         </div>
+       </div>
+     </section>
+
+     <!-- 更新与备份 -->
+     <section class="tab-panel" data-panel="update">
+       <div class="card">
+         <h3 class="card-h">更新</h3>
+         <div class="row">
+           <div class="row-main">
+             <div class="row-title">检查更新</div>
+             <div class="row-desc">v1.0 正式发布时接入更新源；当前为占位，点击提示「更新源待发布」。</div>
+           </div>
+           <button class="btn btn-ghost" id="chkUpdate" type="button">检查更新</button>
+         </div>
+       </div>
+       <div class="card">
+         <h3 class="card-h">备份</h3>
+         <div class="row">
+           <div class="row-main">
+             <div class="row-title">配置导出</div>
+             <div class="row-desc">导出本机 provider 注册表与价表（providers.json / pricing.json）副本，便于迁移或备份。</div>
+           </div>
+           <a class="btn btn-ghost" href="/#/api/config-export" id="doExport" target="_blank" rel="noopener">导出配置</a>
+         </div>
+       </div>
+       <div class="card">
+         <h3 class="card-h">首启授权</h3>
+         <div class="row">
+           <div class="row-main">
+             <div class="row-title">已接受首启协议</div>
+             <div class="row-desc">标记存于 ~/.multi-proxy-manager/.first-launch-consent-done，可随时撤销后重走首启同意门。</div>
+           </div>
+           <button class="btn btn-ghost" id="revConsent" type="button">撤销</button>
+         </div>
+       </div>
+     </section>
+   </main>
+
+   <div id="toasts" class="toasts"></div>
+
+   <script>
+     (function(){
+       function toast(msg, kind){
+         var box = document.getElementById('toasts');
+         if (!box) return;
+         var el = document.createElement('div');
+         el.className = 'toast' + (kind === 'info' ? ' toast--info' : '');
+         el.textContent = msg;
+         box.appendChild(el);
+         setTimeout(function(){ el.remove(); }, 3200);
+       }
+       // tab 切页
+       var tabs = document.querySelectorAll('#settingsTabs .tab');
+       tabs.forEach(function(t){
+         t.addEventListener('click', function(){
+           tabs.forEach(function(x){ x.classList.remove('active'); });
+           document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+           t.classList.add('active');
+           var pn = t.dataset.tab;
+           var panel = document.querySelector('.tab-panel[data-panel="' + pn + '"]');
+           if (panel) panel.classList.add('active');
+           });
+         });
+       // 暗色模式 toggle（真实，沿用 localStorage）
+       var darkBtn = document.getElementById('appearanceDark');
+       var isDark = document.body.classList.contains('theme-dark');
+       if (darkBtn) darkBtn.classList.toggle('on', isDark);
+       if (darkBtn) darkBtn.addEventListener('click', function(){
+         var d = document.body.classList.toggle('theme-dark');
+         darkBtn.classList.toggle('on', d);
+         try { localStorage.setItem('theme', d ? 'dark' : 'light'); } catch (e) {}
+         });
+     // 检查更新：v1.0 占位，诚实提示更新源待发布
+       var chk = document.getElementById('chkUpdate');
+       if (chk) chk.addEventListener('click', function(){
+         toast('应用内更新：v1.0 正式发布时接入更新源，当前为占位。', 'info');
+         });
+     // 撤销首启授权：接 /api/consent/revoke，回首启同意门
+       var rev = document.getElementById('revConsent');
+       if (rev) rev.addEventListener('click', function(){
+         rev.disabled = true;
+         fetch('/api/consent/revoke', { method: 'POST' })
+            .then(function(r){ return r.json(); })
+            .then(function(j){
+              toast(j && j.success ? '已撤销，刷新后将回到首启同意门。' : '撤销失败：' + (j && j.error || ''), j && j.success ? 'info' : 'error');
+            })
+            .catch(function(){ toast('撤销失败：网络异常。', 'error'); })
+            .finally(function(){ rev.disabled = false; });
+         });
+     })();
+   </script>
+</body>
+</html>

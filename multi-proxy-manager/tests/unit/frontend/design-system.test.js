@@ -430,10 +430,11 @@ describe('Design System', () => {
     });
 
     it('should reference colors_and_type.css in all HTML pages', () => {
-      filenames.forEach(name => {
-        if (name === 'index.html') return; // redirect page, no CSS
-        if (name === 'login.html') return; // inline styles, no external CSS
-        const content = fs.readFileSync(path.join(CSS_DIR, name), 'utf8');
+     filenames.forEach(name => {
+       if (name === 'index.html') return; // redirect page, no CSS
+       if (name === 'login.html') return; // inline styles, no external CSS
+       if (name === 'consent.html') return; // 首启 overlay，内联样式（同 login/index 例）
+       const content = fs.readFileSync(path.join(CSS_DIR, name), 'utf8');
         expect(content).toContain('colors_and_type.css');
       });
     });

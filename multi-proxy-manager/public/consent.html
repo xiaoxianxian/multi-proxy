@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>首启同意 · Multi-Proxy Manager</title>
+  <style>
+    :root{
+      --bg:#eef2f6;--page:#ffffff;--ink:#1a2433;--ink-2:#3b4a5d;--faint:#8a93a3;
+      --line:#dce3ec;--brand:#1b6f78;--brand-2:#2f96a0;--ok:#3a7d44;--ok-soft:#e9f5ec;--warn-soft:#fdf6e6;--warn:#b5812a;
+      --shadow:0 10px 30px rgba(20,30,45,.08);--radius:16px;
+    }
+    body.theme-dark{--bg:#0d1117;--page:#151b24;--ink:#e8eef7;--ink-2:#b9c4d4;--faint:#8a93a3;--line:rgba(255,255,255,.10);--brand:#3aa6b3;--ok:#6bbf79;--ok-soft:rgba(58,125,68,.16);}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.65;display:grid;place-items:center;min-height:100vh;padding:24px}
+    .consent{width:min(640px,100%);background:var(--page);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+    .consent__head{padding:24px 28px 14px;background:linear-gradient(135deg,rgba(27,111,120,.10),rgba(47,150,160,.05));border-bottom:1px solid var(--line)}
+    .consent__title{font-size:20px;font-weight:800;margin:0}
+    .consent__sub{color:var(--faint);font-size:13px;margin:4px 0 0}
+    .consent__body{padding:18px 28px}
+    .consent__sec{margin-bottom:16px}
+    .consent__h{font-size:13px;font-weight:700;color:var(--ink-2);letter-spacing:.04em;margin:0 0 6px;display:flex;align-items:center;gap:6px}
+    .consent__list{margin:0;padding:0;list-style:none}
+    .consent__list li{display:flex;gap:8px;padding:4px 0;color:var(--ink-2);font-size:13px}
+    .consent__list li::before{content:"·";color:var(--brand);font-weight:700}
+    .consent__note{background:var(--warn-soft);border-radius:10px;padding:10px 12px;color:var(--ink-2);font-size:12.5px;line-height:1.6;margin:6px 0 14px}
+    .consent__check{display:flex;gap:9px;align-items:flex-start;margin:12px 0 6px;font-size:13px}
+    .consent__check input{margin-top:3px;accent-color:var(--brand)}
+    .consent__foot{background:#f7f9fc;border-top:1px solid var(--line);padding:16px 28px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    body.theme-dark .consent__foot{background:rgba(255,255,255,.02)}
+    .btn{border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform .1s,box-shadow .15s;letter-spacing:.01em}
+    .btn--primary{background:var(--brand);color:#fff;box-shadow:0 4px 14px rgba(27,111,120,.28)}
+    .btn--primary:hover{transform:translateY(-1px)}
+    .btn--primary:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+    .btn--ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line)}
+    .consent__meta{flex-basis:100%;color:var(--faint);font-size:11.5px;line-height:1.5}
+    .consent__ok{display:none;text-align:center;padding:48px 28px}
+    .consent__ok h2{font-size:18px;margin:0 0 8px}
+    .consent__ok p{color:var(--ink-2);font-size:13px;margin:0 0 18px}
+    .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px;margin-right:6px}
+    @keyframes sp{to{transform:rotate(360deg)}}
+    @media (max-width:640px){.consent__foot{flex-direction:column;align-items:stretch}.consent__foot .btn{width:100%}}
+    @media (prefers-reduced-motion:reduce){*{animation:none;transition:none}}
+  </style>
+</head>
+<body class="theme-dark">
+  <main class="consent" role="main">
+    <div class="consent__head">
+        <h1 class="consent__title">首启授权确认</h1>
+        <p class="consent__sub">Multi-Proxy Manager · 本地 AI 模型代理管理台</p>
+     </div>
+
+    <div id="gate" class="consent__body">
+      <div class="consent__sec">
+        <h3 class="consent__h">这个工具做什么</h3>
+        <ul class="consent__list">
+          <li>在你本机统一管理多个 AI 模型代理（codex / hermes / cursor 等），做路由、成本、健康与告警。</li>
+          <li>所有代理状态、provider 配置、密钥、账单账本默认**仅保存在本机**（<code>~/.multi-proxy-manager/</code> 等本地文件）。</li>
+          <li>管理面板默认只绑定本回环 <code>127.0.0.1</code>，不对外部网络开放。</li>
+        </ul>
+      </div>
+
+      <div class="consent__sec">
+        <h3 class="consent__h">隐私与数据</h3>
+        <ul class="consent__list">
+          <li><strong>本地优先</strong>：默认无任何遥测、无第三方上报；会话 / 成本数据留在本机。</li>
+          <li>仅当你<strong>显式开启</strong>对应门控能力（如告警、外部接入端点）时，相关数据才按该能力的设定处理；每个能力默认关闭、可关。</li>
+          <li>调用上游模型时，你的请求内容由<strong>上游模型服务商</strong>按其条款处理，本工具不额外留存。</li>
+        </ul>
+        <div class="consent__note">
+          摘要性质。完整<strong>用户协议</strong>与<strong>隐私条款</strong>随 v1.0 正式发布时补齐（本工具为本地开源管理面板，无独立法人条款）；
+          当前以「本地优先 + 每能力默认可关」为实际约定。勾选下方即表示你已知悉并同意继续。
+        </div>
+      </div>
+
+      <label class="consent__check">
+        <input type="checkbox" id="agreed" />
+        <span>我已阅读并接受，继续以本地优先方式使用 Multi-Proxy Manager。</span>
+      </label>
+
+      <div class="consent__foot" style="padding:0">
+        <button id="accept" class="btn btn--primary" disabled>接受并继续</button>
+        <a class="btn btn--ghost" href="/dashboard" id="later">暂不，稍后再说</a>
+        <p class="consent__meta">勾选后即写入本机标记 <code>~/.multi-proxy-manager/.first-launch-consent-done</code>；之后不再提示。可随时在「设置」中撤销。</p>
+      </div>
+    </div>
+
+    <div id="landing" class="consent__ok">
+      <h2>已接受 · 正在进入</h2>
+      <p>首启协议确认已写入本机。</p>
+      <a class="btn btn--primary" id="enter" href="/dashboard">进入管理台</a>
+    </div>
+  </main>
+
+  <script>
+    (function(){
+      var agreed = document.getElementById('agreed');
+      var accept = document.getElementById('accept');
+      var gate = document.getElementById('gate');
+      var landing = document.getElementById('landing');
+      agreed.addEventListener('change', function(){ accept.disabled = !agreed.checked; });
+      function go(state, text){
+        gate.classList.add('hide');
+        landing.style.display = 'block';
+        landing.querySelector('h2').textContent = state ? '已接受 · 正在进入' : '已记录 · 未接受';
+        landing.querySelector('p').textContent = text;
+      }
+      accept.addEventListener('click', function(){
+        accept.disabled = true;
+        accept.innerHTML = '<span class="spin"></span>写入中…';
+        fetch('/api/consent/accept', { method: 'POST', headers: {'Content-Type':'application/json'} })
+          .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+          .then(function(res){
+            if (res.ok && res.j && res.j.success) {
+              go(true, '首启协议确认已写入本机。');
+              setTimeout(function(){ location.href = '/dashboard'; }, 700);
+            } else {
+              go(false, '写入失败：' + (res.j && res.j.error ? res.j.error : '服务未响应'));
+              accept.disabled = false;
+              accept.textContent = '重试';
+            }
+          })
+          .catch(function(){ go(false, '写入失败：网络或本地权限问题。'); accept.disabled = false; accept.textContent = '重试'; });
+      });
+    })();
+  </script>
+</body>
+</html>
