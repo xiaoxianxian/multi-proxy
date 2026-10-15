@@ -12,6 +12,19 @@ This file is part of the multi-proxy project.
 
 cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决的是上一层：**项目 → 任务 → 分派 → 验收 → 记忆复用**。它站在本地私有栈（Ollama / MiniMax H3 / 自托管 API）之上，把多个 coding agent 编排成一条可验收的工作流，全程非侵入——agent 感知不到中枢的存在。
 
+## 定位：本地多编码代理的调度层，不是又一个 Agent 框架
+
+多 agent 工具分两类：一类做**编排框架**（CrewAI / LangGraph——你把任务交给它的抽象），一类做**云端沙箱编排**。multi-proxy 都不做，它做**管理层**：Codex / Claude Code / Cursor 照原来怎么用还怎么用，multi-proxy 站在中间，管住四件天天出事的小事：
+
+| 差异点 | 具体是什么 | 在哪 |
+|---|---|---|
+| **让你的 AI 编码代理不再打架**（签名能力） | 开代理前读各 agent 自己配置文件里的 `base_url` 实际指向，被 cc-switch 等其它工具占着就拒开；桌面壳开壳前 + Web 面板各查一次 | `multi-proxy-manager/lib/agent-owner.js`、`GET /api/conflicts`、`tools/agent-proxy-switch` |
+| **只读接入，绝不写回** | 适配器只读 agent 的状态与结果，不改 agent 任何配置文件；编排路由默认影子模式——先记账，不动真实流量 | `l2/adapters/`（5 个）、`l2/observe-shadow-run.js` |
+| **成本台账按 agent 归因** | 每个代理、每个模型、每个客户端（Cline / Aider / OpenHands 可区分）单独记账；上游单价 unknown 时不回落瞎估，宁可记「未知」 | `generic-openai-proxy` 按 UA 归因、`l2/relay-ledger.js`、`l2/savings-gateway/` |
+| **本地是一等公民** | Ollama 本地推理与云端 API 同台路由；路由规则打上 `privacy=true`，请求架构性只落本机端点，不上云 | `cursor-proxy/src/providers/ollama.ts`、路由表见下 |
+
+不绑定任何 agent 厂商，也不替代任何一个——这是 multi-proxy 的中立位。
+
 ---
 
 ## 能干什么（先看这个）

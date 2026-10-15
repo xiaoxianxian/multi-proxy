@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.multi-proxy.workbuddy-shim</string>
+
+  <!-- WorkBuddy → OpenAI 兼容 shim：监听 127.0.0.1:18789，把 generic-openai-proxy 的
+       上游请求翻成 WorkBuddy 私线。配置全部来自 workbuddy-shim/.env（server.js 启动时
+       零依赖加载），不要在这里重复注入 token —— token 只在 .env 里，避免落进 LaunchAgents
+       的 plist 明文。 -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-6/bin/node</string>
+    <string>/Users/xiaota/Documents/AI项目/multi-proxy/workbuddy-shim/server.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/workbuddy-shim</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/workbuddy-shim.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/workbuddy-shim.launchd.err.log</string>
+</dict>
+</plist>

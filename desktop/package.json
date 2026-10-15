@@ -23,8 +23,12 @@
     "files": [
       "main.js",
       "preload.js",
-      "splash.html"
+      "splash.html",
+      "first-launch-cleanup.js"
     ],
+    "asar": true,
+    "compression": "normal",
+    "npmRebuild": false,
     "mac": {
       "target": [
         "dir"

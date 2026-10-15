@@ -1,0 +1,15 @@
+{
+  "name": "workbuddy-shim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorkBuddy (CodeBuddy / copilot.tencent.com) → OpenAI-compatible adapter for multi-proxy",
+  "license": "AGPL-3.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/protocol.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

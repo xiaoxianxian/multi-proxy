@@ -150,3 +150,11 @@ codex-proxy/logs/
 cursor-proxy/data/
 logs/
 *.trace.jsonl
+
+# 3.4 过程资产/未定稿(2026-10-15 双轴审计结论): 内部评审稿、法务草案、设计过程稿、竞品评估——
+# 含大量内部决策表述与未拍板占位符，定稿/脱敏后再由维护者显式放行；勿 git add -A 误带
+docs/legal/
+docs/design-system/
+docs/frontend-review/
+docs/vendor-agent-bridge.md
+竞品机制评估-*.md

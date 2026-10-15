@@ -58,6 +58,17 @@ cp -R "dist-app/mac-arm64/Proxy Manager.app" /Applications/
 - 壳进程树内注入完整 PATH（~/.local/bin、homebrew 等，规避 GUI PATH 缺失）
 - 仅壳进程树内设 `NO_PROXY=127.0.0.1,localhost,::1`——**绝不污染全局 launchd 环境**（AGENTS.md §2 / 03-adr/0002 铁律）
 
+## 首启数据清理（3.3，门控默认关 = shadow）
+
+`desktop/first-launch-cleanup.js` 在 `whenReady` → 启 manager **之前**非阻塞跑一次（异常只告警，绝不阻断启动）：
+盘点“开发期残留 / 测试数据”，**只删仓库工作树的可删级**（`codex-proxy/trace|logs`、`cursor-proxy/data` 陈旧锁/缓存、`**/*.bak-*`），**绝不碰用户态**（`~/.multi-proxy-manager/`、活 `proxy.db`、`.encryption-key`、providers/token/密码/账本）；“近 2min 内被写过”的文件判定在跑、跳过。
+
+- `MPX_FIRSTLAUNCH_CLEANUP`：`off`（默认，影子零落盘）/ `report`（写 manifest 不删）/ `on`（删可删级）
+- `MPX_CLEANUP_FORCE=1`：忽略首启标记强制重跑（`on` 跑过一次写 `~/.multi-proxy-manager/.first-launch-cleanup-done`，之后自动跳过）
+- manifest 落点：`~/.multi-proxy-manager/first-launch-cleanup.json`（`report`/`on` 才写）
+
+打包：`npm run pack` 前确认 electron-builder `ignore` 已含 dev 数据兜底排除（`*.log`/`*.jsonl`/`trace`/`logs`/`data/proxy.db*`/`*.bak-*`/`.env`/`.encryption-key`）——当前 `.app` 已实测无 dev 数据。
+
 ## 已验证路径
 
 - [x] 附着模式（manager 外部已跑 → 只开窗口）

@@ -15,6 +15,8 @@ const { spawn, execSync } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+// 3.3 首启数据清理（门控默认关=shadow，绝不影响现有运行；见 desktop/first-launch-cleanup.js）
+const { runFirstLaunchCleanup } = require('./first-launch-cleanup');
 
 const MANAGER_PORT = 18792;
 const MANAGER_URL = `http://127.0.0.1:${MANAGER_PORT}`;
@@ -156,6 +158,28 @@ async function ensureManager() {
   return true;
 }
 
+// ---------- 3.3 首启数据清理（门控默认关=shadow）----------
+// 非侵入：失败/异常绝不阻断 manager 启动（AGENTS §3 非侵入铁律 + §1 代理静默失败教训）。
+// 默认 gate=off → 只算清单 + 打一行日志，零落盘、零删除；维护者可用
+// MPX_FIRSTLAUNCH_CLEANUP=report|on 显式开启（见 desktop/first-launch-cleanup.js）。
+function runFirstLaunchCleanupSafe() {
+  try {
+    const home = app.getPath('home');
+    const res = runFirstLaunchCleanup({
+      home,
+      repoRoot: REPO_ROOT,
+      log: (m) => console.log(m),
+    });
+    const deleted = res.deletable.filter(x => x.deleted && !x.skippedReason).length;
+    console.log(
+      `[shell] first-launch-cleanup gate=${res.gate}${res.shadow ? '(shadow,零落盘)' : ''} ` +
+      `命中=${res.deletable.length} 删除=${deleted} 勿删=${res.neverTouch.length} 用户态=${res.stateFiles.length}`
+    );
+  } catch (e) {
+    console.warn('[shell] first-launch-cleanup 跳过（异常，不影响启动）：', e && e.message);
+  }
+}
+
 // ---------- 窗口 ----------
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -189,6 +213,7 @@ function createWindow() {
 let isQuittingInternal = false;
 
 app.whenReady().then(async () => {
+  runFirstLaunchCleanupSafe(); // 3.3 首启清理：门控默认关=shadow，非阻塞、绝不阻断启动
   const ok = await ensureManager();
   if (!ok) {
     app.quit();

@@ -176,6 +176,17 @@ function main() {
     return 0;
   }
 
+  // 2026-10-14 收口：更新源由 api.github.com（公开仓库）切到自有分发站 sifking.cn。
+  // 默认关 = 不做任何外发：manifest 形态（静态 .dmg 列表 vs 类 release JSON）尚未落地、
+  // 当前环境不可达、且发版前不应向外打任何第三方——对齐「无第三方遥测 / 数据不出本机」。
+  // 应用内更新阶段由维护者显式开启：MP_UPDATE_ON=1 指向 sifking manifest。
+  // 发布源 URL 已定：https://sifking.cn/multi-proxy/releases/。
+  const updateOn = (process.env.MP_UPDATE_ON === '1' || process.env.MP_UPDATE_ON === 'true');
+  if (!updateOn) {
+    process.stdout.write(JSON.stringify({ checked: false, reason: 'default-off' }) + '\n');
+    return 0;
+  }
+
   const current = currentVersion();
   if (!current) {
     process.stdout.write(JSON.stringify({ checked: false, reason: 'no-version-file' }) + '\n');
