@@ -143,3 +143,10 @@ docs/MULTI-SESSION-COORDINATION.md
 docs/M7-DASHBOARD-ABORT-RESUME-VERIFIED.md
 docs/cc-switch-对照研究-*.md
 scripts/工具实录-执行手册-*.md
+
+# 3.3 对外发布清理(2026-10-14 贾维斯): 运行时/测试/dev 数据不进仓库不进包
+codex-proxy/trace/
+codex-proxy/logs/
+cursor-proxy/data/
+logs/
+*.trace.jsonl

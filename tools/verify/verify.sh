@@ -76,32 +76,34 @@ say ""
 say "## 2. 获取代码"
 if [ -f "install.sh" ] && [ -f "manage.sh" ]; then
   WORK="$(pwd)"
-  say "检测到当前就在 multi-proxy 目录，直接使用: $WORK"
+  say "检测到当前就在 multi-proxy 目录，直接使用: ${WORK:-.}"
 else
-  sh_step "克隆仓库到 $WORK" "git clone --depth 1 '$REPO' '$WORK'"
+  sh_step "克隆仓库到 ${WORK:-.}" "git clone --depth 1 '$REPO' '${WORK:-.}'"
 fi
 
-if [ ! -d "$WORK" ]; then
+if [ ! -d "${WORK:-.}" ]; then
   say ""
   say "代码获取失败，后续步骤无法继续。请把本文件发回，谢谢！"
   hr
   exit 1
 fi
-cd "$WORK" || exit 1
+cd "${WORK:-.}" || exit 1
 say ""
-say "工作目录: $WORK"
+say "工作目录: ${WORK:-.}"
 sh_step "当前 HEAD" "git log --oneline -1"
 
 # ---------- 3. 安装 ----------
 say ""
 say "## 3. 安装（install.sh --all，静默全量）"
-sh_step "安装全部组件" "cd '$WORK' && bash install.sh --all"
+# 独立 TMPDIR：避开部分环境（如沙箱 sitecustomize）下 pip 临时目录 mkdir EEXIST 竞争
+mkdir -p "${TMPDIR:-/tmp}/mp-verify-tmp"
+sh_step "安装全部组件" "cd '${WORK:-.}' && TMPDIR='${TMPDIR:-/tmp}/mp-verify-tmp' bash install.sh --all"
 
 # ---------- 4. Linux systemd 自启路径（本次重点验证项） ----------
 say ""
 say "## 4. 开机自启路径（Linux systemd --user）"
 if command -v systemctl >/dev/null 2>&1; then
-  sh_step "配置 systemd 用户服务" "cd '$WORK' && bash install.sh --autostart"
+  sh_step "配置 systemd 用户服务" "cd '${WORK:-.}' && bash install.sh --autostart"
   sh_step "查询服务是否已启用"    "systemctl --user is-enabled multi-proxy-manager.service 2>&1 || true"
   sh_step "查询服务状态"          "systemctl --user status multi-proxy-manager.service --no-pager 2>&1 | head -15 || true"
 else
@@ -111,7 +113,7 @@ fi
 # ---------- 5. 启动服务 ----------
 say ""
 say "## 5. 启动服务"
-sh_step "启动全部服务" "cd '$WORK' && bash manage.sh start all"
+sh_step "启动全部服务" "cd '${WORK:-.}' && bash manage.sh start all"
 
 # 等服务起来（cursor-proxy 初始化较慢，给足 90s）
 say ""
@@ -129,7 +131,7 @@ say "已等待 ${WAITED}s"
 
 say ""
 say "## 5b. 服务状态"
-sh_step "manage.sh status" "cd '$WORK' && bash manage.sh status 2>&1 | head -40"
+sh_step "manage.sh status" "cd '${WORK:-.}' && bash manage.sh status 2>&1 | head -40"
 
 # ---------- 6. 端口与健康检查 ----------
 say ""
@@ -157,7 +159,7 @@ fi
 say ""
 say "## 8. 全量回归（可选）"
 if [ "$FULL" = "1" ]; then
-  sh_step "tools/regression-all.sh" "cd '$WORK' && bash tools/regression-all.sh 2>&1 | tail -60"
+  sh_step "tools/regression-all.sh" "cd '${WORK:-.}' && bash tools/regression-all.sh 2>&1 | tail -60"
 else
   say "默认跳过（设置 MP_FULL=1 可开启，约 30-40 分钟）。"
 fi
@@ -168,11 +170,24 @@ say "## 9. 清理"
 if [ "$KEEP" = "1" ]; then
   say "MP_KEEP=1，保留服务运行与开机自启，不做清理。"
 else
-  sh_step "停止全部服务" "cd '$WORK' && bash manage.sh stop all"
-  if command -v systemctl >/dev/null 2>&1; then
-    sh_step "移除开机自启" "cd '$WORK' && bash install.sh --autostop"
+  # launchd（macOS）托管的实例停了会被 KeepAlive 立刻拉活，先停用再 stop，避免误报 FAIL
+  if command -v launchctl >/dev/null 2>&1; then
+    local_agents=$(ls "$HOME/Library/LaunchAgents"/com.multi-proxy.*.plist 2>/dev/null || true)
+    if [ -n "$local_agents" ]; then
+      say "检测到 launchd LaunchAgent（$(echo "$local_agents" | wc -l | tr -d ' ') 个），先 bootout 停用："
+      for plist in $local_agents; do
+        label=$(basename "$plist" .plist)
+        launchctl bootout "gui/$(id -u)/$label" 2>/dev/null \
+          && say "  [✓] bootout $label" \
+          || say "  [-] $label 未加载或已退出（跳过）"
+      done
+    fi
   fi
-  say "已停止服务并移除开机自启（仓库代码保留在 $WORK，可自行删除）。"
+  sh_step "停止全部服务" "cd '${WORK:-.}' && bash manage.sh stop all"
+  if command -v systemctl >/dev/null 2>&1; then
+    sh_step "移除开机自启" "cd '${WORK:-.}' && bash install.sh --autostop"
+  fi
+  say "已停止服务并移除开机自启（仓库代码保留在 ${WORK:-.}，可自行删除）。"
 fi
 
 hr

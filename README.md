@@ -21,7 +21,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 | 本机同时有 cc-switch、Cursor 自带代理等多个工具，base_url 打架 | **所有权冲突检测**：开代理前读各 agent 配置文件的 `base_url` 实际指向，被占用就拒开（第八节） |
 | 一个任务要拆给多个 agent 分头做，结果再汇合 | **编排引擎**：拆解 → 路由 → 执行 → 聚合，影子模式默认只记录不改真实路由（第五节） |
 | 多个 agent 共享同一份项目记忆 / 技能，但隔离个性 | **记忆服务 + 技能服务**：公共层跨 agent 复用，个性层 per-agent（第五节） |
-| 本地模型 / 本地视频产线（MiniMax H3）也要当「员工」调度 | **4 个适配器**：codex·hermes / h3web / aigc / claude，只读接入、绝不写回（第五节） |
+| 本地模型 / 本地视频产线（MiniMax H3）也要当「员工」调度 | **5 个适配器**：codex·hermes / h3web / aigc / claude / memory-align，只读接入、绝不写回（第五节） |
 | 3 个代理进程谁来管、日志谁来看、端口漂移怎么办 | **进程管理 + Web 管理台 + Electron 桌面壳**，端口全动态探测（第二、四节） |
 
 3 分钟跑一遍全部核心 demo：`bash scripts/demo-tour.sh`（零副作用，影子模式，不碰任何 agent 文件）。
@@ -41,7 +41,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 │  中台层（L2·核心）                                         │
 │   10+ 能力内核：Registry · 编排 · 路由(影子) · 拆解 · 插件    │
 │   记忆 · 技能 · 告警 · 成本 · 熔断 · 限流 · 提示词缓存 · MCP │
-│   4 适配器（非侵入）：codex·hermes · h3web · aigc · claude  │
+│   5 适配器（非侵入）：codex·hermes · h3web · aigc · claude · memory-align │
 ├──────────────────────────────────────────────────────────┤
 │  网关层（L1·增强）                                          │
 │  API 网关 · 协议转换(Responses↔ChatCompletions)            │
@@ -91,7 +91,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 | `circuit-breaker` / `rate-limiter` / `prompt-cache` / `health-monitor` | 熔断 · 限流 · 提示词缓存 · 资源探针 |
 | `mcp-server` / `token-policy` | MCP 服务 · token 策略（Curator pack 驱动，见 `packs/curator/`） |
 
-**4 个适配器（非侵入）**：`l1-agent`（codex-proxy / hermes-proxy）· `h3web`（本地 MiniMax H3 视频产线）· `aigc`（本地 AIGC 服务）· `claude`——按 `l2/adapter-protocol.md` 开放协议接入，下游 Agent 只读、绝不写回。
+**5 个适配器（非侵入）**：`l1-agent`（codex-proxy / hermes-proxy）· `h3web`（本地 MiniMax H3 视频产线）· `aigc`（本地 AIGC 服务）· `claude`· `memory-align`（跨 agent 记忆对齐：hermes↔workbuddy 水位拉齐，门控默认关、shadow 默认开）——按 `l2/adapter-protocol.md` 开放协议接入，下游 Agent 只读、绝不写回。
 
 ---
 
@@ -107,7 +107,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 - **Codex Proxy** — 上游模型转发（多供应商）、`/v1/models`、`/health`、供应商状态、路由模式、切换历史、余额查询、流式传输
 - **Claude Proxy** — Anthropic `/v1/messages` 协议入口（Claude Code 主链路）、`claude-*` 模型别名映射（opus/sonnet → deepseek-v4-pro、haiku → agnes-3.0-flash，`CLAUDE_ALIAS_*` 可覆盖）、`/v1/messages/count_tokens`、供应商 CRUD、路由模式、余额查询
 - **OpenCode Proxy** — OpenAI 兼容透传（opencode 直接写上游真实模型名，不改写）、`/v1/chat/completions` 与 `/v1/responses` 双入口、per-provider 熔断、预算预检、模型目录同步、成本台账
-- **Generic OpenAI Proxy** — Cline / Aider / OpenHands 共用的 OpenAI 兼容网关（一个适配器覆盖三件套，逻辑与 opencode-proxy 同构）、`/v1/chat/completions` 与 `/v1/responses` 双入口、per-provider 熔断、预算预检、模型目录同步、成本台账，按客户端（cline / aider / openhands 或 `x-agent` 头）归因成本
+- **Generic OpenAI Proxy** — Cline / Aider / OpenHands 共用的 OpenAI 兼容网关（一个适配器覆盖三件套，逻辑与 opencode-proxy 同构）、`/v1/chat/completions` 与 `/v1/responses` 双入口、per-provider 熔断、预算预检、模型目录同步、成本台账、瞬态故障有界兜底（fallback 链：5xx/429/408/网络错才切下一个、确定性 4xx 不切、深度上限 5、链耗尽 fail-loud），按客户端（cline / aider / openhands 或 `x-agent` 头）归因成本
 - **Hermes Proxy** — YAML 配置解析、`/api/switch-model`、路由模式、健康检查、余额查询、切换历史
 - **Cursor Proxy** — 5 类供应商适配器（OpenAI Compatible / Anthropic / Gemini / Ollama / Generic）、SQLite 持久化、三种路由策略、熔断器、令牌桶限流、流式翻译、AES-256-GCM 加密 API Key
 - **DSH Proxy** — per-provider 路由、预算预检、模型目录同步
@@ -153,7 +153,7 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 
 路由表里有一条 `privacy == true → 本地模型`，定位是「数据不出本机」。这是**架构性保证**——下游地址就是 `127.0.0.1`，不是调参数调出来的效果。路由规则一旦打上隐私条件，请求只落本机端点，不上云。
 
-（本地视频产线那一类走的是另一条路，走第四节的 4 个适配器，不在这张路由表里。）
+（本地视频产线那一类走的是另一条路，走第四节的 5 个适配器，不在这张路由表里。）
 
 ### 两个已经踩过的坑
 
@@ -287,7 +287,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十四、测试与验收（manager 1458 / codex 159 / claude 174 / opencode 159 / generic 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 · 2026-10-14 实测全绿）
+## 十四、测试与验收（manager 1458 / codex 159 / claude 174 / opencode 159 / generic 177 / cursor 250 / hermes 77 / dsh 20 / l2 51 demo / shell 11 · 2026-10-14~15 实测全绿）
 
 | 模块 | 命令 | 结果 |
 |------|------|------|
@@ -298,6 +298,7 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 | generic-openai-proxy | `cd generic-openai-proxy && npx jest --silent --forceExit --worker=1` | 159/159（14 suites） |
 | cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit` | 250/250（21 suites） |
 | hermes-proxy | `cd hermes-proxy && python3 -m pytest tests/ -q` | 77/77（4 files） |
+| dsh-proxy | `cd dsh-proxy && npm test`（node:test，零第三方依赖） | 20/20（1 file，2026-10-15 实跑） |
 | **L2 demo** | `find l2 -name '*.demo.js' -print0 \| xargs -0 -n1 node` | 51/51 demo 跑通 |
 | shell (bats) | `cd tests/shell && bats *.bats` | 11/11（CI 无 bats 时走 `check.sh` 零依赖回退） |
 
@@ -322,8 +323,8 @@ multi-proxy/
 ├── cursor-proxy/              # TypeScript/SQLite 代理（18794）
 ├── dsh-proxy/                 # Node.js 代理（DeepSeek Harness，PORT 可配）
 ├── desktop/                   # Electron 桌面壳（启动器 + 窗口）
-├── l2/                        # L2 编排中枢：10+ 内核 + 4 adapter + 29 demo
-│    ├── adapters/             # codex·hermes / h3web / aigc / claude 适配器
+├── l2/                        # L2 编排中枢：10+ 内核 + 5 adapter + 51 demo
+│    ├── adapters/             # codex·hermes / h3web / aigc / claude / memory-align 适配器
 │    ├── adapter-protocol.md   # 开放接入协议
 │    ├── savings-gateway/      # 省钱网关 + 成本看门狗
 │    └── specs/                # agent-memory / agent-profile 契约 + schema
@@ -353,6 +354,13 @@ multi-proxy/
 
 ### #3 〔设计〕「单一所有者」机制
 无机制天然防止 proxy 与 cc-switch 同时认领同一 agent 的 base_url。已用 `tools/agent-proxy-switch` + `lib/agent-owner.js` 提供结构化防护（见第五节），桌面壳开壳前强制检测。
+
+### #4 〔已修复·2026-10-15〕`manage.sh stop` 停不掉 launchd 托管实例 + 返回码误报
+现象：`stop all` 对 launchd KeepAlive 托管的实例（实测 codex 18790 / manager 18792）kill 后立刻被拉活，报「未能正常停止」；且 `kill -9` 打在已自行退出的进程上返回 1，被 `set -e` 放大为整个 `stop all` FAIL。
+修复：
+- `stop_service` kill 后复验端口、显式 `return 0`、kill 加 `|| true`，返回码不再冒充停止结果；
+- 端口仍占用时明确提示「launchd KeepAlive 托管，需 `launchctl bootout`」，不再误报；
+- `tools/verify/verify.sh` 清理段先 bootout `~/Library/LaunchAgents/com.multi-proxy.*.plist` 再 stop，修掉其自身 `WORK: unbound variable` 崩溃（2026-10-15 真跑复验 EXIT=0）。
 
 ---
 
@@ -396,10 +404,10 @@ multi-proxy/
 | DSH 接入通道（`.dsh/skills/`） | 完成 |
 | Claude Code 接入（claude-proxy 18791 + 模型别名映射，174 测试 + 真机烟测通过） | 完成 |
 | opencode 接入（opencode-proxy 18798，OpenAI 兼容透传 + 成本台账 + 熔断） | 完成 |
-| Generic OpenAI 接入（generic-openai-proxy 18799，Cline/Aider/OpenHands 共用 OpenAI 兼容透传 + 成本台账 + 熔断） | 完成 |
+| Generic OpenAI 接入（generic-openai-proxy 18799，Cline/Aider/OpenHands 共用 OpenAI 兼容透传 + 成本台账 + 熔断 + 有界兜底） | 完成 |
 | P0 安全修复（`P0-FIXES.md`：11 项） | 完成 |
-| 全量测试 manager 1458 / codex 159 / claude 174 / opencode 159 / generic 159 / cursor 250 / hermes 77 / l2 51 demo / shell 11 全绿（2026-10-14 实测） | 完成 |
-| **交付前最后一批功能集中开发** | **进行中（2026-10-06）** |
+| 全量测试 manager 1458 / codex 159 / claude 174 / opencode 159 / generic 177 / cursor 250 / hermes 77 / dsh 20 / l2 51 demo / shell 11 全绿（2026-10-14~15 实测） | 完成 |
+| ~~交付前最后一批功能集中开发~~ | ✅ 已交付（2026-10-14 转公开 v1.1.0；此后进入持续迭代：generic failover / 文档基线重写 / 适配器计数对账） |
 | 企业版（多租户 / 网关层 / 审计） | 规划中，归 Portico 控制面，未动工 |
 
 > 对外定位：`docs/02-product/v1-positioning-declared.md` · 商业简介：`docs/02-product/business-intro.md` · 文档目录：`docs/00-codebase-map.md` · 架构：`docs/03-architecture/architecture.md` · 验收：`docs/06-test/acceptance.md`。

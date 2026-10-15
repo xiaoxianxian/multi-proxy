@@ -224,12 +224,12 @@ function findProvider(modelName) {
     if (Array.isArray(p.models) && p.models.includes(modelName)) {
       // ⚠️ anthropicBaseUrl 必须一起带出：/v1/messages 的厂商规则对自定义上游未必适用，
       // 漏了它 = 显式逃生口形同不存在（测试抓到的）。
-      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl };
+      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl, fallback: p.fallback };
     }
   }
   const userMatch = userProviders.find(p => p.provider_id && modelName.toLowerCase().includes(String(p.provider_id).toLowerCase()));
   if (userMatch) {
-    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl };
+    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl, fallback: userMatch.fallback };
   }
 
   // 2. Legacy built-in env-key providers (DeepSeek / Kimi / Agnes)
@@ -253,6 +253,8 @@ function findProvider(modelName) {
 // 畸形 fail-safe：文件读不出/JSON 坏/形状不对 ⇒ 当作无策略 + 启动期大声报错。
 //       与 P3「malformed 计价按标准价」同纪律：配错时退回已知安全的老行为。
 const { parseRoutingPolicy, resolveRoute, resolveDirectTarget, buildDirectUpstreamUrl } = require('./routing-policy');
+// 2026-10-15：通用 failover 纯函数层（bounded fallback，任何 provider 可声明 fallback 字段）
+const { isRetryableFailure, buildFallbackTargets, nextFallback, MAX_FALLBACK_DEPTH } = require('./failover');
 // 文件位置可用 env 覆盖（测试与「策略放别处」的场景都用它），缺省落在 DATA_DIR。
 const ROUTING_POLICY_FILE = process.env.PROXY_ROUTING_POLICY_FILE || path.join(DATA_DIR, 'routing-policy.json');
 const ROUTING_POLICY_GATE = ['1', 'true', 'on', 'yes'].includes(String(process.env.PROXY_ROUTING_POLICY || '').toLowerCase());
@@ -438,6 +440,18 @@ function circuitAllows(provider, res) {
         return false;
     }
     return true;
+}
+
+// 2026-10-15：fallback 循环用 —— 只查熔断态、不写 res。
+// circuitAllows 在 block 模式会直接写 503 并 return false；fallback 循环需要先「探测」OPEN
+// 再决定是否切下一个，不能让 circuitAllows 提前污染 res。
+// 关键：observe（默认）/门控关时恒放行（只记账不拦），与 circuitAllows 的语义一致——
+// 否则 observe 模式下 breaker 一旦 OPEN 就会被误判成「硬 503」，破坏「observe 原样透传」契约
+// （见 circuit-proxy.test.js ⑥）。
+function breakerIsOpen(provider) {
+    if (!upstreamBreaker || !provider) return false;     // 门控关：无 breaker
+    if (CIRCUIT_MODE !== 'block') return false;          // observe（默认）：只记账不拦
+    return !upstreamBreaker.allowRequest(provider.name);
 }
 
 function feedCircuit(provider, kind) {
@@ -1039,77 +1053,127 @@ function addHistory(action, from, to, mode, success) {
   if (switchHistory.length > MAX_HISTORY) switchHistory.shift();
 }
 
-// Chat Completions passthrough
+// Chat Completions passthrough (with bounded failover · 2026-10-15)
+// 任何 provider 在 providers.json 声明 `fallback` 字段即启用：上游瞬态故障（网络异常/5xx/429/408/
+// 熔断 OPEN）时按链切下一个，确定性 4xx 或链耗尽 → fail-loud（不静默吞）。未声明 fallback 的
+// provider 行为与改造前逐字一致（单次直发、失败不切）。详见 failover.js。
 app.post('/v1/chat/completions', requireAuth, async (req, res) => {
-  let circuitProvider = null;   // 熔断记账用：catch 作用域拿不到 try 里的 provider
-  try {
-    const { model } = req.body;
-    const provider = findProvider(model);
+  const originalModel = req.body && req.body.model;
+  if (!originalModel) {
+    return res.status(400).json({ success: false, error: 'model is required', code: 'UNSUPPORTED_MODEL' });
+  }
+  // P6/P7-2：只对原始 model 应用一次（fallback 的是同一请求语义，不重复拦截/记账预算）
+  if (await applyRoutingPolicy(originalModel, req, res) !== 'continue') return;
+  if (await applyBudgetGuard(originalModel, req, res) !== 'continue') return;
+
+  const allProviders = loadProviders().filter(p => p.enabled !== false);
+  const visited = new Set([originalModel]);
+  let currentModel = originalModel;
+  let lastFailure = null;       // { status, code, errored, message }
+  let lastProviderName = null;
+  let exhausted = false;       // 是否「曾 fallback 且最终无更多目标」（链耗尽，区别于首跳无兜底）
+  let fellBack = false;        // 是否曾切到过 fallback
+
+  for (let depth = 0; depth <= MAX_FALLBACK_DEPTH; depth++) {
+    const provider = findProvider(currentModel);
     if (!provider) {
-      return res.status(400).json({ success: false, error: `Unsupported model: ${model}`, code: 'UNSUPPORTED_MODEL' });
+      lastFailure = { status: 400, code: 'UNSUPPORTED_MODEL', errored: false };
+      break;
     }
-    // P6：model-id 级路由策略。deny/direct 在这里终结；proxy 才继续往下。
-    // 放在 circuitProvider 赋值之前 —— direct 的失败不该喂熔断（那不是上游健康信号）。
-    if (await applyRoutingPolicy(model, req, res) !== 'continue') return;
-    // P7-2：预算预检（gate 关时恒 'continue'）。放熔断之前：被预算挡的请求不算上游故障。
-    if (await applyBudgetGuard(model, req, res) !== 'continue') return;
-    circuitProvider = provider;
+    lastProviderName = provider.name;
 
-    // 熔断：block 模式下该 provider 已 OPEN → 快速 503，别让客户端干等上游超时
-    if (!circuitAllows(provider, res)) return;
+    // 熔断 OPEN：当作「需重试」信号，不硬 503，进入 fallback 决策（除非无 fallback）
+    if (!breakerIsOpen(provider)) {
+      const bodyForUpstream = { ...req.body, model: currentModel };
+      const t0 = Date.now();
+      const upstreamUrl = `${provider.baseUrl}/chat/completions`;
+      const upstreamSignal = createUpstreamSignal(req, res);
+      try {
+        const response = await fetch(upstreamUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${provider.apiKey}`,
+          },
+          body: JSON.stringify(bodyForUpstream),
+          signal: upstreamSignal,
+        });
 
-    const t0 = Date.now();
-    const upstreamUrl = `${provider.baseUrl}/chat/completions`;
-    // L004：客户端一走，这份 signal 立刻让上游停下，不再空跑满 120 秒
-    const upstreamSignal = createUpstreamSignal(req, res);
-    const response = await fetch(upstreamUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${provider.apiKey}`
-      },
-      body: JSON.stringify(req.body),
-      signal: upstreamSignal,
-    });
+        if (response.ok) {
+          feedCircuit(provider, 'success');
+          // === commit：一旦 2xx 立即落定，不再 fallback（SSE 已推回不去）===
+          if (bodyForUpstream.stream) {
+            const { outcome, acc } = await pipeUpstreamBytes(res, response, '[chat]', upstreamSignal);
+            if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
+              captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'generic-openai-proxy', stream: true } });
+              reportUsage(acc, Date.now() - t0, detectAgent(req), currentModel);
+            }
+          } else {
+            const data = await response.json();
+            captureTrace({ req, provider, rawOrObj: data, meta: { agent: 'generic-openai-proxy', stream: false } });
+            res.json(data);
+            reportUsage(JSON.stringify(data), Date.now() - t0, detectAgent(req), currentModel);
+          }
+          return;
+        }
 
-    if (!response.ok) {
-      feedCircuit(provider, classifyUpstreamStatus(response.status));
-      // Log the raw upstream error internally for debugging
-      const err = await response.text();
-      console.error(`Chat upstream error (status ${response.status}): ${err}`);
-      // Sanitize: never leak provider diagnostic details to the client
-      if (!canWrite(res)) return;
-      return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
-    }
-
-    feedCircuit(provider, 'success');
-
-    if (req.body.stream) {
-      // 流式也接成本采集：复用 pipeUpstreamBytes tee 一份字节、流走完再抽 usage 上报，
-      // 与 /v1/messages 同款。dsh 走的就是这条流式 chat 链路（api: openai-completions），
-      // 之前直接 readable.pipe(res) 没攒字节 ⇒ 流量过 18790 但成本链路抓不到。
-      // 只在 outcome==='completed' 上报：客户端中途断开=虚账，半截 usage 报上去比少报一笔更难看（L004）。
-      const { outcome, acc } = await pipeUpstreamBytes(res, response, '[chat]', upstreamSignal);
-      if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
-        captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'generic-openai-proxy', stream: true } });
-        reportUsage(acc, Date.now() - t0, detectAgent(req), req.body && req.body.model);
+        // 非 2xx：记熔断（瞬态/确定分类），确定性 4xx → 不 fallback，fail-loud
+        feedCircuit(provider, classifyUpstreamStatus(response.status));
+        const err = await response.text();
+        console.error(`[chat] upstream error (status ${response.status}) on model=${currentModel}: ${err.slice(0, 300)}`);
+        if (!isRetryableFailure({ status: response.status })) {
+          if (!canWrite(res)) return;
+          return res.status(response.status).json({
+            success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR', attempted: currentModel,
+          });
+        }
+        lastFailure = { status: response.status, code: 'UPSTREAM_ERROR', errored: false };
+      } catch (e) {
+        // 网络异常/超时/连接失败：瞬态，可切
+        feedCircuit(provider, 'upstream');
+        console.error(`[chat] fetch error on model=${currentModel}: ${e.message}`);
+        lastFailure = { status: 500, code: 'CHAT_ERROR', errored: true, message: e.message };
       }
     } else {
-      const data = await response.json();
-      captureTrace({ req, provider, rawOrObj: data, meta: { agent: 'generic-openai-proxy', stream: false } });
-      res.json(data);
-      // 成本采集：chat 路由此前只有 /v1/messages 接了 reportUsage，dsh 走的这条一直没进账。
-      // 流式分支暂不接（usage 藏在流末、客户端中途断开=虚账），先保非流式完整可记账。
-      reportUsage(JSON.stringify(data), Date.now() - t0, detectAgent(req), req.body && req.body.model);
+      // 熔断 OPEN：记失败态，进入 fallback 决策（breaker 自身已判定，不重复 record）
+      console.error(`[chat] circuit open on model=${currentModel} (${provider.name}) — trying fallback`);
+      lastFailure = { status: 503, code: 'CIRCUIT_OPEN', errored: false };
     }
-  } catch (e) {
-    // 客户端拔了（canWrite=false）不算上游故障，不喂熔断；其余视为上游不可达
-    if (canWrite(res)) feedCircuit(circuitProvider, 'upstream');
-    console.error(`Chat error: ${e.message}`);
-    // 客户端断了才走到这里（L004 后的新路径）：不打日志刷屏，也不往死 socket 上写
-    if (!canWrite(res)) return;
-    res.status(500).json({ success: false, error: e.message, code: 'CHAT_ERROR' });
+
+    // === fallback 决策：取下一个未访问的候选 model ===
+    const next = nextFallback(currentModel, visited, provider, allProviders);
+    if (!next) {
+      // 当前 provider 无兜底目标：若从未切过（首跳就无兜底）→ 原样透传上游状态码；
+      // 若已切过（链走到头）→ 标记链耗尽。两种都不伪装成 502 误报。
+      if (fellBack) exhausted = true;
+      break;
+    }
+    visited.add(next);
+    currentModel = next;
+    fellBack = true;
   }
+
+  if (!canWrite(res)) return;
+  // 模型无处路由（无 provider）且首跳 → 400（与改造前一致）
+  if (lastFailure && lastFailure.status === 400 && !fellBack) {
+    return res.status(400).json({ success: false, error: `Unsupported model: ${currentModel}`, code: 'UNSUPPORTED_MODEL' });
+  }
+  const label = lastProviderName || currentModel;
+  if (exhausted) {
+    // 兜底耗尽：primary + 所有 fallback 都试过仍失败（或全链熔断 OPEN）。明确 502/503。
+    const finalCode = (lastFailure && lastFailure.code === 'CIRCUIT_OPEN') ? 'CIRCUIT_OPEN' : 'FALLBACK_EXHAUSTED';
+    const finalStatus = (lastFailure && lastFailure.code === 'CIRCUIT_OPEN') ? 503 : 502;
+    return res.status(finalStatus).json({
+      success: false,
+      error: `All fallback targets exhausted (last attempted: ${label})`,
+      code: finalCode,
+    });
+  }
+  // 首跳无兜底（provider 没声明 fallback）：原样透传上游状态码（保持老行为，重试性错误也不伪装成 502）
+  const status = lastFailure ? lastFailure.status : 502;
+  const code = lastFailure ? lastFailure.code : 'UPSTREAM_ERROR';
+  const msg = (lastFailure && lastFailure.message) || 'Upstream error';
+  return res.status(status).json({ success: false, error: msg, code });
 });
 
 // ===== Responses passthrough（codex 客户端默认就走这条协议）=====

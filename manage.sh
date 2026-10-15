@@ -330,16 +330,26 @@ stop_service() {
   local pid=$(pid_on_port $port)
   if [ -n "$pid" ]; then
     print_status "停止 $name (PID: $pid)..."
-    kill $pid 2>/dev/null
+    kill $pid 2>/dev/null || true
     sleep 1
 
     if is_port_in_use $port; then
       print_warning "$name 未能正常停止，尝试强制终止..."
-      kill -9 $pid 2>/dev/null
-    else
+      kill -9 $pid 2>/dev/null || true
+      sleep 1
+      if is_port_in_use $port; then
+        # 端口仍被占用：常见于 launchd KeepAlive 托管（杀了立刻被拉活）。
+        # 停 launchd 托管实例需 bootout，不属于 manage.sh 职责，明确告知后返回成功，
+        # 避免 kill -9 的退出码（进程已自行退出时为 1）把 stop 误报为失败。
+        print_warning "$name 端口 $port 仍被占用（可能由 launchd KeepAlive 托管，杀了会被立刻拉活；如需彻底停止请 launchctl bootout 对应 label）"
+      fi
+    fi
+    if ! is_port_in_use $port; then
       print_status "$name 已停止"
     fi
+    return 0
   fi
+  return 0
 }
 
 stop_codex() { stop_service "Codex Proxy" $CODEx_PORT; }
