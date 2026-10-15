@@ -1,0 +1,23 @@
+{
+  "name": "agent-conflict-check",
+  "version": "1.0.0",
+  "description": "独立零依赖检测：你的 coding agent 的 base_url 是否被 cc-switch 等其它代理工具占用。multi-proxy 的「签名能力」可分发副本。",
+  "bin": {
+    "agent-conflict-check": "cli.js"
+  },
+  "scripts": {
+    "start": "node cli.js",
+    "test": "node -e \"require('./conflict-check.js'); console.log('conflict-check.js loads OK')\""
+  },
+  "keywords": [
+    "multi-proxy",
+    "agent",
+    "proxy",
+    "conflict-detection",
+    "cc-switch"
+  ],
+  "license": "AGPL-3.0",
+  "engines": {
+    "node": ">=16"
+  }
+}

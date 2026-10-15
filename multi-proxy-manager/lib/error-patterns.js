@@ -45,6 +45,12 @@ const SEED_PATTERNS = [
   { id: 'hermes-flask-faststart', pattern: 'Hermes.*启动失败|Flask.*启动|误报',
     resolution: 'Hermes(Flask) 启动过快导致端口检测误报"启动失败"。manage.sh 已加 sleep 1s 后再检测，无需处理；若仍复现，手动 `manage.sh status` 复查。',
     first_seen: '2026-08-26' },
+  { id: 'launchd-keepalive-stop', pattern: 'launchd|KeepAlive|bootout|launchctl|stop all.*失败|停不掉',
+    resolution: '该服务由 launchd KeepAlive 托管时，`manage.sh stop` 的 kill 会被立刻拉活、永远停不掉。正确做法：`launchctl bootout gui/$(id -u)/<label>`（卸载并停）或 `launchctl stop <label>`（仅停一次）。多代理套件里 codex(18790)/manager(18792) 默认走 launchd 自启，停它们必须用 launchctl。',
+    first_seen: '2026-10-15' },
+  { id: 'hermes-pyyaml-missing', pattern: 'ModuleNotFoundError.*yaml|No module named .yaml|import yaml',
+    resolution: 'Hermes(Flask) 依赖 pyyaml 但环境缺失。`cd hermes-proxy && python3 -m pip install --user pyyaml`（推荐走 `uv pip install --target <user-site> pyyaml`，不受受限 pip 通道影响）；requirements.txt 已列全，可 `pip install --user -r requirements.txt` 一次补齐 flask/requests/yaml。',
+    first_seen: '2026-10-15' },
 ];
 
 // ---------- 运行时状态（可注入，便于测试） ----------

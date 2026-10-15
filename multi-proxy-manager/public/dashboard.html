@@ -428,8 +428,12 @@
       代理面 Floor
     </div>
     <div class="nav-item" data-page="cost" tabindex="0">
-      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
       成本
+    </div>
+    <div class="nav-item" data-page="shadow" tabindex="0">
+      <span class="nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg></span>
+      影子模式
     </div>
 
     <div class="nav-section-label">管理</div>
@@ -943,6 +947,36 @@
     </div>
   </div>
 
+  <!-- ==================== Shadow (影子模式) Page ==================== -->
+  <div class="page" id="page-shadow">
+    <style>
+      #page-shadow .badge { display:inline-block; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; background:var(--color-bg-secondary); border:1px solid var(--color-border); color:var(--color-text); }
+      #page-shadow .shadow-card { padding:14px; border-radius:10px; border:1px solid var(--color-border); background:var(--color-bg); }
+      #page-shadow .shadow-card-ok { border-left:4px solid var(--color-success); }
+      #page-shadow .shadow-card-warn { border-left:4px solid var(--color-warning); }
+      #page-shadow .shadow-card-bad { border-left:4px solid #ef4444; }
+      #page-shadow .shadow-card-type { font-size:15px; font-weight:700; margin-bottom:6px; color:var(--color-text); }
+      #page-shadow .shadow-card-chosen { font-size:13px; color:var(--color-primary); font-weight:600; margin-bottom:4px; }
+      #page-shadow .shadow-card-meta { font-size:12px; color:var(--color-text-tertiary); }
+      #page-shadow .banner { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:13px; }
+      #page-shadow .banner-warn { background:var(--color-warning-light); color:var(--color-warning-deep); border:1px solid var(--color-warning); }
+    </style>
+    <div class="page-header">
+      <h1 class="page-title">影子模式 · L2 路由能力可视化</h1>
+      <p class="page-subtitle">L2 编排引擎在 shadow 姿态下「会怎么路由」——纯决策计算，不触下游、不联网、零副作用</p>
+    </div>
+    <div class="shadow-summary" id="shadowSummary" style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 16px;">
+      <span class="badge" id="shadowPolicy">策略：—</span>
+      <span class="badge" id="shadowCapCount">能力标签：—</span>
+      <span class="badge" id="shadowGapCount">无候选缺口：—</span>
+    </div>
+    <div id="shadowAlert" class="banner" style="display:none;"></div>
+    <div class="shadow-grid" id="shadowGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;"></div>
+    <p class="page-subtitle" style="margin-top:18px;font-size:12px;color:var(--color-text-tertiary);">
+      说明：这是 L2 在「观察态」下的路由决策预演（同源 l2/observe-shadow-run.js）。生产默认 shadow 恒开——编排层只算决策、不发请求，翻 reject 之前据此确认每个能力标签都有 adapter 承接。
+    </p>
+  </div>
+
   <!-- ==================== Logs Page ==================== -->
   <div class="page" id="page-logs">
     <div class="page-header">
@@ -1114,6 +1148,44 @@
     else if (pageId === 'registry') loadRegistryPage();
     else if (pageId === 'sessions') loadSessions();
     else if (pageId === 'cost') loadCostPage();
+    else if (pageId === 'shadow') loadShadowPage();
+  }
+
+  // ===== 影子模式页：拉 /api/l2/shadow-map 并渲染能力→adapter 路由决策 =====
+  async function loadShadowPage() {
+    var summary = document.getElementById('shadowSummary');
+    var grid = document.getElementById('shadowGrid');
+    var alert = document.getElementById('shadowAlert');
+    if (!grid) return;
+    try {
+      var res = await fetch('/api/l2/shadow-map', { headers: getAuthHeader() });
+      var data = await res.json();
+      if (data.available === false) {
+        if (alert) { alert.style.display = 'block'; alert.textContent = 'L2 模块当前不可用：' + (data.error || '未知'); }
+        return;
+      }
+      if (alert) alert.style.display = 'none';
+      document.getElementById('shadowPolicy').textContent = '无候选策略：' + (data.policy || '—');
+      document.getElementById('shadowCapCount').textContent = '能力标签：' + (data.capabilityCount || 0);
+      document.getElementById('shadowGapCount').textContent = '无候选缺口：' + (data.gapCount || 0);
+      if (data.gapCount > 0 && alert) {
+        alert.style.display = 'block';
+        alert.className = 'banner banner-warn';
+        alert.textContent = '⚠ 存在无 adapter 承接的能力标签：' + (data.gaps || []).join(', ') + ' —— 切 reject 前必须先补 owner。';
+      }
+      grid.innerHTML = (data.capabilities || []).map(function (c) {
+        var statusClass = c.noCandidate ? 'shadow-card-bad' : (c.rejected ? 'shadow-card-warn' : 'shadow-card-ok');
+        var chosenTxt = c.chosen ? ('→ ' + c.chosen) : (c.noCandidate ? '无候选' : '—');
+        var candTxt = (c.candidates || []).map(function (x) { return x.adapterId + (x.modelTier ? '(' + x.modelTier + ')' : ''); }).join('、') || '—';
+        return '<div class="shadow-card ' + statusClass + '">' +
+          '<div class="shadow-card-type">' + esc(c.type) + '</div>' +
+          '<div class="shadow-card-chosen">' + esc(chosenTxt) + '</div>' +
+          '<div class="shadow-card-meta">档位 ' + esc(c.expectedTier || '—') + ' · 候选 ' + esc(candTxt) + '</div>' +
+          '</div>';
+      }).join('');
+    } catch (e) {
+      if (alert) { alert.style.display = 'block'; alert.textContent = '加载失败：' + (e && e.message || e); }
+    }
   }
 
   document.getElementById('sidebarNav').addEventListener('click', function(e) {

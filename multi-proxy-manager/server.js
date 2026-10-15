@@ -104,6 +104,9 @@ app.use('/api/mcp', mcpRoutes);
 // 门控 PROXY_KNOWLEDGE_BASE 默认关（非侵入，与 skill/memory/mcp 同模式）；拉模式：读不鉴权、写鉴权（requireAuth）
 const knowledgeRoutes = require('./routes/knowledge-base');
 app.use('/api/knowledge', knowledgeRoutes);
+// L2 影子能力可视化（只读端点，l2/observe-shadow-run.js 那张 capability 表的实时版；零下游）。
+const l2Routes = require('./routes/l2');
+app.use('/api/l2', l2Routes);
 // 代理面 floor view：只读聚合（cost-track + provider-health），挂在代理 wildcard 之前。
 // 与 registry/provider-health/sessions 同模式；纯只读展示，零副作用、无门控。
 app.use('/api/floor', require('./routes/floor'));
