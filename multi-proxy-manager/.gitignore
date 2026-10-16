@@ -1,0 +1,6 @@
+# E2E 测试产物（playwright 生成，勿入库）
+test-results/
+playwright-report/
+
+# 本机测试服 / 临时日志
+/tmp-pw-server.log
