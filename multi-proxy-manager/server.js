@@ -69,6 +69,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 // - /api/auth/*   认证（login/status）
 // - /api/*        代理生命周期、日志、供应商 API、转发白名单（wildcard 最后）
 // - /api/*        元信息（autostart/version/installed/env-check；health 在根级单独挂）
+// 首启同意门（默认拦管理页；CI/测试口子：MP_CONSENT_BYPASS 或 NODE_ENV=test 全放行）。
+// 状态基座 lib/consent.js（纯文件标记，非侵入）；端点在下方 /api/consent* 挂出。
+const consent = require('./lib/consent');
+function consentBypass(req) {
+  // CI / 自动化 / 单测默认放行，避免挡住既有 1529 测试；真实首启由 isConsented() 判定。
+  const bypass = /1|true|yes/i.test(process.env.MP_CONSENT_BYPASS || '') || (process.env.NODE_ENV === 'test');
+  if (bypass) return true;
+  return consent.isConsented();
+}
 app.use('/api/auth', authRoutes);
 app.use('/api', controlRoutes);
 // L2 P0 Registry：必须挂在代理 wildcard（apiRoutes 的 /:proxy/*）之前，
@@ -113,6 +122,7 @@ app.use('/api/floor', require('./routes/floor'));
 // 跨进程 usage 上报面：代理进程（如 codex-proxy）把上游 usage 报进来，与 floor 同挂此层。
 // 接入规范见 routes/cost-report.js 头注释 —— 接入方只需贴 raw + agent，解析由 usage-probe 自动做。
 app.use('/api/cost', require('./routes/cost-report'));
+// context-breakdown：lane 上报 + 面板查询（门控 PROXY_CONTEXT_TRACK 默认关；口径 docs/context-breakdown-口径.md）
 // P7 本地预算闸门：只读判级（GET）+ 越限采集发告警（POST collect，复用 alert 内核规则）。
 // 没配 budget.json ⇒ enabled:false，零行为变更。边界见 routes/budget.js 头注释：
 // 单租户本地能力，不碰账号/余额/代持（那层等公司 + 商业/法务 feasibility）。
@@ -125,6 +135,29 @@ app.use('/api/h3web', require('./routes/h3web-guard'));
 // 门控 PROXY_IM_INBOUND 默认关（非侵入，与 orchestration/alert 同模式），
 // 真执行另受 PROXY_EXECUTOR_BIND 门控（缺省 0）→ 不开不触下游、不花钱。
 app.use('/api/im-inbound', require('./routes/im-inbound'));
+// 首启同意门端点：必须挂在代理 wildcard（apiRoutes 的 /:proxy/*）之前，
+// 否则 /api/consent 会被 :proxy=consent 误捕获。本机单人面，读写均不加 requireAuth。
+app.get('/api/consent', (_req, res) => {
+  const st = consent.consentState();
+  res.json(Object.assign({ success: true }, st));
+ });
+app.post('/api/consent/accept', (_req, res) => {
+  try {
+    consent.markConsented();
+    res.json({ success: true, consented: true, marker: consent.consentState().markerPath });
+   } catch (e) {
+    res.status(500).json({ success: false, error: String((e && e.message) || e) });
+   }
+});
+app.post('/api/consent/revoke', (_req, res) => {
+  try {
+    consent.revokeConsent();
+    res.json({ success: true, consented: consent.isConsented() });
+   } catch (e) {
+    res.status(500).json({ success: false, error: String((e && e.message) || e) });
+   }
+});
+app.get('/consent', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'consent.html')));
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
@@ -156,9 +189,16 @@ app.use((req, res, next) => {
       '/floor': 'floor.html',
       // P0 修：dashboard 侧栏跳 /skills，routeMap 缺此项 ⇒ 点击被回落成 dashboard（无反应）。
       '/skills': 'skills.html',
-    };
-    const page = routeMap[req.path] || 'dashboard.html';
-    return res.sendFile(path.join(__dirname, 'public', page));
+      // v1.0 补 settings 页：外观/关于/更新与备份（本地优先，内嵌在管理组路由）
+      '/settings': 'settings.html',
+      };
+    // 首启同意门：默认拦管理页（未同意 → 跳 /consent overlay）；
+   // CI/测试经 consentBypass() 全放行（1529 测试不受影响）；/login 入口不拦。
+   if (req.path !== '/login' && !consentBypass(req)) {
+    return res.redirect('/consent');
+   }
+  const page = routeMap[req.path] || 'dashboard.html';
+  return res.sendFile(path.join(__dirname, 'public', page));
   }
   next();
 });
