@@ -1,0 +1,39 @@
+{
+  "_说明": "任务集模板（对应 docs/EVAL-成本验收协议-2026-10-18.md 第三节）。三类各 4 题，共 12 题。下面每题只是一条样例，照结构补齐到你自己的真实负载。accept 必须是可判定条件，不可判定的一律不进任务集。",
+  "_字段": {
+    "id": "题目 ID，与 runs.jsonl 的 task_id 对齐",
+    "class": "coding | rewrite | table",
+    "prompt_file": "题目正文文件路径（相对本文件）",
+    "workdir": "运行目录（编码类必填，避免污染主仓库）",
+    "accept": "验收命令，退出码 0 记为通过；人判类写 manual",
+    "accept_note": "accept=manual 时，人判的具体标准（必须是一眼能判的）",
+    "repeat": "重复次数，默认 2（两次之间清空上下文）"
+  },
+  "tasks": [
+    {
+      "id": "t01",
+      "class": "coding",
+      "prompt_file": "prompts/t01.md",
+      "workdir": "/tmp/eval-t01",
+      "accept": "npm test",
+      "accept_note": "",
+      "repeat": 2
+    },
+    {
+      "id": "t05",
+      "class": "rewrite",
+      "prompt_file": "prompts/t05.md",
+      "accept": "python3 tools/check_ai_tone.py out.md",
+      "accept_note": "机检 0 命中，且字数变化在 ±10% 内",
+      "repeat": 2
+    },
+    {
+      "id": "t09",
+      "class": "table",
+      "prompt_file": "prompts/t09.md",
+      "accept": "manual",
+      "accept_note": "报出的差异集合与 ground truth 完全一致，多报少报都记失败",
+      "repeat": 2
+    }
+  ]
+}

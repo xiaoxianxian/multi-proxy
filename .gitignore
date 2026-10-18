@@ -158,3 +158,12 @@ docs/design-system/
 docs/frontend-review/
 docs/vendor-agent-bridge.md
 竞品机制评估-*.md
+
+# 5. 评测产物中的未发布内容 (2026-10-18)
+# 真稿改写任务集由 eval/*/*/real/build_real.py 从**未发布的公众号成稿**抽取正文段落生成，
+# prompt 文件与 tasks-real.json 内含 #86 未发布全文片段（#86 状态：待终审·不可发）。
+# 脚本入库保证可复现，正文不入库；运行时现跑 build_real.py 即可重建。
+eval/**/real/prompts/
+eval/**/real/tasks-real.json
+# 改写判定写出的临时文件(含模型输出正文)
+eval/**/.tmp_*.txt

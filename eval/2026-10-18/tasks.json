@@ -1,0 +1,202 @@
+{
+  "_说明": "2026-10-18 评测任务集。由 build.py 生成，不要手改。三类各 4 题，全部机器可判。",
+  "_已知局限": [
+    "改写类题目用的是自造 AI 腔样本，不是真实旧稿；只能测'能不能按约束改写'，不能测长文结构。",
+    "表格类用内联 CSV，规模 5-8 行，比真实对账小一个量级。",
+    "编码类没有工具调用能力，模型只能整文件重写，测不到'只改一行'的精度。"
+  ],
+  "tasks": [
+    {
+      "id": "t01",
+      "class": "coding",
+      "prompt_file": "prompts/t01.md",
+      "workdir": "fixtures/t01",
+      "target_file": "lib.js",
+      "protect": [
+        "test.js"
+      ],
+      "accept": "node test.js",
+      "accept_note": "",
+      "repeat": 2
+    },
+    {
+      "id": "t02",
+      "class": "coding",
+      "prompt_file": "prompts/t02.md",
+      "workdir": "fixtures/t02",
+      "target_file": "parse.js",
+      "protect": [
+        "test.js"
+      ],
+      "accept": "node test.js",
+      "accept_note": "",
+      "repeat": 2
+    },
+    {
+      "id": "t03",
+      "class": "coding",
+      "prompt_file": "prompts/t03.md",
+      "workdir": "fixtures/t03",
+      "target_file": "stats.py",
+      "protect": [
+        "test_stats.py"
+      ],
+      "accept": "python3 test_stats.py",
+      "accept_note": "",
+      "repeat": 2
+    },
+    {
+      "id": "t04",
+      "class": "coding",
+      "prompt_file": "prompts/t04.md",
+      "workdir": "fixtures/t04",
+      "target_file": "agg.js",
+      "protect": [
+        "test.js"
+      ],
+      "accept": "node test.js",
+      "accept_note": "",
+      "repeat": 2
+    },
+    {
+      "id": "t05",
+      "class": "rewrite",
+      "prompt_file": "prompts/t05.md",
+      "source": "智能路由作为大模型应用降本增效的重要抓手，正在成为行业关注的焦点。值得注意的是，当前市场上的解决方案良莠不齐，亟需一套系统性的评估框架。总的来说，企业在选型时不仅要关注单价，更要关注端到端的综合成本。综上所述，只有把判定开销、降档风险和缓存重算三笔账算清楚，才能真正实现成本结构的重塑，从而为业务带来可持续的价值。",
+      "must_keep": [
+        "判定开销",
+        "降档",
+        "缓存"
+      ],
+      "accept": "check_rewrite.py",
+      "accept_note": "无破折号、无 banned 词、保留关键词、字数 ±15%",
+      "repeat": 2
+    },
+    {
+      "id": "t06",
+      "class": "rewrite",
+      "prompt_file": "prompts/t06.md",
+      "source": "随着 Agent 技术的深度融合，工具调用链路的复杂度呈现指数级上升。首先，不同步骤对模型能力的要求存在显著差异；其次，统一的模型配置会造成明显的资源浪费；最后，动态调度能够有效提升整体的性价比。值得注意的是，这一过程需要完善的遥测体系作为支撑，否则难以定位问题。综上所述，智能路由是 Agent 工程化的必由之路。",
+      "must_keep": [
+        "工具调用",
+        "步骤",
+        "遥测"
+      ],
+      "accept": "check_rewrite.py",
+      "accept_note": "无破折号、无 banned 词、保留关键词、字数 ±15%",
+      "repeat": 2
+    },
+    {
+      "id": "t07",
+      "class": "rewrite",
+      "prompt_file": "prompts/t07.md",
+      "source": "从数据表现来看，该方案在成本控制方面取得了显著成效。值得注意的是，相比基线配置，其综合成本下降了约百分之七十；其次，在复杂任务上的得分不仅没有下降，反而略有提升；最后，平均响应延迟维持在可接受区间内。总的来说，这组数据充分证明了该方案的先进性与可行性，为后续的规模化推广奠定了坚实基础。",
+      "must_keep": [
+        "70",
+        "得分",
+        "延迟"
+      ],
+      "accept": "check_rewrite.py",
+      "accept_note": "无破折号、无 banned 词、保留关键词、字数 ±15%",
+      "repeat": 2
+    },
+    {
+      "id": "t08",
+      "class": "rewrite",
+      "prompt_file": "prompts/t08.md",
+      "source": "综上所述，智能路由并非简单的模型替换，而是一套涉及判定、锁档与计价的系统工程。值得注意的是，任何忽略判定成本的做法都是不完整的；其次，长任务场景下的档位稳定性直接决定了用户体验；最后，缓存的重算损失必须被显式计入账本。总的来说，只有建立完整的成本核算体系，才能让降本真正落地，而不是停留在宣传口径上。",
+      "must_keep": [
+        "判定",
+        "锁档",
+        "缓存"
+      ],
+      "accept": "check_rewrite.py",
+      "accept_note": "无破折号、无 banned 词、保留关键词、字数 ±15%",
+      "repeat": 2
+    },
+    {
+      "id": "t09",
+      "class": "table",
+      "prompt_file": "prompts/t09.md",
+      "ground_truth": [
+        {
+          "row": "小红书",
+          "field": "转化"
+        },
+        {
+          "row": "B站",
+          "field": "点击"
+        },
+        {
+          "row": "微博",
+          "field": "转化"
+        }
+      ],
+      "accept": "set_equality",
+      "accept_note": "差异集合与 ground truth 完全一致，多报少报都算失败",
+      "repeat": 2
+    },
+    {
+      "id": "t10",
+      "class": "table",
+      "prompt_file": "prompts/t10.md",
+      "ground_truth": [
+        {
+          "row": "deepseek-v4-pro",
+          "field": "输出价"
+        },
+        {
+          "row": "agnes-3.0-flash",
+          "field": "模型"
+        },
+        {
+          "row": "kimi-k2.6",
+          "field": "输入价"
+        }
+      ],
+      "accept": "set_equality",
+      "accept_note": "差异集合与 ground truth 完全一致，多报少报都算失败",
+      "repeat": 2
+    },
+    {
+      "id": "t11",
+      "class": "table",
+      "prompt_file": "prompts/t11.md",
+      "ground_truth": [
+        {
+          "row": "t04",
+          "field": "花费"
+        },
+        {
+          "row": "t06",
+          "field": "通过"
+        },
+        {
+          "row": "t08",
+          "field": "花费"
+        }
+      ],
+      "accept": "set_equality",
+      "accept_note": "差异集合与 ground truth 完全一致，多报少报都算失败",
+      "repeat": 2
+    },
+    {
+      "id": "t12",
+      "class": "table",
+      "prompt_file": "prompts/t12.md",
+      "ground_truth": [
+        {
+          "row": "dsh-proxy",
+          "field": "状态"
+        },
+        {
+          "row": "l2-engine",
+          "field": "状态"
+        }
+      ],
+      "accept": "set_equality",
+      "accept_note": "差异集合与 ground truth 完全一致，多报少报都算失败",
+      "repeat": 2
+    }
+  ]
+}
