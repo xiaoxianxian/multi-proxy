@@ -165,8 +165,21 @@ describe('Logs Page', () => {
       expect(html).toContain('window.toggleAutoRefresh');
     });
 
-    it('should have generateMockLogs for offline mode', () => {
-      expect(html).toContain('function generateMockLogs');
+    // 2026-10-16 反转：这条原来钉死 `function generateMockLogs` 必须存在。
+    // 该函数在日志读失败/空日志时兜底，会显示 20+ 条不存在的日志（含假 ERROR
+    // 'Upstream connection refused: codex-api service unavailable'）——
+    // 排查线上问题时看到不存在的事件，比看不到日志更糟。已删除。
+    // 现在反过来钉：它不许回来，且 renderLogLine 定义必须在（删除时曾误删，只剩调用点）。
+    it('should NOT have generateMockLogs (mock 兜底已移除)', () => {
+      // 只钉函数定义。注释里保留 generateMockLogs 字样是为了说明「为什么删」，
+      // 拿注释文本断言会把历史文档也判成回归。
+      expect(html).not.toContain('function generateMockLogs');
+    });
+
+    it('should keep renderLogLine definition (曾因误删只剩调用点)', () => {
+      expect(html).toContain('function renderLogLine');
+      // 调用点也必须在，否则定义回来了也没人用
+      expect(html).toContain('logsToRender.map(renderLogLine)');
     });
   });
 
