@@ -423,9 +423,9 @@
       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
       <span>Agent 注册表</span>
     </div>
-    <div class="nav-item" data-page="floor" tabindex="0">
+    <div class="nav-item" data-page="floor" tabindex="0" title="开发者盘面：以网格实时呈现各代理状态与请求，不是总览仪表盘">
       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
-      <span>代理面 Floor</span>
+      <span>Floor 盘面 · 开发者</span>
     </div>
     <div class="nav-item" data-page="cost" tabindex="0">
       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
@@ -1156,7 +1156,12 @@
       if (!res.ok) {
         return res.json().then(function(body) {
           var msg = (body && body.error) ? body.error : ('HTTP ' + res.status);
-          var e = new Error(msg); e.httpStatus = res.status; throw e;
+          var e = new Error(msg); e.httpStatus = res.status;
+          // 后端常在 body.hint 里给「怎么修」（如 alert-gate-closed 的
+          // 「PROXY_HEALTH_ALERT 未开启，开灰度：PROXY_HEALTH_ALERT=1 node server.js」）。
+          // 丢掉 hint 只显示机器码，等于把后端已经写好的解决方案扔了。
+          if (body && body.hint) e.hint = body.hint;
+          throw e;
         }, function() {
           var e = new Error('HTTP ' + res.status); e.httpStatus = res.status; throw e;
         });
@@ -1166,18 +1171,21 @@
   }
 
   // 读失败块：视觉与 empty-state 同族（不引入新样式体系），但语义是「读不到」而非「没有」。
-  function showReadError(containerId, msg, hint) {
+  // 四参分工：title 主文案（读取失败 / 告警功能未开启）／detail 后端给的错误原因（优先显示）
+  // ／hint 排查提示。后端常在 body.hint 里写「怎么修」，丢掉它只显示机器码等于把
+  // 已经写好的解决方案扔了（见 fetchJSON 里 e.hint 的注释）。
+  function showReadError(containerId, title, detail, hint) {
     var el = document.getElementById(containerId);
     if (!el) return;
+    var body = [detail, hint].filter(Boolean).join('<br>') || '未知错误';
     el.innerHTML =
       '<div class="empty-state" style="grid-column:1/-1;">' +
         '<div class="empty-icon" style="color:#d97706;">' +
           '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
         '</div>' +
-        '<div class="empty-text" style="color:#d97706;">读取失败</div>' +
-        '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;max-width:420px;">' +
-          esc(msg || '未知错误') +
-          (hint ? '<br><span style="opacity:.8;">' + esc(hint) + '</span>' : '') +
+        '<div class="empty-text" style="color:#d97706;">' + esc(title || '读取失败') + '</div>' +
+        '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;max-width:460px;line-height:1.6;">' +
+          body +
         '</div>' +
         '<button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="' +
           'this.dispatchEvent(new CustomEvent(\'retry-read\',{bubbles:true}))">重试</button>' +
@@ -1538,7 +1546,7 @@
         if (statusFailed) {
           // 读不到 ≠ 没有代理。过去这里兜底成 mock 三代理（pid 12345 / uptime 2h34m），
           // 故障被伪装成「三个代理都在跑」——这是本轮修掉的最危险一处。
-          showReadError('healthProxyList',
+          showReadError('healthProxyList', '读取失败',
             statusResult.__readError.message || '未知错误',
             'manager 的 /api/status 没返回。若 manager 本身没起来，先看 logs 页的启动日志。');
         } else {
@@ -1576,7 +1584,7 @@
           // 「所有 Provider 健康」这句话只有在真读到「无隔离项」时才配说。
           // 读失败时说它，等于替一个没查过的系统开健康证明。
           if (phSub) phSub.textContent = '—';
-          showReadError('healthPagePhList',
+          showReadError('healthPagePhList', '读取失败',
             phResult.__readError.message || '未知错误',
             'provider 隔离状态读不到，不代表 Provider 都健康。');
         } else {
@@ -1609,7 +1617,7 @@
       var historyList = el('healthHistoryList');
       if (historyList) {
         if (historyResult.__readError) {
-          showReadError('healthHistoryList',
+          showReadError('healthHistoryList', '读取失败',
             historyResult.__readError.message || '未知错误',
             '读不到健康历史，不代表期间没有发生故障。');
         } else {
@@ -1637,7 +1645,7 @@
     }).catch(function(err) {
       // 整页读失败：说清楚是哪一路挂了，不要静默 hideLoading 后留一片空白。
       hideOfflineBanner();
-      showReadError('healthProxyList', err && err.message || '未知错误',
+      showReadError('healthProxyList', '读取失败', err && err.message || '未知错误',
         'manager 不可达或 /api/status 异常。可点上方「重试」。');
       hideLoading();
     });
@@ -1688,16 +1696,24 @@
       if (alertResult.__readError) {
         // 「暂无告警事件」只有在真读到空列表时才配说。
         // API 挂掉时显示它，等于在真出事的时候告诉用户「没事」。
-        showReadError('alertList', alertResult.__readError.message || '未知错误',
-          '告警数据读不到。管理端恢复后点「采集告警」或刷新本页。');
-        if (el('alertCountSubtitle')) el('alertCountSubtitle').textContent = '读取失败';
+        // 403 alert-gate-closed 是默认态（PROXY_HEALTH_ALERT 默认 off），
+        // 这时后端的 hint 就是「怎么开」——必须显示出来，否则用户只会看到机器码。
+        var err = alertResult.__readError;
+        var isGate = (err.httpStatus === 403 || (err.message || '').indexOf('alert-gate') !== -1);
+        showReadError('alertList',
+          isGate ? '告警功能未开启' : '读取失败',
+          err.hint || err.message || '未知错误',
+          isGate ? null : '告警数据读不到。管理端恢复后点「采集告警」或刷新本页。');
+        if (el('alertCountSubtitle')) {
+          el('alertCountSubtitle').textContent = isGate ? '告警功能未开启' : '读取失败';
+        }
       } else {
         renderAlertList(alertEvents);
       }
       hideOfflineBanner();
       hideLoading();
     }).catch(function(err) {
-      showReadError('alertList', err && err.message || '未知错误', 'manager 不可达。');
+      showReadError('alertList', '读取失败', err && err.message || '未知错误', 'manager 不可达。');
       hideLoading();
     });
   }
@@ -1786,7 +1802,7 @@
         registryAgents = [];
         renderRegistryGrid([]);
         updateRegistryStats([]);
-        showReadError('registryGrid', err && err.message || '未知错误',
+        showReadError('registryGrid', '读取失败', err && err.message || '未知错误',
           'Agent 注册表读不到，不代表注册表是空的。');
         hideLoading();
       });
@@ -1965,7 +1981,7 @@
         // 中止一个你看不见的任务，比没有中止按钮更危险。
         renderSessionsList([], 'sessionsList');
         renderSessionsList([], 'sessionsListFull');
-        showReadError('sessionsListFull', err && err.message || '未知错误',
+        showReadError('sessionsListFull', '读取失败', err && err.message || '未知错误',
           '会话列表读不到，不代表没有任务在跑。中止操作前请先确认本页能正常加载。');
         showToast('会话列表读取失败', 'error');
        });

@@ -29,6 +29,11 @@ const {
     judgeRisk,
     DEFAULT_TIMEOUT_MS: DEFAULT_JUDGE_TIMEOUT,
 } = require('./decision-judge.js');
+// 路由粘性 + 续聊锁档（外部对照 #71 PilotDeck 落地件，2026-10-18）：
+// judge 旁路前面加两级确定性短路（sticky 命中 / 续聊锁定）+ judge 的 previousTier 上下文。
+// 门控 PROXY_ROUTE_STICKY 默认关——关时 _judgeWithSticky 直接走原 judgeComplexity 直调，
+// 旁路行为与本行以上注释逐字节一致（详见 _judgeWithSticky 的零行为变更论证）。
+const { StickyStore, resolveTierDecision } = require('./route-sticky.js');
 // shadow 日志算钱（route-engine-spec.md:90）：复用 cost.js 的 token→钱 口径（CNY / 百万 token），
 // 不另立一套价目算法——价目表仍由调用方注入，缺价返回 null（cost.js 同款「不拿 0 冒充」纪律）。
 const { tokenCost } = require('./cost.js');
@@ -84,6 +89,10 @@ class RouteEngine {
         // 撞上绝对被掐成 null，看着像模型废了其实是超时）。
         this.riskTimeoutMs = riskTimeoutMs;
         this._judgeCalls = new Set(); // 未落地的 judge promise，供 awaitJudges() 收口
+        // sticky 存储（主/子双轨，纯内存，2026-10-18）。无条件建（轻量 Map 包装），
+        // 用不用由 resolveTierDecision 的门控决定——这里不做门控判断，
+        // 免得「构造器开、运行门控关」两处状态不一致。
+        this._stickyStore = new StickyStore();
         // 风险旁路单独一份：二次确认（Portico 侧动作）只关心「哪一类、要不要复核」，
         // 不该被 complexity judge 拖着一起等——两条旁路的收口粒度不同，分开存。
         this._riskCalls = new Set();
@@ -128,9 +137,17 @@ class RouteEngine {
         // 结果只写进 decision.judge 供观测/统计，**不改档位**：
         // complexity 定价权归 Portico（Portico/02-架构设计.md 条款 5），这里不越权。
         // 不 await —— 旁路不能阻塞热路径；judge 不可用时返回 null，零影响。
+        //
+        // 2026-10-18（外部对照 #71 PilotDeck）：走 _judgeWithSticky 决策链——
+        // task 带 sessionId/sessionKey 且门控 PROXY_ROUTE_STICKY 开时，judge 前面
+        // 多两级确定性短路（session 内 sticky 命中 / 短确认消息续聊锁定），
+        // 判定本身仍带 previousTier 上下文。门控关或无 sessionKey 时
+        // _judgeWithSticky 与原直调路径逐字节等价（见该方法注释的零行为变更论证）。
+        // 粘性结果经 decision.judge.stickyFrom 标注来源（sticky/continuation/judge/fallback），
+        // 消费者可分清「这是模型判的」还是「这是规则/缓存判的」。
         if (this.llmJudge && typeof task.prompt === 'string' && task.prompt.length > 0) {
             decision.judgePending = true; // 同步标记：让消费者知道「在途」，不是没有
-            const p = judgeComplexity(task.prompt.slice(0, 2000))
+            const p = this._judgeWithSticky(task)
                 // 无条件回填（失败为 null）：好让消费者分清「没跑」和「跑了没结果」。
                 .then((j) => { decision.judge = j; })
                 .catch(() => { /* 旁路失败不影响路由 */ })
@@ -316,9 +333,51 @@ class RouteEngine {
        // 未知值保持原档不变
      }
 
-     // ---- 私有方法 ----
+    // ---- 私有方法 ----
 
-     // 启发式推导任务期望的模型类型（模态维度）
+    // judge 旁路 + 粘性决策链（2026-10-18，外部对照 #71 PilotDeck 落地件）。
+    //
+    // 零行为变更论证（三个分支逐一对照原路径）：
+    //   ① 无 sessionKey ⇒ 直接 judgeComplexity(text)——与 2026-10-03 至 10-17 的原路径同调用同参数；
+    //   ② 有 sessionKey 但门控 PROXY_ROUTE_STICKY 关 ⇒ resolveTierDecision 返回 null
+    //      ⇒ 同样落到 judgeComplexity(text)，与 ① 等价；
+    //   ③ 门控开且有 sessionKey ⇒ 走 sticky/continuation/judge/fallback 链，
+    //      返回 judge 形状 + stickyFrom 来源标注。此分支行为变化是**开关显式打开**的结果，
+    //      且只改「judge 结果怎么来」，不改「档位由谁定」（仍只写 decision.judge 观测）。
+    //
+    // sessionKey 约定：调用方在 task 上带 sessionId 或 sessionKey（两者都认）。
+    // previousTier 约定：调用方在 task 上带上一轮档位（请求级透传，双通道之一，
+    // 见 l2/route-sticky.js 文件头）——不给则该轮无续聊保护依据，judge 首判。
+    // orchestrator/DAG 子任务不带任何一个 ⇒ 自动退化为原行为，不强制接入方改字段。
+    async _judgeWithSticky(task) {
+        const text = String(task.prompt).slice(0, 2000);
+        const sessionKey = task.sessionId || task.sessionKey || null;
+        const previousTier = task.previousTier || null;
+        if (!sessionKey) return judgeComplexity(text);
+        const d = await resolveTierDecision({
+            text,
+            sessionKey,
+            previousTier,
+            isMainAgent: task.isMainAgent !== false, // 缺省按主 agent（保守：子 agent 要显式标）
+            defaultTier: this._mapTier(task.complexity), // judge 失败回落 decomposer 的静态档
+            judgeFn: (t, o) => judgeComplexity(t, o.previousTier ? { previousTier: o.previousTier } : {}),
+            store: this._stickyStore,
+        });
+        if (!d) return judgeComplexity(text);
+        // 返回 judge 同款形状（confidence/probabilities/latencyMs/model 为 null——
+        // 这些是 Clef 的字段，规则判出来的没有），另加 stickyFrom/previousTier 标注。
+        return {
+            tier: d.tier,
+            confidence: null,
+            probabilities: null,
+            latencyMs: null,
+            model: null,
+            stickyFrom: d.from,
+            previousTier: d.previousTier || null,
+        };
+    }
+
+    // 启发式推导任务期望的模型类型（模态维度）
     _inferModelType(taskType) {
         if (['vision', 'image', 'video', 'text2video'].includes(taskType)) return 'multimodal';
         if (['audio', 'tts', 'stt'].includes(taskType)) return 'audio';

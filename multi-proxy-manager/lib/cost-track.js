@@ -442,6 +442,12 @@ function applyTokens(proxyName, t, latencyMs, info, givenCost) {
 
   if (!_loading) ledgerAppend({
     ts: new Date().toISOString(),
+    // 本地时区日期键（2026-10-16 新增）。周报的「上周」按北京时间理解，
+    // 过去只有 UTC 的 ts 可用 → 23:00–24:00 的请求会被算进前一天，
+    // 窗口边界差一天且界面上没有提示。落账时就算好，读的时候直接用。
+    // tz 由 PROXY_COST_TZ 覆盖，默认 Asia/Shanghai；时区名无效则不加这个字段
+    // （=「不知道」），读侧会 fallback 到按 ts 现算，绝不写一个错的日期进去。
+    localDay: localDayOf(new Date()),
     proxy: proxyName,
     agent: i.agent || proxyName,
     model: pricingModel,
@@ -518,6 +524,29 @@ function ledgerFile() {
   const env = process.env.PROXY_COST_LEDGER;
   return env && env.trim() ? env.trim()
     : path.join(os.homedir(), '.multi-proxy-manager', 'cost-ledger.jsonl');
+}
+
+/**
+ * 本地时区日期键（YYYY-MM-DD）。tz 来自 PROXY_COST_TZ，默认 Asia/Shanghai。
+ *
+ * 为什么需要它：账本行里的 ts 是 UTC ISO 串，`ts.slice(0,10)` 拿到的是 UTC 日期。
+ * 周报的「上周」由用户按北京时间理解，UTC 口径下 23:00–24:00 的请求会被算进
+ * 前一天——窗口边界差一天，而此前界面上没有任何提示。
+ *
+ * 时区名无效 → 返回 null（Intl 会抛 RangeError）。调用方省略该字段，
+ * 读侧 fallback 到按 ts 现算。**不静默用 UTC 冒充**：那会让「配错了时区」
+ * 和「配对了」在账本上长得一样。
+ */
+function localDayOf(d) {
+  const zone = process.env.PROXY_COST_TZ || 'Asia/Shanghai';
+  try {
+    // en-CA 的 DateTimeFormat 产出 YYYY-MM-DD（ISO 顺序），正好当日期键用。
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(d);
+  } catch {
+    return null;
+  }
 }
 
 function ledgerAppend(rec) {
@@ -669,6 +698,7 @@ function reset() {
 }
 
 module.exports = {
+  localDayOf,
   enabled,
   setPricing,
   loadPricingFromEnv,

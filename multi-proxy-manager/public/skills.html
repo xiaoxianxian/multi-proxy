@@ -617,24 +617,48 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
      })
-        .then(function(res) { return res.ok ? res.json() : null; })
-        .then(function(d) {
-          hideLoading();
-          renderBudget(d);
-          if (!d) { showToast('预算计算失败或门控未开', 'error'); }
+        .then(function(res) {
+          // 2026-10-16：过去 res.ok ? res.json() : null，然后**先 renderBudget(d)
+          // 再判断 !d**——d 是 null 时先拿 null 去渲染（可能画出半张空卡），
+          // 再弹「预算计算失败或门控未开」。顺序倒了。且那句话把两种原因混成
+          // 一句：门控没开该去开门控，计算失败该看日志，用户的下一步完全不同。
+          return res.json().then(function(b) { return { ok: res.ok, status: res.status, body: b }; });
         })
-        .catch(function(err) { hideLoading(); showToast('预算计算失败: ' + err.message, 'error'); });
+        .then(function(r) {
+          hideLoading();
+          if (!r.ok) {
+            if (r.status === 403) {
+              showToast('预算计算未开启：门控关闭（PROXY_SKILL_HOSTS 相关开关）', 'error', 6000);
+            } else {
+              showToast('预算计算失败: ' + ((r.body && (r.body.error || r.body.message)) || ('HTTP ' + r.status)), 'error', 6000);
+            }
+            return;
+          }
+          renderBudget(r.body);
+        })
+        .catch(function(err) { hideLoading(); showToast('预算计算失败: ' + err.message, 'error', 6000); });
    });
 
    document.getElementById('scanProjectBtn').addEventListener('click', function() {
      showLoading();
      var pv = (document.getElementById('projectInput').value || '').trim();
      fetch('/api/skill-hosts/ledger?tokens=1' + (pv ? '&project=' + encodeURIComponent(pv) : ''))
-        .then(function(res) { return res.ok ? res.json() : null; })
-        .then(function(d) {
+        .then(function(res) {
+          // 2026-10-16：同上——把「门控没开」和「扫描失败」混成一句，
+          // 用户不知道该开门控还是该看日志。
+          return res.json().then(function(b) { return { ok: res.ok, status: res.status, body: b }; });
+        })
+        .then(function(r) {
           hideLoading();
-          if (!d) { showToast('扫描失败或门控未开', 'error'); return; }
-          ledger = d;
+          if (!r.ok) {
+            if (r.status === 403) {
+              showToast('扫描未开启：门控关闭（PROXY_SKILL_HOSTS 相关开关）', 'error', 6000);
+            } else {
+              showToast('扫描失败: ' + ((r.body && (r.body.error || r.body.message)) || ('HTTP ' + r.status)), 'error', 6000);
+            }
+            return;
+          }
+          ledger = r.body;
           render();
           var sc = document.getElementById('scopeMeta');
           if (sc) { sc.textContent = pv ? '当前：项目级 ' + pv : '当前：全局 $HOME（项目目录留空）'; }
@@ -647,11 +671,22 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
    document.getElementById('refreshBtn').addEventListener('click', function() {
      showLoading();
      fetch('/api/skill-hosts/ledger?tokens=1')
-        .then(function(res) { return res.ok ? res.json() : null; })
-        .then(function(d) {
+        .then(function(res) {
+          // 2026-10-16：同上——把「门控没开」和「扫描失败」混成一句，
+          // 用户不知道该开门控还是该看日志。
+          return res.json().then(function(b) { return { ok: res.ok, status: res.status, body: b }; });
+        })
+        .then(function(r) {
           hideLoading();
-          if (!d) { showToast('扫描失败或门控未开', 'error'); return; }
-          ledger = d;
+          if (!r.ok) {
+            if (r.status === 403) {
+              showToast('扫描未开启：门控关闭（PROXY_SKILL_HOSTS 相关开关）', 'error', 6000);
+            } else {
+              showToast('扫描失败: ' + ((r.body && (r.body.error || r.body.message)) || ('HTTP ' + r.status)), 'error', 6000);
+            }
+            return;
+          }
+          ledger = r.body;
           render();
           showToast('已重新扫描 ' + (d.totals ? d.totals.entries : 0) + ' 条', 'success');
         })

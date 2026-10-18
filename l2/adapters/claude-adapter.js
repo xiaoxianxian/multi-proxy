@@ -266,6 +266,12 @@ class ClaudeAdapter {
                 usage: parsed.usage || null,
                 raw: parsed,
              },
+            // 出站账本测量值（egress-ledger · 观测件）：同 l1-agent-adapter，门控关=不消费。
+            egress: {
+                bytesOut: Buffer.byteLength(JSON.stringify(body), 'utf8'),
+                upstreamHost: `${host}:${port}`,
+                usage: parsed.usage || null,
+            },
             error: null,
          };
      }

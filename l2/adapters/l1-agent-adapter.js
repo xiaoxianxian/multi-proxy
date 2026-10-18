@@ -256,6 +256,14 @@ class L1AgentAdapter {
                 id: parsed.id || taskId,
                 raw: parsed.raw ? undefined : parsed,
             },
+            // 出站账本测量值（egress-ledger · 观测件）：如实带上，是否记账由 orchestrator 侧
+            // 门控 PROXY_L2_EGRESS_LEDGER 决定（默认关=不注入=不消费本字段）。
+            // upstreamHost = 本次实际下一跳（本地代理 host:port）；真实 provider 出网在本地代理进程内，本层看不到。
+            egress: {
+                bytesOut: Buffer.byteLength(JSON.stringify(body), 'utf8'),
+                upstreamHost: `${host}:${port}`,
+                usage: parsed.usage || null,
+            },
             error: null,
         };
     }

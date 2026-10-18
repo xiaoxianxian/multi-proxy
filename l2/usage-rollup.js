@@ -34,6 +34,16 @@ function gateOpen() {
     return v === '1' || v === 'true' || v === 'on';
 }
 
+// ⚠️ 时区口径说明（2026-10-16）：
+//   本文件仍是 **UTC** 日期键，而 l2/watchtower-report.js 已改成本地时区
+//   （默认 Asia/Shanghai，PROXY_COST_TZ 可覆盖）。两处**故意**不同步：
+//   ① usage-rollup 的日卷键被既有持久化数据与下游消费方钉死，改键等于让历史
+//      日卷全部错位；
+//   ② watchtower 是「给人看的周报」，日期必须贴合用户对「上周」的理解；
+//      usage-rollup 是「机器聚合的日卷」，UTC 键更稳定、可跨机复现。
+//   **所以：日卷与周报的日期在 UTC 23:00–24:00 边界上可能差一天，这是已知的、
+//    有意的差异，不是 bug。** 若将来要统一，必须同时做存量数据迁移。
+//
 // 日期键：epoch ms 或 ISO 串 → 'YYYY-MM-DD'（UTC，跨时区不漂）；无/坏 ts → null（不猜）
 function dayOf(ts) {
     const d = typeof ts === 'number' ? new Date(ts) : new Date(String(ts ?? ''));

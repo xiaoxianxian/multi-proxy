@@ -197,6 +197,9 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 - **CSP / CORS** — 内容安全策略防 XSS、限制跨域来源
 - **错误脱敏** — 生产环境不暴露堆栈和内部细节
 - **密钥加密** — Cursor 代理 AES-256-GCM 加密 API Key
+- **内容注入/目标劫持守卫（content-guard）** — 记忆写入与动作执行前扫描嵌入指令与目标重定向，对应 OWASP ASI 2026 ASI01/ASI06；默认关（`MULTI_PROXY_CONTENT_GUARD`）
+  - 接入点：① `SideEffectGuard.beforeAction`（动作执行前，目标劫持 ASI01 + 注入）；② `run-history.append`（事件落盘前，记忆污染 ASI06）；③ `profiles-store.save`（长期记忆快照落盘前，记忆污染 ASI06）。命中即拦截不落盘（隔离而非静默存）；不注入 contentGuard 或门控关 = 零行为变更
+- **出网治理（egress）** — 本仓库只控入站；出站管控由 Portico 企业版承载（tenant 级 `egress` 策略，见 `Portico/schemas/tenant-registry.schema.json`），不在路由内核实现
 
 详见 `docs/04-tech/security-whitepaper.md`。
 

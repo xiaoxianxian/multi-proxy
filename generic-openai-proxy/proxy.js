@@ -293,7 +293,9 @@ function loadRoutingPolicy() {
 //    「我想绕开网关」的意图悄悄失效（钱照记、流量照过），比报错更糟。
 // direct 的全部含义就是「不走我们的链路」：不 captureTrace、不 reportUsage、不喂熔断。
 async function forwardDirect(req, res, model, route) {
-  const agent = detectAgent(req);
+  // 账本记检测原值（可能是 <unknown>），takeover 查找用回落值——两者分开：
+  // 归因要诚实，路由要兼容，不能为了兼容把归因也一起糊掉。
+  const agent = pickTakeoverAgent(detectAgent(req));
   let records = {};
   try {
     const f = path.join(DATA_DIR, `takeover-${agent}.json`);
@@ -1063,6 +1065,25 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
     return res.status(400).json({ success: false, error: 'model is required', code: 'UNSUPPORTED_MODEL' });
   }
   // P6/P7-2：只对原始 model 应用一次（fallback 的是同一请求语义，不重复拦截/记账预算）
+  // ── 子 agent 上下文观测（l2/subagent-detect · 门控 PROXY_SUBAGENT_DETECT，默认关）──
+  // 外部对照 #71 PilotDeck（2026-10-18）：三法识别「这条请求是不是子 agent 派生的」
+  //（① 消息体 <multi-proxy-subagent-model> 标签 ② tools 无派发工具反推 ③ x-main-agent: false 头）。
+  // 只观测、不改写、不阻断：结果挂 req._subagent + 一行 console（debug 级）。
+  // 关时热路径零开销（一次布尔）；观测失败不拖垮转发（旁路铁律同 reportUsage）。
+  try {
+    const subagentDetect = require('../l2/subagent-detect');
+    if (subagentDetect.gateOpen()) {
+      const det = subagentDetect.detectSubagent({
+        messages: req.body && req.body.messages,
+        tools: req.body && req.body.tools,
+        isMainAgent: req.headers['x-main-agent'] !== 'false',
+      });
+      if (det.isSubagent) {
+        req._subagent = { modelHint: det.modelHint, reasons: det.reasons };
+        console.log(`[subagent] 子上下文命中（${det.reasons.join('+')}）model=${originalModel}${det.modelHint ? ` hint=${det.modelHint}` : ''}`);
+      }
+    }
+  } catch { /* 观测失败不是转发失败 */ }
   if (await applyRoutingPolicy(originalModel, req, res) !== 'continue') return;
   if (await applyBudgetGuard(originalModel, req, res) !== 'continue') return;
 
@@ -1106,13 +1127,26 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
             const { outcome, acc } = await pipeUpstreamBytes(res, response, '[chat]', upstreamSignal);
             if (outcome === 'completed' && acc && !upstreamSignal.aborted) {
               captureTrace({ req, provider, rawOrObj: acc, meta: { agent: 'generic-openai-proxy', stream: true } });
-              reportUsage(acc, Date.now() - t0, detectAgent(req), currentModel);
+              reportUsage(acc, Date.now() - t0, detectAgent(req), currentModel, originalModel);
             }
           } else {
             const data = await response.json();
             captureTrace({ req, provider, rawOrObj: data, meta: { agent: 'generic-openai-proxy', stream: false } });
             res.json(data);
-            reportUsage(JSON.stringify(data), Date.now() - t0, detectAgent(req), currentModel);
+            reportUsage(JSON.stringify(data), Date.now() - t0, detectAgent(req), currentModel, originalModel);
+            // ── context-breakdown 观测（门控 PROXY_CONTEXT_TRACK 默认关 = 零开销；口径 docs/context-breakdown-口径.md）──
+            // 旁路铁律同 reportUsage：全 catch、不拖主路径。只报计数，不报正文。
+            try {
+              require('../l2/context-report').observe({
+                agent: 'generic-openai-proxy',
+                reqId: null,
+                model: currentModel,
+                requestModel: req.body && req.body.model,
+                clientKey: detectAgent(req),
+                request: req.body,
+                actuals: (data && data.usage) || null,
+              });
+            } catch { /* 观测失败不是转发失败 */ }
           }
           return;
         }
@@ -1311,7 +1345,7 @@ function pipeUpstreamBytes(res, response, tag, signal) {
  * 🔴 纪律：上报是**旁路**，fire-and-forget + 全 catch。manager 挂了 / 格式认不出，
  * 都不能让主路径（Claude Code 的请求）失败或变慢。
  */
-function reportUsage(raw, latencyMs, agent, model) {
+function reportUsage(raw, latencyMs, agent, model, requestedModel) {
   if (!raw || typeof raw !== 'string') return;
   const url = String(process.env.MANAGER_URL || 'http://127.0.0.1:18792').replace(/\/$/, '');
   // 写端点不 fail-open：没 token 就不报，宁可少一笔账也不让陌生人灌假成本。
@@ -1320,11 +1354,22 @@ function reportUsage(raw, latencyMs, agent, model) {
   const agentToken = process.env.MANAGER_AGENT_TOKEN || process.env.PROXY_AUTH_TOKEN;
   const headers = { 'content-type': 'application/json' };
   if (agentToken) headers['x-agent-token'] = agentToken;
-  // model / requestModel 原样带上：否则过代理的 openai 线会退化成 model=<unknown>，
-  // 按模型拆账直接没数据（见 cost-report.js 头注释）。上游 usage 里通常不带模型名，
-  // 所以这里从请求体补（dsh / codex / cursor 都在 body.model 声明目标模型）。
-  const body = { agent: agent || 'generic-openai-proxy', raw, latencyMs };
-  if (model) { body.model = model; body.requestModel = model; }
+  // 上游 usage 里通常不带模型名，所以这里从请求体/路由结果补。
+  //
+  // 🔴 model 与 requestModel 必须是**两个不同的值**（2026-10-16 修）：
+  //   本文件的 /v1/chat/completions 有 fallback 链（currentModel 会被 nextFallback 改写），
+  //   此前把 currentModel 同时塞进 model 和 requestModel，等于把「宿主要的是哪个模型」
+  //   这条信息扔了 —— 账本里两个字段永远相同，「如果不重写会花多少」的对比因此恒等于
+  //   实际花费，「已省金额」结构性算不出来（永远 0 或 null）。
+  //   cost-track 当初做这两个字段就是为了回答这个问题，接线却把它抵消了。
+  // 只传一个值时退回原行为（两者同值）—— /v1/messages 那条是真直通，本就该同值。
+  // agent 兜底用哨兵值而非代理名（2026-10-16）：调用方没给 agent 就是「不知道」，
+  // 记成代理名会让账本多出一个不存在的花钱方。
+  const body = { agent: agent || UNKNOWN_AGENT, raw, latencyMs };
+  if (model || requestedModel) {
+    body.model = model || requestedModel;
+    body.requestModel = requestedModel || model;
+  }
   fetch(`${url}/api/cost/report`, {
     method: 'POST',
     headers,
@@ -1345,20 +1390,74 @@ let reportWarned = false;
 // 上报账本时必须能区分是谁在花钱，否则「省钱效果」无法按客户端归因。
 // 检测优先级：
 //   1. 显式 `x-agent` 请求头（接入方主动声明，如客户端插件在状态栏上报）
-//   2. `user-agent` 头里抓客户端特征（cline / aider / openhands / opencode / dsh / codex / cursor / hermes）
-//   3. 默认 'generic-openai-proxy'（保持向后兼容，老客户端不带头也照旧）
+//   2. `PROXY_AGENT_UA_MAP` 里登记的 UA 特征（部署侧自配，见下）
+//   3. 内置 `user-agent` 特征表（cline / aider / openhands / opencode / dsh / codex / cursor / hermes）
+//   4. '<unknown>' —— 与 lib/cost-track.js 的哨兵值同串
+//
+// 🔴 2026-10-16：第 4 步从 'generic-openai-proxy' 改成 '<unknown>'。
+//    本代理覆盖十几种客户端，兜底成代理名等于把「不知道是哪个客户端在花钱」
+//    伪装成「网关自己的流量」——归因错了比归因缺失更难看：
+//      · 一个不存在的 agent 长期占据账单首位，读者会以为网关自己在烧钱；
+//      · 真正该被点名的接入方（补一个 x-agent 头就能被统计）永远发现不了自己没被算进去。
+//    这正是 multi-proxy 自己的 unknown 态对账纪律：不知道就说不知道，不拿猜测填。
+//    ⚠️ 行为兼容：forwardDirect 的 takeover 查找已加回落（见 pickTakeoverAgent），
+//       direct 行为不变；历史账本里的 'generic-openai-proxy' 行不改写（账本冻结）。
+//
+// 可配置覆盖 PROXY_AGENT_UA_MAP（JSON 数组，按顺序先中先得）：
+//   [{"match":"myclient","agent":"my-client"}]
+// 用途：接入方不方便加 x-agent 头时，在这里登记一次即可，不用改代码、不用重启逻辑。
+const UNKNOWN_AGENT = '<unknown>';
+let _uaMapCache = null;
+function loadUaMap() {
+  if (_uaMapCache !== null) return _uaMapCache;
+  const raw = process.env.PROXY_AGENT_UA_MAP;
+  if (!raw || !raw.trim()) { _uaMapCache = []; return _uaMapCache; }
+  try {
+    const parsed = JSON.parse(raw);
+    _uaMapCache = Array.isArray(parsed)
+      ? parsed.filter(m => m && typeof m.match === 'string' && typeof m.agent === 'string')
+      : [];
+    if (_uaMapCache.length === 0 && parsed) {
+      console.warn('[agent] PROXY_AGENT_UA_MAP 解析成功但没有有效条目（需要 {match, agent}），已忽略');
+    }
+  } catch (e) {
+    // 配置坏 → 明确警告一次后按「没配」处理。绝不静默：静默会让接入方以为登记生效了。
+    console.warn('[agent] PROXY_AGENT_UA_MAP 不是合法 JSON，已忽略：' + e.message);
+    _uaMapCache = [];
+  }
+  return _uaMapCache;
+}
 function detectAgent(req) {
   const explicit = req.headers['x-agent'];
   if (explicit && String(explicit).trim()) return String(explicit).trim();
   const ua = String(req.headers['user-agent'] || '');
+  const lua = ua.toLowerCase();
+  const configured = loadUaMap();
+  for (let i = 0; i < configured.length; i++) {
+    if (lua.indexOf(configured[i].match.toLowerCase()) !== -1) return configured[i].agent;
+  }
   if (/cline/i.test(ua)) return 'cline';
   if (/aider/i.test(ua)) return 'aider';
   if (/openhands/i.test(ua)) return 'openhands';
   if (/opencode/i.test(ua)) return 'opencode';
   if (/dsh|deepseek[-\s]harness/i.test(ua)) return 'dsh';
-  if (/codex|openai/i.test(ua)) return 'codex';
+  if (/codex/i.test(ua)) return 'codex';
   if (/cursor/i.test(ua)) return 'cursor';
   if (/hermes/i.test(ua)) return 'hermes';
+  // /openai/i 故意放在 codex 之后且单独一条：openai-node / openai-python 这些官方库
+  // 的 UA 会被各种客户端带上，命中它只说明「用的 openai 官方 SDK」，不说明是 codex。
+  // 但它仍然比 unknown 更接近事实，故保留，仅不再与 codex 合并（合并时 codex 会被误判）。
+  if (/openai/i.test(ua)) return 'openai-sdk';
+  return UNKNOWN_AGENT;
+}
+
+// takeover 文件名按「检测到的 agent」找。检测不出时回落到本代理名——
+// 这样老部署里已存在的 takeover-generic-openai-proxy.json 照旧命中，
+// 2026-10-16 改 detectAgent 兜底值不会让 direct 路由悄悄失效。
+function pickTakeoverAgent(detected) {
+  if (detected !== UNKNOWN_AGENT) return detected;
+  const asUnknown = path.join(DATA_DIR, 'takeover-' + UNKNOWN_AGENT + '.json');
+  if (fs.existsSync(asUnknown)) return UNKNOWN_AGENT;
   return 'generic-openai-proxy';
 }
 
@@ -1548,6 +1647,11 @@ module.exports = {
   applyBudgetGuard,
   getBudgetStatus: () => budgetCheck.getStatus(),
   seedBudgetSnapshot: () => budgetCheck.seedStateFromFile(),
+  // agent 归因（2026-10-16 兜底值从代理名改成 <unknown>，与 cost-track 哨兵同串）：
+  // 导出供单测钉死「猜不到就说不知道」，以及 PROXY_AGENT_UA_MAP 的解析与回落。
+  detectAgent,
+  pickTakeoverAgent,
+  UNKNOWN_AGENT,
   budgetCheck,
 };
 

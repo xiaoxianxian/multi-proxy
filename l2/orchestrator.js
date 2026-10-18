@@ -34,7 +34,7 @@ const { extractUsage } = require('./relay-ledger.js');
 const DEFAULT_MAX_RETRIES = 1;
 
 class Orchestrator {
-    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null, semanticReview = false, semanticThrow = false, fidelityCheck = false, fidelityThrow = false, relayLedger = null } = {}) {
+    constructor({ executor, routeEngine, decomposer, shadowMode = true, dir = null, maxRetries = DEFAULT_MAX_RETRIES, retriever = null, semanticReview = false, semanticThrow = false, fidelityCheck = false, fidelityThrow = false, relayLedger = null, egressLedger = null } = {}) {
         this.executor = executor;          // 注入：(subtask, ctx, runOpts) => result；shadowMode 下不被调用
         this.routeEngine = routeEngine;    // 注入：非 shadow 时由 executor 用其 route() 选 adapter
         this.decomposer = decomposer;      // 注入：runFromInput 用；否则用内置 templateDecompose
@@ -47,6 +47,7 @@ class Orchestrator {
         this.fidelityCheck = fidelityCheck;   // 质量工程 2.3：下发 executor 前后比对透传字段（默认关）
         this.fidelityThrow = fidelityThrow;   // 默认关：打开则透传字段被改样即硬拒
         this.relayLedger = relayLedger;        // P2 观测件：null=不记账（零行为变更）；注入 relay-ledger 实例才逐跳记 usage
+        this.egressLedger = egressLedger;      // P2 观测件：null=不记账（零行为变更）；注入才逐跳记 client×destHost×bytes
         this.history = [];                 // 协作历史（任务级）
         this._seq = 0;
         this._fidelityIssues = [];         // 2.3 诊断记录（fidelityCheck 开启时累积）
@@ -184,6 +185,7 @@ class Orchestrator {
                 results[st.id] = { id: st.id, status: 'done', value, attempts };
                 executionOrder.push(st.id);
                 this._recordRelay(st, value, ctx, null);
+                this._recordEgress(st, value, ctx);
                 return;
             } catch (e) {
                 lastErr = e;
@@ -200,6 +202,7 @@ class Orchestrator {
                 results[st.id] = { id: st.id, status: 'done', value, attempts, fallbackFrom: st.id, via: fb.id };
                 executionOrder.push(fb.id);
                 this._recordRelay(st, value, ctx, st.id);
+                this._recordEgress(st, value, ctx);
                 return;
             } catch (e2) {
                 lastErr = e2 || lastErr;
@@ -225,6 +228,36 @@ class Orchestrator {
             viaFallback,
             shadow: this.shadowMode,
             value,
+        });
+    }
+
+    // 出站记账（P2 观测件 2026-10-17）：仅当注入了 egressLedger 才动作；第一行守卫保证
+    // 未注入时逐字零行为变更。tokens 复用 relay-ledger 的 extractUsage（已懂真实链路结构）；
+    // bytes/destHost 来自适配器返回值的 egress 字段（l1-agent / claude adapter 在 invoke 里量好带上），
+    // 拿不到就记 null（bytesFound=false），不填 0。详见 l2/egress-ledger.js 文件头。
+    // ⚠️ upstreamHost = 适配器的下一跳（本地代理 host:port），不是真实 provider——真实出网在本地代理进程内，本层看不到。
+    _recordEgress(st, value, ctx) {
+        if (!this.egressLedger || typeof this.egressLedger.record !== 'function') return null;
+        const v = (value && typeof value === 'object') ? value : {};
+        const adapterId = v.adapterId || v.agent || null;
+        // 测量值三级回退：挂在 value 上 > 适配器返回值 value.raw.egress > 空
+        const eg = (v.egress && typeof v.egress === 'object') ? v.egress
+            : (v.raw && v.raw.egress && typeof v.raw.egress === 'object') ? v.raw.egress : {};
+        const usage = extractUsage(value) || eg.usage || null;   // 复用 relay-ledger 挖取逻辑
+        const tokens = (usage && Number.isFinite(usage.totalTokens))
+            ? usage.totalTokens
+            : (Number.isFinite(v.totalTokens) ? v.totalTokens : null);
+        const bytesOut = Number.isFinite(v.bytesOut) ? v.bytesOut
+            : (Number.isFinite(eg.bytesOut) ? eg.bytesOut : null);
+        const destHost = v.upstreamHost || eg.upstreamHost || null;
+        return this.egressLedger.record({
+            client: adapterId,
+            destHost,
+            bytes: bytesOut,
+            tokens,
+            runId: ctx && ctx.runId,
+            subtaskId: st.id,
+            shadow: this.shadowMode,
         });
     }
 

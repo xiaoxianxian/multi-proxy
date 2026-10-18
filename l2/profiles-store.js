@@ -17,12 +17,18 @@
 //
 // 文件形态：{ ts, active, profiles: { <name>: <snapshot> } }，snapshot 由调用方自定（providers + 设置）。
 // 门控 PROXY_PROFILES 默认关 = save/switchTo 全 no-op（零行为变更）；不被任何热路径 require。
+// 记忆污染守卫（ASI06）：若注入 contentGuard（默认随 MULTI_PROXY_CONTENT_GUARD 门控），save 落盘前会扫
+//   「数据里藏指令」的内容；命中则拦截不落盘（隔离而非静默存）。不注入 = 零行为变更。
 // 零第三方依赖（node 内置 path/os/fs/crypto）。
 
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
+
+// 记忆污染守卫（OWASP ASI 2026 ASI06）：可选注入，不传 = 零行为变更。
+// 由环境变量 MULTI_PROXY_CONTENT_GUARD 控制开关（默认关）。
+const { createContentGuard } = require('./content-guard');
 
 const GATE_ENV = 'PROXY_PROFILES';
 const DEFAULT_FILE = path.join(os.homedir(), '.multi-proxy-manager', 'profiles.json');
@@ -40,6 +46,7 @@ function createProfilesStore(opts = {}) {
     const activeFile = typeof opts.file === 'string' ? opts.file : DEFAULT_FILE;
     // 可选自检钩子：(file, nextDoc) => boolean，false = 视为落盘失败 → 回滚（默认：重读比对内容）
     const verifyWrite = typeof opts.verifyWrite === 'function' ? opts.verifyWrite : null;
+    const contentGuard = opts.contentGuard || null; // 可选：记忆污染守卫（ASI06），不传 = 零行为变更
     let enabled = typeof opts.enabled === 'boolean' ? opts.enabled : gateOpen();
     // 本进程最后一次「写出 / 已确认」的内容 sha256；null = 尚不知，新进程不误报外部改动
     let lastHash = null;
@@ -106,6 +113,13 @@ function createProfilesStore(opts = {}) {
     function save(name, snapshot) {
         if (!enabled) return { written: false, reason: 'gate-closed' };
         if (typeof name !== 'string' || !name) return { written: false, reason: 'bad-name' };
+        // 记忆污染守卫（ASI06）：外部内容写入前，拦截「数据里藏指令」的内容（隔离而非静默存）
+        if (contentGuard && contentGuard.enabled) {
+            const r = contentGuard.scanMemoryWrite(snapshot);
+            if (!r.proceed) {
+                return { written: false, reason: 'memory-poisoning-detected', poisoned: true, signals: r.signals, score: r.score };
+            }
+        }
         const { doc, hash } = readDoc();
         if (externallyModified(hash)) return { written: false, reason: 'external-change', hash, expected: lastHash };
         const base = doc || { ts: 0, active: null, profiles: {} };
@@ -166,7 +180,7 @@ function createProfilesStore(opts = {}) {
     return { save, load, list, switchTo, active, isEnabled, setEnabled, file, lastKnownHash };
 }
 
-const _ps = createProfilesStore();
+const _ps = createProfilesStore({ contentGuard: createContentGuard() });
 module.exports = {
     GATE_ENV,
     DEFAULT_FILE,

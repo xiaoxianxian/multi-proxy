@@ -283,21 +283,43 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
      }
    }
 
+   // 门控状态读失败时的提示。仍走 setGate(false) 的展示（门控开没开不知道，
+   // 不能贸然显示知识库），但在「门控关闭」视图里补一句：这是读不到，不是门控关。
+   // 少了这句，用户会跑去开门控，而真正要修的是管理端。
+   function showGateReadError(reason) {
+     var gateView = document.getElementById('gateClosedView');
+     if (!gateView) return;
+     var existing = document.getElementById('gateReadError');
+     if (existing) existing.parentNode.removeChild(existing);
+     var box = document.createElement('div');
+     box.id = 'gateReadError';
+     box.style.cssText = 'margin:12px 0 0;padding:10px 12px;border-radius:6px;' +
+       'background:rgba(217,119,6,.08);color:#d97706;font-size:13px;line-height:1.6;';
+     box.textContent = '⚠ 门控状态读取失败（' + reason + '）。这不代表门控关闭——' +
+       '管理端恢复后刷新本页即可。';
+     gateView.appendChild(box);
+   }
+
    function checkGate() {
      showLoading();
      fetch('/api/knowledge/status')
         .then(function(res) {
-          if (res.status === 403) {            // 门控关
+          if (res.status === 403) {            // 门控真关
             setGate(false);
           } else if (res.ok) {
             setGate(true);
           } else {
+            // 2026-10-16：过去 500 也 setGate(false)——服务挂了却显示「门控关闭」，
+            // 用户会跑去开门控，而真正要修的是管理端。读失败必须和门控关分开说。
             setGate(false);
+            showGateReadError('HTTP ' + res.status);
           }
           hideLoading();
         })
-        .catch(function() {
+        .catch(function(err) {
+          // 同上：网络错误不等于门控关闭。
           setGate(false);
+          showGateReadError(err && err.message || '网络错误');
           hideLoading();
         });
    }
@@ -372,9 +394,22 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
        headers: { 'Content-Type': 'application/json' },
        body: JSON.stringify({ query: query, topK: topK, scope: scope })
       })
-      .then(function(res) { return res.json(); })
-      .then(function(results) {
+      .then(function(res) {
+        // 2026-10-16：过去这里直接 res.json() 不检查 res.ok——401（未登录）
+        // 或 500（服务错）时返回体通常是 {error:...} 而不是数组，于是落到
+        // 「无匹配结果（空 query 或空库不检索）」。用户以为知识库是空的，
+        // 实际是没登录或服务挂了。读失败和「真的没匹配」必须分开说。
+        return res.json().then(function(b) { return { ok: res.ok, status: res.status, body: b }; });
+      })
+      .then(function(r) {
         hideLoading();
+        if (!r.ok) {
+          resultsBox.innerHTML = '<div class="empty-state" style="color:#d97706;">检索失败：' +
+            esc((r.body && (r.body.error || r.body.message)) || ('HTTP ' + r.status)) +
+            '<br><span style="font-size:12px;opacity:.8;">读不到结果不代表知识库里没有相关内容。</span></div>';
+          return;
+        }
+        var results = r.body;
         if (!Array.isArray(results) || results.length === 0) {
           resultsBox.innerHTML = '<div class="empty-state">无匹配结果（空 query 或空库不检索）</div>';
           return;

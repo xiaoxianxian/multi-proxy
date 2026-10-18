@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Manager - Context</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EC%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="stylesheet" href="./colors_and_type.css">
+  <link rel="stylesheet" href="./shared-styles.css">
+</head>
+<style>
+  body { margin: 0; background: var(--color-bg-secondary, #f5f6f8); color: var(--color-text); font-family: var(--font-family, -apple-system, "Segoe UI", sans-serif); }
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; flex-shrink: 0; background: var(--color-bg); border-right: 1px solid var(--color-border); }
+  .sidebar-nav { padding: 12px; }
+  .sidebar-nav a { display: block; padding: 8px 12px; border-radius: 8px; color: var(--color-text); text-decoration: none; font-size: 13px; margin-bottom: 2px; }
+  .sidebar-nav a:hover { background: var(--color-bg-secondary, #eef0f3); }
+  .sidebar-nav a.active { background: var(--color-primary); color: #fff; font-weight: 600; }
+  .main { flex: 1; padding: 24px 28px; min-width: 0; }
+  .head { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+  .head h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .chip { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--color-border); color: var(--color-text-tertiary, #8a8f98); }
+  .chip.on { border-color: #22c55e; color: #16a34a; }
+  .toolbar { margin-left: auto; display: flex; gap: 8px; }
+  .btn-mini { font-size: 12px; padding: 5px 10px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 6px; cursor: pointer; }
+  .meta { font-size: 12px; color: var(--color-text-tertiary, #8a8f98); margin-bottom: 16px; line-height: 1.6; }
+  .meta code { font-size: 11px; background: var(--color-bg-secondary, #eef0f3); padding: 1px 5px; border-radius: 4px; }
+  h3.sec { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--color-text-tertiary, #8a8f98); margin: 22px 0 10px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .kpi { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; }
+  .kpi .k { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--color-text-tertiary, #8a8f98); font-weight: 700; }
+  .kpi .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .kpi .s { font-size: 11px; color: var(--color-text-tertiary, #8a8f98); margin-top: 2px; }
+  /* 七类堆叠条 */
+  .stack { display: flex; height: 34px; border-radius: 10px; overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg); }
+  .stack > div { height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 10px; font-size: 12px; }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .legend .n { font-variant-numeric: tabular-nums; font-weight: 600; }
+  /* 每请求趋势 */
+  .trend { display: flex; flex-direction: column; gap: 4px; }
+  .trow { display: flex; align-items: center; gap: 10px; font-size: 11px; }
+  .trow .ts { width: 64px; color: var(--color-text-tertiary, #8a8f98); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .trow .bar { flex: 1; height: 16px; display: flex; border-radius: 4px; overflow: hidden; border: 1px solid var(--color-border-light, #e5e7eb); }
+  .trow .bar > div { height: 100%; }
+  .trow .tot { width: 76px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; flex-shrink: 0; }
+  .trow .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--color-border); color: var(--color-text-tertiary, #8a8f98); flex-shrink: 0; }
+  /* 事件与告警 */
+  .ev { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border: 1px solid var(--color-border); border-radius: 10px; margin-bottom: 8px; background: var(--color-bg); font-size: 12px; }
+  .ev .kind { font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
+  .ev .kind.compaction-candidate { background: #fef3c7; color: #b45309; }
+  .ev .kind.prune-candidate { background: #e0e7ff; color: #4338ca; }
+  .ev .kind.model-switch { background: #dcfce7; color: #15803d; }
+  .ev .kind.tools-changed { background: #f3e8ff; color: #7e22ce; }
+  .ev .body { flex: 1; min-width: 0; }
+  .ev .when { color: var(--color-text-tertiary, #8a8f98); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty { padding: 34px; text-align: center; color: var(--color-text-tertiary, #8a8f98); font-size: 13px; border: 1px dashed var(--color-border); border-radius: 12px; line-height: 1.8; }
+  .note { margin-top: 16px; font-size: 12px; color: var(--color-text-tertiary, #8a8f98); line-height: 1.7; }
+  .note code { font-size: 11px; background: var(--color-bg-secondary, #eef0f3); padding: 1px 5px; border-radius: 4px; }
+</style>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand"><div class="logo-icon">P</div><h1>Multi-Proxy</h1></div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html">概览</a>
+      <a href="floor.html">Floor（代理面）</a>
+      <a href="context.html" class="active">Context（上下文组成）</a>
+      <a href="proxy-config.html">代理配置</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="skills.html">Skills</a>
+      <a href="knowledge.html">Knowledge</a>
+      <a href="logs.html">日志</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <div class="head">
+      <h2>Context Breakdown</h2>
+      <span class="chip" id="chip-track">门控 —</span>
+      <div class="toolbar">
+        <button class="btn-mini" id="btn-refresh">刷新</button>
+        <button class="btn-mini" id="btn-theme">主题</button>
+      </div>
+    </div>
+    <div class="meta" id="meta">正在加载…</div>
+
+    <h3 class="sec">总览（估算轨 · 窗口均值）</h3>
+    <div class="kpi-grid" id="kpi"></div>
+
+    <h3 class="sec">七类组成（对齐 dsh-context 坐标系）</h3>
+    <div class="stack" id="stack"></div>
+    <div class="legend" id="legend"></div>
+
+    <h3 class="sec">每请求趋势（最近 40 条 · 堆叠=七类）</h3>
+    <div class="trend" id="trend"></div>
+
+    <h3 class="sec">推断事件（proxy-frame-diff · 候选非事实）</h3>
+    <div id="events"></div>
+
+    <h3 class="sec">告警汇总</h3>
+    <div id="warnings"></div>
+
+    <div class="note" id="note"></div>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var CATS = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
+  var COLORS = { system: '#2563eb', tools: '#f59e0b', user: '#10b981', inject: '#8b5cf6', skill: '#ec4899', assistant: '#06b6d4', tool: '#64748b' };
+  var KIND_LABEL = { 'compaction-candidate': '压缩候选', 'prune-candidate': '裁剪候选', 'model-switch': '换模型', 'tools-changed': '工具集变化' };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function nf(v) { return Number(v || 0).toLocaleString(); }
+  function ts(t) { try { return t ? new Date(t).toLocaleTimeString() : '—'; } catch (e) { return '—'; } }
+  function pct(v) { return Math.round(Number(v || 0) * 100) + '%'; }
+
+  function stackHtml(byCategory, total) {
+    if (!total) return '<div class="empty">窗口内无数据</div>';
+    var h = '';
+    for (var i = 0; i < CATS.length; i++) {
+      var c = CATS[i];
+      var v = Number(byCategory[c] || 0);
+      if (v <= 0) continue;
+      var w = Math.max(0.5, (v / total) * 100);
+      h += '<div style="width:' + w.toFixed(2) + '%;background:' + COLORS[c] + '" title="' + esc(c + ': ' + nf(v) + ' tokens (' + Math.round(v / total * 100) + '%)') + '"></div>';
+    }
+    return h;
+  }
+  function legendHtml(byCategory, total) {
+    var h = '';
+    for (var i = 0; i < CATS.length; i++) {
+      var c = CATS[i];
+      var v = Number(byCategory[c] || 0);
+      h += '<span class="item"><span class="sw" style="background:' + COLORS[c] + '"></span>' + esc(c) +
+        ' <span class="n">' + nf(v) + '</span>' + (total ? ' <span style="color:var(--color-text-tertiary)">' + Math.round(v / total * 100) + '%</span>' : '') + '</span>';
+    }
+    return h;
+  }
+  function kpiHtml(s) {
+    var cards = [
+      ['观测请求', nf(s.requests), '窗口内经代理的请求'],
+      ['平均上下文', nf(s.requests ? Math.round(Object.keys(s.byCategory).reduce(function (a, c) { return a + Number(s.byCategory[c] || 0); }, 0)) : 0), '七类均值（估算轨）'],
+      ['峰值单帧', nf(s.peak), '窗口内最大'],
+      ['实测覆盖率', pct(s.actualCoverage), '有 provider usage 的请求占比'],
+      ['推断事件', nf(Object.keys(s.events || {}).reduce(function (a, k) { return a + s.events[k]; }, 0)), '压缩/裁剪/换模型/工具集']
+    ];
+    return cards.map(function (c) {
+      return '<div class="kpi"><div class="k">' + esc(c[0]) + '</div><div class="v">' + esc(c[1]) + '</div><div class="s">' + esc(c[2]) + '</div></div>';
+    }).join('');
+  }
+  function trendHtml(rows) {
+    if (!rows.length) return '<div class="empty">窗口内无请求记录</div>';
+    var max = 0;
+    rows.forEach(function (r) { if (r.total > max) max = r.total; });
+    return rows.map(function (r) {
+      var bar = '';
+      CATS.forEach(function (c) {
+        var v = Number((r.byCategory || {})[c] || 0);
+        if (v <= 0) return;
+        bar += '<div style="width:' + Math.max(0.5, v / max * 100).toFixed(2) + '%;background:' + COLORS[c] + '" title="' + esc(c + ': ' + nf(v)) + '"></div>';
+      });
+      var evTags = (r.events || []).map(function (e) {
+        return '<span class="tag">' + esc(KIND_LABEL[e.kind] || e.kind) + '</span>';
+      }).join(' ');
+      return '<div class="trow"><span class="ts">' + ts(r.ts) + '</span>' +
+        '<span class="bar">' + bar + '</span>' +
+        '<span class="tot">' + nf(r.total) + '</span>' +
+        '<span class="tag">' + esc(r.source === 'actual' ? '实测' : '估算') + '</span>' + evTags + '</div>';
+    }).join('');
+  }
+  function eventsHtml(rows) {
+    var evs = [];
+    rows.forEach(function (r) {
+      (r.events || []).forEach(function (e) { evs.push({ e: e, r: r }); });
+    });
+    evs = evs.slice(-30).reverse();
+    if (!evs.length) return '<div class="empty">暂无推断事件（上下文平稳增长时这是正常形态）</div>';
+    return evs.map(function (x) {
+      var e = x.e, r = x.r;
+      var detail = '';
+      if (e.kind === 'compaction-candidate' || e.kind === 'prune-candidate') {
+        detail = '缩量 <b>' + nf(e.droppedTokens) + '</b> tokens（' + Math.round(Number(e.ratio || 0) * 100) + '%）';
+      } else if (e.kind === 'model-switch') {
+        detail = esc(e.from) + ' → ' + esc(e.to);
+      } else if (e.kind === 'tools-changed') {
+        detail = '新增 ' + nf((e.added || []).length) + ' / 移除 ' + nf((e.removed || []).length) +
+          ((e.added || []).length ? '（+' + esc((e.added || []).slice(0, 3).join(', ')) + '）' : '');
+      }
+      return '<div class="ev"><span class="kind ' + esc(e.kind) + '">' + esc(KIND_LABEL[e.kind] || e.kind) + '</span>' +
+        '<span class="body">' + detail + '<br><span style="color:var(--color-text-tertiary)">' + esc(r.agent) + ' · ' + esc(r.clientKey) + ' · ' + esc(r.model || '—') + '</span></span>' +
+        '<span class="when">' + ts(r.ts) + '</span></div>';
+    }).join('');
+  }
+  function warningsHtml(s) {
+    var keys = Object.keys(s.warnings || {});
+    if (!keys.length) return '<div class="empty">无告警</div>';
+    return keys.map(function (k) {
+      return '<div class="ev"><span class="kind prune-candidate">' + esc(k) + '</span><span class="body">× ' + nf(s.warnings[k]) + '</span></div>';
+    }).join('');
+  }
+
+  function load() {
+    fetch('./api/context/summary?windowMs=' + 86400000)
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        document.getElementById('chip-track').textContent = '观测中 · ' + nf(s.requests) + ' 请求';
+        document.getElementById('chip-track').className = 'chip on';
+        document.getElementById('meta').innerHTML =
+          '只观测不改写。分类数字为估算轨（长度/3 启发式）；实测轨来自上游 usage，覆盖率 ' + pct(s.actualCoverage) + '。' +
+          '事件为代理侧帧差推断（<code>proxy-frame-diff</code>），是候选不是事实。门控 <code>PROXY_CONTEXT_TRACK</code>。';
+        var total = CATS.reduce(function (a, c) { return a + Number(s.byCategory[c] || 0); }, 0);
+        document.getElementById('kpi').innerHTML = kpiHtml(s);
+        document.getElementById('stack').innerHTML = stackHtml(s.byCategory, total);
+        document.getElementById('legend').innerHTML = legendHtml(s.byCategory, total);
+        return fetch('./api/context/recent?n=40').then(function (r) { return r.json(); }).then(function (d) {
+          var rows = d.rows || [];
+          document.getElementById('trend').innerHTML = trendHtml(rows);
+          document.getElementById('events').innerHTML = eventsHtml(rows);
+        });
+      })
+      .then(function () {
+        document.getElementById('note').innerHTML =
+          '口径真源：<code>docs/context-breakdown-口径.md</code>。坐标系抄自 dsh-context（七类），' +
+          '差异：代理看不到注入生产者，inject/skill 两桶默认 0，不硬凑。' +
+          '丢帧 ' + nf(0) + ' · 落盘错误见 <code>GET /api/context/stats</code>。';
+      })
+      .catch(function (e) {
+        document.getElementById('meta').textContent = '加载失败：' + e.message;
+      });
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', load);
+  document.getElementById('btn-theme').addEventListener('click', function () {
+    document.documentElement.classList.toggle('dark');
+  });
+  load();
+})();
+</script>
+</body>
+</html>

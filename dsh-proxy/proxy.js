@@ -219,6 +219,34 @@ const UPSTREAM_MODELS = [
   }
 ];
 
+// ===== 阶段二：免费优先回退（门控 PROXY_FREE_PREFERENCE，默认关）=====
+// 目的：请求模型未在 providers.json 精确命中、且会落入付费内置 provider 时，若存在「实测免费」
+//   的 provider 能服务该模型，改走免费出口（WB shim）。
+// 纪律（对应 docs/savings-gateway-credit-routing.md 阶段二 + 红线）：
+//   · 门控默认关：FREE_PREF_GATE 关时 pickFreeProvider 恒返回 null，findProvider 逐字节回到上线前。
+//   · 免费=实测值：provider 用 freeModels 声明「哪些真实模型 id 实测 credit=0」（来源 workbuddy-shim
+//     的 usage.credit，见 providers.json 的 freeMeasuredAt/freeSource），绝不按 tier 估算塞 0（C0-3）。
+//   · 只做模型 id 能力匹配：请求模型与 freeModels 都去 "wb-" 前缀后精确比对，不猜；命中后原样转发
+//     该模型 id（它本就是 WB 接受的真实 id，无需改写 body.model，故 5 处转发点零改动）。
+const FREE_PREF_GATE = ['1', 'true', 'on', 'yes'].includes(String(process.env.PROXY_FREE_PREFERENCE || '').toLowerCase());
+
+// 纯函数：从 providers 里挑一个能免费服务 modelName 的 provider；没有返回 null。
+// providers: providers.json 数组；modelName: 客户端请求的模型名；opts.gate 可覆盖门控（测试用）。
+function pickFreeProvider(modelName, providers, opts) {
+  const gate = opts && typeof opts.gate === 'boolean' ? opts.gate : FREE_PREF_GATE;
+  if (!gate) return null;
+  if (!modelName || !Array.isArray(providers)) return null;
+  const want = String(modelName).replace(/^wb-/, '');
+  for (const p of providers) {
+    if (!p || p.enabled === false) continue;
+    const free = Array.isArray(p.freeModels) ? p.freeModels : [];
+    if (free.some((m) => String(m).replace(/^wb-/, '') === want)) {
+      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models || [], anthropicBaseUrl: p.anthropicBaseUrl };
+    }
+  }
+  return null;
+}
+
 function findProvider(modelName) {
   if (!modelName) return null;
   // 1. User-defined providers (created via Web UI, stored in providers.json)
@@ -232,6 +260,9 @@ function findProvider(modelName) {
       return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl };
     }
   }
+  // 阶段二：免费优先回退（精确未命中时）。门控关 → pickFreeProvider 恒返回 null，下面逐字节回原逻辑。
+  const freeProvider = pickFreeProvider(modelName, userProviders);
+  if (freeProvider) return freeProvider;
   const userMatch = userProviders.find(p => p.provider_id && modelName.toLowerCase().includes(String(p.provider_id).toLowerCase()));
   if (userMatch) {
     return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl };
@@ -1106,6 +1137,19 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       // 成本采集：chat 路由此前只有 /v1/messages 接了 reportUsage，dsh 走的这条一直没进账。
       // 流式分支暂不接（usage 藏在流末、客户端中途断开=虚账），先保非流式完整可记账。
       reportUsage(JSON.stringify(data), Date.now() - t0, detectAgent(req), req.body && req.body.model);
+      // ── context-breakdown 观测（门控 PROXY_CONTEXT_TRACK 默认关 = 零开销；口径 docs/context-breakdown-口径.md）──
+      // 旁路铁律同 reportUsage：全 catch、不拖主路径。只报计数，不报正文。
+      try {
+        require('../l2/context-report').observe({
+          agent: 'dsh-proxy',
+          reqId: null,
+          model: req.body && req.body.model,
+          requestModel: req.body && req.body.model,
+          clientKey: detectAgent(req),
+          request: req.body,
+          actuals: (data && data.usage) || null,
+        });
+      } catch { /* 观测失败不是转发失败 */ }
     }
   } catch (e) {
     // 客户端拔了（canWrite=false）不算上游故障，不喂熔断；其余视为上游不可达
@@ -1471,6 +1515,8 @@ module.exports = {
   parseConfigToml,
   createUpstreamSignal, // L004：测试直接打这个函数，别再靠「镜像一份代码」的假测试
   canWrite,
+  findProvider,      // 阶段二 e2e/回归测试用（原未导出）
+  pickFreeProvider,  // 阶段二纯函数测试用
   // per-provider 上游熔断（2026-10-09）：门控关时 getCircuitBreaker() 返回 null
   getCircuitBreaker: () => upstreamBreaker,
   classifyUpstreamStatus,

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 520" width="760" height="520" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <rect width="760" height="520" fill="#ffffff"/>
+  <text x="380" y="32" text-anchor="middle" font-size="19" font-weight="700" fill="#1a202c">能力对比：云网关 vs 本地优先（你）</text>
+  <text x="380" y="54" text-anchor="middle" font-size="12" fill="#64748b">同一痛点两种路径；★ = 只有跑在你机器上才成立</text>
+
+  <rect x="30" y="72" width="250" height="34" fill="#1e293b"/>
+  <text x="155" y="94" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">能力</text>
+  <rect x="280" y="72" width="220" height="34" fill="#475569"/>
+  <text x="390" y="94" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">火山 / 阿里云网关</text>
+  <rect x="500" y="72" width="230" height="34" fill="#065f46"/>
+  <text x="615" y="94" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">你（multi-proxy + Portico）</text>
+
+  <!-- Row 1 -->
+  <rect x="30" y="112" width="700" height="34" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="134" font-size="13" fill="#1a202c">密钥托管</text>
+  <text x="390" y="134" text-anchor="middle" font-size="13" fill="#16a34a">✓ 托管</text>
+  <text x="615" y="134" text-anchor="middle" font-size="13" fill="#16a34a">✓ 本地 .env</text>
+  <!-- Row 2 -->
+  <rect x="30" y="150" width="700" height="34" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="172" font-size="13" fill="#1a202c">Token 计量 + 分账</text>
+  <text x="390" y="172" text-anchor="middle" font-size="13" fill="#16a34a">✓ 组织维度</text>
+  <text x="615" y="172" text-anchor="middle" font-size="13" fill="#16a34a">✓ 本地账本</text>
+  <!-- Row 3 -->
+  <rect x="30" y="188" width="700" height="34" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="210" font-size="13" fill="#1a202c">多模型 Fallback / 路由</text>
+  <text x="390" y="210" text-anchor="middle" font-size="13" fill="#16a34a">✓</text>
+  <text x="615" y="210" text-anchor="middle" font-size="13" fill="#16a34a">✓</text>
+  <!-- Row 4 highlight ★ -->
+  <rect x="30" y="226" width="700" height="34" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="46" y="248" font-size="13" font-weight="700" fill="#065f46">端口冲突检测（OCCUPANT_PORTS）</text>
+  <text x="390" y="248" text-anchor="middle" font-size="13" fill="#dc2626">✗</text>
+  <text x="615" y="248" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">✓ ★</text>
+  <!-- Row 5 highlight ★ -->
+  <rect x="30" y="264" width="700" height="34" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="46" y="286" font-size="13" font-weight="700" fill="#065f46">本地 Ollama 一等公民</text>
+  <text x="390" y="286" text-anchor="middle" font-size="13" fill="#dc2626">✗ 仅兼容端点</text>
+  <text x="615" y="286" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">✓ ★</text>
+  <!-- Row 6 降级：数据不出域厂商也有专有云 / 私有化形态（2026-10-15 核） -->
+  <rect x="30" y="302" width="700" height="34" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="324" font-size="13" fill="#1a202c">数据不出域（合规场景）</text>
+  <text x="390" y="324" text-anchor="middle" font-size="13" fill="#16a34a">✓ 专有云 / 私有化形态</text>
+  <text x="615" y="324" text-anchor="middle" font-size="13" fill="#16a34a">✓ 本机</text>
+  <!-- Row 7 highlight ★ -->
+  <rect x="30" y="340" width="700" height="34" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="46" y="362" font-size="13" font-weight="700" fill="#065f46">确定性审计回放</text>
+  <text x="390" y="362" text-anchor="middle" font-size="13" fill="#dc2626">✗ 仅日志（在他方 custody）</text>
+  <text x="615" y="362" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">✓ ★</text>
+  <!-- Row 8 降级：AGPL 是分发与信任策略，不是壁垒 -->
+  <rect x="30" y="378" width="700" height="34" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="400" font-size="13" fill="#1a202c">开源自有 / 不被锁</text>
+  <text x="390" y="400" text-anchor="middle" font-size="13" fill="#dc2626">✗ lock-in</text>
+  <text x="615" y="400" text-anchor="middle" font-size="13" fill="#16a34a">✓ 代码可审、可分叉</text>
+  <!-- Row 9 -->
+  <rect x="30" y="416" width="700" height="34" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="438" font-size="13" fill="#1a202c">MCP 管理 / 安全合规</text>
+  <text x="390" y="438" text-anchor="middle" font-size="13" fill="#16a34a">✓</text>
+  <text x="615" y="438" text-anchor="middle" font-size="13" fill="#d97706">△ 部分</text>
+
+  <text x="30" y="478" font-size="11" fill="#94a3b8">★ 只有跑在你机器上才成立的几项；数据不出域厂商已有专有云 / 私有化形态，差别在账本 custody 不在部署位置。</text>
+  <text x="30" y="496" font-size="11" fill="#94a3b8">大厂性能 / 成本数字均“官方口径·非实测”；本图纯文字标签，不含任何品牌 logo。</text>
+</svg>

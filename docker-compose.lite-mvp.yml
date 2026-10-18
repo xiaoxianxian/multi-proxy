@@ -1,0 +1,29 @@
+# multi-proxy 轻档镜像 · 单服务起法（仅 manager + L2 h3web，接本地 Ollama）
+# 用法：docker compose -f docker-compose.lite-mvp.yml up --build
+# 判据：./scripts/lite-mvp-smoke.sh（manager 探活 + Ollama 探活 + h3web 探针 precheck）
+
+services:
+  manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.lite-mvp
+    container_name: multi-proxy-lite-mvp
+    ports:
+      - "18792:18792"
+    environment:
+      # 接宿主 Ollama（macOS/Linux Docker Desktop）：host.docker.internal 解析宿主机
+      OLLAMA_BASE: "http://host.docker.internal:11434"
+      PROXY_H3WEB_PORTS: "8731"
+      # manager 默认 bind 127.0.0.1（容器内回环，host 连不上）；Docker 部署设 0.0.0.0 host 可达
+      # 对外售卖须配 MANAGER_PASSWORD + 防火墙/反代（启动 [security] 会提示）
+      BIND_HOST: "0.0.0.0"
+      # macOS 需 extra_hosts 才能解析 host.docker.internal（Linux 自带）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - manager-lite-state:/root/.multi-proxy-manager
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  manager-lite-state:

@@ -209,6 +209,10 @@ export const DEFAULT_ROUTE_CONFIG: RouteConfig = {
    { id: 'r-cheap',   condition: "taskType == 'cheap'",   targetProvider: 'agnes-3.0-flash' },
    { id: 'r-coding',  condition: "taskType == 'coding'",  targetProvider: 'deepseek-v4-pro' },
    { id: 'r-writing', condition: "taskType == 'writing'", targetProvider: 'qwen3.8:27b-mlx' },
+   // writing-rewrite（缩写/扩写/去废话/改写）：产出变长/结构，绝不降档 → 强模型（2026-10-18 TierFlow 评测结论）
+   { id: 'r-writing-rewrite',  condition: "taskType == 'writing-rewrite'",  targetProvider: 'qwen3.8:27b-mlx' },
+   // writing-rephrase（润色/翻译/换说法）：只换表达 → 可降档到廉价模型
+   { id: 'r-writing-rephrase', condition: "taskType == 'writing-rephrase'", targetProvider: 'agnes-3.0-flash' },
    { id: 'r-vision',  condition: "taskType == 'vision'",  targetProvider: 'qwen3.8:27b-mlx' },
    { id: 'r-private', condition: 'privacy == true',        targetProvider: 'qwen3.8:27b-mlx' },
    { id: 'r-hard',    condition: "quality == 'high'",      targetProvider: 'deepseek-v4-pro' },

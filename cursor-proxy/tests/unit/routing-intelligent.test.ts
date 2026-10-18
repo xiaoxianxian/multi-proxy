@@ -42,14 +42,26 @@ describe('M6-4a classifyTask', () => {
     expect(classifyTask([{ role: 'user', content: 'git commit 怎么回退上一个提交' }])).toBe('coding');
   });
 
-  it('写作特征 → writing', () => {
-    expect(classifyTask([{ role: 'user', content: '帮我润色这篇公众号文章的开头' }])).toBe('writing');
+  it('写作特征 → writing（长文创作，非 rewrite/rephrase）', () => {
     expect(classifyTask([{ role: 'user', content: '把这段总结成一篇文章' }])).toBe('writing');
+    expect(classifyTask([{ role: 'user', content: '帮我写一篇关于本地部署的公众号长文' }])).toBe('writing');
   });
 
-  it('短消息+翻译信号 → cheap', () => {
-    expect(classifyTask([{ role: 'user', content: '把 hello world 翻译成英文' }])).toBe('cheap');
-    expect(classifyTask([{ role: 'user', content: '缩写这段话' }])).toBe('cheap');
+  // 2026-10-18 TierFlow 评测结论落测试：润色/翻译是「换说法」不是「去废话」，归 writing-rephrase 而非 cheap
+  it('润色/翻译信号 → writing-rephrase（可降档，不再误归 cheap）', () => {
+    expect(classifyTask([{ role: 'user', content: '帮我润色这篇公众号文章的开头' }])).toBe('writing-rephrase');
+    expect(classifyTask([{ role: 'user', content: '把 hello world 翻译成英文' }])).toBe('writing-rephrase');
+  });
+
+  // 缩写/扩写/去废话是「改写」，产出变长/结构，绝不降档 → writing-rewrite
+  it('缩写/扩写/改写信号 → writing-rewrite（绝不降档，不再误归 cheap）', () => {
+    expect(classifyTask([{ role: 'user', content: '缩写这段话' }])).toBe('writing-rewrite');
+    expect(classifyTask([{ role: 'user', content: '帮我把这段扩写得更详细些' }])).toBe('writing-rewrite');
+    expect(classifyTask([{ role: 'user', content: '去废话，保留核心信息' }])).toBe('writing-rewrite');
+  });
+
+  it('短消息+琐碎格式化信号 → cheap', () => {
+    expect(classifyTask([{ role: 'user', content: '把这段 json 格式化一下' }])).toBe('cheap');
   });
 
   it('无明显特征 → general', () => {
@@ -245,7 +257,18 @@ describe('M6-D 默认四层 RouteConfig', () => {
   it('cheap 任务命中 r-cheap → agnes-3.0-flash', () => {
     const eng = new RouteEngine();
     expect(eng.getNextRoute('cheap', 'm', DEFAULT_ROUTE_CONFIG)).toBe('agnes-3.0-flash');
-   });
+  });
+
+  // 2026-10-18 TierFlow 评测结论落规则：改写（变长/结构）绝不降档 → 强模型；换说法可降档 → 廉价
+  it('writing-rewrite 命中 r-writing-rewrite → qwen3.8（绝不降档）', () => {
+    const eng = new RouteEngine();
+    expect(eng.getNextRoute('writing-rewrite', 'm', DEFAULT_ROUTE_CONFIG)).toBe('qwen3.8:27b-mlx');
+  });
+
+  it('writing-rephrase 命中 r-writing-rephrase → agnes-3.0-flash（可降档）', () => {
+    const eng = new RouteEngine();
+    expect(eng.getNextRoute('writing-rephrase', 'm', DEFAULT_ROUTE_CONFIG)).toBe('agnes-3.0-flash');
+  });
 
   it('privacy==true 命中 → 本地离线 qwen3.8:27b-mlx', () => {
     const eng = new RouteEngine();

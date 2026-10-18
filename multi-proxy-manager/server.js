@@ -123,6 +123,7 @@ app.use('/api/floor', require('./routes/floor'));
 // 接入规范见 routes/cost-report.js 头注释 —— 接入方只需贴 raw + agent，解析由 usage-probe 自动做。
 app.use('/api/cost', require('./routes/cost-report'));
 // context-breakdown：lane 上报 + 面板查询（门控 PROXY_CONTEXT_TRACK 默认关；口径 docs/context-breakdown-口径.md）
+app.use('/api/context', require('./routes/context'));
 // P7 本地预算闸门：只读判级（GET）+ 越限采集发告警（POST collect，复用 alert 内核规则）。
 // 没配 budget.json ⇒ enabled:false，零行为变更。边界见 routes/budget.js 头注释：
 // 单租户本地能力，不碰账号/余额/代持（那层等公司 + 商业/法务 feasibility）。
@@ -187,6 +188,8 @@ app.use((req, res, next) => {
       '/sessions': 'sessions.html',
       '/knowledge': 'knowledge.html',
       '/floor': 'floor.html',
+      // context-breakdown 面板页（只读聚合，与 /floor 同模式）
+      '/context': 'context.html',
       // P0 修：dashboard 侧栏跳 /skills，routeMap 缺此项 ⇒ 点击被回落成 dashboard（无反应）。
       '/skills': 'skills.html',
       // v1.0 补 settings 页：外观/关于/更新与备份（本地优先，内嵌在管理组路由）

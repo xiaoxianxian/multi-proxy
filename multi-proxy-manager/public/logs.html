@@ -1398,20 +1398,15 @@ body {
     }).join('');
   }
 
-  // ===== Mock Version Data =====
-  function getMockVersion() {
-    return {
-      version: '1.0.3',
-      proxies: { codex: 'v1.2.0', hermes: 'v0.9.4', cursor: 'v2.1.0' }
-    };
-  }
-
   // ===== Initialize =====
   function init() {
     initDarkMode();
     // Load version info
     fetch('/api/version')
-      .then(function(res) { return res.json(); })
+      .then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
       .then(function(data) {
         versionCache = data;
         var sidebarVer = document.getElementById('sidebarVersion');
@@ -1420,10 +1415,13 @@ body {
         }
       })
       .catch(function() {
-        var ver = getMockVersion();
-        versionCache = ver;
+        // 2026-10-16：过去这里兜底 getMockVersion()——假版本 '1.0.3' 加三个假
+        // 子版本号（codex v1.2.0 / hermes v0.9.4 / cursor v2.1.0），侧边栏显示
+        // "Manager 1.0.3"。版本号是「要不要升级」的判断依据，喂假值会让用户
+        // 放弃一次本该做的升级。现在如实说读不到。
+        versionCache = null;
         var sidebarVer = document.getElementById('sidebarVersion');
-        if (sidebarVer) sidebarVer.textContent = 'Manager ' + ver.version;
+        if (sidebarVer) sidebarVer.textContent = '版本读取失败';
       });
 
     // Load dynamic proxy nav

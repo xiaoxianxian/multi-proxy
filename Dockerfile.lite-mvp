@@ -1,0 +1,46 @@
+# multi-proxy 轻档镜像 · MVP（第一笔钱 · h3web 镜像形态）
+# 性质：对外可 build 的最小形态——manager 调度层 + L2 h3web 适配器 + 判据探针。
+# 不含 h3 重引擎（百 GB 权重走「重量档」单独出）；接用户本地 Ollama（host.docker.internal:11434）。
+# 关键：manager 保持原目录名 multi-proxy-manager/（不改名 manager/）——
+#   forward.js 需 ../../packs/sandbox-egress、packs/sandbox-egress 需 ../../multi-proxy-manager/lib/redact，
+#   容器布局必须与宿主仓库（multi-proxy/{multi-proxy-manager,packs,l2,codex-proxy,...}）一致，否则起即崩。
+# 创建：2026-10-17 老板拍「第一笔钱 = 轻档镜像」推进 PoC。
+
+FROM node:20-alpine
+
+RUN apk add --no-cache lsof docker-cli curl
+
+WORKDIR /app
+
+# Manager 自身（统一 Web 后台：多模型代理 / 用量归一 / base_url 单一所有）
+COPY multi-proxy-manager/package.json multi-proxy-manager/package-lock.json* ./multi-proxy-manager/
+RUN cd multi-proxy-manager && npm install --production
+COPY multi-proxy-manager/ ./multi-proxy-manager/
+
+# 各代理目录：buildProxyConfigs __dirname=/app/multi-proxy-manager，../= /app → /app/{codex,hermes,cursor}-proxy
+COPY codex-proxy/ ./codex-proxy/
+COPY hermes-proxy/ ./hermes-proxy/
+COPY cursor-proxy/package.json ./cursor-proxy/
+COPY cursor-proxy/dist ./cursor-proxy/dist
+
+# packs：forward.js require ../../packs/sandbox-egress；其 index.js require ../../multi-proxy-manager/lib/redact
+COPY packs/ ./packs/
+
+# 轻档：L2 h3web 适配器（零依赖 node http/net）+ 判据探针
+COPY l2/ ./l2/
+COPY scripts/h3web-roundtrip-probe.js ./scripts/h3web-roundtrip-probe.js
+
+ENV PORT=18792
+
+# 轻档默认门控：开 L2 skill host（h3web 本地能力路由）；本地 Ollama 由 compose host.docker.internal:11434 接入。
+# BIND_HOST=0.0.0.0：manager 默认 bind 127.0.0.1（容器内回环，host 连不上）；Docker 部署设 0.0.0.0 让 host 可达。
+# ⚠️ 对外售卖须配 MANAGER_PASSWORD + 防火墙/反代访问控制（启动 [security] 会提示）。
+# MANAGER_PASSWORD 由部署 `docker run -e MANAGER_PASSWORD=xxx` 传入（默认空 = 首跑 JWT 自动生成、管理台 open）；对外售卖必传。
+ENV BIND_HOST=0.0.0.0 \
+    PROXY_L2_SKILL=1 \
+    PROXY_L2_SKILLHOSTS=1 \
+    PROXY_H3WEB_PORTS=8731
+
+EXPOSE 18792
+
+CMD ["node", "multi-proxy-manager/server.js"]

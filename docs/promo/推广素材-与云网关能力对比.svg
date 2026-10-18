@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 677 430" width="677" height="430" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <title>multi-proxy 与云端 AI 网关能力对比</title>
+  <desc>八项能力逐行对照：多模型统一代理、密钥托管、Token 计量与分账两边都能做；用量归一自动识别、base_url 单一所有者与冲突检测、本地是一档路由条件、只读接入不写回四项是 multi-proxy 的本地工程账；MCP 管理与内容过滤 multi-proxy 未做，标半格。云网关数字均为官方口径·非实测。</desc>
+  <rect width="677" height="430" fill="#ffffff"/>
+  <text x="338" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1a202c">multi-proxy vs 云端 AI 网关</text>
+  <text x="338" y="52" text-anchor="middle" font-size="11.5" fill="#64748b">★ = 只有跑在你机器上才成立的几笔工程账</text>
+
+  <rect x="26" y="66" width="230" height="32" fill="#1e293b"/>
+  <text x="141" y="87" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">能力</text>
+  <rect x="256" y="66" width="180" height="32" fill="#475569"/>
+  <text x="346" y="87" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">火山 / 阿里云网关</text>
+  <rect x="436" y="66" width="215" height="32" fill="#065f46"/>
+  <text x="543" y="87" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">multi-proxy（本地）</text>
+
+  <rect x="26" y="102" width="625" height="31" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="38" y="122" font-size="12" fill="#1a202c">多模型统一代理 + Fallback</text>
+  <text x="346" y="122" text-anchor="middle" font-size="12" fill="#16a34a">✓</text>
+  <text x="543" y="122" text-anchor="middle" font-size="12" fill="#16a34a">✓</text>
+
+  <rect x="26" y="133" width="625" height="31" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="38" y="153" font-size="12" fill="#1a202c">密钥托管</text>
+  <text x="346" y="153" text-anchor="middle" font-size="12" fill="#16a34a">✓ 平台托管</text>
+  <text x="543" y="153" text-anchor="middle" font-size="12" fill="#16a34a">✓ 本地 .env 收口</text>
+
+  <rect x="26" y="164" width="625" height="31" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="38" y="184" font-size="12" fill="#1a202c">Token 计量 / 分账</text>
+  <text x="346" y="184" text-anchor="middle" font-size="12" fill="#16a34a">✓ 组织维度</text>
+  <text x="543" y="184" text-anchor="middle" font-size="11.5" fill="#16a34a">✓ 按 agent 归因</text>
+
+  <rect x="26" y="195" width="625" height="31" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="38" y="215" font-size="12" font-weight="700" fill="#065f46">★ 用量归一自动识别</text>
+  <text x="346" y="215" text-anchor="middle" font-size="11" fill="#94a3b8">— 只认自家口径</text>
+  <text x="543" y="215" text-anchor="middle" font-size="11" font-weight="700" fill="#065f46">✓ 按 usage 字段形态认</text>
+
+  <rect x="26" y="226" width="625" height="31" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="38" y="246" font-size="12" font-weight="700" fill="#065f46">★ base_url 单一所有者 / 冲突检测</text>
+  <text x="346" y="246" text-anchor="middle" font-size="12" fill="#dc2626">✗</text>
+  <text x="543" y="246" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">✓ ★</text>
+
+  <rect x="26" y="257" width="625" height="31" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="38" y="277" font-size="12" font-weight="700" fill="#065f46">★ 本地是一档路由条件</text>
+  <text x="346" y="277" text-anchor="middle" font-size="11" fill="#dc2626">✗ 仅兼容端点</text>
+  <text x="543" y="277" text-anchor="middle" font-size="11" font-weight="700" fill="#065f46">✓ privacy=true → 127.0.0.1</text>
+
+  <rect x="26" y="288" width="625" height="31" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="38" y="308" font-size="12" fill="#1a202c">只读接入 · 不写回 agent 配置</text>
+  <text x="346" y="308" text-anchor="middle" font-size="11" fill="#94a3b8">需改配置接入</text>
+  <text x="543" y="308" text-anchor="middle" font-size="11" fill="#16a34a">✓ 影子模式只记账</text>
+
+  <rect x="26" y="319" width="625" height="31" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="38" y="339" font-size="12" fill="#1a202c">MCP 管理 / 内容过滤 / 全链路日志</text>
+  <text x="346" y="339" text-anchor="middle" font-size="12" fill="#16a34a">✓</text>
+  <text x="543" y="339" text-anchor="middle" font-size="12" fill="#d97706">△ 未做</text>
+
+  <text x="26" y="372" font-size="10.5" fill="#94a3b8">★ 三笔工程账：用量归一识别 / base_url 单一所有者 / 本地是一档路由条件；「支持本地模型」不是差异项，别拿它当卖点。</text>
+  <text x="26" y="390" font-size="10.5" fill="#94a3b8">云网关数字均为“官方口径·非实测”；multi-proxy 能力以仓库当前状态为准。本图纯文字标签，不含任何品牌 logo。</text>
+</svg>

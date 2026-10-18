@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.multi-proxy.dsh-proxy-18797</string>
+
+  <!-- dsh-proxy 常驻实例（端口 18797，DSH 桌面端专属 lane 的 OpenAI 兼容网关）。
+       .dsh/config.toml 的 base_url 指向 http://127.0.0.1:18797/v1。
+       读取 ~/.multi-proxy-manager/providers.json 做 provider 路由（findProvider 精确匹配
+       → wb-* 路由到 workbuddy-shim 18789 → WorkBuddy 上游）。
+       ⚠️ 密钥不落 plist：dsh-proxy/.env（AGNES_API_KEY 等，dotenv 从 WorkingDirectory 自动读）；
+          PORT/BINDING 在此显式注入，仅绑 127.0.0.1（不对外暴露）。 -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-6/bin/node</string>
+    <string>/Users/xiaota/Documents/AI项目/multi-proxy/dsh-proxy/proxy.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/dsh-proxy</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>
+    <string>18797</string>
+    <key>BINDING</key>
+    <string>127.0.0.1</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/dsh-proxy.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/dsh-proxy.launchd.err.log</string>
+</dict>
+</plist>

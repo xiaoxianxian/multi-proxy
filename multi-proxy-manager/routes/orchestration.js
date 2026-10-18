@@ -26,6 +26,7 @@ const { Orchestrator } = require('../../l2/orchestrator.js');
 const { decompose } = require('../../l2/decomposer.js');
 const { makeLlmDecomposer } = require('../../l2/llm-decomposer.js');
 const { createRelayLedger } = require('../../l2/relay-ledger.js');
+const { createEgressLedger } = require('../../l2/egress-ledger.js');
 
 // 质量层（2.2 需候选信息）的共享 RouteEngine：与 routes/registry.js 共用**同一份** process 级
 // registry 单例（避免 registry 分裂 P2-1）。惰性构造：默认关时不 require、不建对象（零副作用）。
@@ -99,6 +100,20 @@ function isRelayLedgerOpen() {
   return v === '1' || v === 'true' || v === 'on';
 }
 
+// 出站账本（P2 观测件 2026-10-17）：门控 PROXY_L2_EGRESS_LEDGER 默认关 → null，
+// Orchestrator 不收 ledger、/run 响应不挂 egress 字段（逐字零行为变更）。
+// 开 = 同一实例长寿命注入单例 Orchestrator，逐跳记 client×destHost×bytes，/run 附 egress 汇总。
+let _egressLedger = null;
+function getEgressLedger() {
+  if (!isEgressLedgerOpen()) return null;
+  if (!_egressLedger) _egressLedger = createEgressLedger();
+  return _egressLedger;
+}
+function isEgressLedgerOpen() {
+  const v = String(process.env.PROXY_L2_EGRESS_LEDGER || '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'on';
+}
+
 function getOrchestrator() {
   if (!_orchestrator) {
     const opts = {
@@ -116,6 +131,9 @@ function getOrchestrator() {
     // 接力账本：门控开才注入（默认 null → Orchestrator._recordRelay 首行守卫直接返回）
     const ledger = getRelayLedger();
     if (ledger) opts.relayLedger = ledger;
+    // 出站账本：门控开才注入（默认 null → Orchestrator._recordEgress 首行守卫直接返回）
+    const egress = getEgressLedger();
+    if (egress) opts.egressLedger = egress;
     _orchestrator = new Orchestrator(opts);
   }
   return _orchestrator;
@@ -215,6 +233,10 @@ router.post('/run', async (req, res) => {
     if (orch.relayLedger && result.history && result.history.runId) {
       payload.relay = orch.relayLedger.report(result.history.runId);
     }
+    // 出站账本 sidecar（P2 观测件）：门控 PROXY_L2_EGRESS_LEDGER 开才附（默认关 → 不挂字段）
+    if (orch.egressLedger) {
+      payload.egress = orch.egressLedger.report();
+    }
     res.json(payload);
   } catch (e) {
     // 环 / 调度不收敛 / 拆解异常：转 400，不冒泡
@@ -227,6 +249,13 @@ router.post('/run', async (req, res) => {
 router.get('/relay', (req, res) => {
   const ledger = getOrchestrator().relayLedger;
   if (!ledger) return res.status(403).json({ error: 'relay-ledger-gate-closed', hint: 'PROXY_L2_RELAY_LEDGER 未开启（默认关）→ 接力账本不记账；开灰度：PROXY_L2_RELAY_LEDGER=1。' });
+  res.json(ledger.report());
+});
+
+// GET /egress → 出站账本全量报告（跨 run 汇总；门控关 → 403，与 /relay 同纪律）。
+router.get('/egress', (req, res) => {
+  const ledger = getOrchestrator().egressLedger;
+  if (!ledger) return res.status(403).json({ error: 'egress-ledger-gate-closed', hint: 'PROXY_L2_EGRESS_LEDGER 未开启（默认关）→ 出站账本不记账；开灰度：PROXY_L2_EGRESS_LEDGER=1。' });
   res.json(ledger.report());
 });
 
@@ -244,6 +273,6 @@ router.post('/shadow', (req, res) => {
 module.exports = router;
 
 // 测试辅助（不暴露到路由，仅供单测重置单例验证长寿命语义）
-module.exports._resetForTest = () => { _orchestrator = null; _relayLedger = null; };
+module.exports._resetForTest = () => { _orchestrator = null; _relayLedger = null; _egressLedger = null; };
 // 测试/运维辅助：查当前 executor 绑定状态（null = 未接线）
 module.exports._getExecutorBind = () => getExecutorBind();

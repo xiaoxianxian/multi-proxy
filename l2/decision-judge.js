@@ -37,8 +37,15 @@ const TIER_CRITERIA = {
  * 永不抛错、永不 reject：judge 不可用（服务没起 / 超时 / 返回异常）一律返回 null，
  * 调用方据此保持原档位。热路径挂这里不能拉垮路由。
  *
+ * opts.previousTier（2026-10-18 外部对照 #71 PilotDeck 落地件）：带上轮档位时，
+ * 把「续聊应保持上轮档位」写进 Clef 的 state 提示（对齐 PilotDeck 给 judge 的
+ * CRITICAL RULE——它用 prompt 规则防「好的/继续」被误降档）。
+ * 注意这只是**提示层**：确定性的短消息短路在 l2/route-sticky.js 的
+ * isContinuation（规则命中时一次模型都不调），两条腿合用才是完整机制。
+ * previousTier 缺省时 state 原文不变（零行为变更）。
+ *
  * @param {string} text 待判文本
- * @param {{url?:string, timeoutMs?:number, minConf?:number}} opts
+ * @param {{url?:string, timeoutMs?:number, minConf?:number, previousTier?:string}} opts
  * @returns {Promise<null|{tier:string, confidence:number|null, probabilities:object|null, latencyMs:number|null, model:string|null}>}
  */
 async function judgeComplexity(text, opts = {}) {
@@ -55,7 +62,11 @@ async function judgeComplexity(text, opts = {}) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: 'clef-flash-4bit',
-                state: '判断这条请求该走哪个 complexity 档位。',
+                // previousTier 存在时加续聊保护提示（对齐 PilotDeck CRITICAL RULE；
+                // 缺省时此句与原文逐字一致，零行为变更）。
+                state: opts.previousTier
+                    ? `判断这条请求该走哪个 complexity 档位。注意：上一轮判为 ${opts.previousTier} 档。若本条是上一轮任务的简短跟进（例如"好的""继续""冲"），应保持 ${opts.previousTier} 档；只有出现明确的新任务且复杂度不同时才改判。`
+                    : '判断这条请求该走哪个 complexity 档位。',
                 questions: {
                     tier: { type: 'choice', instructions: '请判断档位。', criteria: TIER_CRITERIA },
                 },

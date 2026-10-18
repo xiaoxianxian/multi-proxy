@@ -61,6 +61,9 @@ class CircuitBreaker {
     // 允许外部 HandoffGuard（l2/handoff-reason.js）在 allowRequest 放行前追加一道
     // 「乒乓 / 切换预算」门控。不注入则本熔断器行为逐字不变（向后兼容铁律）。
     this.handoffGuard = null;
+    // L2 Sentinel 不可逆动作确认闸门（nanoMuse Sentinel 借鉴，2026-10-15）：
+    // 默认 null → 零行为变更；注入后由 allowRequest 在放行前追加「该不该先确认」门控。
+    this.sentinelGuard = null;
   }
 
   /**
@@ -190,6 +193,10 @@ class CircuitBreaker {
     // guard 拒绝（乒乓 / 切换预算耗尽 / 超时）则不放行——防多 agent 互相甩锅。
     // 未注入（this.handoffGuard == null）时本行永不命中，行为逐字不变（向后兼容铁律）。
     if (this.handoffGuard && !this.handoffGuard.shouldHandoff(providerId).allow) return false;
+    // L2 Sentinel 不可逆动作确认闸门（nanoMuse Sentinel 借鉴，2026-10-15）：
+    // 注入 sentinelGuard 后，放行前再问一道「这次不可逆动作要不要先确认」。
+    // 未注入（this.sentinelGuard == null）时本行永不命中，行为逐字不变（向后兼容铁律）。
+    if (this.sentinelGuard && !this.sentinelGuard.shouldProceed('handoff', providerId).allow) return false;
     return true;
   }
 

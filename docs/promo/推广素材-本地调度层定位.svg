@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 677 430" width="677" height="430" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <title>multi-proxy 在你本机上占哪一层</title>
+  <desc>三层纵向结构：上层是本地编码代理（Codex、Claude Code、Cursor、OpenCode、Cline、Aider、OpenHands、Hermes、DSH），中层是 multi-proxy 本地调度层（统一入口路由、密钥 .env 收口、base_url 单一所有者、成本台账按 agent 归因、本地模型一档路由），下层并列两条上行去向：云端 provider 与本地 Ollama；右侧标注云端 AI 网关属组织层、在远端。底部点睛：不替代任何一个 agent，只管它们天天出事的那几件小事。</desc>
+  <rect width="677" height="430" fill="#ffffff"/>
+  <text x="338" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1a202c">multi-proxy 在你本机上占哪一层</text>
+
+  <rect x="30" y="52" width="420" height="62" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="46" y="76" font-size="13" font-weight="700" fill="#1e3a8a">本地编码代理（照原来怎么用还怎么用）</text>
+  <text x="46" y="96" font-size="11" fill="#475569">Codex · Claude Code · Cursor · OpenCode · Cline · Aider · OpenHands · Hermes · DSH</text>
+
+  <line x1="240" y1="114" x2="240" y2="132" stroke="#94a3b8" stroke-width="2" marker-end="url(#mpDown)"/>
+
+  <rect x="30" y="134" width="420" height="96" rx="9" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="46" y="158" font-size="13" font-weight="700" fill="#065f46">multi-proxy（本地调度层 · 不是又一个 Agent 框架）</text>
+  <text x="46" y="180" font-size="11" fill="#475569">统一入口路由 · 各家密钥 .env 收口 · 只读接入不写回</text>
+  <text x="46" y="199" font-size="11" fill="#475569">base_url 单一所有者 · 成本台账按 agent 归因</text>
+  <text x="46" y="218" font-size="11" fill="#475569">本地模型是一档路由条件（privacy=true → 127.0.0.1）</text>
+
+  <line x1="240" y1="230" x2="240" y2="252" stroke="#94a3b8" stroke-width="2" marker-end="url(#mpDown)"/>
+
+  <rect x="30" y="254" width="200" height="58" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="277" font-size="12.5" font-weight="700" fill="#334155">云端 provider</text>
+  <text x="46" y="296" font-size="11" fill="#475569">DeepSeek / Kimi / GLM / Qwen …</text>
+
+  <rect x="250" y="254" width="200" height="58" rx="9" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="266" y="277" font-size="12.5" font-weight="700" fill="#92400e">本地 Ollama</text>
+  <text x="266" y="296" font-size="11" fill="#92400e">同一张路由表里的平等候选</text>
+
+  <text x="490" y="76" font-size="12.5" font-weight="600" fill="#64748b">另一层：云端 AI 网关</text>
+  <rect x="490" y="88" width="157" height="104" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="504" y="112" font-size="12" font-weight="700" fill="#334155">火山 / 阿里云网关</text>
+  <text x="504" y="133" font-size="10.5" fill="#475569">组织治理层 · 在远端</text>
+  <text x="504" y="152" font-size="10.5" fill="#475569">合规分账 · 密钥托管</text>
+  <text x="504" y="171" font-size="10.5" fill="#475569">内容过滤 · 全链路日志</text>
+  <text x="504" y="188" font-size="10" fill="#94a3b8">数字均为官方口径·非实测</text>
+
+  <line x1="450" y1="182" x2="486" y2="160" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="452" y="238" font-size="10.5" fill="#94a3b8">按需叠加，</text>
+  <text x="452" y="252" font-size="10.5" fill="#94a3b8">不是二选一</text>
+
+  <rect x="30" y="336" width="617" height="62" rx="9" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="46" y="360" font-size="12.5" font-weight="700" fill="#92400e">不替代任何一个 agent，只管它们天天出事的那几件小事。</text>
+  <text x="46" y="381" font-size="11" fill="#92400e">所有权冲突 · 密钥散落 · 账算不清 · 本地模型进不了同一张路由表。</text>
+
+  <defs>
+    <marker id="mpDown" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/></marker>
+  </defs>
+</svg>

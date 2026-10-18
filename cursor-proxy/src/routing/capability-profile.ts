@@ -21,10 +21,15 @@
 //   agnes-3.0-flash   — coding 弱 / writing 弱 / vision 弱 / general 中
 //   kimi-k2.6         — coding 中 / writing 强 / vision 中 / general 中
 //
-// 门控：PROXY_CAPABILITY_FILTER='0'（默认）→ 关闭，行为等同现状。
-//       PROXY_CAPABILITY_FILTER='1' → 开启，filter before cost。
+// 门控：PROXY_CAPABILITY_FILTER 不设 / 非 '0'（默认）→ 开启过滤（已是路由热路径的一部分，
+//       见 routeEngine.ts pickByCost 的 filterByCapability 调用）。
+//       PROXY_CAPABILITY_FILTER='0' → 显式关闭，行为等同现状（纯 cost 排序）。
+//
+// P0-2（2026-10-15 TokenSaver 借鉴）：在 DEFAULT 之上叠加校准 override 层（resolveProfile /
+//   recordCalibration），用实际路由结果反推档位；override 默认空、recordCalibration 默认关，
+//   不破老行为。详见各函数注释与 multi-proxy/docs/10-initiatives/capability-profile-TokenSaver改造计划-2026-10-15.md。
 
-import { RouteCandidate } from './routeEngine.js';
+import type { RouteCandidate } from './routeEngine.js';
 
 /**
  * task capability 档位：
@@ -81,6 +86,36 @@ export const DEFAULT_CAPABILITY_PROFILES: Record<string, CapabilityProfile> = {
 };
 
 /**
+ * P0-2（TokenSaver 借鉴 2026-10-15）：校准 override 层。
+ * 来源母题：PilotDeck TokenSaver「按难度分级 → 自适应模型调度」。
+ * 立场：借「难度→调度」设计，不引入其实现；override 不入静态文件（避免手拍回潮），
+ *       由 L2 feedback loop 把实际跑出来的结果折算成档位写回。
+ *
+ * 门控：capabilityOverrideStore 默认空 → resolveProfile 等于 DEFAULT（向后兼容，等同 P0-1）。
+ *       recordCalibration 仅在 PROXY_CAPABILITY_CALIBRATION='1' 时写 override（默认不写）。
+ */
+const capabilityOverrideStore: Record<string, CapabilityProfile> = {};
+
+/** 解析某模型能力画像：默认 ∪ 校准 override（override 优先）。 */
+export function resolveProfile(modelId: string): CapabilityProfile | undefined {
+  const def = DEFAULT_CAPABILITY_PROFILES[modelId];
+  const ov = capabilityOverrideStore[modelId];
+  if (!def && !ov) return undefined;
+  return { ...def, ...ov };
+}
+
+/**
+ * P0-2 校准入口：L2 feedback loop 把「某次路由结果」折算成档位写回 override。
+ * 仅在 PROXY_CAPABILITY_CALIBRATION='1' 时生效（默认关 → 不写，行为等同 P0-1）。
+ * 统计与置信护栏（下调需更高样本）在 L2 侧完成，本函数只做「合并写入」。
+ */
+export function recordCalibration(modelId: string, taskType: string, level: CapabilityLevel): void {
+  if (process.env.PROXY_CAPABILITY_CALIBRATION !== '1') return;
+  if (!capabilityOverrideStore[modelId]) capabilityOverrideStore[modelId] = {};
+  capabilityOverrideStore[modelId][taskType] = level;
+}
+
+/**
  * 判断候选是否「能力不足」。
  *
  * 规则：
@@ -97,7 +132,7 @@ function isCapabilityFiltered(
   // 门控关 → 不过滤
   if (process.env.PROXY_CAPABILITY_FILTER === '0') return false;
 
-  const p = profile ?? DEFAULT_CAPABILITY_PROFILES[candidate.id];
+  const p = profile ?? resolveProfile(candidate.id);
   if (!p) return false; // 无 profile → 不排除
 
   const level = p[taskType];

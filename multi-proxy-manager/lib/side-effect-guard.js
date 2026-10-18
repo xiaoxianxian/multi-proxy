@@ -37,10 +37,11 @@ class SideEffectGuard {
      *   enabled  {boolean}      门控；默认关（铁律④）。不传时读 env MULTI_PROXY_SIDE_EFFECT_GUARD
      *   manualDeadlineMs {number} unknown 态存活超过这个时长就转人工，默认 30 分钟
      */
-    constructor({ audit = null, store = null, gate = null, enabled = null, manualDeadlineMs = 30 * 60 * 1000 } = {}) {
+    constructor({ audit = null, store = null, gate = null, contentGuard = null, enabled = null, manualDeadlineMs = 30 * 60 * 1000 } = {}) {
         this.audit = audit || new ActionAudit();
         this.store = store || new SessionStore();
         this.gate = gate;
+        this.contentGuard = contentGuard; // 可选：记忆污染(ASI06)/目标劫持(ASI01) 扫描；不传=零变更
         this.enabled = enabled === null
             ? process.env.MULTI_PROXY_SIDE_EFFECT_GUARD === '1'
             : Boolean(enabled);
@@ -56,13 +57,22 @@ class SideEffectGuard {
      *     'blocked-by-gate'    权限门禁拦下
      *     'already-completed'  幂等键命中且最终态是 completed → 跳过，别重复做
      */
-    beforeAction({ toolName, idempotencyKey, actor, resource, sessionId } = {}) {
+    beforeAction({ toolName, idempotencyKey, actor, resource, sessionId, content, objective } = {}) {
         if (!this.enabled) return { proceed: false, reason: 'guard-disabled' };
 
         // ① 权限门禁
         if (typeof this.gate === 'function') {
             const g = this.gate(toolName) || {};
             if (g.blocked) return { proceed: false, reason: 'blocked-by-gate', gateReason: g.reason || null };
+        }
+
+        // ①-b 内容守卫（记忆污染 ASI06 / 目标劫持 ASI01）：动作携带的内容若藏指令或劫持目标 → 拦
+        //       contentGuard 自身 enabled=false 时 scanAction 直接放行，双层保险。
+        if (this.contentGuard) {
+            const c = this.contentGuard.scanAction({ content, objective });
+            if (!c.proceed) {
+                return { proceed: false, reason: c.reason, signals: c.signals || null };
+            }
         }
 
         // ② 幂等查证：命中且已 completed → 跳过（崩溃重放时「跳过已完成」的落地点）

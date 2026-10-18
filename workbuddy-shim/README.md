@@ -163,8 +163,9 @@ WORKBUDDY_MODEL_ALIASES=wb-r1:deepseek-r1,wb-v32:deepseek-v3.2
 npm test                 # 协议纯函数单测（regionOf / prepareChatBody / 别名 / 头链…）
 ```
 
-协议逻辑全部走纯函数单测覆盖；涉及真实上游的端到端需要你自己的 token，先按上面「获取 token」
-填好 `.env` 再 `node server.js`，然后 `curl` 一次 `/v1/chat/completions` 验证 SSE 透传。
+协议逻辑全部走纯函数单测覆盖（含非流式聚合 `aggregateSseToJson`）；涉及真实上游的端到端需要你自己的
+token，先按上面「获取 token」填好 `.env` 再 `node server.js`，然后 `curl` 一次
+`/v1/chat/completions`（`stream:false` 返回完整 JSON、`stream:true` 透传 SSE 均可）。
 
 ---
 
