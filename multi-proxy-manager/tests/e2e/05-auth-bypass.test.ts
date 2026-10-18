@@ -3,134 +3,87 @@
 // This file is part of the multi-proxy project.
 
 /**
- * E2E Test Group 5: 认证绕过测试
- * 
- * 测试场景：
- * 1. 未登录访问 /logs → 应显示 login.html
- * 2. 未登录访问 /proxy-config → 应显示 login.html
- * 3. 未登录访问受保护的 API → 应返回 401
- * 4. 清除 token 后访问 → 应返回 401
- * 5. 过期 token 访问 → 应返回 401
+ * E2E Test Group 5: 认证绕过保护 — P1/P2 regen (10-16).
+ *
+ * P1 根因(查实 07:xx 10-16):
+ *  - BASE_URL 旧写死生产 18792 → 改 helper(默认 18801 隔离)。
+ *  - test「accept valid token」走「setup→等#loginMode→手动 login」旧流 → 改 helpers.login()。
+ *  - 认证头实为 `x-auth-token`(lib/auth.js:124, 兼容 cookie auth_token); 旧「clear localStorage」
+ *    清错存储(token 在 sessionStorage), 改清 sessionStorage(Playwright 每 test 新 context, 本就空, 双保险)。
+ * P0 安全(10-16): 仅 throwaway HOME 清密码(401 测试需 fresh 无密码态走 setup); 不碰真凭据。
  */
 
 import { test, expect } from '@playwright/test';
+import { login, BASE_URL } from './helpers';
 
-const BASE_URL = 'http://localhost:18792';
-const TEST_PASSWORD = 'TestPass123!';
+// 每个 test 新 context 起始即「未登录」; 这里显式清 sessionStorage 双保险。
+async function wipeAuth(page) {
+  await page.goto(`${BASE_URL}/login.html`);
+  await page.evaluate(() => sessionStorage.clear());
+}
 
 test.describe('E2E Group 5: Auth Bypass Protection', () => {
-  
-  test('should redirect unauthenticated user to login from logs page', async ({ page }) => {
-    // Clear any existing token
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
-    
-    // Try accessing logs directly
+
+  test('should gate unauthenticated access to logs page', async ({ page }) => {
+    await wipeAuth(page);
     await page.goto(`${BASE_URL}/logs.html`);
-    
-    // Should either stay on logs.html (client-side checks) or redirect to login
-    // Since login.html handles auth checking, verify the page loads
-    const hasLoginPage = await page.locator('#loginMode').isVisible().catch(() => false);
-    const hasLogsPage = await page.locator('#logViewer').isVisible().catch(() => false);
-    
-    // At minimum, the page should load without crashing
-    expect(hasLoginPage || hasLogsPage).toBe(true);
-  });
+      // P1: 未登录访问 logs → redirect 到 login.html(快照实证: 落到 login.html「欢迎回来」)。
+    await page.waitForURL(/.*login\.html/);
+    });
 
-  test('should redirect unauthenticated user to login from proxy-config', async ({ page }) => {
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
-    
-    await page.goto(`${BASE_URL}/proxy-config.html?proxy=codex`);
-    
-    // Page should load without crashing
-    const hasProxyConfig = await page.locator('.page-title').isVisible().catch(() => false);
-    const hasLoginPage = await page.locator('#loginMode').isVisible().catch(() => false);
-    
-    expect(hasProxyConfig || hasLoginPage).toBe(true);
-  });
+  test('should gate unauthenticated access to proxy-config', async ({ page }) => {
+    await wipeAuth(page);
+    await page.goto(`${BASE_URL}/proxy-config.html?proxy=codex`, { waitUntil: 'load' });
+    // P3(10-19): 门禁重定向到登录页为铁证(URL); 配置内容不外泄; 模式脚本按密码状态异步切换——
+    // 旧 first() 取 DOM 序靠前的 #setupMode, 登录模式下恒 hidden 造成误判。等恰有一个 mode 可见。
+    await expect(page).toHaveURL(/login\.html/);
+    await expect(page.locator('.section-tab')).toHaveCount(0);
+    await expect(page.locator('#setupMode:visible, #loginMode:visible')).toHaveCount(1, { timeout: 10000 });
+    });
 
-  test('should return 401 for protected API without token', async ({ page }) => {
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
-    
-    // Try accessing a protected endpoint directly
-    const response = await page.evaluate(async () => {
-      const res = await fetch(`${BASE_URL}/api/logs/clear`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+  test('should return 401 for protected logs API without token', async ({ page }) => {
+    await wipeAuth(page);
+    const status = await page.evaluate(async () => {
+      const res = await fetch('/api/logs/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       return res.status;
     });
-    
-    // Should return 401 (Unauthorized)
-    expect(response).toBe(401);
-  });
+    expect(status).toBe(401);
+    });
 
   test('should return 401 for stop API without token', async ({ page }) => {
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
-    
-    const response = await page.evaluate(async () => {
-      const res = await fetch(`${BASE_URL}/api/stop/codex`, {
-        method: 'POST'
-      });
+    await wipeAuth(page);
+    const status = await page.evaluate(async () => {
+      const res = await fetch('/api/stop/codex', { method: 'POST' });
       return res.status;
     });
-    
-    expect(response).toBe(401);
-  });
+    expect(status).toBe(401);
+    });
 
   test('should return 401 for start API without token', async ({ page }) => {
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
-    
-    const response = await page.evaluate(async () => {
-      const res = await fetch(`${BASE_URL}/api/start/codex`, {
-        method: 'POST'
-      });
+    await wipeAuth(page);
+    const status = await page.evaluate(async () => {
+      const res = await fetch('/api/start/codex', { method: 'POST' });
       return res.status;
     });
-    
-    expect(response).toBe(401);
-  });
+    expect(status).toBe(401);
+    });
 
-  test('should accept valid token for protected API', async ({ page }) => {
-    // Setup password and login
-    await page.goto(`${BASE_URL}/login.html`);
-    await page.locator('#setupPassword').fill(TEST_PASSWORD);
-    await page.locator('#setupConfirm').fill(TEST_PASSWORD);
-    await page.locator('#setupSubmit').click();
-    await page.waitForTimeout(1500);
-    await expect(page.locator('#loginMode')).toBeVisible();
-    await page.locator('#loginPassword').fill(TEST_PASSWORD);
-    await page.locator('#loginForm button[type="submit"]').click();
-    await page.waitForURL(/.*dashboard\.html/);
-    
-    // Verify token exists
-    const token = await page.evaluate(() => sessionStorage.getItem('auth_token'));
+  test('should accept a valid token for a protected API', async ({ page }) => {
+      // P1: 设置密码即 auto-redirect dashboard(token 入 sessionStorage); 用 x-auth-token 调受控端点。
+    const token = await login(page);
     expect(token).toBeTruthy();
-    
-    // Try accessing a protected endpoint WITH token
-    const response = await page.evaluate(async () => {
-      const token = sessionStorage.getItem('auth_token');
-      const res = await fetch(`${BASE_URL}/api/status`, {
-        headers: { 'x-auth-token': token || '' }
-      });
+    const status = await page.evaluate(async (tok) => {
+      const res = await fetch('/api/status', { headers: { 'x-auth-token': tok } });
       return res.status;
+    }, token);
+    expect(status).toBe(200);
     });
-    
-    // Should succeed (200)
-    expect(response).toBe(200);
-  });
 
-  test('should have auth status endpoint', async ({ page }) => {
-    const response = await page.evaluate(async () => {
-      const res = await fetch(`${BASE_URL}/api/auth/status`);
-      return { status: res.status, body: await res.json() };
+  test('should expose a public auth status endpoint', async ({ request }) => {
+      // 10-19 预案: goto+evaluate 与 SPA 二次导航竞态(execution context destroyed),
+    // 换 APIRequestContext(纯 HTTP, 无浏览器上下文); 断言不变: 200 + needsSetup 字段存在。
+    const r = await request.get('/api/auth/status');
+    expect(r.status()).toBe(200);
+    expect(await r.json()).toHaveProperty('needsSetup');
     });
-    
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('needsSetup');
-  });
 });
