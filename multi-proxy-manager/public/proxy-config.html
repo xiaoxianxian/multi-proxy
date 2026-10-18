@@ -688,13 +688,13 @@
   <div class="toast-container" id="toastContainer"></div>
 
   <script>
-    var MOCK_PROVIDERS = [
-      { id: 'prov_001', name: 'OpenAI', provider_id: 'openai', base_url: 'https://api.example.com/v1', api_key: 'sk-test-key-xxxxx', enabled: true },
-      { id: 'prov_002', name: 'Anthropic', provider_id: 'anthropic', base_url: 'https://api.example-anthropic.com', api_key: 'sk-ant-test-xxxxx', enabled: true },
-      { id: 'prov_003', name: 'Google Gemini', provider_id: 'google', base_url: 'https://api.example-gemini.com/v1', api_key: 'AIzaSy-test-xxxxx', enabled: false },
-      { id: 'prov_004', name: 'Azure OpenAI', provider_id: 'azure', base_url: 'https://example-resource.openai.azure.com/openai/deployments', api_key: 'test-key-xxxxx', enabled: true },
-    ];
-
+    // ⚠️ 命名警示（2026-10-16）：MOCK_MODELS / MOCK_BALANCES 名字带 MOCK，
+    // 但它们**不是假数据，是已加载数据的容器**——loadModelsData / loadBalancesData
+    // 往里 push 真实数据，renderModels / renderBalances 从里读。改名会牵涉十余处
+    // 引用，风险大于收益，故保留名字只在此注明。
+    // 旁边原本还有个 MOCK_PROVIDERS，那**是真假数据**（4 个假 provider 带
+    // sk-test-key-xxxxx 假 key），已于 2026-10-16 删除：它的初值曾直接当
+    // providers 初始值，loadProviders 读失败时又兜底成它。
     var MOCK_MODELS = [
       { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
       { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
@@ -733,7 +733,12 @@
     var switchHistory = [];
     var historySupported = currentProxyName === 'codex' || currentProxyName === 'hermes';
 
-    var providers = MOCK_PROVIDERS.slice();
+    // 2026-10-16：过去初值就是 MOCK_PROVIDERS.slice()——页面刚打开、
+    // loadProviders() 还没回来时，用户先看到 4 个假 provider（OpenAI /
+    // Anthropic / Gemini / Azure，api_key 是 'sk-test-key-xxxxx'）。
+    // 若 loadProviders 再失败，这些假数据会一直挂着。改成空数组，
+    // 加载前显示「加载中」而不是假配置。
+    var providers = [];
     var isRunning = true;
     var currentModel = 'claude-sonnet-4-20250514';
     var currentProxyName = 'cursor';
@@ -743,6 +748,23 @@
       return '';
     }
 
+    // 读失败统一呈现（2026-10-16 面板走查新增）。视觉用本页已有的 toast 容器
+    // 与 empty-state 文案，语义是「读不到」而不是「没有」——把读失败显示成
+    // 「暂无数据」会让用户以为自己的配置没了。
+    // 四参：containerId 容器 / title 主文案 / detail 后端原因 / hint 排查提示。
+    function showReadError(containerId, title, detail, hint) {
+      var el = document.getElementById(containerId);
+      if (!el) return;
+      var body = [detail, hint].filter(Boolean).join('<br>') || '未知错误';
+      el.innerHTML =
+        '<div style="grid-column:1/-1;padding:16px;text-align:center;">' +
+          '<div style="color:#d97706;font-weight:600;margin-bottom:6px;">' + esc(title || '读取失败') + '</div>' +
+          '<div style="font-size:12px;color:var(--color-text-tertiary,#94a3b8);line-height:1.6;max-width:460px;margin:0 auto;">' +
+            body +
+          '</div>' +
+        '</div>';
+    }
+
     async function fetchAdminApi(path, options = {}) {
       const prefix = PROXY_API_PREFIX[currentProxyName] || '/api';
       const fwdUrl = '/api/' + currentProxyName + prefix + path;
@@ -750,16 +772,31 @@
       const token = sessionStorage.getItem('auth_token');
       if (token) headers['x-auth-token'] = token;
 
+      // 2026-10-16：这里过去 catch 后 `return null`，把 HTTP 错误、网络错误、
+      // JSON 解析错误全吞成同一个值。调用方因此无法区分「成功返回 null」和
+      // 「失败」，于是 addProvider / updateProvider / deleteProviderById 的
+      // catch 分支把变更写进本地数组——**提交失败却显示成功**（刷新后消失，
+      // 用户配的 API key 会一直失败）。switchModel 的注释本来写着「失败时抛
+      // 异常，由调用方提示」，被这个 null 吞成了假 `{success:true}`。
+      // 现在失败就抛，且带上后端 body 里的 error / hint（后端常在 hint 里
+      // 写「怎么修」，丢掉它只显示机器码等于把写好的解决方案扔了）。
+      let res;
       try {
-        const res = await fetch(fwdUrl, {
-          headers,
-          ...options,
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return await res.json();
+        res = await fetch(fwdUrl, { headers, ...options });
       } catch (e) {
-        return null;
+        const err = new Error('无法连接管理端（' + e.message + '）');
+        err.networkError = true;
+        throw err;
       }
+      let body = null;
+      try { body = await res.json(); } catch (_) { body = null; }
+      if (!res.ok) {
+        const err = new Error((body && (body.error || body.message)) || ('HTTP ' + res.status));
+        err.httpStatus = res.status;
+        err.hint = body && body.hint;
+        throw err;
+      }
+      return body;
     }
 
     async function loadProviders() {
@@ -786,9 +823,15 @@
             providers[i].api_key = fullKeys[providers[i].id];
           }
         }
-      } catch {
-        providers = MOCK_PROVIDERS.slice();
+      } catch (e) {
+        // 2026-10-16：读失败过去兜底成 MOCK_PROVIDERS——4 个假 provider
+        // 带 sk-test-key-xxxxx 假 key。用户会以为自己的 provider 配置还在，
+        // 而真相可能是后端一个都没有或完全读不到。现在如实说「读不到」。
+        providers = [];
         getBalancesFromProviders();
+        renderProviders();
+        showReadError('providersBody', '读取失败', e.message || '未知错误',
+          'provider 列表读不到，不代表你没有配置过 provider。');
       } finally {
         hideLoading();
       }
@@ -806,11 +849,12 @@
         renderBalances();
         await loadModelsData();
         renderModels();
-      } catch {
-        providers.push({ id: 'prov_' + Date.now(), name, provider_id: pid, base_url: url, api_key: key, enabled });
-        getBalancesFromProviders();
-        renderProviders();
-        renderBalances();
+      } catch (e) {
+        // 2026-10-16：过去这里把提交失败的 provider 塞进本地数组——**添加失败
+        // 却显示成功**。用户刷新页面后它消失，而期间配的模型会一直失败，
+        // 且用户完全不知道原因。现在如实报错，不往本地状态里写没存上的东西。
+        showToast('添加 Provider 失败: ' + (e.message || '未知错误'), 'error', 5000);
+        if (e.hint) showToast(e.hint, 'info', 6000);
       }
     }
 
@@ -828,17 +872,13 @@
         renderBalances();
         await loadModelsData();
         renderModels();
-      } catch {
-        for (var i = 0; i < providers.length; i++) {
-          if (providers[i].id === id) {
-            providers[i].name = name;
-            providers[i].base_url = url;
-            if (key) providers[i].api_key = key;
-            providers[i].enabled = enabled;
-            break;
-          }
-        }
-        renderProviders();
+      } catch (e) {
+        // 2026-10-16：过去这里在本地把 provider 改掉——**保存失败却显示已保存**。
+        // 用户以为新的 API key / base_url 生效了，实际后端还是旧值，
+        // 于是花几小时排查为什么链路不通。现在报错并重新拉一次真实状态。
+        showToast('保存 Provider 失败: ' + (e.message || '未知错误'), 'error', 5000);
+        if (e.hint) showToast(e.hint, 'info', 6000);
+        loadProviders();
       }
     }
 
@@ -851,14 +891,12 @@
         renderBalances();
         await loadModelsData();
         renderModels();
-      } catch {
-        for (var i = 0; i < providers.length; i++) {
-          if (providers[i].id === id) { providers.splice(i, 1); break; }
-        }
-        getBalancesFromProviders();
-        renderProviders();
-        renderBalances();
-        renderModels();
+      } catch (e) {
+        // 2026-10-16：过去这里本地 splice——**删除失败却显示已删除**。用户以为
+        // 敏感的 API key 已经删掉，实际后端还存着。现在报错并回拉真实状态。
+        showToast('删除 Provider 失败: ' + (e.message || '未知错误'), 'error', 5000);
+        if (e.hint) showToast(e.hint, 'info', 6000);
+        loadProviders();
       }
     }
 
@@ -877,8 +915,12 @@
           body: JSON.stringify({ enabled }),
         });
       } catch (e) {
+        // 2026-10-16：过去这里只回滚不说原因——用户看到开关弹回去，
+        // 但不知道为什么，只会反复点。回滚保留（乐观更新失败要复原），
+        // 补一句人话。
         providers[idx].enabled = prevEnabled;
         renderProviders();
+        showToast('切换启用状态失败: ' + (e.message || '未知错误'), 'error', 5000);
       }
     }
 
@@ -1116,9 +1158,10 @@
           for (var i = 0; i < models.length; i++) {
             MOCK_MODELS.push({ id: models[i].id || models[i].model_id || models[i], name: models[i].name || models[i].display_name || models[i] });
           }
-          if (MOCK_MODELS.length === 0) {
-            MOCK_MODELS.push({ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' });
-          }
+          // 2026-10-16：过去这里在列表为空时塞一个假模型 'claude-sonnet-4'。
+          // 模型下拉是「选哪个模型」的唯一入口，出现一个后端不存在的模型，
+          // 用户选它只会得到上游报错。空就是空，让用户看到「没读到模型」。
+
         }
       } finally {
         hideLoading();
@@ -1811,8 +1854,8 @@
         html = '<div style="color:var(--color-text-tertiary);font-size:13px;padding:12px;">' +
                '<span>暂无余额/成本数据。' +
                (currentProxyName === 'cursor' ?
-                ' cursor 成本为实采（需门控 PROXY_CURSOR_COST 开启且有付费请求）。</span>' :
-                '</span>');</div>';
+                ' cursor 成本为实采（需门控 PROXY_CURSOR_COST 开启且有付费请求）。' : '') +
+               '</span></div>';
        }
       grid.innerHTML = html;
      }
@@ -1895,9 +1938,16 @@
     async function clearHistory() {
       if (!confirm('确定要清除所有切换历史吗？')) return;
       if (historySupported) {
-        const data = await fetchAdminApi('/clear-history', { method: 'POST' });
-        if (!data || !data.success) {
-          showToast('清除失败', 'error');
+        // 2026-10-16：fetchAdminApi 改成抛错后，这里必须自己接——否则失败会
+        // 变成未捕获的 Promise rejection，用户点了「清除」什么都没发生。
+        try {
+          const data = await fetchAdminApi('/clear-history', { method: 'POST' });
+          if (!data || !data.success) {
+            showToast('清除失败: ' + ((data && data.error) || '后端未确认'), 'error');
+            return;
+          }
+        } catch (e) {
+          showToast('清除失败: ' + (e.message || '未知错误'), 'error', 5000);
           return;
         }
       }
@@ -1936,8 +1986,12 @@
           body: JSON.stringify({ key: 'routing_mode', value: mode }),
         });
         showToast('路由模式已切换为 ' + mode, 'success');
-      } catch {
-        showToast('路由模式已切换为 ' + mode, 'info');
+      } catch (e) {
+        // 2026-10-16：过去这里失败时也弹「路由模式已切换为 xxx」，只是把
+        // success 降成 info——**连错误字样都没有**。用户以为路由改了，
+        // 实际没改，然后发现请求还走老路由，完全对不上。现在如实报错。
+        showToast('切换路由模式失败: ' + (e.message || '未知错误'), 'error', 5000);
+        if (e.hint) showToast(e.hint, 'info', 6000);
       }
     }
 
@@ -2118,6 +2172,14 @@
     }
 
     init();
+
+    // Hash-driven tab switching: same-document fragment navigation (e.g. goto / 用户改 hash /
+    // 浏览器前进后退) 不触发整页重载, on-load 的 getTabFromHash 不会重跑 → 监听 hashchange 补齐。
+    window.addEventListener('hashchange', function() {
+      var tabName = getTabFromHash();
+      var tabEl = document.querySelector('.section-tab[data-tab="' + tabName + '"]');
+      if (tabEl) switchTab(tabEl, tabName);
+    });
 
     // ==================== Event Delegation for Provider Table ====================
     document.addEventListener('click', function(e) {

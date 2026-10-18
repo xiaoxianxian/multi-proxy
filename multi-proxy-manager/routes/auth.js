@@ -19,8 +19,8 @@ const router = express.Router();
 
 // Strict rate limit on login endpoint: 5 attempts per minute window
 const authLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5,
+  windowMs: parseInt(process.env.AUTH_RATE_WINDOW_MS || '60000', 10), // 1 minute; AUTH_RATE_WINDOW_MS env overrides (test harness)
+  max: parseInt(process.env.AUTH_RATE_MAX || '5', 10), // 5; AUTH_RATE_MAX env overrides (test harness)
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
@@ -31,8 +31,8 @@ const authLimiter = rateLimit({
 
 // Longer lockout after many rapid failures: 5 failed logins in 15 minutes
 const lockoutLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  windowMs: parseInt(process.env.AUTH_LOCKOUT_WINDOW_MS || '900000', 10), // 15 minutes; AUTH_LOCKOUT_WINDOW_MS overrides (test)
+  max: parseInt(process.env.AUTH_LOCKOUT_MAX || '5', 10), // 5; AUTH_LOCKOUT_MAX overrides (test)
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
