@@ -8,6 +8,8 @@ This file is part of the multi-proxy project.
 
 > 本文件从项目结构实际扫描生成（`ls` / `git ls-files`），数字来自 `docs/01-feature-matrix.md` 与 README 第十四节实测基线。
 > 最后验证：2026-10-15，HEAD `b234dcc`，main。上次验证：2026-09-17（HEAD `d9219af`，4 代理 / 770 tests 时代，已过期重写）。
+> ⚠️ **2026-10-19 局部复核（非全量）**：仅重跑数量声明——`l2/` 模块 41→**51**、子目录 11→**10**、`lib/` 25→**27**、`routes/` 19→**22**（模块口径：仅 `l2/` 根目录 `.js`、不含 `*.demo.js`），HEAD `355eb61`，较上次已落后 16 个提交。**端口状态、各代理运行态、测试总数等其余内容本轮未复核**，仍以 2026-10-15 为准。
+> ⚠️ **口径撞车提醒**：`l2/` 的「51 个**模块**」（根非 demo）与 `01-feature-matrix.md` 的「L2 **51 demo**」（含子目录 demo 数）**数值相同、含义不同**，改动前务必看本文件 L45 上方那行的口径注。
 
 ---
 
@@ -33,7 +35,7 @@ This file is part of the multi-proxy project.
 | 路径 | 用途 | 关键文件 |
 |------|------|----------|
 | 根目录/ | 项目入口 + 文档 + 安装/管理脚本 | `README.md`, `AGENTS.md`, `install.sh`, `install.ps1`, `manage.sh`, `manage.ps1`, `deploy-local.sh`, `docker-compose.yml`, `llms.txt` |
-| multi-proxy-manager/ | 管理后端 + Web 面板 + Electron 壳（L2 挂载点） | `server.js`, `lib/`（25 模块）, `routes/`（19 路由）, `public/`, `main.js` |
+| multi-proxy-manager/ | 管理后端 + Web 面板 + Electron 壳（L2 挂载点） | `server.js`, `lib/`（27 模块）, `routes/`（22 路由）, `public/`, `main.js` |
 | codex-proxy/ | Codex CLI 代理（Responses↔ChatCompletions 转换） | `proxy.js`, `routing-policy.js`, `budget-check.js`, `model-sync.js`, `tests/` |
 | claude-proxy/ | Claude Code 代理（Anthropic Messages 协议 + 模型别名映射） | `proxy.js`, `routing-policy.js`, `tests/` |
 | opencode-proxy/ | opencode 代理（OpenAI 兼容透传 + 成本台账 + 熔断） | `proxy.js`, `routing-policy.js`, `tests/` |
@@ -41,7 +43,7 @@ This file is part of the multi-proxy project.
 | hermes-proxy/ | Hermes Agent 代理（Python） | `proxy.py`, `requirements.txt`, `tests/` |
 | cursor-proxy/ | Cursor IDE 代理（TypeScript + SQLite） | `src/server/`, `dist/`, `data/proxy.db`, `tests/` |
 | dsh-proxy/ | DeepSeek Harness 客户端代理 | `proxy.js`, `routing-policy.js`, `tests/` |
-| l2/ | L2 编排内核：41 个模块文件 + 11 个子目录 | 见下方「l2 内核分组」 |
+| l2/ | L2 编排内核：51 个模块文件 + 10 个子目录（模块口径：**仅 `l2/` 根目录的 `.js`、不含 `*.demo.js`**；若含子目录全量非 demo 则为 80。⚠️ 勿与 `docs/01-feature-matrix.md` 的「L2 **51 demo**」混淆——那是 demo 数，含子目录） | 见下方「l2 内核分组」 |
 | l2/adapters/ | 5 个非侵入适配器 | `l1-agent-adapter.js`, `claude-adapter.js`, `h3web-adapter.js`, `aigc-adapter.js`, `memory-align-adapter.js` |
 | packs/ | agent 能力包（curator / dev-workflow 等） | `packs/curator/`, `packs/dev-workflow/` |
 | tools/verify/ | 跨平台真机验证包（Linux/macOS/Windows） | `verify.sh`, `verify.ps1`, `README.md` |
