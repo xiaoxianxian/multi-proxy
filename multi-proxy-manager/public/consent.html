@@ -29,7 +29,7 @@
     .consent__check input{margin-top:3px;accent-color:var(--brand)}
     .consent__foot{background:#f7f9fc;border-top:1px solid var(--line);padding:16px 28px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
     body.theme-dark .consent__foot{background:rgba(255,255,255,.02)}
-    .btn{border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform .1s,box-shadow .15s;letter-spacing:.01em}
+    .btn{border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform .1s,box-shadow .15s;letter-spacing:.01em;text-decoration:none}
     .btn--primary{background:var(--brand);color:#fff;box-shadow:0 4px 14px rgba(27,111,120,.28)}
     .btn--primary:hover{transform:translateY(-1px)}
     .btn--primary:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
@@ -56,7 +56,7 @@
         <h3 class="consent__h">这个工具做什么</h3>
         <ul class="consent__list">
           <li>在你本机统一管理多个 AI 模型代理（codex / hermes / cursor 等），做路由、成本、健康与告警。</li>
-          <li>所有代理状态、provider 配置、密钥、账单账本默认**仅保存在本机**（<code>~/.multi-proxy-manager/</code> 等本地文件）。</li>
+          <li>所有代理状态、provider 配置、密钥、账单账本默认<strong>仅保存在本机</strong>（<code>~/.multi-proxy-manager/</code> 等本地文件）。</li>
           <li>管理面板默认只绑定本回环 <code>127.0.0.1</code>，不对外部网络开放。</li>
         </ul>
       </div>

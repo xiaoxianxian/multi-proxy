@@ -154,7 +154,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
        <div class="gate-title">技能扫描功能未开启</div>
        <div class="gate-body">
          路由 <code>/api/skill-hosts</code> 由门控 <code>PROXY_L2_SKILLHOSTS</code> 控制（默认关 = 零副作用，与 knowledge/skill 同模式）。<br>
-         只暴露只读面：<code>scan</code> 纯读目录、<code>plan</code> dry-run；<code>install</code> / <code>setEnabled</code> **不上 HTTP**（非侵入④：内核绝不默认写 agent 目录）。<br>
+         只暴露只读面：<code>scan</code> 纯读目录、<code>plan</code> dry-run；<code>install</code> / <code>setEnabled</code> <strong>不上 HTTP</strong>（非侵入④：内核绝不默认写 agent 目录）。<br>
          开灰度：<code>PROXY_L2_SKILLHOSTS=1 node server.js</code>
        </div>
        <button class="btn btn-outline" onclick="checkGate()">重新检测</button>
