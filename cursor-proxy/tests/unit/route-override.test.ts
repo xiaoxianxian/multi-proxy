@@ -113,14 +113,20 @@ async function runHandler(
   };
 }
 
-// coding / general / cheap 三类会让引擎给出建议（实测值）；writing / vision 建议为 null。
+// coding / cheap / writing-rephrase 会让引擎给出建议（实测值）；
+// writing（纯创作）/ writing-rewrite（变长/结构）目标 = 高档模型 qwen3.8:27b-mlx = defaultModel
+// → 反噪声不变式「与默认模型相同不产生切换建议」→ suggestion=null；vision 同。
+// 注：writing/rephrase 的拆分与降档目标来自 355eb61 的 TierFlow 10-18（routeEngine 规则 +
+// taskClassifier 四层优先级），rephrase 降档落 agnes-3.0-flash 需 host 上 generic provider
+// enabled（D7 host 契约，与 coding→api.deepseek.com 断言同级依赖）。
 const MESSAGES = {
   coding:  [{ role: 'user', content: 'debug this bug in src/main.ts, compile error, refactor' }],
   general: [{ role: 'user', content: '你好 今天天气怎么样' }],
   cheap:   [{ role: 'user', content: '翻译 你好今天天气' }],
-  writing: [{ role: 'user', content: '帮我写篇公众号文章 润色文案' }],
+  writing: [{ role: 'user', content: '帮我写篇公众号文章 讲下 AI 商业化趋势' }],
+  rephrase:[{ role: 'user', content: '帮我润色这段文案 换个说法 翻译成英文' }],
   vision:  [{ role: 'user', content: '看图 识别 image_url screenshot' }],
- };
+};
 
 describe('M6 D4=C · 路由 override 机制（chatHandler 级）', () => {
   let savedMode: string | undefined;
@@ -173,13 +179,28 @@ describe('M6 D4=C · 路由 override 机制（chatHandler 级）', () => {
     expect(last.engineTaskType).toBe('coding');
      });
 
-  it('门控开启但引擎不给建议（writing）：请求体不变，且无 override 审计', async () => {
+  it('门控开启但引擎不给建议（纯 writing）：请求体不变，且无 override 审计', async () => {
     const mod = await import('../../src/server/handlers/chatHandler.js');
     mod.clearOverrideLog();
     const { bodyModel } = await runHandler(true, 'qwen3.8-flash', MESSAGES.writing);
-    expect(bodyModel).toBe('qwen3.8-flash');   // suggestion=null，override 不触发
-       // 不产生新审计条目
+    expect(bodyModel).toBe('qwen3.8-flash');
+    // TierFlow 10-18：纯 writing 目标 = qwen3.8:27b-mlx = defaultModel → 反噪声 → suggestion=null
     expect(mod.getOverrideLog().length).toBe(0);
+    });
+
+  it('门控开启时 writing-rephrase 任务：降档到廉价模型 agnes-3.0-flash（TierFlow 10-18 实测）', async () => {
+    const mod = await import('../../src/server/handlers/chatHandler.js');
+    mod.clearOverrideLog();
+    const { bodyModel } = await runHandler(true, 'qwen3.8-flash', MESSAGES.rephrase);
+    expect(bodyModel).toBe('agnes-3.0-flash');
+    // 审计：requestModel 保留、overrideModel 为降档目标、taskType 正确
+    const log = mod.getOverrideLog();
+    const last = log[log.length - 1];
+    expect(last).toBeDefined();
+    expect(last.applied).toBe(true);
+    expect(last.requestModel).toBe('qwen3.8-flash');
+    expect(last.overrideModel).toBe('agnes-3.0-flash');
+    expect(last.engineTaskType).toBe('writing-rephrase');
     });
 
   it('审计缓冲可读写：getOverrideLog 快照后 clearOverrideLog 清空', async () => {
