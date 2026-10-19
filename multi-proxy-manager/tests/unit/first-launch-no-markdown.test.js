@@ -35,5 +35,12 @@ describe('首启/可见页 不渲染 Markdown 语法（防字面 ** 露出）', 
   test('同意页 .btn 链接样式含 text-decoration:none（防 <a class=btn> 默认下划线）', () => {
     const raw = fs.readFileSync(path.join(PUB, 'consent.html'), 'utf8');
     expect(raw).toMatch(/\.btn\{[^}]*text-decoration\s*:\s*none/);
-  });
+   });
+
+  test('consent.html 接受后 .hide 已定义（gate 能隐藏，不与已接受卡同屏堆叠）', () => {
+    // components.css:264 定义 .hide，但 consent.html 0 外链 CSS → 必须本页自带，否则 gate 不隐藏（渲染碎裂）
+    const raw = fs.readFileSync(path.join(PUB, 'consent.html'), 'utf8');
+    expect(raw).toMatch(/\.hide\s*\{\s*display:\s*none/);
+    expect(raw).toMatch(/classList\.add\(\s*['"]hide['"]\s*\)/);
+   });
 });
