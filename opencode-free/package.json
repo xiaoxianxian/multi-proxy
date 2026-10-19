@@ -1,0 +1,1 @@
+{"name":"opencode-free","version":"0.1.0","type":"module","description":"Multi-proxy 插件:本地 OpenAI 兼容代理,把 opencode Zen free 模型(deepseek-v4-flash 等)按 opencode 形态转发。可单独安装/卸载/更新。","main":"server.mjs","bin":{"opencode-free":"server.mjs"},"scripts":{"start":"node server.mjs","test":"node test.mjs"},"engines":{"node":">=18"},"license":"MIT","dependencies":{"undici":"^8.12.2"}}

@@ -1,0 +1,91 @@
+{
+  "schema": "multi-proxy/plugin@1",
+  "name": "opencode-free",
+  "version": "0.1.0",
+  "type": "provider-shim",
+  "description": "本地 OpenAI 兼容代理：转发 opencode.ai /inference/v1 的全部模型（免费+付费），并给每条模型打上 is_free 标记，便于 hermes/dsh 等 agent 自行识别免费。可独立安装/更新/卸载，不影响 multi-proxy 主体。",
+  "optional": true,
+  "removable": true,
+  "removable_note": "卸载 = ./launchd.sh uninstall + 在调用方(hermes/dsh)删掉指向 18800 的 provider。multi-proxy 主体不依赖本插件。",
+
+  "port": 18800,
+  "binding": "127.0.0.1",
+  "upstream": "https://opencode.ai/inference/v1",
+  "proxy": "http://127.0.0.1:7897",
+
+  "endpoints": [
+    { "path": "/healthz", "method": "GET", "desc": "健康检查；返回 ok/upstream/proxy/key_mode/key_set（不泄露 key 值）" },
+    { "path": "/v1/models", "method": "GET", "desc": "全部模型目录，每条带 is_free 布尔，顶层另给 _meta{total,free,paid,free_rule,key_mode}" },
+    { "path": "/v1/chat/completions", "method": "POST", "desc": "OpenAI Chat Completions：复刻 opencode 1.19.0 请求形态强制转发 + 400 重试 + 流式 60s idle 收尾" }
+  ],
+
+  "auth": {
+    "default": "public",
+    "modes": ["public", "account"],
+    "note": "默认 Bearer public：仅能列目录 + 形态转发；填 OPENCODE_API_KEY 后改用真实 opencode 账号 key，付费模型可调通、免费模型在登录态下一般也通。key 只进 .env，绝不落 plist。",
+    "free_tier_gate": "在通用 HTTP shim 下：免费模型返回 FreeTierError（opencode 会话门），付费模型返回 AuthError（需账号 key）。这是 opencode 侧策略限制，非本插件 bug。填账号 key 后可绕过免费层会话门。"
+  },
+
+  "free_detection": {
+    "rule": "模型 id 含 'free' 段（opencode 命名约定）即免费、走 Bearer public",
+    "field": "is_free",
+    "meta_endpoint": "/v1/models._meta"
+  },
+
+  "hardened": [
+    "流式 60s idle 收尾（OPENCODE_STREAM_IDLE_MS）：防 kimi 卡 180s",
+    "偶发 400 重试一次（换新 opencode session、1.5s/3s 退避；不重试 401/403）",
+    "免费标记 is_free + 顶层 _meta（复刻 workbuddy 式目录，下游自识别）",
+    "账号 key 支持（OPENCODE_API_KEY）覆盖付费模型"
+  ],
+
+  "config": {
+    "env_file": ".env",
+    "env_example": ".env.example",
+    "vars": [
+      { "name": "OPENCODE_FREE_PORT", "default": "18800", "desc": "本地监听端口（避开 18793-18799 multi-proxy 管理段）" },
+      { "name": "OPENCODE_UPSTREAM", "default": "https://opencode.ai/inference/v1", "desc": "上游；opencode 改了端点改这里即可" },
+      { "name": "OPENCODE_PROXY", "default": "http://127.0.0.1:7897", "desc": "本机代理；置空则直连" },
+      { "name": "OPENCODE_API_KEY", "default": "public", "desc": "默认 public；填真实 opencode 账号 key 覆盖付费+登录态免费" },
+      { "name": "OPENCODE_STREAM_IDLE_MS", "default": "60000", "desc": "流式无数据收尾时限" },
+      { "name": "OPENCODE_RETRY_400", "default": "1", "desc": "置 0 关 400 重试" }
+    ]
+  },
+
+  "integrations": {
+    "hermes": {
+      "desc": "在 ~/.hermes/config.yaml 的 providers 加一条，base_url 指向本插件，api_key 用 public 或真实账号 key",
+      "snippet": "opencode-free:\n  base_url: http://127.0.0.1:18800/v1\n  api_key: public"
+    },
+    "dsh": {
+      "desc": "dsh / generic-openai 客户端把 base_url 指向本插件，api_key=public 即用；模型用 /v1/models 取，按 is_free 挑",
+      "snippet": "base_url: http://127.0.0.1:18800/v1\napi_key: public"
+    },
+    "generic": {
+      "desc": "任何 OpenAI 兼容客户端：base_url=http://127.0.0.1:18800/v1，api_key=public 或账号 key。列表里看 _meta.free_rule / 每条 is_free 识别免费。"
+    }
+  },
+
+  "lifecycle": {
+    "install": "cd opencode-free && npm install --registry=https://registry.npmmirror.com && ./launchd.sh install",
+    "uninstall": "./launchd.sh uninstall",
+    "update": "git pull 后 ./launchd.sh restart（改了 .env 必须 restart，因 .env 进程启动时读）",
+    "status": "./launchd.sh status",
+    "restart": "./launchd.sh restart",
+    "self_test": "node test/test-e2e.mjs"
+  },
+
+  "dependencies": {
+    "runtime": "node>=18",
+    "npm": ["undici ^8.12.2"],
+    "external": "opencode.ai（经本机 7897 代理；免费层有会话门/地区门，paid 需账号 key）"
+  },
+
+  "health": "GET http://127.0.0.1:18800/healthz",
+
+  "verified": {
+    "date": "2026-10-18",
+    "e2e": "healthz 返回 key_mode=public；/v1/models total=85 free=9 paid=76，每条带 is_free + 顶层 _meta；chat 路由未坏（FreeTierError 透传，400 重试不破坏）。",
+    "known_limits": "免费模型在通用 shim 下受 opencode 会话门(FreeTierError)/地区门(RegionError)限制；付费模型需 OPENCODE_API_KEY。列表可用、按 is_free 识别免费已实证。"
+  }
+}

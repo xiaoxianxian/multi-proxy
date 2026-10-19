@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+   <key>Label</key>
+   <string>com.multi-proxy.opencode-free</string>
+
+   <!-- opencode-free → OpenAI 兼容 shim：监听 127.0.0.1:18800，转发 opencode.ai/inference/v1 全部模型
+       并标记免费。配置全部来自 opencode-free/.env（server.mjs 启动时零依赖加载），不要在这里注入
+       OPENCODE_API_KEY —— key 只在 .env 里，避免落进 LaunchAgents 的 plist 明文。
+       可独立卸载（launchd.sh uninstall），不影响 multi-proxy 主体。 -->
+   <key>ProgramArguments</key>
+   <array>
+     <string>/Users/xiaota/.hermes/node/bin/node</string>
+     <string>/Users/xiaota/Documents/AI项目/multi-proxy/opencode-free/server.mjs</string>
+   </array>
+
+   <key>WorkingDirectory</key>
+   <string>/Users/xiaota/Documents/AI项目/multi-proxy/opencode-free</string>
+
+   <key>RunAtLoad</key>
+   <true/>
+   <key>KeepAlive</key>
+   <true/>
+   <key>StandardOutPath</key>
+   <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/opencode-free.launchd.out.log</string>
+   <key>StandardErrorPath</key>
+   <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/opencode-free.launchd.err.log</string>
+</dict>
+</plist>
