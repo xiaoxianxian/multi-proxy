@@ -83,7 +83,7 @@ This file is part of the multi-proxy project.
 | 模块 | 文件/套件 | 测试数 | 状态 |
 |------|--------|--------|------|
 | multi-proxy-manager | 94 suites | **1458 pass / 0 fail** | ✅ 全绿（2026-10-14 实跑；须 `NODE_OPTIONS=--experimental-vm-modules`）|
-| cursor-proxy | 21 suites | **250 tests** | ✅ 全绿（须 `NODE_OPTIONS=--experimental-vm-modules`，直跑 `npx jest` 会 ESM 假崩误判）|
+| cursor-proxy | 22 suites | **258 tests** | ✅ 全绿（2026-10-19 实跑；须 `NODE_OPTIONS=--experimental-vm-modules`，直跑 `npx jest` 会 ESM 假崩误判；10-19 起删 `jest.config.cjs` 与 `jest.config.js` 去重，消除「Multiple configurations found」假崩；route-override 6 例对齐 TierFlow 降档规则，新增 rephrase→`agnes-3.0-flash` 用例）|
 | codex-proxy | 14 suites | **159 tests** | ✅ 全绿 |
 | claude-proxy | 15 suites | **174 tests** | ✅ 全绿（2026-10-14 实跑；14 套件同构拷贝 codex-proxy + `model-alias.test.js` 15 例新增；须 `--worker=1` 避内存争抢 SIGTERM）|
 | opencode-proxy | 14 suites | **159 tests** | ✅ 全绿（2026-10-14 实跑；须 `--worker=1`，stream-bypass 首用例走真 HTTP 回环，内存争抢下偶发 >30s 假红，单跑复绿）|
@@ -93,7 +93,9 @@ This file is part of the multi-proxy project.
 | L2 demo | 51 demo（`run-demos.js` selected） | 全 PASS | ✅（10-14 实测 51/51；10-01 起 35→42→46→51 递增）|
 | shell (bats) | 1 .bats | 11 tests（本机无 `bats` binary，沿用 09-28 历史值，不纳入合计）| 沿用 |
 
-**10-14~15 现状：全矩阵绿（manager 1458/0fail + 三新代理 jest 174/159/177 + dsh node:test 20 + cursor 250 + hermes 77 + L2 51 demo），测试合计 ~2500+。** 历史快照：10-08 manager 1326/87、cursor 236/19、codex 79/8、claude 174/15、opencode 159/14、generic 159/14、l2 46 demo（合计 ~2400）；09-28 manager 822/50、cursor 219/17、codex 62/6、hermes 77/4、l2 23 demo（合计 1380 checks）。增量轨迹：manager 770(09-26)→807(09-27)→822(09-28)→1297(10-07)→1326(10-08)→**1458(10-14)**、l2 demo 23→35→42→46→**51**、cursor 219→236→**250**、codex 62→79→**159**。
+**10-14~15 现状：全矩阵绿（manager 1458/0fail + 三新代理 jest 174/159/177 + dsh node:test 20 + cursor 250 + hermes 77 + L2 51 demo），测试合计 ~2500+。** 历史快照：10-08 manager 1326/87、cursor 236/19、codex 79/8、claude 174/15、opencode 159/14、generic 159/14、l2 46 demo（合计 ~2400）；09-28 manager 822/50、cursor 219/17、codex 62/6、hermes 77/4、l2 23 demo（合计 1380 checks）。增量轨迹：manager 770(09-26)→807(09-27)→822(09-28)→1297(10-07)→1326(10-08)→**1458(10-14)**、l2 demo 23→35→42→46→**51**、cursor 219→236→250→**258(10-19)**、codex 62→79→**159**。
+
+**10-19 现状：cursor-proxy 258/22（TierFlow route-override 对齐，删 jest.config.cjs 去重）；10-19 晨全矩阵实跑全绿（manager 97/1512、cursor 21/250、codex 159、claude 174、opencode 159、generic 192、dsh 27、l2 56 demo、e2e matrix 49+1skip），详见 PROJECT-STATE/2026-10-19.md。**
 
 ---
 
