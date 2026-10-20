@@ -74,10 +74,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 const consent = require('./lib/consent');
 const legalLib = require('./lib/legal');
 function consentBypass(req) {
-  // CI / 自动化 / 单测默认放行，避免挡住既有 1529 测试；真实首启由 isConsented() 判定。
+  // CI / 自动化 / 单测默认放行，避免挡住既有测试；真实首启由 verifyConsent() 判定。
+  // D2：verifyConsent = 「无 JSON 记录时看 legacy 纯时间戳 marker（A 策略回填不打扰）；有记录但法务正文哈希不符 → 未同意重弹」。
   const bypass = /1|true|yes/i.test(process.env.MP_CONSENT_BYPASS || '') || (process.env.NODE_ENV === 'test');
   if (bypass) return true;
-  return consent.isConsented();
+  return consent.verifyConsent().valid;
 }
 app.use('/api/auth', authRoutes);
 app.use('/api', controlRoutes);
@@ -141,15 +142,18 @@ app.use('/api/im-inbound', require('./routes/im-inbound'));
 // 否则 /api/consent 会被 :proxy=consent 误捕获。本机单人面，读写均不加 requireAuth。
 app.get('/api/consent', (_req, res) => {
   const st = consent.consentState();
-  res.json(Object.assign({ success: true }, st));
- });
-app.post('/api/consent/accept', (_req, res) => {
+  const v = consent.verifyConsent();
+  res.json(Object.assign({ success: true }, st, { valid: v.valid, version: v.version || null, migrated: !!v.migrated, reason: v.reason }));
+});
+app.post('/api/consent/accept', (req, res) => {
   try {
     consent.markConsented();
-    res.json({ success: true, consented: true, marker: consent.consentState().markerPath });
+    // D2：另写 JSON 同意记录（法务正文哈希/版本/时间戳/IP）；本地面板默认回环，req.ip 即客户端。
+    const rec = consent.recordConsent({ ip: req.ip });
+    res.json({ success: true, consented: true, marker: consent.consentState().markerPath, record: rec.recordPath, consentHash: rec.consentHash });
    } catch (e) {
-    res.status(500).json({ success: false, error: String((e && e.message) || e) });
-   }
+     res.status(500).json({ success: false, error: String((e && e.message) || e) });
+    }
 });
 app.post('/api/consent/revoke', (_req, res) => {
   try {

@@ -169,4 +169,23 @@ function legalDoc(type, opts = {}) {
    };
 }
 
-module.exports = { legalDoc, mdToHtml, DOCS, ONLINE_HOME, defaultDir, extractVersion, esc };
+// D2（2026-10-19 全角色评审）：法务内容指纹 = sha256 over 两份定稿正文（顺序 terms→privacy，缺文件该篇空串仍参与）。
+// 与 legalDoc 同源同 dir（opts.dir / opts.env）→ 同意记录绑它：文档正文一变，指纹变，旧同意失效（lib/consent.js verifyConsent 据此判定）。
+// 确定性：本机有 docs/legal 与「无 docs/legal」算出不同指纹；缺文档期间同意的旧记录，在补齐/改动文档后应重新同意。绝不抛异常。
+function legalHashOf(opts = {}) {
+  const crypto = require('crypto');
+  const env = opts.env || process.env;
+  const dir = opts.dir || defaultDir(env);
+  const parts = Object.keys(DOCS).map((key) => {
+    let body = '';
+    try {
+      body = fs.readFileSync(path.join(dir, DOCS[key].file), 'utf8');
+    } catch {
+      body = '';
+    }
+    return key + '::' + (body + DOCS[key].file).replace(/\r\n/g, '\n');
+  });
+  return crypto.createHash('sha256').update(parts.join('\u0000'), 'utf8').digest('hex');
+}
+
+module.exports = { legalDoc, legalHashOf, mdToHtml, DOCS, ONLINE_HOME, defaultDir, extractVersion, esc };
