@@ -40,5 +40,44 @@
     ],
     "fallback": ["openai/gpt-oss-120b", "google/gemma-4-31b-it:free"],
     "_note": "取官方文档『免费大语言模型列表』永久免费档（7B 级，不扣赠金）；注册另送 14 元赠金可跑 DeepSeek-V3/R1、Qwen2.5-72B 等付费档但会扣额度。有 key 后以其 /v1/models 为准"
+  },
+  {
+    "id": "free-llm-vercel",
+    "name": "Vercel AI Gateway·免费档",
+    "provider_id": "vercel",
+    "api_key": "__FILL_VERCEL_KEY__",
+    "base_url": "https://api.vercel.ai/gateway/v1",
+    "enabled": true,
+    "models": [
+      { "id": "bytedance-exp-ling-3.1-free", "name": "Ling 3.1 Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "deepseek-v4-flash-free", "name": "DeepSeek V4 Flash Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true }
+    ],
+    "fallback": ["free-llm-openrouter:thinkingmachines/inkling:free"],
+    "_note": "路由型网关（②类）：/v1/models 列表公开免鉴权，注册送 10 次免费调用；实际调用需 Vercel 账号 key。清单随官方变动，动态刷新后以其 /v1/models 免费者为准"
+  },
+  {
+    "id": "free-llm-opencode",
+    "name": "OpenCode Zen·免费档",
+    "provider_id": "opencode",
+    "api_key": "__FILL_OPENCODE_KEY__",
+    "base_url": "https://opencode.ai/zen/v1",
+    "enabled": true,
+    "models": [
+      { "id": "ling-3.1-flash-free", "name": "Ling 3.1 Flash Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "ling-3.0-flash-fin-free", "name": "Ling 3.0 Flash Fin Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "nemotron-3-ultra-free", "name": "Nemotron 3 Ultra Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "nemotron-3.5-lightning-free", "name": "Nemotron 3.5 Lightning Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "mimo-v2.6-flash-free", "name": "MiMo V2.6 Flash Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "mimo-v2.5-free", "name": "MiMo V2.5 Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "exo-free", "name": "Exo Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "space-bunny-free", "name": "Space Bunny Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "longcat-2.5-preview-free", "name": "LongCat 2.5 Preview Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "step-5-preview-free", "name": "Step 5 Preview Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "glm-5.3-flash-free", "name": "GLM 5.3 Flash Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "deepseek-v4.1-flash-free", "name": "DeepSeek V4.1 Flash Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
+      { "id": "big-pickle", "name": "Big Pickle（限时免费）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true }
+    ],
+    "fallback": ["free-llm-openrouter:thinkingmachines/inkling:free"],
+    "_note": "OpenCode Zen 免费档（②类路由厂商）：需 OpenCode 账号 key（免费注册，免费模型限时·零保留；免费账号常 IP 受限，必要时换 IP/代理）。模型 id 即 model 值；/v1/models 可拉全量（含付费），动态刷新后取其中免费者为准"
   }
 ]

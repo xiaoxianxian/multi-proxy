@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# free-llm · 安装：把 3 家免费 provider add-only 合并进 live providers.json（先备份，幂等）
+# free-llm · 安装：把 seed 里各家（免费/路由）provider add-only 合并进 live providers.json（先备份，幂等）
 # 依赖：generic-openai-proxy（18799）。加 key 不用重启它（每请求重读 providers.json）。
 set -euo pipefail
 
@@ -10,9 +10,13 @@ LIVE="$DATA_DIR/providers.json"
 SEED="$HERE/providers.seed.json"
 GENERIC_PORT=18799
 
-# 1) 读 key：优先 free-llm/.env，其次环境变量（真实 key 只落在 .env，已被 gitignore）
-if [ -f "$HERE/.env" ]; then
-  echo "· 读取 $HERE/.env"
+# 1) 读 key：优先 ~/.multi-proxy-manager/.env（核心引擎读同一份，refresh-models.mjs 也读这里），
+#    没有再退回插件目录 .env（旧位置）。真实 key 只落 .env（已 gitignore，不进 git）
+if [ -f "$DATA_DIR/.env" ]; then
+  echo "· 读取 $DATA_DIR/.env"
+  set -a; source "$DATA_DIR/.env"; set +a
+elif [ -f "$HERE/.env" ]; then
+  echo "· 读取 $HERE/.env（旧位置；建议迁到 $DATA_DIR/.env）"
   set -a; source "$HERE/.env"; set +a
 fi
 
@@ -24,11 +28,12 @@ echo "· 已备份 live providers.json → $BACKUP"
 
 # 2) add-only 合并：已存在的 id 原样保留（不覆盖用户的 key/改动），缺失的 key 注入 .env 值
 LIVE="$LIVE" SEED="$SEED" OR_KEY="${OPENROUTER_FREE_KEY:-}" \
-GROQ_KEY="${GROQ_FREE_KEY:-}" SIL_KEY="${SILICONFLOW_FREE_KEY:-}" node - <<'JS'
+GROQ_KEY="${GROQ_FREE_KEY:-}" SIL_KEY="${SILICONFLOW_FREE_KEY:-}" \
+VERCEL_KEY="${VERCEL_KEY:-}" OPENCODE_KEY="${OPENCODE_KEY:-}" node - <<'JS'
 const fs = require('fs');
 const live = JSON.parse(fs.readFileSync(process.env.LIVE, 'utf8'));
 const seed = JSON.parse(fs.readFileSync(process.env.SEED, 'utf8'));
-const keys = { openrouter: process.env.OR_KEY || '', groq: process.env.GROQ_KEY || '', siliconflow: process.env.SIL_KEY || '' };
+const keys = { openrouter: process.env.OR_KEY || '', groq: process.env.GROQ_KEY || '', siliconflow: process.env.SIL_KEY || '', vercel: process.env.VERCEL_KEY || '', opencode: process.env.OPENCODE_KEY || '' };
 let added = 0, filled = 0, placeholder = 0;
 for (const e of seed) {
   const k = keys[e.provider_id] || '';
@@ -43,7 +48,10 @@ for (const e of seed) {
     const cur = live[i];
     const wasPlaceholder = !cur.api_key || /^__FILL_/.test(cur.api_key);
     // 幂等：刷新清单/基址/免责；占位 key 可升级成真 key；已有真 key 绝不覆盖
-    Object.assign(cur, { name: e.name, base_url: e.base_url, enabled: e.enabled, models: e.models, fallback: e.fallback, _note: e._note });
+    // models 并集（add-only）：保留 live 已动态加进来的模型，seed 只补新增、绝不砍
+    const mergedModels = (cur.models || []).concat((e.models || []).filter(m => !(cur.models || []).some(c => c.id === m.id)));
+    Object.assign(cur, { name: e.name, base_url: e.base_url, enabled: e.enabled, fallback: e.fallback, _note: e._note });
+    cur.models = mergedModels;
     if (wasPlaceholder) { cur.api_key = realKey || cur.api_key; if (realKey) filled++; }
     console.log(`  = ${e.id} 已存在：刷新模型清单${wasPlaceholder && realKey ? '，并填入 key' : wasPlaceholder ? '（key 仍占位）' : '（保留已有 key）'}`);
   }

@@ -4,15 +4,17 @@
 //   node key-wizard.mjs                       交互式：逐个提示粘贴（去哪个控制台领，链接都在向导里），回车跳过
 //   OPENROUTER_FREE_KEY=.. GROQ_FREE_KEY=.. SILICONFLOW_FREE_KEY=.. node key-wizard.mjs
 //                                              非交互：key 全走环境变量，不弹提问
-// 安全：真实 key 只落在 free-llm/.env（被 .gitignore），向导绝不打印完整 key。
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+// 安全：真实 key 只落在 ~/.multi-proxy-manager/.env（被 .gitignore），向导绝不打印完整 key。
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline/promises';
 
 // 用 fileURLToPath 解码中文路径（new URL().pathname 会把「项目」百分号编码 → 路径不存在）
 const HERE = fileURLToPath(new URL('.', import.meta.url));      // free-llm/ 目录
-const ENV = HERE + '.env';
+// 真实 key 统一落 ~/.multi-proxy-manager/.env（核心引擎 / install.sh / refresh-models.mjs 读同一份；被 gitignore）
+const DATA_DIR = process.env.HOME + '/.multi-proxy-manager';
+const ENV = DATA_DIR + '/.env';
 
 const PROVIDERS = [
   { id: 'openrouter', name: 'OpenRouter·免费档', envVar: 'OPENROUTER_FREE_KEY',
@@ -24,6 +26,12 @@ const PROVIDERS = [
   { id: 'siliconflow', name: '硅基流动·免费档', envVar: 'SILICONFLOW_FREE_KEY',
     get: 'https://cloud.siliconflow.cn（注册领 key）',
     note: '本插件只用永久免费的 7B 档，$0、不扣赠金' },
+  { id: 'vercel', name: 'Vercel AI Gateway·免费档', envVar: 'VERCEL_KEY',
+    get: 'vercel.com 注册 → 取 AI Gateway / AI SDK key（api.vercel.ai/gateway）',
+    note: '路由网关：填一个 key 就用背后整张模型清单；免费档 bytedance-exp-ling-3.1-free / deepseek-v4-flash-free 零费用' },
+  { id: 'opencode', name: 'OpenCode Zen·免费档', envVar: 'OPENCODE_KEY',
+    get: 'opencode.ai 注册 → 取账号 key（opencode.ai/zen/v1）',
+    note: '路由网关：免费模型限时·零保留；按出口 IP 地域门槛，本机东京需实测' },
 ];
 
 function loadEnvMap() {
@@ -47,7 +55,7 @@ const interactive = !!process.stdin.isTTY && process.argv.indexOf('--yes') === -
 const rl = interactive ? readline.createInterface({ input: process.stdin, output: process.stdout }) : null;
 
 console.log('== free-llm · key 录入向导 ==');
-console.log('三家都是注册即免费、不充钱；填完即写 free-llm/.env（绝不进 git）。中途没领到的直接回车跳过，日后再跑一次补上。\n');
+console.log('各家都是注册即免费、不充钱；填完即写 ~/.multi-proxy-manager/.env（绝不进 git）。中途没领到的直接回车跳过，日后再跑一次补上。\n');
 
 for (const p of PROVIDERS) {
   const key = envMap[p.envVar];
@@ -60,12 +68,13 @@ for (const p of PROVIDERS) {
 }
 if (rl) rl.close();
 
+mkdirSync(process.env.HOME + '/.multi-proxy-manager', { recursive: true });
 writeFileSync(ENV, [
-  '# free-llm · 各家免费 key（本文件被 .gitignore，绝不进 git）',
-  ...PROVIDERS.map(p => `${p.envVar}=${envMap[p.envVar] || ''}`),
-  ''
+   '# free-llm · 各家免费 key（本文件被 .gitignore，绝不进 git）',
+   ...PROVIDERS.map(p => `${p.envVar}=${envMap[p.envVar] || ''}`),
+   ''
 ].join('\n'));
-console.log('\n✓ 已写入 free-llm/.env');
+console.log('\n✓ 已写入 ~/.multi-proxy-manager/.env');
 
 console.log('\n== 安装/更新到 18799 ==');
 spawnSync('bash', [HERE + 'install.sh'], { stdio: 'inherit' });
@@ -78,4 +87,4 @@ for (const p of PROVIDERS) {
   const k = envMap[p.envVar];
   console.log((hasReal(k) ? '●' : '○') + ' ' + p.name + (hasReal(k) ? '（key 已就位，chat 可实测）' : '（占位·待填 key）'));
 }
-console.log('\n完成后，开 Hermes 聊天 / 调 /v1/chat/completions 即自动在这三家间 429 兜底切换。');
+console.log('\n完成后，开 Hermes 聊天 / 调 /v1/chat/completions 即自动在各家间 429 兜底切换。');
