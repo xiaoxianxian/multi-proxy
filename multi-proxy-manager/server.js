@@ -238,6 +238,19 @@ const isolationExecutor = require('./lib/provider-isolation-executor');
 // 自行 lazy 创建**，两者指向同一账本文件，不存在状态分裂。
 const { SideEffectGuard } = require('./lib/side-effect-guard');
 
+// D3（非回环强制鉴权 · fail-closed）：判定是否拒绝以全网可达方式启动。
+// 纯函数（非侵入、可单测）：回环地址 或 显式 bypass(MP_BIND_AUTH_BYPASS) → 放行；
+// 非回环且未配置鉴权 → true（调用方应 throw 拒绝启动）。逻辑与启动块解耦，便于测试。
+function shouldFailClosedBind(bindHost, opts) {
+  const LOOPBACK = ['127.0.0.1', 'localhost', '::1', '::ffff:127.0.0.1'];
+  const o = opts || {};
+  const isLoopback = LOOPBACK.includes(bindHost);
+  const bypass = o.bypass === '1' || o.bypass === true;
+  if (isLoopback || bypass) return false;
+  // 非回环：只有未配置鉴权时才 fail-closed（配了鉴权 → 放行并提醒）。
+  return !o.authConfigured;
+}
+
 // 启动服务（跳过测试环境）
 if (process.env.NODE_ENV !== "test") {
   costTrack.loadPricingFromEnv();
@@ -310,10 +323,26 @@ if (process.env.NODE_ENV !== "test") {
   // 管理面板默认只绑本回环 127.0.0.1（安全收紧：面板带 JWT 但不应全网卡可达）；
   // Docker/跨机部署显式设 BIND_HOST=0.0.0.0，沿用 hermes-proxy 的 BIND_HOST 惯例。
   const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
+  // D3：非回环地址（0.0.0.0/LAN/::）= 管理台对网络可达方开放。fail-closed——
+  // 未配置鉴权（MANAGER_PASSWORD 空 且 无已存密码）且未显式 MP_BIND_AUTH_BYPASS=1 → 在 bind 前拒绝启动。
+  if (shouldFailClosedBind(BIND_HOST, {
+    bypass: process.env.MP_BIND_AUTH_BYPASS,
+    authConfigured: !auth.needsPasswordSetup(),
+  })) {
+    throw new Error(
+      `[security] BIND_HOST=${BIND_HOST} 非回环地址但未配置管理台鉴权（MANAGER_PASSWORD 空 且 无已存密码）。\n` +
+      `  fail-closed：拒绝以全网可达方式启动。请三选一：\n` +
+      `   ① 设 MANAGER_PASSWORD（或 UI 首启设密码）后重启；\n` +
+      `   ② 已由真实防火墙/反向代理兜底且有意免鉴权 → 显式设 MP_BIND_AUTH_BYPASS=1（自担风险）；\n` +
+      `   ③ 改回本机面板 → BIND_HOST=127.0.0.1`
+    );
+  }
   app.listen(PORT, BIND_HOST, () => {
     if (!['127.0.0.1', 'localhost', '::1', '::ffff:127.0.0.1'].includes(BIND_HOST)) {
-      console.warn(`[security] BIND_HOST=${BIND_HOST} 非回环地址：管理台将对该网络可达方开放。` +
-        '请确认 MANAGER_PASSWORD 已设置、且防火墙/反向代理已加访问控制。');
+      console.warn(`[security] BIND_HOST=${BIND_HOST} 非回环地址：管理台对该网络可达方开放。` +
+        (process.env.MP_BIND_AUTH_BYPASS === '1'
+          ? ' MP_BIND_AUTH_BYPASS=1 已声明免鉴权——外层防火墙/反向代理须兜底。'
+          : '已启用鉴权，请确认防火墙/反向代理访问控制。'));
     }
     console.log('\n========================================');
     console.log('  Multi-Proxy Manager Shell');
@@ -328,3 +357,5 @@ if (process.env.NODE_ENV !== "test") {
 
 
 module.exports = app;
+// D3：导出 fail-closed 判定纯函数，供单测直测（启动块在 NODE_ENV=test 下不执行，无法经 server 触发）。
+module.exports.shouldFailClosedBind = shouldFailClosedBind;
