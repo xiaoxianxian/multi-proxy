@@ -7,17 +7,15 @@
 // 现状（已 grep 核实，非臆测）：
 //   · live 暗色机制 = 在 <html> 上挂 class="dark"，由 localStorage 'darkMode' 键驱动；
 //     带 #darkModeToggle 按钮的 6 页（dashboard/knowledge/login/logs/skills/proxy-config）都 wire 了 .dark。
-//   · 历史「第 3 套主题」= public/ui.js 的 mp-theme / data-theme，**无任何生产页加载**（docs/design-system 用
-//     另一份 ui.js 副本，不在此断言范围）。
+//   · 历史「第 3 套主题」= public/ui.js 的 mp-theme / data-theme，**无任何生产页加载**（全仓 grep 0 引用；docs/ 下无其它 ui.js）。
 //
 // 本文件锁三条不变量，任一被破坏即「三套主题并存 / 主题又碎裂」回归（2026-08 那个「success/error 颜色不一致」
 // 即此类病）：
 //   ① live 机制统一：凡带 #darkModeToggle 的页面都 wire 了 <html> 的 .dark class（不出现「有按钮不翻 .dark」）。
 //   ② 暗色 token 双选择器兼容：tokens.css 同时覆盖 html[data-theme="dark"]（新）与 html.dark（旧 class），
 //      colors_and_type.css 用 :root.dark 覆盖 --color-* 名空间暗色 —— 旧 .dark class 路径不因新 data-theme 失效。
-//   ③ 死路径不复活：public/ 生产页无一 <script src="ui.js">（mp-theme/data-theme 第 3 套不回归）。
-//      注：public/ui.js 删留属 OD-4（老板拍板：7 页去重挂一行 vs 正式删除），本断言在 OD-4 定稿前锁定「当前未加载」状态；
-//      若日后 OD-4=复活并把 ui.js 挂回生产页，需同步更新本断言。
+//   ③ 死路径不复活：public/ 生产页无一引用 ui.js，且 public/ui.js 已删（OD-4 老板拍板=删）；
+//      若日后有人重新加回 ui.js 或挂回生产页，本断言 fail，需有意的决策才更新。
 const fs = require('fs');
 const path = require('path');
 
@@ -50,12 +48,14 @@ describe('D6 主题机制回归（防「三套主题并存」复发）', () => {
     expect(colorsAndType).toMatch(/:root\.dark/);                  // --color-* 名空间的暗色桥接
   });
 
-  test('③ public/ 生产页无一加载已废弃的 ui.js（mp-theme/data-theme 第 3 套主题不回归；OD-4 定稿前锁定当前状态）', () => {
+  test('③ public/ui.js 已删（OD-4 拍板=删），生产页无一引用 ui.js（mp-theme/data-theme 第 3 套不复活）', () => {
     const pages = fs.readdirSync(PUB).filter((f) => f.endsWith('.html'));
     const offenders = [];
     pages.forEach((f) => {
       if (/<script[^>]*\ssrc=["'][^"']*\/?ui\.js["']/i.test(readSrc(f))) offenders.push(f);
     });
     expect(offenders).toEqual([]);
+    // OD-4=删：ui.js 文件本身不存在；重新加回=回归，需有意的决策才解锁本断言
+    expect(fs.existsSync(path.join(PUB, 'ui.js'))).toBe(false);
   });
 });
