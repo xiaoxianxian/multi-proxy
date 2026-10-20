@@ -25,6 +25,8 @@
     .consent__list li{display:flex;gap:8px;padding:4px 0;color:var(--ink-2);font-size:13px}
     .consent__list li::before{content:"·";color:var(--brand);font-weight:700}
     .consent__note{background:var(--warn-soft);border-radius:10px;padding:10px 12px;color:var(--ink-2);font-size:12.5px;line-height:1.6;margin:6px 0 14px}
+    .consent__legal-link{color:var(--brand-2);text-decoration:none;border-bottom:1px solid var(--brand);font-weight:600;padding-bottom:1px}
+    .consent__legal-link:hover{color:var(--ink)}
     .consent__check{display:flex;gap:9px;align-items:flex-start;margin:12px 0 6px;font-size:13px}
     .consent__check input{margin-top:3px;accent-color:var(--brand)}
     .consent__foot{background:#f7f9fc;border-top:1px solid var(--line);padding:16px 28px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -70,9 +72,11 @@
           <li>调用上游模型时，你的请求内容由<strong>上游模型服务商</strong>按其条款处理，本工具不额外留存。</li>
         </ul>
         <div class="consent__note">
-          摘要性质。完整<strong>用户协议</strong>与<strong>隐私条款</strong>随 v1.0 正式发布时补齐（本工具为本地开源管理面板，无独立法人条款）；
-          当前以「本地优先 + 每能力默认可关」为实际约定。勾选下方即表示你已知悉并同意继续。
-        </div>
+          摘要性质。完整<strong>用户服务协议</strong>与<strong>隐私政策</strong>可在面板内「关于 · 法务」页直接查阅：
+          <a href="/legal" class="consent__legal-link">→ 打开法务页</a>（本地 <code>docs/legal/</code>
+          定稿文本，零网络）；v1.0 正式发布时同步上线网站版（www.sifking.cn）。本工具为本地开源
+          管理面板，以「本地优先 + 每能力默认可关」为实际约定。勾选下方即表示你已知悉并同意继续。
+         </div>
       </div>
 
       <label class="consent__check">

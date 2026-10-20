@@ -72,6 +72,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // 首启同意门（默认拦管理页；CI/测试口子：MP_CONSENT_BYPASS 或 NODE_ENV=test 全放行）。
 // 状态基座 lib/consent.js（纯文件标记，非侵入）；端点在下方 /api/consent* 挂出。
 const consent = require('./lib/consent');
+const legalLib = require('./lib/legal');
 function consentBypass(req) {
   // CI / 自动化 / 单测默认放行，避免挡住既有 1529 测试；真实首启由 isConsented() 判定。
   const bypass = /1|true|yes/i.test(process.env.MP_CONSENT_BYPASS || '') || (process.env.NODE_ENV === 'test');
@@ -159,6 +160,12 @@ app.post('/api/consent/revoke', (_req, res) => {
    }
 });
 app.get('/consent', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'consent.html')));
+// 法务文本可达页（D1，2026-10-19 首启信任页评审 §3-P2#6 / §6-P1#1）：本地 docs/legal 定稿文本
+// + 服务端安全渲染（零网络、零第三方读）。/api/legal 在 :proxy wildcard 前挂载避免被误捕获；
+// /legal 经下方 routeMap 在同意门内可达。type 非法/缺文件 → 200 + fallback，不 500、不抛。
+app.get('/api/legal', (req, res) => {
+  res.json(legalLib.legalDoc(String((req.query || {}).type || 'terms')));
+});
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);
@@ -192,6 +199,8 @@ app.use((req, res, next) => {
       '/context': 'context.html',
       // P0 修：dashboard 侧栏跳 /skills，routeMap 缺此项 ⇒ 点击被回落成 dashboard（无反应）。
       '/skills': 'skills.html',
+      // 法务文本可达页（D1）：首启页「法务条款」链接指向此页，与 /consent 同处同意门内
+      '/legal':    'legal.html',
       // v1.0 补 settings 页：外观/关于/更新与备份（本地优先，内嵌在管理组路由）
       '/settings': 'settings.html',
       };

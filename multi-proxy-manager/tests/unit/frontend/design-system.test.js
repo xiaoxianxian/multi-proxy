@@ -434,6 +434,7 @@ describe('Design System', () => {
        if (name === 'index.html') return; // redirect page, no CSS
        if (name === 'login.html') return; // inline styles, no external CSS
        if (name === 'consent.html') return; // 首启 overlay，内联样式（同 login/index 例）
+        if (name === 'legal.html') return; // 法务页 overlay，内联样式（同 consent 例，自包含可达）
        const content = fs.readFileSync(path.join(CSS_DIR, name), 'utf8');
         expect(content).toContain('colors_and_type.css');
       });
