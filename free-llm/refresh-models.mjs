@@ -85,8 +85,11 @@ for (const p of live) {
 }
 
 if (changed > 0) {
-  fs.writeFileSync(LIVE, JSON.stringify(live, null, 2) + '\n', { mode: 0o600 });
-  console.log(`完成：共补入 ${changed} 个模型，已写回 live providers.json（权限 0600，key 未落盘/未打印）`);
+  // 原子写：先写同目录 .tmp，再 rename 原子替换——避免与正在读文件的 18799 撞上半截 JSON（无人值守更安全）
+  const tmp = LIVE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(live, null, 2) + '\n', { mode: 0o600 });
+  fs.renameSync(tmp, LIVE);
+  console.log(`完成：共补入 ${changed} 个模型，已原子写回 live providers.json（权限 0600，key 未落盘/未打印）`);
 } else {
   console.log('完成：无新增（各清单已与上游一致，或目标均跳过）');
 }
