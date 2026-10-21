@@ -7,6 +7,7 @@ const { Readable, PassThrough } = require('stream');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const keyPool = require('./key-pool.js'); // 门控 PROXY_KEYPOOL 默认关；纯函数、key 选择只读 (provider, attemptIndex, env)
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -1095,6 +1096,11 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
   let exhausted = false;       // 是否「曾 fallback 且最终无更多目标」（链耗尽，区别于首跳无兜底）
   let fellBack = false;        // 是否曾切到过 fallback
 
+  // key-pool（门控 PROXY_KEYPOOL 默认关）：开则同 provider 429 时换下一把 key 再试(有界)，全 key 都 429 才进 provider-fallback。
+  // 关 = activeKey 恒 provider.apiKey、不轮换、零行为变更（沿用 routing-policy 门控范式）。
+  const kpOpen = keyPool.gateOpen();
+  const keyAttempt = kpOpen ? new Map() : null; // provider.name → 已试到第几把 key（仅门控开时有）
+
   for (let depth = 0; depth <= MAX_FALLBACK_DEPTH; depth++) {
     const provider = findProvider(currentModel);
     if (!provider) {
@@ -1102,6 +1108,10 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       break;
     }
     lastProviderName = provider.name;
+
+    // key-pool：门控关 → keyIdx=0、activeKey=provider.apiKey（老行为逐字不变）；开 → 试到第几把 key
+    const keyIdx = keyAttempt ? (keyAttempt.get(provider.name) || 0) : 0;
+    const activeKey = keyPool.activeKey(provider, keyIdx); // 门控关 → 恒 provider.apiKey
 
     // 熔断 OPEN：当作「需重试」信号，不硬 503，进入 fallback 决策（除非无 fallback）
     if (!breakerIsOpen(provider)) {
@@ -1114,7 +1124,7 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${provider.apiKey}`,
+            'Authorization': `Bearer ${activeKey}`,
           },
           body: JSON.stringify(bodyForUpstream),
           signal: upstreamSignal,
@@ -1172,6 +1182,13 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
       // 熔断 OPEN：记失败态，进入 fallback 决策（breaker 自身已判定，不重复 record）
       console.error(`[chat] circuit open on model=${currentModel} (${provider.name}) — trying fallback`);
       lastFailure = { status: 503, code: 'CIRCUIT_OPEN', errored: false };
+    }
+
+    // key-pool：429(限流) + 门控开 + 还有下一把 key ⇒ 同 provider 换 key 再试(有界)，不急着进 provider-fallback。
+    // 门控关(kpOpen=false) → 条件恒假 → 走 provider-fallback，与老行为逐字一致（零变更）。
+    if (lastFailure && lastFailure.status === 429 && kpOpen && keyPool.hasNextKey(provider, keyIdx)) {
+      keyAttempt.set(provider.name, keyIdx + 1);
+      continue; // 重回循环：同 provider、下一把 key（depth 仍受 MAX_FALLBACK_DEPTH 限）
     }
 
     // === fallback 决策：取下一个未访问的候选 model ===
