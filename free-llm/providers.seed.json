@@ -46,7 +46,7 @@
     "name": "Vercel AI Gateway·免费档",
     "provider_id": "vercel",
     "api_key": "__FILL_VERCEL_KEY__",
-    "base_url": "https://api.vercel.ai/gateway/v1",
+    "base_url": "https://ai-gateway.vercel.sh/v1",
     "enabled": true,
     "models": [
       { "id": "bytedance-exp-ling-3.1-free", "name": "Ling 3.1 Free", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true },
