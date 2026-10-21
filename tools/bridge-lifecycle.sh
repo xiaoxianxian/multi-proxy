@@ -73,6 +73,13 @@ do_on() {
   mkdir -p "$REPO_DIR/logs"
   # 🔴 env 必须带全：BRIDGE_MODE=rewrite 是**省钱的前提**（observe 只转发不改写，
   #    切了 curator 照样一分不省）；CURATOR_* 那几个是 curator pack 的档位参数。
+  # ⚠️ 2026-10-21：suffix 是历史钉值，钉它的理由（k 未知）已被实测推翻（k̂=0，8/8；
+  #   见 94 号 §7.11）。改这两个值必须成组：mid + MAX_HIDE_RATIO=0.3 ⇒ would-over-hide、
+  #   一点不省（真工具表 13 把下 mid 要藏 10 把，floor(13×0.3)=3 卡死）。
+  # 🔴 这三行**只能待在 env 之前**，不许插进 `... \` 续行中间：bash 会把 `#` 连同整条
+  #    逻辑行一起吃掉 ⇒ env 退化成「无命令」只打印环境，PORT / BRIDGE_MODE /
+  #    BRIDGE_CURATOR 全部丢失（2026-10-22 实测：env 吐 187 行环境 dump，子进程里
+  #    PORT=[] MODE=[] CURATOR=[]，只剩注释之后的 CURATOR_* 以「前缀赋值」形式活下来）。
   env PORT="$PORT" BINDING=127.0.0.1 UPSTREAM="$UPSTREAM" \
       BRIDGE_MODE=rewrite BRIDGE_CURATOR=1 \
       NODE_OPTIONS="--max-old-space-size=$HEAP_MB" \

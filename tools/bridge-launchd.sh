@@ -86,6 +86,12 @@ nohup_fallback() {
   local pid
   pid="$(lsof -nP -iTCP:$CURATOR_PORT -sTCP:LISTEN -t 2>/dev/null || true)"
   if [ -n "$pid" ]; then printf '端口 %s 已被 pid %s 占用，认为桥已在跑\n' "$CURATOR_PORT" "$pid"; return 0; fi
+  # ⚠️ 2026-10-21：suffix 是历史钉值，钉它的理由（k 未知）已被实测推翻（k̂=0，8/8；
+  #   见 94 号 §7.11）。改这两个值必须成组：mid + MAX_HIDE_RATIO=0.3 ⇒ would-over-hide、
+  #   一点不省（真工具表 13 把下 mid 要藏 10 把，floor(13×0.3)=3 卡死）。
+  # 🔴 这三行**只能待在 env 之前**，不许插进 `... \` 续行中间：bash 会把 `#` 连同整条
+  #    逻辑行一起吃掉 ⇒ env 退化成「无命令」只打印环境，PORT / BRIDGE_MODE /
+  #    BRIDGE_CURATOR 全部丢失（2026-10-22 实测，同 tools/bridge-lifecycle.sh）。
   env PORT="$CURATOR_PORT" BINDING=127.0.0.1 UPSTREAM="$UPSTREAM" \
       BRIDGE_MODE=rewrite BRIDGE_CURATOR=1 \
       CURATOR_PRUNE_MODE=suffix CURATOR_MAX_HIDE_RATIO=0.3 \

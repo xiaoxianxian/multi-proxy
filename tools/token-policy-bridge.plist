@@ -37,7 +37,16 @@
     <!-- 裁剪模式显式钉成 suffix，不用 auto。
          auto 在未标定 k 时会选 mid（cache-k-estimator.js:77：0 < kStar=0.111 → mid），
          而 mid 的断点后退量 > 隐藏量，在 k 未知的上游上等于拿钱赌；
-         suffix 下 T' 是 T 的前缀，后退量 = 隐藏量，任何 k 都不亏。 -->
+         suffix 下 T' 是 T 的前缀，后退量 = 隐藏量，任何 k 都不亏。
+         ⚠️ 2026-10-21 订正（只改注释，值未动，回源见 94 号 §7.11）：
+           上面「k 未知、拿钱赌」的理由已被实测推翻——k̂=0（8/8 样本，tools/cache-k-real-run.js），
+           d 从 0.1 订正为 0.02 ⇒ kStar 0.111 → 0.0204；同消息结构干净基线下
+           mid 省 31.9%、suffix 省 10.9%（53/54 旧价口径按现价重算后是 15.0% vs 14.0%，优势仅 1 个点，
+           量级随「suffix 尾部可删空间」变，不可外推）。
+           🔴 改这一项必须成组改：真工具表 13 把下 mid + MAX_HIDE_RATIO=0.3 ⇒ would-over-hide、saved=0
+           （mid 要藏 10 把，floor(13×0.3)=3 卡死）⇒ 只删 suffix 会让裁剪彻底哑火、比现状更差。
+           要切 mid 就得同时把 MAX_HIDE_RATIO 放到 ≥0.77（代码默认 0.85 ⇒ kept 3/13、saved 2,713），
+           代价是能力视野收窄到 coreTools 三件套。属行为变更，归老板拍板后改 + launchctl 重启。 -->
     <key>CURATOR_PRUNE_MODE</key>
     <string>suffix</string>
     <!-- 默认 0.85 实测过猛：13 工具的 codex 会话里会藏掉 11 把（2,905 tok / 占 schema 78.7%），
