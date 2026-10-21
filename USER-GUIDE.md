@@ -44,17 +44,23 @@ git clone <你的仓库地址> multi-proxy
 cd multi-proxy
 ```
 
-项目包含七个模块，扁平目录结构：
+项目当前包含以下本机入口与可选组件（端口按 2026-10-22 本机监听实测补齐）：
 
-| 目录 | 说明 | 端口 |
+| 目录 / 组件 | 说明 | 端口 |
 |------|------|------|
-| `multi-proxy-manager/` | Web 管理后台（前端+后端） | 18792 |
-| `codex-proxy/` | Codex CLI 代理 | 18790 |
+| `workbuddy-shim/` | 可选：WorkBuddy → OpenAI 兼容 shim | 18789 |
+| `codex-proxy/` | Codex CLI / OpenAI 兼容代理 | 18790 |
 | `claude-proxy/` | Claude Code 代理（Anthropic 协议 + 模型别名映射） | 18791 |
-| `opencode-proxy/` | opencode 代理（OpenAI 兼容透传） | 18798 |
-| `generic-openai-proxy/` | Cline / Aider / OpenHands 共用代理（OpenAI 兼容透传） | 18799 |
+| `multi-proxy-manager/` | Web 管理后台（前端 + 后端） | 18792 |
 | `hermes-proxy/` | Hermes Agent 代理 | 18793 |
 | `cursor-proxy/` | Cursor IDE 代理 | 18794 |
+| `tools/token-policy-bridge.js` | 可选：token 策略透明桥 | 18795 |
+| `l2/savings-gateway/` | 省钱台账 + failover 网关 | 18796 |
+| `dsh-proxy/` | DeepSeek Harness 专属 lane | 18797 |
+| `opencode-proxy/` | opencode 代理（OpenAI 兼容透传） | 18798 |
+| `generic-openai-proxy/` | Cline / Aider / OpenHands 共用代理 | 18799 |
+| `opencode-free/` | 可选：opencode.ai 模型兼容插件 | 18800 |
+| `unified-ingress/` | **统一入口，按路径自动分发** | **18880** |
 
 ---
 
@@ -69,13 +75,12 @@ bash install.sh --all
 这会自动完成：
 1. 检测 Node.js 和 Python3 是否就绪
 2. 为 codex-proxy 安装 npm 依赖
-3. 为 claude-proxy 安装 npm 依赖
-4. 为 opencode-proxy 安装 npm 依赖
-5. 为 generic-openai-proxy 安装 npm 依赖
-6. 为 hermes-proxy 安装 pip 依赖
-7. 为 cursor-proxy 安装 npm 依赖并编译 TypeScript
-8. 为 multi-proxy-manager 安装 npm 依赖
-9. 为缺少 `.env` 的模块自动创建 `.env` 副本
+3. 为 hermes-proxy 安装 pip 依赖
+4. 为 cursor-proxy 安装 npm 依赖并编译 TypeScript
+5. 为 multi-proxy-manager 安装 npm 依赖
+6. 为这四个组件准备所需配置
+
+> **重要：**当前 `install.sh --all` 实际只覆盖 codex / hermes / cursor / manager，脚本中没有 claude / opencode / generic 的 install 函数。要使用后三者，继续执行下方「方式 C」对应目录的手动安装步骤；本文档只如实说明现状，不把未安装组件写成已安装。
 
 ### 方式 B：交互式安装
 
@@ -114,7 +119,7 @@ cd multi-proxy-manager && npm install && cd ..
 
 ## 四、配置环境变量
 
-安装完成后，每个模块目录下会生成一个 `.env` 文件（从 `.env.example` 复制而来）。你需要根据实际需求填写。
+安装完成后，先检查你实际安装的模块是否已有 `.env`；缺少时从该目录的 `.env.example` 复制后再填写。`install.sh --all` 只处理 codex / hermes / cursor / manager，不会替 claude / opencode / generic 完成安装与配置。
 
 ### 1. Codex Proxy (`codex-proxy/.env`)
 
@@ -283,6 +288,57 @@ bash manage.sh status
 ✓ Manager Shell  - 运行中 (PID: xxx, 端口: 18792)
   访问地址: http://localhost:18792
 ```
+
+> `install.sh --all` 只安装其中 codex / hermes / cursor / manager；Claude / OpenCode / Generic 只有在你按「方式 C」手动安装并启动后才会出现在状态列表中。
+
+---
+
+## 接入你的 agent（装完后的下一步）
+
+服务运行不等于 agent 已经改道。按客户端选择一种入口；以下 `export` 只在当前 shell 生效，不污染全局环境。
+
+### Codex CLI / OpenAI SDK / OpenAI 兼容工具
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:18790/v1
+```
+
+`18790` 是直接入口。统一入口 18880 已运行时，也可把值改为 `http://127.0.0.1:18880/v1`。
+
+### Claude Code
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:18880
+export ANTHROPIC_MODEL=deepseek-v4-pro
+```
+
+- `18880` 是统一入口；未运行时可把 `ANTHROPIC_BASE_URL` 改为 `http://127.0.0.1:18791` 直连 claude-proxy。
+- `ANTHROPIC_MODEL` 必须是上游真实模型名；示例 `deepseek-v4-pro` 已由本机模型列表验证存在。
+- claude-proxy（18791）与 codex-proxy（18790）自 2026-10-02 起均已实现 `/v1/messages`。
+
+### 统一入口 18880 怎么分发
+
+| 请求路径 | 后端 |
+|----------|------|
+| `/v1/messages` | claude-proxy（18791） |
+| `/v1/responses`、`/v1/chat/completions`、`/v1/models` | codex-proxy（18790） |
+| `/api/*` | manager（18792） |
+
+### Cursor
+
+1. 打开 `Cursor → Settings → Models → Override OpenAI Base URL`。
+2. `Base URL` 填 `http://127.0.0.1:18794`。
+3. `API Key` 填任意非空值；18794 的 `/v1` 端点不校验该值。
+4. 模型选择 18794 `/v1/models` 返回的真实名称，例如 `agnes-3.0-flash`。不要使用 Cursor 默认的 `gpt-5` / `claude-3.7-sonnet` / `claude-sonnet-4`，这些名称实测返回 404。
+
+### 一行验证
+
+```bash
+curl --noproxy '*' http://127.0.0.1:18790/v1/models
+bash manage.sh status
+```
+
+第一条应返回 `object: "list"` 的模型清单；第二条检查服务状态。当前仓库的 `manage.sh` 文件模式是 `100644`，应使用 `bash manage.sh status`；直接执行 `./manage.sh status` 会报 `permission denied`。
 
 ---
 
@@ -506,33 +562,35 @@ pip3 install flask pyyaml requests pytest --break-system-packages
 
 > **注意：** `flask` 是 Hermes 代理的运行时依赖，但沙箱/新环境中可能未安装。如果跑 Hermes 测试时报 `ModuleNotFoundError: No module named 'flask'`，请先执行上面的命令。
 
-### 2. 运行所有单元测试
+### 2. 运行测试
+
+以下命令都从仓库根目录执行：
 
 ```bash
-# Manager
-cd multi-proxy-manager && NODE_ENV=test npx jest --verbose --forceExit
-
-# Codex
-cd codex-proxy && NODE_ENV=test npx jest --verbose --forceExit
-
-# Hermes
-cd hermes-proxy && PYTHONPATH=. python3 -m pytest tests/ -v
-
-# Cursor
-cd cursor-proxy && NODE_OPTIONS='--experimental-vm-modules' npx jest --verbose
+(cd multi-proxy-manager && npx jest --silent --forceExit)
+(cd codex-proxy && npx jest --silent --forceExit)
+(cd claude-proxy && npx jest --silent --forceExit --worker=1)
+(cd generic-openai-proxy && npx jest --silent --forceExit --worker=1)
+(cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit)
+(cd hermes-proxy && python3 -m pytest tests/ -q)
+find l2 -name '*.demo.js' -print0 | xargs -0 -n1 node
 ```
 
-### 2. 验收清单
+### 3. 2026-10-22 真跑基线
 
-| 检查项 | 预期结果 |
-|--------|---------|
-| Manager 测试 | 1458/1458 通过（94 suites） |
-| Codex 测试 | 159/159 通过（14 suites） |
-| Hermes 测试 | 77/77 通过（4 files） |
-| Cursor 测试 | 250/250 通过（21 suites） |
-| **总计** | **1944/1944 通过** |
+| 检查项 | 真实结果 |
+|--------|----------|
+| Manager 测试 | 1579 pass / 1 fail |
+| Codex 测试 | 179 pass |
+| Claude 测试 | 174 pass |
+| Generic 测试 | 207 pass / 3 timeout |
+| Cursor 测试 | 258 pass |
+| Hermes 测试 | 80 pass |
+| L2 demo | 55 pass / 1 fail |
 
-### 3. 功能验收
+失败与超时均按 2026-10-22 输出原样保留，当前基线不是“全绿”。opencode / dsh / shell 没有纳入本次真跑，不沿用旧数字。
+
+### 4. 功能验收
 
 | 检查项 | 验证方式 |
 |--------|---------|

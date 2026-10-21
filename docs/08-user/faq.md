@@ -175,7 +175,7 @@ cursor-proxy 是新写的 L2 架构载体（chatHandler + routeEngine + agentReg
 |----|------|--------|
 | P4 continuity-kernel 真代码 | ❌ 仅设计稿，无 `.js` | 高 |
 | P3 进程级崩溃恢复 | ❌ 草案未落 | 高 |
-| `/v1/messages` Anthropic ingress | ❌ 全仓无路由 | 中 |
+| `/v1/messages` Anthropic ingress | ✅ 2026-10-02 起已实现：claude-proxy（18791）与 codex-proxy（18790）均有路由，本机 POST 实测 HTTP 200；旧结论“全仓无路由”已作废 | — |
 | provider-selector 4 策略（smart/order/rotate/usage） | ❌ 现状 order 隐式 | 中 |
 | hermes E2E 补 1 pytest | ❌ 未实施 | 中 |
 | D3-③ decomposer 扩 5-stage | ⏸ 挂起（消费方不存在） | 低 |

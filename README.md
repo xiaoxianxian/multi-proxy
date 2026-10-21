@@ -12,6 +12,8 @@ This file is part of the multi-proxy project.
 
 cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决的是上一层：**项目 → 任务 → 分派 → 验收 → 记忆复用**。它站在本地私有栈（Ollama / MiniMax H3 / 自托管 API）之上，把多个 coding agent 编排成一条可验收的工作流，全程非侵入——agent 感知不到中枢的存在。
 
+> **第一次使用：**还没安装，从[快速开始](#十快速开始)开始；已经装好且服务全绿，直接跳到[接入你的 agent](#接入你的-agent)，30 秒完成「改出口 → 验证」。
+
 ## 定位：本地多编码代理的调度层，不是又一个 Agent 框架
 
 多 agent 工具分两类：一类做**编排框架**（CrewAI / LangGraph——你把任务交给它的抽象），一类做**云端沙箱编排**。multi-proxy 都不做，它做**管理层**：Codex / Claude Code / Cursor 照原来怎么用还怎么用，multi-proxy 站在中间，管住四件天天出事的小事：
@@ -84,14 +86,21 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 
 | 模块 | 技术栈 | 端口 | 说明 |
 |------|--------|------|------|
-| `multi-proxy-manager/` | Node.js + Express + Electron 桌面壳 | 18792 | Web 管理界面（前端 + 后端 + L2 内核） |
-| `codex-proxy/` | Node.js + Express | 18790 | Codex CLI 代理 |
+| `workbuddy-shim/` | Node.js 原生 HTTP | 18789 | 可选：WorkBuddy → OpenAI 兼容 shim |
+| `codex-proxy/` | Node.js + Express | 18790 | Codex CLI / OpenAI 兼容代理 |
 | `claude-proxy/` | Node.js + Express | 18791 | Claude Code 代理（Anthropic Messages 协议 + 模型别名映射） |
-| `opencode-proxy/` | Node.js + Express | 18798 | opencode 代理（OpenAI 兼容透传 + 成本台账 + 熔断） |
-| `generic-openai-proxy/` | Node.js + Express | 18799 | Cline / Aider / OpenHands 共用代理（OpenAI 兼容透传 + 成本台账 + 熔断） |
+| `multi-proxy-manager/` | Node.js + Express + Electron 桌面壳 | 18792 | Web 管理界面（前端 + 后端 + L2 内核） |
 | `hermes-proxy/` | Python + Flask | 18793 | Hermes Agent 代理 |
 | `cursor-proxy/` | TypeScript + Express + SQLite | 18794 | Cursor IDE 代理 |
-| `dsh-proxy/` | Node.js + Express | PORT 可配 | DeepSeek Harness 客户端代理 |
+| `tools/token-policy-bridge.js` | Node.js 原生 HTTP | 18795 | 可选：token 策略透明桥，上游为 18790 |
+| `l2/savings-gateway/` | Node.js | 18796 | 省钱台账 + failover 网关，上游为 18790 |
+| `dsh-proxy/` | Node.js + Express | 18797 | DeepSeek Harness 专属 OpenAI 兼容 lane |
+| `opencode-proxy/` | Node.js + Express | 18798 | opencode 代理（OpenAI 兼容透传 + 成本台账 + 熔断） |
+| `generic-openai-proxy/` | Node.js + Express | 18799 | Cline / Aider / OpenHands 共用代理 |
+| `opencode-free/` | Node.js | 18800 | 可选：opencode.ai 模型 OpenAI 兼容插件 |
+| `unified-ingress/` | Node.js 原生 HTTP | **18880** | **统一入口**：按路径分发到 18790 / 18791 / 18792 |
+
+> 端口表按 2026-10-22 本机 `/usr/sbin/lsof -nP -iTCP -sTCP:LISTEN` 的 13 个项目监听端口补齐；其中 18789、18795、18800 为可选 shim / bridge / 插件，`install.sh --all` 不会安装全部 13 个监听服务。
 
 **网关层能力**：协议转换（OpenAI Responses ↔ Chat Completions）、负载均衡（Failover / Round Robin）、成本优化路由、路由规则热插拔。
 
@@ -99,7 +108,7 @@ cc-switch、Codex++ 这一类工具解决的是「切模型」；本仓库解决
 
 ## 三、中台层（L2 核心）
 
-10+ 能力内核模块（`l2/*.js`），配 29 个 E2E demo（`l2/*.demo.js`，09-28 真跑全部通过）：
+10+ 能力内核模块（`l2/*.js`），配套 E2E demo（`l2/*.demo.js`；当前真跑基线见第十四节）：
 
 | 内核模块 | 能力 |
 |----------|------|
@@ -234,12 +243,9 @@ bash tools/agent-proxy-switch codex cc-switch    # 切换（结构上杜绝双�
 
 ```bash
 # ── macOS / Linux（bash） ──
-bash install.sh --all        # 安装依赖 + 从 .env.example 生成各代理 .env
-# 编辑各代理 .env 配置 API Key
+bash install.sh --all        # 当前只安装 codex / hermes / cursor / manager
+# 编辑已安装代理的配置，填写实际使用的 API Key
 nano codex-proxy/.env
-nano claude-proxy/.env
-nano opencode-proxy/.env
-nano generic-openai-proxy/.env
 nano cursor-proxy/.env
 # Hermes 用 YAML：cp hermes-proxy/config.yaml.example hermes-proxy/config.yaml 后编辑
 bash manage.sh start
@@ -247,11 +253,49 @@ bash manage.sh status
 # 管理面板 → http://127.0.0.1:18792
 ```
 
+> **当前安装边界：**`install.sh --all` 只覆盖 codex / hermes / cursor / manager，脚本内没有 claude / opencode / generic 的 install 函数。要使用后三者，先按 `USER-GUIDE.md`「方式 C：逐个安装」手动安装依赖并准备各自 `.env`；这是安装脚本的代码层缺口，不在本文档修复范围内。
+
 ```powershell
 # ── Windows（PowerShell，原生，无需 WSL） ──
 .\install.ps1        # 安装依赖 + 启动 + 配置登录自启
 .\manage.ps1 status  # 查看状态
 ```
+
+### 接入你的 agent
+
+服务全绿只代表代理已经运行；还要把 agent 的模型出口指向本机代理。以下 `export` 只影响当前 shell，不写全局环境。
+
+**Codex CLI / OpenAI SDK / OpenAI 兼容工具：**
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:18790/v1
+```
+
+也可以在统一入口已运行时改用 `http://127.0.0.1:18880/v1`。`18880` 按路径自动分发：`/v1/messages` → claude-proxy（18791），`/v1/responses`、`/v1/chat/completions` 和 `/v1/models` → codex-proxy（18790），`/api/*` → manager（18792）。
+
+**Claude Code：**
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:18880
+export ANTHROPIC_MODEL=deepseek-v4-pro
+```
+
+统一入口未运行时，把 `ANTHROPIC_BASE_URL` 改为 `http://127.0.0.1:18791` 直连 claude-proxy。`ANTHROPIC_MODEL` 必须填写你的上游实际模型名；示例 `deepseek-v4-pro` 已出现在本机 `/v1/models` 返回中。claude-proxy（18791）与 codex-proxy（18790）自 2026-10-02 起均已实现 Anthropic `/v1/messages` 路由。
+
+**Cursor：**
+
+1. 打开 `Cursor → Settings → Models → Override OpenAI Base URL`。
+2. `Base URL` 填 `http://127.0.0.1:18794`；`API Key` 填任意非空值（18794 的 `/v1` 端点不校验该值）。
+3. 模型选 18794 `/v1/models` 返回的真实名称，例如 `agnes-3.0-flash`；不要选 Cursor 默认的 `gpt-5` / `claude-3.7-sonnet` / `claude-sonnet-4`，这些名称实测会返回 404。
+
+**一行验证：**
+
+```bash
+curl --noproxy '*' http://127.0.0.1:18790/v1/models
+bash manage.sh status
+```
+
+> 当前仓库中的 `manage.sh` 文件模式为 `100644`，因此应通过 `bash manage.sh status` 运行；字面执行 `./manage.sh status` 会得到 `permission denied`。本文档不越权修改脚本权限。
 
 **开机自启（按平台）**：
 - macOS：`bash install.sh --autostart`（launchd，写 `~/Library/LaunchAgents/com.multi-proxy-manager.plist`）
@@ -262,7 +306,7 @@ bash manage.sh status
 
 **前置**：Node.js 20+（cursor-proxy 的 TypeScript 测试需 Node 24 + ESM runner）；Python3（Hermes）。端口检测已跨平台（优先 `lsof`，回退 `ss` / `/proc/net/tcp`）。支持 macOS（launchd）/ Linux（systemd --user）/ Windows（PowerShell + 计划任务）。Linux 装依赖：`sudo apt install nodejs npm python3`；Windows 需先装 Node.js 与 Python3。
 
-完整上手流程见 `docs/quickstart.md`；验收口径见 `docs/06-test/acceptance.md`。
+完整上手流程见 `docs/quickstart.md`。
 
 **启动顺序与端口依赖**：代理相互独立可单独起停；`18790`(codex) 是核心网关，savings-gateway(`18796`) 反向依赖它（`upstream: 127.0.0.1:18790`）。一键 `bash manage.sh start` 按依赖顺序拉起；单服务 `bash manage.sh <agent> start`。所有端口默认绑 `127.0.0.1`，仅 Docker/跨机显式 `BIND_HOST=0.0.0.0`。运行状态一键核对：`bash tools/health-all.sh`。
 
@@ -300,7 +344,7 @@ bash manage.sh status
 2. **一个 agent 的 `base_url` 同一时刻只有一个所有者。** `lib/agent-owner.js` 读的是各 agent 自己配置里 `base_url` 的实际指向，而不是谁在听端口；cc-switch 占着 15721 时桌面壳开壳前先 `detectAll()`，撞了就把该 agent 的开关置关并提示，不抢、不覆写。这块来自一次真实事故（裸 `*` 污染 NO_PROXY 把本机所有走代理的 GUI 应用带崩，见第七节），上下文不在代码里。
 3. **本地是一档路由条件，不是一个开关。** 路由规则打上 `privacy == true → 本地模型`，下游地址就是 `127.0.0.1`，是架构性保证而不是调参调出来的效果。
 
-也讲一句该讲的：**如果只想省 API 的钱、要一个两分钟跑起来的网关，这个 repo 过重。** 它是为「本机多个 agent 同时在跑、数据不能出这台机器」这一层做重的；单端口轻量网关在满足前面那个需求上更合适。
+也讲一句该讲的：**如果只想省 API 的钱、要一个两分钟跑起来的网关，这个 repo 过重。** 它是为「本机多个 agent 同时在跑、数据不能出这台机器」这一层做重的；单端口轻量网关在满足前面那个需求上更合适。如果你的场景正是多 agent 协作或本地隐私路由，直接从[接入你的 agent](#接入你的-agent)开始，不必先读完后面的实现细节。
 
 ## 十三、3 分钟演示
 
@@ -313,22 +357,21 @@ bash scripts/demo-tour.sh --quick  # 只看 demo 不跑测试（约 30 秒）
 
 ---
 
-## 十四、测试与验收（manager 1458 / codex 159 / claude 174 / opencode 159 / generic 177 / cursor 250 / hermes 77 / dsh 20 / l2 51 demo / shell 11 · 2026-10-14~15 实测全绿）
+## 十四、测试与验收（2026-10-22 真跑基线；当前非全绿）
 
-| 模块 | 命令 | 结果 |
-|------|------|------|
-| multi-proxy-manager | `cd multi-proxy-manager && npx jest --silent --forceExit` | 1458/1458（94 suites） |
-| codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 159/159（14 suites） |
-| claude-proxy | `cd claude-proxy && npx jest --silent --forceExit --worker=1` | 174/174（15 suites） |
-| opencode-proxy | `cd opencode-proxy && npx jest --silent --forceExit --worker=1` | 159/159（14 suites） |
-| generic-openai-proxy | `cd generic-openai-proxy && npx jest --silent --forceExit --worker=1` | 159/159（14 suites） |
-| cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit` | 250/250（21 suites） |
-| hermes-proxy | `cd hermes-proxy && python3 -m pytest tests/ -q` | 77/77（4 files） |
-| dsh-proxy | `cd dsh-proxy && npm test`（node:test，零第三方依赖） | 20/20（1 file，2026-10-15 实跑） |
-| **L2 demo** | `find l2 -name '*.demo.js' -print0 \| xargs -0 -n1 node` | 51/51 demo 跑通 |
-| shell (bats) | `cd tests/shell && bats *.bats` | 11/11（CI 无 bats 时走 `check.sh` 零依赖回退） |
+| 模块 | 真实命令 | 2026-10-22 结果 |
+|------|----------|----------------|
+| multi-proxy-manager | `cd multi-proxy-manager && npx jest --silent --forceExit` | 1579 pass / 1 fail |
+| codex-proxy | `cd codex-proxy && npx jest --silent --forceExit` | 179 pass |
+| claude-proxy | `cd claude-proxy && npx jest --silent --forceExit --worker=1` | 174 pass |
+| generic-openai-proxy | `cd generic-openai-proxy && npx jest --silent --forceExit --worker=1` | 207 pass / 3 timeout |
+| cursor-proxy | `cd cursor-proxy && NODE_OPTIONS=--experimental-vm-modules npx jest --silent --forceExit` | 258 pass |
+| hermes-proxy | `cd hermes-proxy && python3 -m pytest tests/ -q` | 80 pass |
+| **L2 demo** | `find l2 -name '*.demo.js' -print0 \| xargs -0 -n1 node` | 55 pass / 1 fail |
 
-历史修复记录见 `P0-FIXES.md`（11 项 P0）；完整验收判据见 `docs/06-test/acceptance.md`。
+以上数字是 2026-10-22 的命令真跑快照，失败与超时均原样保留，不写成“全绿”。opencode / dsh / shell 未纳入本次真跑基线，不沿用旧数字冒充当前结果。
+
+历史修复记录见 `P0-FIXES.md`（11 项 P0）。
 
 ---
 
@@ -349,7 +392,7 @@ multi-proxy/
 ├── cursor-proxy/              # TypeScript/SQLite 代理（18794）
 ├── dsh-proxy/                 # Node.js 代理（DeepSeek Harness，PORT 可配）
 ├── desktop/                   # Electron 桌面壳（启动器 + 窗口）
-├── l2/                        # L2 编排中枢：10+ 内核 + 5 adapter + 51 demo
+├── l2/                        # L2 编排中枢：10+ 内核 + 5 adapter + 配套 demo
 │    ├── adapters/             # codex·hermes / h3web / aigc / claude / memory-align 适配器
 │    ├── adapter-protocol.md   # 开放接入协议
 │    ├── savings-gateway/      # 省钱网关 + 成本看门狗
@@ -432,11 +475,11 @@ multi-proxy/
 | opencode 接入（opencode-proxy 18798，OpenAI 兼容透传 + 成本台账 + 熔断） | 完成 |
 | Generic OpenAI 接入（generic-openai-proxy 18799，Cline/Aider/OpenHands 共用 OpenAI 兼容透传 + 成本台账 + 熔断 + 有界兜底） | 完成 |
 | P0 安全修复（`P0-FIXES.md`：11 项） | 完成 |
-| 全量测试 manager 1458 / codex 159 / claude 174 / opencode 159 / generic 177 / cursor 250 / hermes 77 / dsh 20 / l2 51 demo / shell 11 全绿（2026-10-14~15 实测） | 完成 |
+| 测试基线：manager 1579 pass / 1 fail；codex 179 pass；claude 174 pass；generic 207 pass / 3 timeout；cursor 258 pass；hermes 80 pass；L2 demo 55 pass / 1 fail（2026-10-22 真跑） | ⚠️ 基线已记录，当前非全绿 |
 | ~~交付前最后一批功能集中开发~~ | ✅ 已交付（2026-10-14 转公开 v1.1.0；此后进入持续迭代：generic failover / 文档基线重写 / 适配器计数对账） |
 | 企业版（多租户 / 网关层 / 审计） | 规划中，归 Portico 控制面，未动工 |
 
-> 对外定位：`docs/02-product/v1-positioning-declared.md` · 商业简介：`docs/02-product/business-intro.md` · 文档目录：`docs/00-codebase-map.md` · 架构：`docs/03-architecture/architecture.md` · 验收：`docs/06-test/acceptance.md`。
+> 对外定位：`docs/02-product/v1-positioning-declared.md` · 商业简介：`docs/02-product/business-intro.md` · 文档目录：`docs/00-codebase-map.md` · 架构：`docs/03-architecture/architecture.md`。
 
 ## License（开源版 AGPL-3.0 · 双许可）
 
