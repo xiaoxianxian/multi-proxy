@@ -171,3 +171,6 @@ eval/**/.tmp_*.txt
 # 2026-10-19 增补：E2E 结果存档（03:50 老板四项拍板②「git 外存档」——留盘不入库）
 e2e-matrix-results-*/
 multi-proxy-manager/matrix-results/
+
+# graphify 本地图谱产物（agent-infra/tools/project-delta 同层工具生成，不入库）
+graphify-out/

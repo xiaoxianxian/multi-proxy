@@ -546,6 +546,22 @@
       </div>
     </div>
 
+    <!-- 账本主权 Hero（2026-10-21）：把成本 digest 提到总览首屏，差异化于 Magpie 的「模型切换」叙事 -->
+    <div class="hig-card" id="costSovereigntyCard" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">账本主权 · 上周节省</div>
+          <div class="hig-card-subtitle">多 agent 统一网关的核心差异：每一笔花销按 agent 归因、本地流量零成本、账本归你</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadCostSovereignty()">刷新</button>
+      </div>
+      <div class="hig-card-body">
+        <div id="costSovereigntyBody">
+          <div class="empty-state"><div class="empty-text">正在加载账本…</div></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Version Info Card -->
     <div class="hig-card" style="margin-bottom:20px;">
       <div class="hig-card-header">
@@ -914,6 +930,9 @@
       <h1 class="page-title">成本</h1>
       <p class="page-subtitle">各 provider 实时余额 · 当前周期预算判级 · 本月累计（模拟值）</p>
     </div>
+    <div style="margin-bottom:16px;padding:12px 14px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--muted-foreground);">
+      本页讲的是 <b>账本主权</b>，不是「怎么切便宜模型」。我们<b>不靠绕开订阅条款省钱</b>（那是 Magpie 的灰色玩法，厂商账号风控一收紧就失灵，且踩 ToS）。multi-proxy 的「省」来自：每一笔花销<b>按 agent 归因</b>、本地模型流量<b>零成本</b>、<b>账本归你</b>——可复核、可导出、不绑架你的账号。
+    </div>
     <div class="hig-card" style="margin-bottom:20px;">
       <div class="hig-card-header">
         <div>
@@ -1223,6 +1242,7 @@
     else if (pageId === 'registry') loadRegistryPage();
     else if (pageId === 'sessions') loadSessions();
     else if (pageId === 'cost') { loadCostPage(); loadWatchtower(); }
+    else if (pageId === 'dashboard') loadCostSovereignty();
     else if (pageId === 'shadow') loadShadowPage();
   }
 
@@ -2161,6 +2181,47 @@
       });
   }
 
+  // ---- 账本主权 Hero（2026-10-21）----
+  // 与 loadWatchtower 同源（/api/cost/watchtower），但只取首屏最该被看见的三数 + 一条差异化宣言。
+  // 口径纪律同 loadWatchtower：算不出一律画「—」，绝不折算成 0。
+  function loadCostSovereignty() {
+    var body = document.getElementById('costSovereigntyBody');
+    if (!body) return;
+    fetch('/api/cost/watchtower?days=7', { headers: { 'x-auth-token': authToken || '' } })
+      .then(function(r) { return r.json(); })
+      .then(function(w) {
+        if (!w || w.ok !== true) {
+          // 读失败必须带出后端原因（同 loadWatchtower 纪律），不要只说「读取失败」。
+          body.innerHTML = '<div class="empty-state"><div class="empty-text" style="color:#d97706;">账本读取失败</div>' +
+            '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;">' + wtEsc((w && w.error) || '未知错误') + '</div></div>';
+          return;
+        }
+        var cur = (w.spend && w.spend.currency) || null;
+        var cards = [
+          { label: '实际花费', value: wtMoney(w.spend && w.spend.actualCost, cur), sub: ((w.spend && w.spend.requestCount) || 0) + ' 次请求' },
+          { label: '模型重写已省', value: w.saved && w.saved.computable ? wtMoney(w.saved.byRouting, cur) : '—',
+            sub: w.saved && w.saved.computable ? ('对标 ' + wtMoney(w.saved.baselineCost, cur)) : (w.saved && w.saved.reason ? wtEsc(w.saved.reason) : '算不出') },
+          { label: '零花费请求占比', value: (w.zeroCost && w.zeroCost.ratio !== null && w.zeroCost.ratio !== undefined) ? Math.round(w.zeroCost.ratio * 100) + '%' : '—',
+            sub: ((w.zeroCost && w.zeroCost.requestCount) || 0) + ' / ' + ((w.spend && w.spend.requestCount) || 0) }
+        ];
+        body.innerHTML =
+          '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
+          cards.map(function(c) {
+            var neg = (typeof c.value === 'string' && c.value.indexOf('-') === 0);
+            return '<div style="flex:1;min-width:140px;padding:14px;background:var(--color-bg-secondary);border-radius:8px;">' +
+              '<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:4px;">' + c.label + '</div>' +
+              '<div style="font-size:20px;font-weight:700;color:' + (neg ? '#ef4444' : 'var(--foreground)') + ';">' + wtEsc(c.value) + '</div>' +
+              '<div style="font-size:11px;color:var(--muted-foreground);margin-top:4px;">' + c.sub + '</div></div>';
+          }).join('') + '</div>' +
+          '<div style="font-size:12px;line-height:1.6;color:var(--muted-foreground);padding:10px 12px;border-radius:8px;background:var(--color-bg-secondary);border:1px solid var(--color-border);">' +
+          '<b>不拼「切模型」，拼账本主权。</b>我们不做绕订阅条款省钱的灰色玩法（Magpie 那套，账号风控一收紧就失灵）。multi-proxy 的「省」来自：每一笔花销<b>按 agent 归因</b>、本地模型流量<b>零成本</b>、<b>账本归你</b>——可复核、可导出、不绑架你的账号。' +
+          '</div>';
+      })
+      .catch(function() {
+        body.innerHTML = '<div class="empty-state"><div class="empty-text">无法获取账本（manager 未运行或未登录）</div></div>';
+      });
+  }
+
   function renderSessionsList(sessions, containerId) {
     var container = document.getElementById(containerId);
     if (!container) return;
@@ -2560,6 +2621,7 @@
        ]).then(function() {
        loadSessions();
        loadProviderHealth();
+       loadCostSovereignty();
        // Check API Key completeness
        fetch('/api/env-check')
           .then(function(res) { return res.json(); })

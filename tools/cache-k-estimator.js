@@ -6,9 +6,23 @@
 // cache-k-estimator：从代理白拿的 usage 自测「退回段是否按未命中价计费」（k）
 //
 // 为什么必须自测：tools 懒加载在带 prompt cache 的上游上赚不赚，取决于一个上游
-// 私有口径 k —— 断点后退那一截（退回段）是否按未命中价收。这个数官方没写，
-// 而且 DeepSeek 的 prompt_cache_miss_tokens 语义至今未回源（53 号文档标红线：
-// 实测裁到 4 把时 miss 反而比不裁更小，明显不等于「未命中的输入 token」）。
+// 私有口径 k —— 断点后退那一截（退回段）是否按未命中价收。这个数官方没写。
+// ⭐ 2026-10-20 回源 + 实测闭合（细节见 docs/10-initiatives/94-DeepInfer与deepseek-recipe
+// 外部对照-2026-10-20.md §7）：
+//   ① 定义已回源：DeepSeek 官方 kv_cache 文档——prompt_cache_miss_tokens＝本请求输入中
+//      未命中的 token（即 输入−命中）。53 号「裁到 4 把时 miss 反而变小」按此重算自洽
+//      （被裁 token 不在请求里，输入与 hit 同步缩短，miss 只动差值：估算 −44 vs 实测 −58）。
+//      命中机制＝前缀单元全匹配（非最长公共前缀）。
+//   ② ⭐ k 已实测闭合（2026-10-20 真实 API，工具 tools/cache-k-real-run.js）：真实 codex
+//      13 工具表 + 本 policy + deepseek-flash 直连，suffix/mid 双模式各 4 会话，
+//      **8/8 换挡样本 k̂=0**（residual 全为负 ⇒ 上游 miss 口径比「新增正文」还省）。
+//      ⇒ k ≤ k*(0.0204) ⇒ mid 不亏，auto 保持 mid 的依据坐实。
+//      附带成本实测（干净 A/B、缓存隔离、同消息结构）：mid R3 省 31.9% vs suffix 省
+//      10.9% 元/轮。与 53/54 旧价（d=0.1：mid −12.0% vs suffix −4.7%）方向一致且
+//      **mid 优势扩大**（7.3 → 21 个点）——d 收紧后命中变便宜、miss 主导成本，
+//      激进裁剪更占优，与经济学方向自洽。
+//   ③ 复跑：node tools/cache-k-real-run.js --sessions 4（< $0.05；402=余额不足）。
+//      ⚠️ DeepSeek API 必须直连：7897 代理吞 Authorization 头。
 // k 只能实测定，而代理站在请求路径中间、每轮都能白拿 usage —— 这是 agent 侧
 // 工具（Graft/zg 之流）和纯 Lakehouse 厂商都拿不到的位置。
 //
@@ -31,9 +45,14 @@ const path = require('path');
 const STORE = path.join(process.env.HOME || '/tmp', '.multi-proxy/cache-estimate.json');
 
 // 命中价折扣：命中 token 的单价 / 未命中 token 的单价。
-// DeepSeek 官方 news0802：命中 0.1 元/M、未命中 1 元/M ⇒ d=0.1。
+// 默认 0.02 ＝ 2026-10-20 官方定价页现价（Flash）：命中 $0.003/M、未命中 $0.15/M
+// ⇒ 谷 0.02、峰（$0.006/$0.3）同为 0.02，与时段无关。旧值 0.1 源自 2026-08-02
+// 官方 news0802（0.1 元/M vs 1 元/M），已过时。2026-10-20 老板拍改为现价。
+// 影响面：kStar = d/(1−d) 由 0.111 收紧到 0.0204 ⇒ k ∈ [0.0204, 0.111] 的样本
+// 建议由 mid 翻 suffix（命中折扣深 ⇒ 保前缀更值钱）。已核旧样本：账本唯一样本
+// k=0，两种 d 下均判 mid，结论不翻转。回源记录见 94 号文档 §7.4。
 function kStar(discount) {
-  const d = Number.isFinite(discount) ? discount : 0.1;
+  const d = Number.isFinite(discount) ? discount : 0.02;
   return d / (1 - d); // 净收益 = H·d − R·k·(1−d)，suffix 下 R=H ⇒ k ≤ k* 才不亏
 }
 

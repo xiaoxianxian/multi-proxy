@@ -58,9 +58,15 @@ const DEFAULTS = {
   // mid           = 删掉所有未使用的（跳着删），断点退到第一个被删工具处，后退量 > 隐藏量。
   //   在"退回段按满价计费"的上游（k=1）上 mid 是亏的；但在 k≈0 的上游上 mid 实测多赚 7 个点
   //   （DeepSeek V4.1-Flash 实测：mid −12.0% 元/轮 vs suffix −4.7%，见 53/54 号）。
+  //   ⭐ 2026-10-20 新价复验（d=0.02，tools/cache-k-real-run.js 真实 API 干净 A/B）：
+  //     mid R3 省 31.9% vs suffix 省 10.9% —— 方向一致且 mid 优势扩大（7.3→21 个点），
+  //     因为 d 收紧后命中便宜、miss 主导成本，激进裁剪更占优；k̂=0（8/8 样本）
+  //     ⇒ k ≤ k*(0.0204) ⇒ mid 不亏，auto 保持 mid 的依据坐实。
   //   'auto' = 按自测的 k 选；显式写 suffix/mid 则强制（扫参/兜底用）。
   pruneMode: 'auto',
-  cacheDiscount: 0.1, // 命中价 / 未命中价，DeepSeek 官方 news0802（0.1 元/M vs 1 元/M）
+  cacheDiscount: 0.02, // 命中价 / 未命中价，2026-10-20 官方定价页现价（Flash：$0.003/M vs $0.15/M，峰谷同率）；
+  // 旧值 0.1 源自 2026-08-02 news0802 已过时；2026-10-20 老板拍改现价（回源见 94 号文档 §7.4）。
+  // 影响：kStar 0.111→0.0204，k ∈ [0.0204, 0.111] 样本建议 mid→suffix；53/54 实测样本 k=0 不变（仍 mid）。
 };
 const KE = require('../../../tools/cache-k-estimator.js');
 // k 的取值来源优先级：显式 env > cache-estimate.json（自测落盘）> 未标定(0)。
