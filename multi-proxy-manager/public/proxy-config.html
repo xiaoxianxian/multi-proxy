@@ -837,11 +837,11 @@
       }
     }
 
-    async function addProvider(name, pid, url, key, enabled) {
+    async function addProvider(name, pid, url, key, enabled, responsesTranslate, responsesTarget) {
       try {
         await fetchAdminApi('/providers', {
           method: 'POST',
-          body: JSON.stringify({ name, provider_id: pid, base_url: url, api_key: key, enabled }),
+          body: JSON.stringify({ name, provider_id: pid, base_url: url, api_key: key, enabled, responsesTranslate, responsesTarget }),
         });
         await loadProviders();
         renderProviders();
@@ -858,9 +858,9 @@
       }
     }
 
-    async function updateProvider(id, name, url, key, enabled) {
+    async function updateProvider(id, name, url, key, enabled, responsesTranslate, responsesTarget) {
       try {
-        const body = { name, base_url: url, enabled };
+        const body = { name, base_url: url, enabled, responsesTranslate, responsesTarget };
         if (key) body.api_key = key;
         await fetchAdminApi('/providers/' + encodeURIComponent(id), {
           method: 'PUT',
@@ -1407,8 +1407,9 @@
         // B8: API Key 明文不进 DOM —— 显示掩码，复制/测试按钮只带 data-id，
         // 点击时从内存 providers 数组按 id 取 key。
         var displayKey = maskKey(p.api_key);
+        var rtBadge = (p.responsesTranslate) ? ' <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:6px;font-size:11px;font-weight:600;background:var(--color-primary);color:#fff;vertical-align:middle;">↔ 翻译</span>' : '';
         html += '<tr data-provider-id="' + esc(p.id) + '">' +
-          '<td><strong>' + esc(p.name) + '</strong></td>' +
+          '<td><strong>' + esc(p.name) + '</strong>' + rtBadge + '</td>' +
           '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(p.provider_id) + '">' + esc(p.provider_id) + '</code></td>' +
           '<td><code style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(p.base_url) + '">' + esc(p.base_url) + '</code></td>' +
           '<td><code class="api-key-display" data-id="' + esc(p.id) + '" style="background:var(--color-bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;font-family:\'SF Mono\',Menlo,monospace;max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="点击复制">' + displayKey + '</code></td>' +
@@ -1525,6 +1526,39 @@
       return row;
     }
 
+    // Responses API 协议翻译区块：仅 codex 代理显示（responsesTranslate 门控）
+    function createResponsesTranslateSection(checked, target) {
+      var box = document.createElement('div');
+      box.className = 'form-check';
+      box.style.marginTop = '14px';
+
+      box.appendChild(createCheckboxField('modal-responses-translate', '开启 Responses API 协议翻译', !!checked));
+
+      var selWrap = document.createElement('div');
+      selWrap.style.cssText = 'margin-top:10px;';
+      var selLabel = document.createElement('label');
+      selLabel.style.cssText = 'display:block;font-size:12px;color:var(--color-text-tertiary);margin-bottom:6px;';
+      selLabel.textContent = '上游协议（把 Responses 翻译成哪种上游协议）';
+      var sel = document.createElement('select');
+      sel.id = 'modal-responses-target';
+      sel.className = 'form-input';
+      sel.style.cssText = 'width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--color-border);background:var(--color-bg);color:var(--color-text);font-size:13px;';
+      var optChat = document.createElement('option');
+      optChat.value = 'chat'; optChat.textContent = 'Chat Completions（OpenAI 兼容上游，默认）';
+      var optMsg = document.createElement('option');
+      optMsg.value = 'messages'; optMsg.textContent = 'Anthropic Messages（Claude / 兼容上游）';
+      sel.appendChild(optChat); sel.appendChild(optMsg);
+      sel.value = (target === 'messages') ? 'messages' : 'chat';
+      selWrap.appendChild(selLabel); selWrap.appendChild(sel);
+      box.appendChild(selWrap);
+
+      var hint = document.createElement('p');
+      hint.style.cssText = 'margin:8px 0 0;font-size:12px;color:var(--color-text-tertiary);line-height:1.5;';
+      hint.textContent = '仅 codex 代理生效：上游不原生支持 /v1/responses 时（多数 OpenAI 兼容网关、Anthropic 兼容上游），开启后由网关把 Codex 的 Responses 请求翻译成上游真支持的协议再翻回。默认关闭 = 维持原透传。';
+      box.appendChild(hint);
+      return box;
+    }
+
     function showAddProviderModal() {
       var modal = document.createElement('div');
       modal.className = 'modal';
@@ -1543,6 +1577,9 @@
       modal.appendChild(createFormField('Base URL *', 'text', 'modal-base-url', { placeholder: 'https://api.openai.com/v1' }));
       modal.appendChild(createFormField('API Key *', 'password', 'modal-api-key', { placeholder: 'sk-...' }));
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', true));
+      if (currentProxyName === 'codex') {
+        modal.appendChild(createResponsesTranslateSection(false, 'chat'));
+      }
 
       var fetchRow = document.createElement('div');
       fetchRow.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--color-border);';
@@ -1589,10 +1626,14 @@
         var url = urlEl.value.trim();
         var key = keyEl.value.trim();
         var en = enEl.checked;
+        var rtEl = document.getElementById('modal-responses-translate');
+        var rtTargetEl = document.getElementById('modal-responses-target');
+        var rt = rtEl ? rtEl.checked : false;
+        var rtTarget = rtTargetEl ? rtTargetEl.value : 'chat';
         if (!name || !pid || !url || !key) { showToast('请填写所有必填字段', 'error'); return; }
         if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
         if (key.length < 8) { showToast('API Key 长度至少 8 个字符', 'error'); return; }
-        addProvider(name, pid, url, key, en);
+        addProvider(name, pid, url, key, en, rt, rtTarget);
         overlay.remove();
         showToast('已添加供应商 ' + name, 'success');
       };
@@ -1701,6 +1742,9 @@
       modal.appendChild(keyField);
 
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', provider.enabled));
+      if (currentProxyName === 'codex') {
+        modal.appendChild(createResponsesTranslateSection(provider.responsesTranslate, provider.responsesTarget));
+      }
 
       var fetchRow2 = document.createElement('div');
       fetchRow2.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--color-border);';
@@ -1740,13 +1784,17 @@
         var urlEl = document.getElementById('modal-base-url');
         var keyEl = document.getElementById('modal-api-key');
         var enEl = document.getElementById('modal-enabled');
+        var rtEl = document.getElementById('modal-responses-translate');
+        var rtTargetEl = document.getElementById('modal-responses-target');
         var name = nameEl.value.trim();
         var url = urlEl.value.trim();
         var key = keyEl.value.trim();
         var en = enEl.checked;
+        var rt = rtEl ? rtEl.checked : false;
+        var rtTarget = rtTargetEl ? rtTargetEl.value : 'chat';
         if (!name || !url) { showToast('请填写所有必填字段', 'error'); return; }
         if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
-        updateProvider(provider.id, name, url, key, en);
+        updateProvider(provider.id, name, url, key, en, rt, rtTarget);
         overlay.remove();
         showToast('已更新 ' + name, 'success');
       };

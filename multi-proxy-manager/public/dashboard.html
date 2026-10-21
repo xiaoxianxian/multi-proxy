@@ -562,6 +562,29 @@
       </div>
     </div>
 
+    <!-- 统一接入 Hero（2026-10-21）：单端点 18880 作为推荐接入 URL，隐藏 per-agent 端口心智 -->
+    <div class="hig-card" id="unifiedIngressCard" style="margin-bottom:20px;">
+      <div class="hig-card-header">
+        <div>
+          <div class="hig-card-title">统一接入 · 单端点</div>
+          <div class="hig-card-subtitle">推荐所有 agent 指向这一个 URL，网关按协议自动分发到对应后端；各 agent 专属端口仍然可用</div>
+        </div>
+      </div>
+      <div class="hig-card-body">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+          <code id="unifiedIngressUrl" style="background:var(--color-bg-secondary);padding:8px 14px;border-radius:8px;font-family:'SF Mono',Menlo,monospace;font-size:14px;color:var(--color-text);">http://127.0.0.1:18880/v1</code>
+          <button class="btn btn-outline btn-sm" onclick="copyUnifiedIngressUrl()">复制</button>
+        </div>
+        <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.7;">
+          <div style="margin-bottom:6px;"><b>按协议自动分发：</b></div>
+          <div>· <code>/v1/messages</code>（Anthropic / Claude Code）→ claude 18791</div>
+          <div>· <code>/v1/responses</code> · <code>/v1/chat/completions</code> · <code>/v1/models</code>（OpenAI / Codex）→ codex 18790</div>
+          <div>· <code>/api/*</code> · <code>/health</code>（管理面）→ manager 18792</div>
+          <div style="margin-top:10px;color:var(--color-text-tertiary);font-size:12px;">纯转发层，不改协议语义、不合并架构。这是可选前门——你仍可直连各 agent 专属端口（18790 / 18791 / …）。</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Version Info Card -->
     <div class="hig-card" style="margin-bottom:20px;">
       <div class="hig-card-header">
@@ -2220,6 +2243,20 @@
       .catch(function() {
         body.innerHTML = '<div class="empty-state"><div class="empty-text">无法获取账本（manager 未运行或未登录）</div></div>';
       });
+  }
+
+  // ---- 统一接入 Hero（2026-10-21）：复制推荐单端点 URL ----
+  function copyUnifiedIngressUrl() {
+    var url = 'http://127.0.0.1:18880/v1';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function() { showToast('已复制接入 URL', 'success', 1500); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = url; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); showToast('已复制接入 URL', 'success', 1500); } catch (e) {}
+      document.body.removeChild(ta);
+    }
   }
 
   function renderSessionsList(sessions, containerId) {

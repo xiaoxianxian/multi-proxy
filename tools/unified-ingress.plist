@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.multi-proxy.unified-ingress-18880</string>
+
+  <!-- 统一入口：agent 只记一个 endpoint（18880），本层按路径转发到各后端 proxy。
+       纯转发，不改协议语义（不翻译、不解析 body）——翻译是各后端 proxy 的职责。
+
+       ✅ 装载状态（2026-10-22 实测）：已 bootstrap，KeepAlive，/health 200；
+         /v1/models→18790（真实模型清单）、/v1/messages→18791（400=路由在）、
+         /v1/chat/completions→18790（400）、/api/*→18792 全部分派正确。
+         可选前门：per-agent 端口（18790/18791/18792…）照旧可用，不替换现有服务。
+
+       装载：launchctl bootstrap gui/$UID <本文件> && launchctl kickstart -k gui/$UID/com.multi-proxy.unified-ingress-18880
+       卸载：launchctl bootout gui/$UID/com.multi-proxy.unified-ingress-18880
+
+       ⚠️ 端口钉 18880 的理由：18800 已被 opencode-free 占用（2026-10-22 实测 lsof 有 node LISTEN），
+          unified-ingress/server.js 的默认值也已从 18800 订正为 18880。
+       ⚠️ 端口被占时 bootstrap 只入列不补位（LastExitStatus 常见 256）：先确认 18880 空闲再 kickstart -k。 -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-6/bin/node</string>
+    <string>/Users/xiaota/Documents/AI项目/multi-proxy/unified-ingress/server.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/unified-ingress</string>
+
+  <!-- 配置面全部走环境变量（与 token-policy-bridge.plist 同约定）。
+       下面三项即 server.js 默认值，显式写出只为可审计；改后端指向才需要动这里 + kickstart。 -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>INGRESS_PORT</key>
+    <string>18880</string>
+    <key>INGRESS_BINDING</key>
+    <string>127.0.0.1</string>
+    <key>BACKEND_CODEX</key>
+    <string>http://127.0.0.1:18790</string>
+    <key>BACKEND_CLAUDE</key>
+    <string>http://127.0.0.1:18791</string>
+    <key>BACKEND_MANAGER</key>
+    <string>http://127.0.0.1:18792</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/unified-ingress-18880.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/xiaota/Documents/AI项目/multi-proxy/logs/unified-ingress-18880.launchd.err.log</string>
+</dict>
+</plist>

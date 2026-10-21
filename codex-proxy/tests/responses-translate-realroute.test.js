@@ -67,3 +67,53 @@ describe('真实路由：/v1/responses 翻译分支激活', () => {
     expect(url).toContain('/responses');
   });
 });
+
+describe('真实路由：/api/providers 持久化 responsesTranslate / responsesTarget', () => {
+  let app;
+  beforeAll(() => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mp-tr-persist-'));
+    const dataDir = path.join(tmp, '.multi-proxy-manager');
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'providers.json'), JSON.stringify([]), 'utf8');
+    process.env.HOME = tmp;
+    delete process.env.PROXY_AUTH_TOKEN; // fail-open
+    // eslint-disable-next-line global-require
+    app = require('../proxy.js').app;
+  });
+
+  afterAll(() => {
+    process.env.HOME = ORIG_HOME;
+    jest.resetModules();
+  });
+
+  test('POST 创建时带 responsesTranslate/responsesTarget → GET 读回不被丢弃', async () => {
+    const created = await request(app).post('/api/providers').send({
+      name: 'UpMsg', provider_id: 'upmsg', api_key: 'sk-msg', base_url: 'https://msg.test/v1',
+      responsesTranslate: true, responsesTarget: 'messages', enabled: true,
+    });
+    expect(created.status).toBe(200);
+    const id = created.body.provider.id;
+
+    const list = await request(app).get('/api/providers');
+    const p = list.body.providers.find(x => x.id === id);
+    expect(p.responsesTranslate).toBe(true);
+    expect(p.responsesTarget).toBe('messages');
+  });
+
+  test('PUT 可改 responsesTranslate / responsesTarget → GET 读回生效', async () => {
+    const created = await request(app).post('/api/providers').send({
+      name: 'UpChat2', provider_id: 'upchat2', api_key: 'sk-chat', base_url: 'https://chat2.test/v1',
+    });
+    const id = created.body.provider.id;
+    // 默认关（POST 未带）
+    let list = await request(app).get('/api/providers');
+    expect(list.body.providers.find(x => x.id === id).responsesTranslate).toBe(false);
+
+    const ok = await request(app).put('/api/providers/' + id).send({ responsesTranslate: true, responsesTarget: 'chat' });
+    expect(ok.status).toBe(200);
+    list = await request(app).get('/api/providers');
+    const p = list.body.providers.find(x => x.id === id);
+    expect(p.responsesTranslate).toBe(true);
+    expect(p.responsesTarget).toBe('chat');
+  });
+});
