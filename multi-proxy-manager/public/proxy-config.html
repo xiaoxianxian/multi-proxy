@@ -1038,6 +1038,10 @@
       cursor: '/admin-api',
     };
 
+    // 已落地 Responses API 协议翻译（l2/responses-translate.js + 各 proxy handleTranslatedResponses）
+    // 的代理集合。hermes 是 Python、cursor 是 TS 构建产物，翻译层未同步过去——不露死开关。
+    var RESPONSES_TRANSLATE_PROXIES = ['codex', 'claude', 'opencode', 'generic'];
+
     var displayName;
 
     // ==================== Core Init ====================
@@ -1577,7 +1581,7 @@
       modal.appendChild(createFormField('Base URL *', 'text', 'modal-base-url', { placeholder: 'https://api.openai.com/v1' }));
       modal.appendChild(createFormField('API Key *', 'password', 'modal-api-key', { placeholder: 'sk-...' }));
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', true));
-      if (currentProxyName === 'codex') {
+      if (RESPONSES_TRANSLATE_PROXIES.indexOf(currentProxyName) !== -1) {
         modal.appendChild(createResponsesTranslateSection(false, 'chat'));
       }
 
@@ -1742,7 +1746,7 @@
       modal.appendChild(keyField);
 
       modal.appendChild(createCheckboxField('modal-enabled', '启用此供应商', provider.enabled));
-      if (currentProxyName === 'codex') {
+      if (RESPONSES_TRANSLATE_PROXIES.indexOf(currentProxyName) !== -1) {
         modal.appendChild(createResponsesTranslateSection(provider.responsesTranslate, provider.responsesTarget));
       }
 

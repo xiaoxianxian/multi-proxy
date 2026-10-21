@@ -225,12 +225,12 @@ function findProvider(modelName) {
     if (Array.isArray(p.models) && p.models.includes(modelName)) {
       // ⚠️ anthropicBaseUrl 必须一起带出：/v1/messages 的厂商规则对自定义上游未必适用，
       // 漏了它 = 显式逃生口形同不存在（测试抓到的）。
-      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl, fallback: p.fallback };
+      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl, fallback: p.fallback, responsesTranslate: p.responsesTranslate, responsesTarget: p.responsesTarget };
     }
   }
   const userMatch = userProviders.find(p => p.provider_id && modelName.toLowerCase().includes(String(p.provider_id).toLowerCase()));
   if (userMatch) {
-    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl, fallback: userMatch.fallback };
+    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl, fallback: userMatch.fallback, responsesTranslate: userMatch.responsesTranslate, responsesTarget: userMatch.responsesTarget };
   }
 
   // 2. Legacy built-in env-key providers (DeepSeek / Kimi / Agnes)
@@ -841,7 +841,7 @@ app.get('/api/providers', requireAuth, (req, res) => {
 
 // POST /api/providers — create a new provider
 app.post('/api/providers', requireAuth, (req, res) => {
-  const { name, provider_id, api_key, base_url, enabled, models } = req.body;
+  const { name, provider_id, api_key, base_url, enabled, models, responsesTranslate, responsesTarget } = req.body;
   if (!name || !provider_id || !api_key || !base_url) {
     return res.status(400).json({ success: false, error: 'Missing required fields: name, provider_id, api_key, base_url' });
   }
@@ -856,6 +856,8 @@ app.post('/api/providers', requireAuth, (req, res) => {
     base_url,
     models: Array.isArray(models) ? models.filter(m => typeof m === 'string') : [],
     enabled: enabled !== false,
+    responsesTranslate: responsesTranslate === true,
+    responsesTarget: responsesTarget === 'messages' ? 'messages' : (responsesTarget || 'chat'),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -870,7 +872,7 @@ app.put('/api/providers/:id', requireAuth, (req, res) => {
   if (idx === -1) {
     return res.status(404).json({ success: false, error: 'Provider not found' });
   }
-  const allowedFields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled', 'models'];
+  const allowedFields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled', 'models', 'responsesTranslate', 'responsesTarget'];
   const updates = {};
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
@@ -1235,6 +1237,109 @@ app.post('/v1/chat/completions', requireAuth, async (req, res) => {
 // 归一化**复用** tools/token-policy-bridge.js 里已实测的那份（见 50 号文档 §一），
 // 不在这里复制第二份：两份实现必然漂移，代价就是「这条路工具类型不兼容、那条兼容」。
 const { normalizeTools } = require('../tools/token-policy-bridge.js');
+// P8：Responses API ⇄ ChatCompletions / Anthropic Messages 双向翻译（与 codex-proxy 同层实现）。
+//   上游不原生支持 /v1/responses 时，开启 provider.responsesTranslate 即可对接；默认 false = 维持原透传。
+const RT = require('../l2/responses-translate.js');
+
+// P8 翻译分支：把 Responses 请求翻成上游真支持的协议（ChatCompletions / Messages），
+//   再把上游响应翻回 Responses 格式。仅当 provider.responsesTranslate 为真时走这条；
+//   默认关 → 下方路由维持原透传路径（零行为变更）。
+async function handleTranslatedResponses(req, res, provider, upstreamSignal) {
+  const target = provider.responsesTarget === 'messages' ? 'messages' : 'chat';
+  const { body: norm } = normalizeTools(req.body);
+  const translated = target === 'messages'
+    ? RT.responsesToMessages(norm)
+    : RT.responsesToChatCompletions(norm);
+  translated.stream = !!req.body.stream;
+
+  let upstreamUrl, headers;
+  if (target === 'messages') {
+    upstreamUrl = anthropicMessagesUrl(provider);
+    headers = { 'Content-Type': 'application/json', 'anthropic-version': req.headers['anthropic-version'] || '2023-06-01' };
+    if (provider.apiKey) {
+      headers['x-api-key'] = provider.apiKey;
+      if (req.headers['authorization']) headers['authorization'] = `Bearer ${provider.apiKey}`;
+    }
+  } else {
+    upstreamUrl = `${provider.baseUrl}/chat/completions`;
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${provider.apiKey}` };
+  }
+
+  const response = await fetch(upstreamUrl, {
+    method: 'POST', headers, body: JSON.stringify(translated), signal: upstreamSignal,
+  });
+  if (!response.ok) {
+    feedCircuit(provider, classifyUpstreamStatus(response.status));
+    const err = await response.text();
+    console.error(`[responses-translate] upstream error (${target}, status ${response.status}): ${err.slice(0, 300)}`);
+    if (!canWrite(res)) return;
+    return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
+  }
+  feedCircuit(provider, 'success');
+
+  if (!translated.stream) {
+    const upstreamJson = await response.json();
+    const resp = target === 'messages'
+      ? RT.messagesToResponses(upstreamJson, req.body)
+      : RT.chatCompletionsToResponses(upstreamJson, req.body);
+    if (!canWrite(res)) return;
+    res.json(resp);
+    captureTrace({ req, provider, rawOrObj: upstreamJson, meta: { agent: 'generic-openai-proxy', stream: false, translated: target } });
+    return;
+  }
+
+  // 流式：把上游 SSE 逐行解析，翻成 Responses SSE 写给客户端
+  if (!canWrite(res)) return;
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  const emitter = new RT.ResponsesStreamEmitter(req.body);
+  const nodeStream = Readable.fromWeb(response.body);
+  let buffer = '';
+  let pendingUsage = null;
+  const anthropicBlocks = new Map();
+  const ingestAnthropic = (ev) => {
+    if (ev.type === 'content_block_start') {
+      const b = ev.content_block || {};
+      anthropicBlocks.set(ev.index, { type: b.type, id: b.id, name: b.name, input: '' });
+    } else if (ev.type === 'content_block_delta') {
+      const b = anthropicBlocks.get(ev.index);
+      const d = ev.delta || {};
+      if (d.type === 'text_delta' && d.text) { const s = emitter.pushText(d.text); if (s) res.write(s); }
+      else if (d.type === 'input_json_delta' && b) { b.input += d.partial_json || ''; }
+    } else if (ev.type === 'content_block_stop') {
+      const b = anthropicBlocks.get(ev.index);
+      if (b && b.type === 'tool_use') { const s = emitter.pushTool(ev.index, { id: b.id, function: { name: b.name, arguments: b.input } }); if (s) res.write(s); }
+    } else if (ev.type === 'message_delta') {
+      if (ev.usage) pendingUsage = { completion_tokens: ev.usage.output_tokens || 0, prompt_tokens: 0, total_tokens: 0 };
+    }
+  };
+  const flushLine = (data) => {
+    if (data === '[DONE]') return;
+    let obj; try { obj = JSON.parse(data); } catch { return; }
+    if (target === 'messages') { ingestAnthropic(obj); return; }
+    const delta = obj.choices && obj.choices[0] && obj.choices[0].delta;
+    if (delta && delta.content) { const s = emitter.pushText(delta.content); if (s) res.write(s); }
+    if (delta && Array.isArray(delta.tool_calls)) {
+      for (const tc of delta.tool_calls) { const s = emitter.pushTool(tc.index, tc); if (s) res.write(s); }
+    }
+    if (obj.usage) pendingUsage = obj.usage;
+  };
+  try {
+    for await (const chunk of nodeStream) {
+      buffer += chunk.toString();
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx); buffer = buffer.slice(idx + 1);
+        const t = line.trim();
+        if (t.startsWith('data:')) flushLine(t.slice(5).trim());
+      }
+    }
+    const s = emitter.end(pendingUsage); if (s) res.write(s);
+    res.end();
+  } catch (e) {
+    if (canWrite(res)) { try { const s = emitter.end(pendingUsage); res.write(s); } catch { /* noop */ } res.end(); }
+    console.error(`[responses-translate] stream error: ${e.message}`);
+  }
+}
 
 app.post('/v1/responses', requireAuth, async (req, res) => {
   let circuitProvider = null;
@@ -1250,6 +1355,13 @@ app.post('/v1/responses', requireAuth, async (req, res) => {
     if (await applyBudgetGuard(model, req, res) !== 'continue') return;
     circuitProvider = provider;
     if (!circuitAllows(provider, res)) return;
+
+    // P8：翻译分支（上游不原生支持 /v1/responses 时）。门控默认关 → 维持原透传。
+    if (provider.responsesTranslate) {
+      const upstreamSignal = createUpstreamSignal(req, res);
+      await handleTranslatedResponses(req, res, provider, upstreamSignal);
+      return;
+    }
 
     // 注意返回值是 { body, changed, from } 包装对象，不是 body 本身——直接 stringify
     // 整个返回值会把 model 一起弄丢（上游报 "model name cannot be empty"）。
