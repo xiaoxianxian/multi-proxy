@@ -53,6 +53,39 @@ describe('consent — 首启法务同意门状态模块', () => {
     expect(st.consented).toBe(false);
   });
 
+  test('⑦ deferConsent 写「稍后再说」标记 = 门放行（带过期时间，非永久豁免）', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'home-defer-'));
+    expect(consent.isDeferred({ home })).toBe(false); // 无标记 → 不放行
+    const r = consent.deferConsent({ home, now: 1000, ttlMs: 60000 });
+    expect(r.success).toBe(true);
+    expect(r.deferPath).toBe(path.join(home, '.multi-proxy-manager', 'consent-defer.json'));
+    const st = consent.deferState({ home, now: 2000 });
+    expect(st.deferred).toBe(true);
+    expect(st.remainingMs).toBe(59000);
+    expect(consent.isDeferred({ home, now: 59000 })).toBe(true);
+    // 过期 ⇒ 门重新拦（这是「暂不，稍后再说」不该是永久豁免的关键）
+    expect(consent.isDeferred({ home, now: 61000 })).toBe(false);
+    expect(consent.deferState({ home, now: 61000 }).reason).toBe('expired');
+  });
+
+  test('⑧ revokeConsent 一并清 defer ⇒ 撤销后门重新拦', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'home-revoke-'));
+    consent.markConsented({ home, now: 1 });
+    consent.deferConsent({ home, now: 1, ttlMs: 60000 });
+    expect(consent.isDeferred({ home, now: 100 })).toBe(true);
+    consent.revokeConsent({ home });
+    expect(consent.isDeferred({ home, now: 100 })).toBe(false);
+  });
+
+  test('⑨ defer 标记写失败时不抛（success:false）', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'defer-fail-'));
+    const fileAsDir = path.join(base, 'i-am-a-file');
+    fs.writeFileSync(fileAsDir, 'x');
+    const r = consent.deferConsent({ deferPath: path.join(fileAsDir, 'sub', 'consent-defer.json') });
+    expect(r.success).toBe(false);
+    expect(consent.isDeferred({ deferPath: path.join(fileAsDir, 'sub', 'consent-defer.json') })).toBe(false);
+  });
+
   test('⑥ markConsented 写失败时不抛（success:false）—— 绝不破坏外层', () => {
     // 让 marker 的父目录是一个「文件」→ mkdirSync('file/sub') 撞 ENOTDIR → 走失败分支
     const base = fs.mkdtempSync(path.join(os.tmpdir(), 'consent-fail-'));

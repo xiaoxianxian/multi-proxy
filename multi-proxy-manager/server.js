@@ -78,6 +78,8 @@ function consentBypass(req) {
   // D2：verifyConsent = 「无 JSON 记录时看 legacy 纯时间戳 marker（A 策略回填不打扰）；有记录但法务正文哈希不符 → 未同意重弹」。
   const bypass = /1|true|yes/i.test(process.env.MP_CONSENT_BYPASS || '') || (process.env.NODE_ENV === 'test');
   if (bypass) return true;
+  // 「暂不，稍后再说」窗口内放行（带过期时间，不是永久豁免；过期后门重新拦）。
+  if (consent.isDeferred()) return true;
   return consent.verifyConsent().valid;
 }
 app.use('/api/auth', authRoutes);
@@ -143,7 +145,8 @@ app.use('/api/im-inbound', require('./routes/im-inbound'));
 app.get('/api/consent', (_req, res) => {
   const st = consent.consentState();
   const v = consent.verifyConsent();
-  res.json(Object.assign({ success: true }, st, { valid: v.valid, version: v.version || null, migrated: !!v.migrated, reason: v.reason }));
+  const d = consent.deferState();
+  res.json(Object.assign({ success: true }, st, { valid: v.valid, version: v.version || null, migrated: !!v.migrated, reason: v.reason, defer: d }));
 });
 app.post('/api/consent/accept', (req, res) => {
   try {
@@ -154,6 +157,14 @@ app.post('/api/consent/accept', (req, res) => {
    } catch (e) {
      res.status(500).json({ success: false, error: String((e && e.message) || e) });
     }
+});
+// 「暂不，稍后再说」：写带过期时间的 defer 标记（默认 24h，上限 7 天），门的 consentBypass() 认它。
+// 本机单人面、不加 requireAuth；写失败也返回 200 + success:false（前端照旧放行，绝不把人卡在 consent 页）。
+app.post('/api/consent/defer', (req, res) => {
+  const ttl = Number(((req.body || {}).ttlMs));
+  const opts = Number.isFinite(ttl) && ttl > 0 ? { ttlMs: Math.min(ttl, 7 * 24 * 60 * 60 * 1000) } : {};
+  const r = consent.deferConsent(opts);
+  res.json(Object.assign({ success: !!r.success }, r, { deferPath: r.deferPath }));
 });
 app.post('/api/consent/revoke', (_req, res) => {
   try {
@@ -194,6 +205,8 @@ app.use((req, res, next) => {
     const routeMap = {
       '/': 'dashboard.html',
       '/dashboard': 'dashboard.html',
+      // P0 修：/login 缺映射 ⇒ 落进下面的默认分支返回 dashboard.html（实测 <title>Dashboard</title>）。
+      '/login': 'login.html',
       '/logs': 'logs.html',
       '/proxy-config': 'proxy-config.html',
       '/sessions': 'sessions.html',
@@ -208,11 +221,15 @@ app.use((req, res, next) => {
       // v1.0 补 settings 页：外观/关于/更新与备份（本地优先，内嵌在管理组路由）
       '/settings': 'settings.html',
       };
-    // 首启同意门：默认拦管理页（未同意 → 跳 /consent overlay）；
-   // CI/测试经 consentBypass() 全放行（1529 测试不受影响）；/login 入口不拦。
-   if (req.path !== '/login' && !consentBypass(req)) {
-    return res.redirect('/consent');
-   }
+    // 首启同意门（2026-10-22 保守处置 · 是否在主入口启用待老板拍板）：
+    // 实测错配 —— / 与 /dashboard.html 由 express.static 直出、根本不进这个中间件，
+    // 于是「主入口不拦、/dashboard 这类无扩展名路径反而被拦」，且 consent 页
+    // 「暂不，稍后再说」href=/dashboard 又被 302 回 /consent ⇒ 死循环。
+    // 一致性二选一（都拦 / 都不拦）取「都不拦」：都拦会改掉老板现网可用入口
+    // （/ → index.html → dashboard.html），有把人锁在门外的风险，故不擅自加拦。
+    // 判定逻辑（含 defer 放行）完整保留在 consentBypass()，拍板要「都拦」时：
+    //   ① 放开下面这行注释；② 让 / 与 *.html 也走本中间件（否则直连 .html 仍能绕过门）。
+    //   if (req.path !== '/login' && !consentBypass(req)) return res.redirect('/consent');
   const page = routeMap[req.path] || 'dashboard.html';
   return res.sendFile(path.join(__dirname, 'public', page));
   }
@@ -359,3 +376,5 @@ if (process.env.NODE_ENV !== "test") {
 module.exports = app;
 // D3：导出 fail-closed 判定纯函数，供单测直测（启动块在 NODE_ENV=test 下不执行，无法经 server 触发）。
 module.exports.shouldFailClosedBind = shouldFailClosedBind;
+// 同意门判定导出供单测直测（门当前按上方注释「都不拦」撤下，逻辑仍需可验）。
+module.exports.consentBypass = consentBypass;

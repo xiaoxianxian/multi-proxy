@@ -16,7 +16,10 @@ const legalLib = require('./legal'); // D2：同意记录绑法务正文指纹�
 
 const MARKER_BASENAME = '.first-launch-consent-done';
 const RECORD_BASENAME = 'consent-record.json'; // D2：JSON 同意记录（哈希/版本/时间戳/IP）
+const DEFER_BASENAME = 'consent-defer.json'; // 「稍后再说」标记（带过期时间）
 const RECORD_VERSION = 2;
+// 默认推迟窗口 24h：过期后门重新拦（避免「点一次稍后 = 永久豁免」）
+const DEFAULT_DEFER_TTL_MS = 24 * 60 * 60 * 1000;
 
 function stateDirOf(home) {
   return home ? path.join(home, '.multi-proxy-manager') : '';
@@ -57,6 +60,7 @@ function markConsented(opts = {}) {
 
 // 撤销同意（删标记）→ 回到「未同意」，用于「可退出 / 重新同意」场景。
 // D2：一并删 consent-record.json（记录与 marker 同步撤销；残留会让 verify 仍判已同意）。
+// 顺带删 defer 标记：撤销语义上应回到「门重新拦」，否则旧 defer 会把撤销者放过去。
 function revokeConsent(opts = {}) {
   const state = consentState(opts);
   let removed = false;
@@ -71,7 +75,77 @@ function revokeConsent(opts = {}) {
   } catch {
     /* 幂等 */
   }
+  try {
+    fs.unlinkSync(deferPathOf(opts));
+  } catch {
+    /* 幂等 */
+  }
   return { markerPath: state.markerPath, removed, consented: isConsented(opts) };
+}
+
+// ─── 「稍后再说」推迟标记（带过期时间） ───
+// consent.html 的「暂不，稍后再说」原本 href=/dashboard，而 /dashboard 未同意即 302 回
+// /consent ⇒ 死循环。defer 是那条「真能放行」的路：写一份带 deferUntil 的标记，
+// 门的 consentBypass() 认它 ⇒ 放行；过期即失效，门重新拦（不是永久豁免）。
+function deferPathOf(opts = {}) {
+  const home = opts.home || process.env.HOME || process.env.USERPROFILE || '';
+  const stateDir = opts.stateDir || (home ? path.join(home, '.multi-proxy-manager') : '');
+  return opts.deferPath || (stateDir ? path.join(stateDir, DEFER_BASENAME) : DEFER_BASENAME);
+}
+
+function readDefer(opts = {}) {
+  try {
+    const p = deferPathOf(opts);
+    if (!fs.existsSync(p)) return null;
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null; // 损坏 → 视为无 defer
+  }
+}
+
+// 写「稍后再说」：{v, deferredAt, deferUntilMs, deferUntil}。ttlMs 缺省 24h，绝不抛。
+function deferConsent(opts = {}) {
+  const p = deferPathOf(opts);
+  const now = typeof opts.now === 'number' ? opts.now : Date.now();
+  const ttlMs = Number.isFinite(opts.ttlMs) && opts.ttlMs > 0 ? opts.ttlMs : DEFAULT_DEFER_TTL_MS;
+  const untilMs = now + ttlMs;
+  try {
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify({
+      v: RECORD_VERSION,
+      deferredAt: new Date(now).toISOString(),
+      deferUntilMs: untilMs,
+      deferUntil: new Date(untilMs).toISOString(),
+    }, null, 2));
+    return { success: true, deferPath: p, deferUntilMs: untilMs, deferUntil: new Date(untilMs).toISOString(), ttlMs };
+  } catch {
+    return { success: false, deferPath: p, reason: 'defer 标记写入失败' };
+  }
+}
+
+// 读 defer 状态：{deferred, deferUntil, remainingMs, reason}。过期/缺失/损坏 ⇒ deferred:false。
+function deferState(opts = {}) {
+  const d = readDefer(opts);
+  const now = typeof opts.now === 'number' ? opts.now : Date.now();
+  if (!d || !Number.isFinite(Number(d.deferUntilMs))) {
+    return { deferred: false, deferPath: deferPathOf(opts), reason: 'no-defer' };
+  }
+  const untilMs = Number(d.deferUntilMs);
+  if (untilMs <= now) {
+    return { deferred: false, deferPath: deferPathOf(opts), deferUntil: d.deferUntil, reason: 'expired' };
+  }
+  return {
+    deferred: true,
+    deferPath: deferPathOf(opts),
+    deferUntil: d.deferUntil || new Date(untilMs).toISOString(),
+    deferUntilMs: untilMs,
+    remainingMs: untilMs - now,
+  };
+}
+
+function isDeferred(opts = {}) {
+  return deferState(opts).deferred;
 }
 
 // ─── D2（2026-10-19 全角色评审）：同意记录加固 ───
@@ -141,5 +215,7 @@ function verifyConsent(opts = {}) {
 module.exports = {
   consentState, isConsented, markConsented, revokeConsent,
   recordConsent, verifyConsent, recordPathOf,
-  MARKER_BASENAME, RECORD_BASENAME, RECORD_VERSION,
+  deferPathOf, deferConsent, deferState, isDeferred,
+  MARKER_BASENAME, RECORD_BASENAME, DEFER_BASENAME, RECORD_VERSION,
+  DEFAULT_DEFER_TTL_MS,
 };

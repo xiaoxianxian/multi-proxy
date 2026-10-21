@@ -86,7 +86,9 @@
 
       <div class="consent__foot" style="padding:0">
         <button id="accept" class="btn btn--primary" disabled>接受并继续</button>
-        <a class="btn btn--ghost" href="/dashboard" id="later">暂不，稍后再说</a>
+        <!-- 「稍后再说」不再直连 /dashboard（未同意会被门 302 回本页 ⇒ 死循环）：
+             先写一份带过期时间的 defer 标记（默认 24h），门的 consentBypass() 认它 ⇒ 真放行。 -->
+        <button type="button" class="btn btn--ghost" id="later">暂不，稍后再说（24 小时内不再提示）</button>
         <p class="consent__meta">勾选后即写入本机标记 <code>~/.multi-proxy-manager/.first-launch-consent-done</code>；之后不再提示。可随时在「设置」中撤销。</p>
       </div>
     </div>
@@ -104,6 +106,7 @@
       var accept = document.getElementById('accept');
       var gate = document.getElementById('gate');
       var landing = document.getElementById('landing');
+      var later = document.getElementById('later');
       agreed.addEventListener('change', function(){ accept.disabled = !agreed.checked; });
       function go(state, text){
         gate.classList.add('hide');
@@ -111,6 +114,13 @@
         landing.querySelector('h2').textContent = state ? '已接受 · 正在进入' : '已记录 · 未接受';
         landing.querySelector('p').textContent = text;
       }
+      // 「稍后再说」：写 defer 标记后进入管理台。写失败也照旧跳转（不把人卡在本页）。
+      if (later) later.addEventListener('click', function(){
+        later.disabled = true;
+        var go = function(){ location.href = '/dashboard'; };
+        fetch('/api/consent/defer', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' })
+          .then(go, go);
+      });
       accept.addEventListener('click', function(){
         accept.disabled = true;
         accept.innerHTML = '<span class="spin"></span>写入中…';
