@@ -11,7 +11,7 @@
        codex-proxy/proxy.js 保持 0 diff；回滚 = 把 base_url 指回 18790。 -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-3/bin/node</string>
+    <string>/Users/xiaota/.workbuddy/binaries/node/versions/22.22.2-6/bin/node</string>
     <string>/Users/xiaota/Documents/AI项目/multi-proxy/tools/token-policy-bridge.js</string>
   </array>
 
