@@ -47,6 +47,11 @@ const REPO_ROOT = resolveRepoRoot();
 let mainWindow = null;
 let managerProc = null;      // 壳拉起的 manager 子进程（非 null 才负责退出时回收）
 let attachedToExternal = false; // manager 是外部启动的（附着模式）
+let splashWindow = null;     // 启动屏窗口：等待 manager 就绪期间唯一可见窗口
+let splashShownAt = 0;       // 用于最小展示时长，抑制附着模式下的一闪而过
+
+// 等待 manager 最长 15 秒期间必须有可见窗口，否则用户以为应用没启动（P0-4 首启断裂）
+const MIN_SPLASH_MS = 600;
 
 // ---------- HTTP 探测 ----------
 function probeManager(timeoutMs = 800) {
@@ -122,7 +127,7 @@ function startManager() {
   proc.stderr.on('data', d => console.error('[manager:err]', d.toString().trim()));
   proc.on('exit', (code) => {
     console.log(`[manager] exited with ${code}`);
-    if (!app.isQuittingInternal && !mainWindow?.isDestroyed()) {
+    if (!isQuittingInternal && !mainWindow?.isDestroyed()) {
       // manager 意外退出：提示但不自动重启（manager 自带崩溃恢复语义）
       dialog.showErrorBox('管理服务已退出', `manager 进程退出(code=${code})，请重启应用。`);
     }
@@ -181,6 +186,44 @@ function runFirstLaunchCleanupSafe() {
 }
 
 // ---------- 窗口 ----------
+// 启动屏：无边框小窗，只负责在「等 manager 就绪」这段时间给出品牌化反馈。
+// 独立窗口而非与主窗复用 —— frame 在 BrowserWindow 创建后不可修改，
+// 复用会被迫让主窗丢掉 hiddenInset 标题栏，且 preload 会绑到 file:// 页面。
+function createSplash() {
+  splashShownAt = Date.now();
+  splashWindow = new BrowserWindow({
+    width: 460,
+    height: 280,
+    frame: false,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    center: true,
+    show: false,             // 首帧就绪后再 show，避免闪白窗
+    skipTaskbar: true,
+    title: 'Proxy Manager 启动中',
+    backgroundColor: '#f8fafc', // 与 splash.html 背景同色，消除过渡白闪
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+  splashWindow.once('ready-to-show', () => {
+    if (!splashWindow.isDestroyed()) splashWindow.show();
+  });
+  splashWindow.on('closed', () => { splashWindow = null; });
+}
+
+// 幂等：成功路径与失败路径都会调，重复调用安全
+function destroySplash() {
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+  splashWindow = null;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -190,6 +233,8 @@ function createWindow() {
     title: 'Proxy Manager',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 18 },
+    show: false,             // 由 openMainWindow 在首帧就绪后统一显示
+    backgroundColor: '#f8fafc', // 与 splash 同色，避免切换瞬间闪白
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -209,20 +254,48 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
+// 主窗先隐藏加载，首帧就绪再显示，显示之后才销毁 splash：
+// 保证任意时刻屏幕上都至少有一个可见窗口，不存在「空窗期」。
+function openMainWindow() {
+  createWindow();
+  let revealed = false;
+  const revealOnce = () => {
+    if (revealed) return;
+    revealed = true;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    destroySplash(); // 无论主窗是否还在，splash 绝不残留
+  };
+  mainWindow.once('ready-to-show', () => {
+    // 附着模式下 manager 秒起，若立刻切换会看到 splash 一闪而过
+    const remain = MIN_SPLASH_MS - (Date.now() - splashShownAt);
+    if (remain > 0) setTimeout(revealOnce, remain);
+    else revealOnce();
+  });
+  // 兜底：ready-to-show 始终不触发时不让用户永远卡在启动屏
+  setTimeout(revealOnce, 8000);
+}
+
 // ---------- 退出策略 ----------
 let isQuittingInternal = false;
 
 app.whenReady().then(async () => {
+  createSplash();           // 建窗口在最先：让等待期立刻有画面（loadFile 不等 manager）
   runFirstLaunchCleanupSafe(); // 3.3 首启清理：门控默认关=shadow，非阻塞、绝不阻断启动
   const ok = await ensureManager();
   if (!ok) {
+    // 失败路径必须先收掉 splash：留下孤儿窗口会让 app.quit() 卡在关窗阶段
+    destroySplash();
     app.quit();
     return;
   }
-  createWindow();
+  openMainWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    // 按 mainWindow 判断而非所有窗口数：splash 存在期间不应吞掉 activate
+    if (!mainWindow || mainWindow.isDestroyed()) openMainWindow();
   });
 });
 
