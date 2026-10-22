@@ -41,6 +41,25 @@ describe('E2E — Manager API Flow', () => {
       expect(res.body).toContain('hermes');
       expect(res.body).toContain('cursor');
     });
+
+    it('should list the 6 proxies added in P0-1 (2026-10-22)', async () => {
+      // 断言跟真源走：入口文件在才要求出现在 /api/installed。
+      // throwaway/最小安装下不存在的代理不钉（避免把「未安装」误判成回归）。
+      const res = await request(app).get('/api/installed');
+      const entries = {
+        claude: 'claude-proxy/proxy.js',
+        dsh: 'dsh-proxy/proxy.js',
+        opencode: 'opencode-proxy/proxy.js',
+        generic: 'generic-openai-proxy/proxy.js',
+        'opencode-free': 'opencode-free/server.mjs',
+        'workbuddy-shim': 'workbuddy-shim/server.js',
+      };
+      for (const [name, rel] of Object.entries(entries)) {
+        if (fs.existsSync(path.join(PROJECT_ROOT, rel))) {
+          expect(res.body).toContain(name);
+        }
+      }
+    });
   });
 
   describe('GET /api/status', () => {
@@ -71,6 +90,25 @@ describe('E2E — Manager API Flow', () => {
     it('should report cursor on port 18794', async () => {
       const res = await request(app).get('/api/status');
       expect(res.body.cursor.port).toBe(18794);
+    });
+
+    it('should report the P0-1 proxies on their real ports', async () => {
+      // 端口与 manage.sh:28-34（claude/dsh/opencode/generic）及各 .env 实测值对齐。
+      // 同样按「入口存在才钉」的纪律，避免 throwaway 环境假红。
+      const res = await request(app).get('/api/status');
+      const entries = {
+        claude: ['claude-proxy/proxy.js', 18791],
+        dsh: ['dsh-proxy/proxy.js', 18797],
+        opencode: ['opencode-proxy/proxy.js', 18798],
+        generic: ['generic-openai-proxy/proxy.js', 18799],
+        'opencode-free': ['opencode-free/server.mjs', 18800],
+        'workbuddy-shim': ['workbuddy-shim/server.js', 18789],
+      };
+      for (const [name, [rel, port]] of Object.entries(entries)) {
+        if (!fs.existsSync(path.join(PROJECT_ROOT, rel))) continue;
+        expect(res.body[name]).toBeDefined();
+        expect(res.body[name].port).toBe(port);
+      }
     });
   });
 

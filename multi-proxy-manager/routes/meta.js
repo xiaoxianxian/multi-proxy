@@ -99,6 +99,13 @@ router.get('/version', (_req, res) => {
       codex: readPackVersion('codex-proxy'),
       hermes: readPackVersion('hermes-proxy'),
       cursor: readPackVersion('cursor-proxy'),
+      // 2026-10-22 P0-1：面板已管 9 个代理，版本卡跟着补齐（键名与 buildProxyConfigs() 一致）。
+      claude: readPackVersion('claude-proxy'),
+      dsh: readPackVersion('dsh-proxy'),
+      opencode: readPackVersion('opencode-proxy'),
+      generic: readPackVersion('generic-openai-proxy'),
+      'opencode-free': readPackVersion('opencode-free'),
+      'workbuddy-shim': readPackVersion('workbuddy-shim'),
     },
   });
 });

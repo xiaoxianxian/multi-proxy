@@ -53,6 +53,82 @@ function buildProxyConfigs() {
     };
   }
 
+  // 以下 6 个是 2026-10-22 P0-1 补齐：本机实测在跑（或入口真实存在）但面板此前不管的代理。
+  // 端口与 manage.sh:28-34 的 *_PORT 定义一致（claude 18791 / dsh 18797 / opencode 18798 / generic 18799）；
+  // workbuddy-shim 18789、opencode-free 18800 不在 manage.sh，端口取自各自 .env 实测值。
+
+  const claudeDir = path.join(baseDir, 'claude-proxy');
+  if (fs.existsSync(path.join(claudeDir, 'proxy.js'))) {
+    configs.claude = {
+      name: 'Claude Proxy',
+      port: 18791,
+      scriptPath: path.join(claudeDir, 'proxy.js'),
+      startCommand: 'node',
+      startArgs: ['proxy.js'],
+      cwd: claudeDir,
+    };
+  }
+
+  const dshDir = path.join(baseDir, 'dsh-proxy');
+  if (fs.existsSync(path.join(dshDir, 'proxy.js'))) {
+    configs.dsh = {
+      name: 'DSH Proxy',
+      port: 18797,
+      scriptPath: path.join(dshDir, 'proxy.js'),
+      startCommand: 'node',
+      startArgs: ['proxy.js'],
+      cwd: dshDir,
+    };
+  }
+
+  const opencodeDir = path.join(baseDir, 'opencode-proxy');
+  if (fs.existsSync(path.join(opencodeDir, 'proxy.js'))) {
+    configs.opencode = {
+      name: 'OpenCode Proxy',
+      port: 18798,
+      scriptPath: path.join(opencodeDir, 'proxy.js'),
+      startCommand: 'node',
+      startArgs: ['proxy.js'],
+      cwd: opencodeDir,
+    };
+  }
+
+  const genericDir = path.join(baseDir, 'generic-openai-proxy');
+  if (fs.existsSync(path.join(genericDir, 'proxy.js'))) {
+    configs.generic = {
+      name: 'Generic OpenAI Proxy',
+      port: 18799,
+      scriptPath: path.join(genericDir, 'proxy.js'),
+      startCommand: 'node',
+      startArgs: ['proxy.js'],
+      cwd: genericDir,
+    };
+  }
+
+  const opencodeFreeDir = path.join(baseDir, 'opencode-free');
+  if (fs.existsSync(path.join(opencodeFreeDir, 'server.mjs'))) {
+    configs['opencode-free'] = {
+      name: 'OpenCode Free',
+      port: 18800,
+      scriptPath: path.join(opencodeFreeDir, 'server.mjs'),
+      startCommand: 'node',
+      startArgs: ['server.mjs'],
+      cwd: opencodeFreeDir,
+    };
+  }
+
+  const workbuddyDir = path.join(baseDir, 'workbuddy-shim');
+  if (fs.existsSync(path.join(workbuddyDir, 'server.js'))) {
+    configs['workbuddy-shim'] = {
+      name: 'WorkBuddy Shim',
+      port: 18789,
+      scriptPath: path.join(workbuddyDir, 'server.js'),
+      startCommand: 'node',
+      startArgs: ['server.js'],
+      cwd: workbuddyDir,
+    };
+  }
+
   return configs;
 }
 
