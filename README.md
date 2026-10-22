@@ -490,4 +490,6 @@ multi-proxy/
 
 **商业授权交付文件**：可交付的商业版授权文件见 `LICENSE-ENTERPRISE.md`（条款详情以 `LICENSE-COMMERCIAL.md` 为准，以双方签署协议生效）。
 
+**企业能力边界**：多租户 / SSO / 审计留痕 / 企业分账等企业化能力**不在 AGPL 开源内核**，由 Portico 商业版承载，需走商业授权（见 `LICENSE-COMMERCIAL.md` / `LICENSE-ENTERPRISE.md`）。开源版保持单用户 / 单机 / 单成本池形态；企业版路线详见第十八节。
+
 > 依赖合规：现行依赖（Express / Flask / SQLite / better-sqlite3 等）均为宽松许可，AGPL 项目引用无需修改，保留其版权声明即可。
