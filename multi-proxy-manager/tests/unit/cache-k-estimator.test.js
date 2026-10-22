@@ -131,7 +131,9 @@ describe('cache-k-estimator', () => {
     expect(back.k).toBe(0.02);
     expect(back.mode).toBe('mid');
     expect(back.source).toBe('measured');
-    expect(back.kStar).toBeCloseTo(1 / 9, 5);
+    // d 已由实测订正 0.1 → 0.02（tools/cache-k-real-run.js 真 DeepSeek API 跑出 8/8 k̂=0），
+    // kStar 判据随之从 1/9 变为 0.02/0.98
+    expect(back.kStar).toBeCloseTo(0.02 / (1 - 0.02), 5);
     fs.rmSync(path.dirname(store), { recursive: true, force: true });
   });
 });

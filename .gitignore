@@ -174,3 +174,4 @@ multi-proxy-manager/matrix-results/
 
 # graphify 本地图谱产物（agent-infra/tools/project-delta 同层工具生成，不入库）
 graphify-out/
+generic-openai-proxy/.env.pre-keypool*
