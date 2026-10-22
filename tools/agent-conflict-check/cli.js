@@ -49,9 +49,12 @@ function main() {
   } else {
     process.stdout.write('=== 代理所有权冲突检测 ===\n');
     process.stdout.write(`占用端口清单：${occupantPorts().join(', ') || '（空）'}\n\n`);
+    const unknowns = results.filter((r) => r.status === 'unknown');
     for (const r of results) {
       if (r.occupied) {
         process.stdout.write(`✗ ${r.agent} 被占用\n    base_url=${r.baseUrl}\n    占用者=${r.by}\n`);
+      } else if (r.status === 'unknown') {
+        process.stdout.write(`? ${r.agent} 无法判定：${r.reason}（unknown ≠ 安全）\n`);
       } else if (r.baseUrl) {
         process.stdout.write(`✓ ${r.agent} 正常（base_url=${r.baseUrl}）\n`);
       } else {
@@ -63,6 +66,9 @@ function main() {
       process.stdout.write(`结论：检测到 ${conflicts.length} 处冲突 —— 在 multi-proxy 与占用者之间二选一，确认端口归属后再启动服务。\n`);
     } else {
       process.stdout.write('结论：无冲突。\n');
+    }
+    if (unknowns.length) {
+      process.stdout.write(`注意：${unknowns.map((r) => r.agent).join(', ')} 判定为 unknown（配置文件缺失/不可读/无可解析落点），本工具无法证明其未被占用。\n`);
     }
   }
 
