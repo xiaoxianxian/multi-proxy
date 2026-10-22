@@ -43,8 +43,8 @@
   --border-strong: #d0d5dd;
   --fg:        #101828;   /* 主文本 */
   --muted:     #475467;   /* 次文本 */
-  --subtle:    #667085;   /* 弱化文本 / 说明 */
-  --faint:      #8a93a3;    /* 占位 / 时间戳 / 禁用 — 提对比度至 ≥3:1（WCAG AA inactive/UI 级；正文不用此色） */
+  --subtle:    #5f6c7d;   /* 弱化文本 / 说明 — 旧值 #667085 在 --surface-3(#eef0f3) 上仅 4.36:1，未达 AA 4.5:1；新值最差底 4.68:1 */
+  --faint:      #78818f;    /* 占位 / 时间戳 / 禁用 — 提对比度至 ≥3:1（WCAG AA inactive/UI 级；正文不用此色）。旧值 #8a93a3 实测最差 2.71:1，未兑现注释承诺 */
 
   /* === Provider 品牌色（代理卡片 / 徽章 / 图例） === */
   --prov-codex:    #7c3aed;  --prov-codex-soft:    #f1ecfd;

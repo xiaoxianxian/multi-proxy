@@ -17,6 +17,52 @@ function readCss(filename) {
   return fs.readFileSync(path.join(CSS_DIR, filename), 'utf8');
 }
 
+/* ── WCAG 对比度工具（P0-8）───────────────────────────────────────────────
+   与其在测试里钉死十六进制色值（改一次色改一次测试，且挡不住"改回不达标的
+   色"），这里钉的是「对比度 ≥ 阈值」：从 CSS 解析真实生效值，按 WCAG 2.1
+   公式实测。色值可自由调，只要达标就绿；一旦调回不达标，测试自动红。 */
+
+/** WCAG 2.1 相对亮度：L = 0.2126R + 0.7152G + 0.0722B（各通道先做 sRGB 线性化） */
+function relLuminance(hex) {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16));
+  const lin = (c8) => {
+    const s = c8 / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG 对比度：ratio = (L_lighter + 0.05) / (L_darker + 0.05) */
+function contrastRatio(fg, bg) {
+  const a = relLuminance(fg);
+  const b = relLuminance(bg);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/** 提取指定选择器块的 CSS 体（大括号配平，避免吃到后续同名 :root 段） */
+function extractBlock(css, selector) {
+  const at = css.indexOf(selector);
+  if (at === -1) throw new Error(`CSS 选择器未找到: ${selector}`);
+  const open = css.indexOf('{', at);
+  let depth = 0;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    else if (css[i] === '}' && --depth === 0) return css.slice(open + 1, i);
+  }
+  throw new Error(`大括号未配平: ${selector}`);
+}
+
+/** 把块内的 `--name: #hex;` 解析成 { name: hex } */
+function parseVars(block) {
+  const map = {};
+  const re = /(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\b/g;
+  let m;
+  while ((m = re.exec(block)) !== null) map[m[1]] = m[2];
+  return map;
+}
+
 describe('Design System', () => {
 
   describe('CSS Variable Definitions', () => {
@@ -446,6 +492,78 @@ describe('Design System', () => {
         const content = fs.readFileSync(path.join(CSS_DIR, name), 'utf8');
         expect(content).toContain('shared-styles.css');
       });
+    });
+  });
+
+  describe('WCAG AA 文字对比度 (P0-8)', () => {
+    // 两套色板并存（旧 --color-* 在 colors_and_type.css，新层在 tokens.css），
+    // 且两套背景底不同，故两边都要按各自真实背景校验。
+    const legacyCss = readCss('colors_and_type.css');
+    const nextCss = readCss('tokens.css');
+    const legacyLight = parseVars(extractBlock(legacyCss, ':root {'));
+    const legacyDark = parseVars(extractBlock(legacyCss, ':root.dark {'));
+    const nextLight = parseVars(extractBlock(nextCss, ':root {'));
+    const nextDark = parseVars(extractBlock(nextCss, 'html[data-theme="dark"]'));
+
+    const LEGACY_BG = ['--color-bg', '--color-bg-secondary', '--color-bg-tertiary'];
+    const NEXT_BG = ['--bg', '--surface', '--surface-2', '--surface-3'];
+
+    /** 返回该前景在所有背景上的最差对比度，及其所在的底 */
+    function worstOn(fg, bgNames, vars) {
+      let worst = Infinity;
+      let at = null;
+      for (const bn of bgNames) {
+        const r = contrastRatio(vars[fg], vars[bn]);
+        if (r < worst) { worst = r; at = `${bn}=${vars[bn]}`; }
+      }
+      return { worst: Math.round(worst * 100) / 100, at };
+    }
+
+    const cases = [];
+    const add = (layer, theme, fg, bgNames, vars, min) => {
+      const { worst, at } = worstOn(fg, bgNames, vars);
+      cases.push([`${layer}·${theme}`, fg, vars[fg], at, worst, min]);
+    };
+
+    // 正文级 token：WCAG AA 要求 ≥4.5:1
+    ['--color-text', '--color-text-secondary', '--color-text-tertiary'].forEach((fg) => {
+      add('旧色板', '浅色', fg, LEGACY_BG, legacyLight, 4.5);
+      add('旧色板', '暗色', fg, LEGACY_BG, legacyDark, 4.5);
+    });
+    ['--fg', '--muted', '--subtle'].forEach((fg) => {
+      add('新token', '浅色', fg, NEXT_BG, nextLight, 4.5);
+      add('新token', '暗色', fg, NEXT_BG, nextDark, 4.5);
+    });
+    // --faint 语义为占位/时间戳/禁用（非正文），按 WCAG UI 组件级 ≥3:1 要求
+    add('新token', '浅色', '--faint', NEXT_BG, nextLight, 3);
+    add('新token', '暗色', '--faint', NEXT_BG, nextDark, 3);
+
+    it.each(cases)(
+      '%s %s = %s 在 %s 上最差对比度 %s 应 ≥ %s',
+      (layer, fg, color, bgAt, ratio, min) => {
+        expect(ratio).toBeGreaterThanOrEqual(min);
+      }
+    );
+
+    it('每个被校验的 token 都应真实定义（防止改名后门禁被静默跳过）', () => {
+      const required = [
+        [legacyLight, LEGACY_BG.concat(['--color-text', '--color-text-secondary', '--color-text-tertiary'])],
+        [legacyDark, LEGACY_BG.concat(['--color-text', '--color-text-secondary', '--color-text-tertiary'])],
+        [nextLight, NEXT_BG.concat(['--fg', '--muted', '--subtle', '--faint'])],
+        [nextDark, NEXT_BG.concat(['--fg', '--muted', '--subtle', '--faint'])],
+      ];
+      required.forEach(([vars, names]) => {
+        names.forEach((n) => expect(vars[n]).toBeDefined());
+      });
+    });
+
+    it('--faint 应按主题跨文件一致（colors_and_type 桥接段 vs tokens.css）', () => {
+      // colors_and_type.css 底部的 v1 桥接段也定义了 --faint，而 tokens.css 后加载
+      // 会覆盖它。两处若不一致，读代码看到的值和实际生效的值就对不上（漂移）。
+      const bridgeLight = parseVars(extractBlock(legacyCss, '/* ===== v1 设计系统 token 桥接'));
+      const bridgeDark = parseVars(extractBlock(legacyCss, 'html[data-theme="dark"]'));
+      expect(bridgeLight['--faint'].toLowerCase()).toBe(nextLight['--faint'].toLowerCase());
+      expect(bridgeDark['--faint'].toLowerCase()).toBe(nextDark['--faint'].toLowerCase());
     });
   });
 });
