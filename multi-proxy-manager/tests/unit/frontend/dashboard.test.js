@@ -45,10 +45,17 @@ describe('Dashboard Page', () => {
       expect(html).toContain('Proxy Manager');
     });
 
-    it('should have nav items for dashboard, logs, and proxy config', () => {
-      expect(html).toContain('data-page="dashboard"');
-      expect(html).toContain('data-page="logs"');
-      expect(html).toContain('proxy-config.html');
+    it('should source sidebar nav from single nav.js and cover key pages (P0-5)', () => {
+      // P0-5：4 页主导航统一由 public/nav.js 在运行时注入（单一导航来源），
+      // 静态 dashboard.html 不再硬编码 <div data-page="...">；主导航改 <a href> 路由。
+      // proxy-config.html 仍由页内动态 proxy-nav 引用（见 dashboard.html buildProxyNavItems）。
+      expect(html).toContain('nav.js');       // 引单一来源
+      expect(html).toContain('renderNav');     // 运行时注入调用
+      expect(html).toContain('proxy-config.html'); // 动态 proxy-nav 仍引用
+      var nav = fs.readFileSync(path.join(PUBLIC_DIR, 'nav.js'), 'utf8');
+      expect(nav).toContain("id: 'dashboard'"); // 真源覆盖：总览/日志/代理配置
+      expect(nav).toContain("id: 'logs'");
+      expect(nav).toContain("/proxy-config");
     });
 
     it('should have version info element in sidebar footer', () => {
@@ -138,6 +145,30 @@ describe('Dashboard Page', () => {
       expect(html).toContain("codex:");
       expect(html).toContain("hermes:");
       expect(html).toContain("cursor:");
+    });
+
+    it('should define PROXY_CONFIGS for the other installed proxies (P0-1)', () => {
+      // 2026-10-22 P0-1：面板此前只管 3 个代理，实测本机还有 6 个在跑/已装的。
+      // 键名与端口必须与 lib/process-manager.js buildProxyConfigs() 逐字一致。
+      const installed = {
+        claude: 18791,
+        dsh: 18797,
+        opencode: 18798,
+        generic: 18799,
+        'opencode-free': 18800,
+        'workbuddy-shim': 18789,
+      };
+      for (const [key, port] of Object.entries(installed)) {
+        // 带连字符的键在 JS 里必须写成 'opencode-free': {...}，故允许可选引号。
+        expect(html).toMatch(new RegExp("['\"]?" + key + "['\"]?\\s*:"));
+      }
+      // 端口也钉住：前端副本漂移会让卡片跳到错端口
+      expect(html).toContain('18791');
+      expect(html).toContain('18797');
+      expect(html).toContain('18798');
+      expect(html).toContain('18799');
+      expect(html).toContain('18800');
+      expect(html).toContain('18789');
     });
 
     it('should have proxy cards with toggle buttons', () => {
