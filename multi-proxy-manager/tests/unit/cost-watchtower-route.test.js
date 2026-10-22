@@ -144,11 +144,11 @@ describe('cost route e2e (/api/cost/report → /api/cost/watchtower)', () => {
   });
 
   // ── 2026-10-16 补：门控可见性 + 账本完整度 ──────────────────────
-  // 这两项是「产品化」的直接体现：PROXY_COST_TRACK 默认关，没开记账与开了但
-  // 没流量在账本上长得一模一样（都是空），读者看到空周报只会觉得工具没用。
+  // 这两项是「产品化」的直接体现：成本记账默认已开（OOBE 红线 2），仅显式 off 才关；
+  // 开了但没流量与显式关在账本上长得不一样（enabled 字段区分），读者看到空周报能分辨原因。
 
-  test('门控未开 → tracking.enabled=false 且带 hint（空表要解释为什么空）', async () => {
-    delete process.env.PROXY_COST_TRACK;   // 模拟「部署了但没开记账」的默认态
+  test('门控显式 off → tracking.enabled=false 且带 hint（空表要解释为什么空）', async () => {
+    process.env.PROXY_COST_TRACK = 'off';   // 模拟「显式关闭记账」的态（默认已开，必须显式 off 才关）
     const res = await request(app).get('/api/cost/watchtower').set(authHdr);
     expect(res.status).toBe(200);
     expect(res.body.tracking.enabled).toBe(false);

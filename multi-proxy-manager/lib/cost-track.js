@@ -13,7 +13,7 @@
 // 设计原则（与 l2/ 内核铁律一致）：
 //   - 非侵入：门控关时热路径零开销（只调 enabled() 做布尔判断，< 1μs）；
 //            门控开时只读 usage 字段（不改 response.data、不注入 header）。
-//   - 门控 PROXY_COST_TRACK 默认关 = observe（热路径不提取），开 = 提取累计 + **落盘**。
+//   - 门控 PROXY_COST_TRACK 默认开 = 提取累计 + **落盘**；仅显式 'off' 才关（= observe，热路径不提取）。
 //   - pricing 注入：PROXY_PRICING_<proxy> env = JSON `{input, output, cacheHit?}`（每百万 tokens，CNY/USD）。
 //     与 PROVIDERS-README.md 的 pricing 字段对齐。无 env 时默认 {input:0, output:0}（本地模型 cost=0）。
 //   - pricing 可由 server 启动时调 `loadPricingFromEnv()` 注入，或调 `setPricing(name, pricing)` 显式设。
@@ -24,7 +24,8 @@
 //    3. alert-route.js collect：`getCost(proxy)` 拿累计花费
 //
 // 门控 env：
-//   PROXY_COST_TRACK=1/true/on  → 开（提取 usage 累计 + 落盘）
+//   PROXY_COST_TRACK 未设置/任意值 → 开（默认，提取 usage 累计 + 落盘）
+//   PROXY_COST_TRACK=off         → 关（仅显式 off，不区分大小写；observe 模式）
 //   PROXY_PRICING_<proxy>       → 每 proxy 的单价（JSON，每百万 tokens）
 //   PROXY_COST_LEDGER           → 账本文件路径（默认 ~/.multi-proxy-manager/cost-ledger.jsonl）
 //
@@ -59,9 +60,12 @@ const UNKNOWN = '<unknown>';
 const _seen = new Set();
 const SEEN_MAX = 50000;
 
+// OOBE 红线 2（成本记账默认开）：默认 ON，仅显式 'off' 才关。
+// 旧语义是「默认关，需 PROXY_COST_TRACK=1/true/on 才开」——导致新用户开箱账本为空表（PM P0）。
+// 现在 unset / 空 / 任意非 'off' 的值都算开；显式 'off'（不区分大小写）才关。
 function enabled() {
   const v = String(process.env.PROXY_COST_TRACK ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'on';
+  return v !== 'off';
 }
 
 // ---- 内存态 per-proxy 累计 ----

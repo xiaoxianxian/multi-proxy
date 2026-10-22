@@ -69,15 +69,15 @@ router.get('/watchtower', requireAgentAuth, (req, res) => {
       // 让部署侧能覆盖（比如部署在 UTC 机器上但团队在东部时区）。
       tz: process.env.PROXY_COST_TZ || undefined
     });
-    // 门控状态必须随报返回（2026-10-16 加）：PROXY_COST_TRACK 默认关，
-    // 「没开记账」和「开了但真没流量」在账本上长得一模一样（都是空），
-    // 而读者看到空周报的第一反应是「这工具没用」——必须让他看见差别。
+    // 门控状态必须随报返回（2026-10-16 加）：成本记账默认开（OOBE 红线 2），
+    // 仅显式 PROXY_COST_TRACK=off 才关。「开了但真没流量」和「显式关了」在账本上
+    // 长得不一样（前者 enabled=true、后者 enabled=false）——必须让他看见差别。
     // 口径分开报：enabled=false 时下面这些数可能是历史存量，不是当前状态。
     const trackingEnabled = costTrack.enabled();
     report.tracking = { enabled: trackingEnabled, hint: null };
     if (!trackingEnabled) {
-      report.tracking.hint = '当前未开启记账（PROXY_COST_TRACK 未设为 1/true/on）。'
-        + '下面的数是门控开启期间的历史存量，不是当前状态；开启并重启 manager 后才会记新账。';
+      report.tracking.hint = '记账已显式关闭（PROXY_COST_TRACK=off）。'
+        + '下面的数是开启期间的历史存量，不是当前状态；移除 off 并重启 manager 后才会记新账。';
     } else if (report.spend.entryCount === 0) {
       report.tracking.hint = '已开启记账，但本窗口没有记录。确认流量确实经过 multi-proxy，'
         + '且代理能连上 manager（上报失败会在代理侧打一次 [cost] 警告）。';

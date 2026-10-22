@@ -20,24 +20,23 @@ const LEDGER = path.join(LEDGER_DIR, 'cost-ledger.jsonl');
 // ~/.multi-proxy-manager/cost-ledger.jsonl，假账直接写进真账本。
 beforeEach(() => { process.env.PROXY_COST_LEDGER = LEDGER; });
 
-// L2 P2 A路·token×单价埋点内核（热路径内存累计，门控 PROXY_COST_TRACK 默认关）
+// L2 P2 A路·token×单价埋点内核（热路径内存累计，门控 PROXY_COST_TRACK 默认开 · OOBE 红线 2）
 describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
   beforeEach(() => { CT.reset(); delete process.env.PROXY_COST_TRACK; });
   afterEach(() => { CT.reset(); delete process.env.PROXY_COST_TRACK; });
 
-  // ---- 门控：默认关 ----
-  test('门控默认关：enabled()=false，热路径零行为', () => {
-    expect(CT.enabled()).toBe(false);
+  // ---- 门控：默认开（OOBE 红线 2：默认开，仅显式 off 才关）----
+  test('门控默认开：enabled()=true，热路径记录', () => {
+    expect(CT.enabled()).toBe(true);   // unset ⇒ 默认开
     CT.setPricing('openai', { input: 10, output: 20 });
     CT.accumulate('openai', { prompt_tokens: 1000, completion_tokens: 500 });
-    // 门控关时 accumulate 不提取、不累计。
-    // ⚠️ 逐字段显式校验，不用整对象 toEqual —— getCost() 后加字段（如 latencyP50）不该炸掉这条测试。
+    // 门控开时 accumulate 提取 + 累计。逐字段显式校验（与历史测试同口径）。
     const c0 = CT.getCost('openai');
-    expect(c0.promptTokens).toBe(0);
-    expect(c0.completionTokens).toBe(0);
-    expect(c0.totalTokens).toBe(0);
-    expect(c0.cost).toBe(0);
-    expect(c0.requestCount).toBe(0);
+    expect(c0.promptTokens).toBe(1000);
+    expect(c0.completionTokens).toBe(500);
+    expect(c0.totalTokens).toBe(1500);
+    expect(c0.cost).toBeCloseTo(1000 / 1e6 * 10 + 500 / 1e6 * 20, 9);
+    expect(c0.requestCount).toBe(1);
     expect(c0.latencyP50).toBeNull(); // 无样本 ⇒ null，绝不 0
    });
 
@@ -50,11 +49,19 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
     expect(CT.enabled()).toBe(true);
    });
 
-  test('门控 off 的其它写法：=0/false/no/空 均不启用', () => {
-    for (const v of ['0', 'false', 'no', '', undefined]) {
+  test('门控仅显式 off 关闭：=off/OFF 关，其余(含空/unset/0/false/no)均开', () => {
+    for (const v of ['0', 'false', 'no', 'true', '1', 'on', 'ON', 'True']) {
       process.env.PROXY_COST_TRACK = v;
-      expect(CT.enabled()).toBe(false);
+      expect(CT.enabled()).toBe(true);
      }
+    delete process.env.PROXY_COST_TRACK;
+    expect(CT.enabled()).toBe(true);   // unset ⇒ 默认开
+    process.env.PROXY_COST_TRACK = '';
+    expect(CT.enabled()).toBe(true);    // 空串 ⇒ 默认开
+    process.env.PROXY_COST_TRACK = 'off';
+    expect(CT.enabled()).toBe(false);
+    process.env.PROXY_COST_TRACK = 'OFF';
+    expect(CT.enabled()).toBe(false);
    });
 
   // ---- 门控开：提取 + 累计 ----
@@ -164,11 +171,12 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
     expect(rows).toHaveLength(10);
    });
 
-  test('门控关时 accumulate 不创建 state（零副作用，不污染全局 _state）', () => {
-    // 门控 default off
+  test('门控显式 off 时 accumulate 不创建 state（零副作用，不污染全局 _state）', () => {
+    // 默认开；此测试验证「显式 off」仍保持 observe 语义（零副作用）
+    process.env.PROXY_COST_TRACK = 'off';
     expect(CT.getAll()).toEqual({});
     CT.accumulate('openai', { prompt_tokens: 100, completion_tokens: 50 });
-     // 门控关 → 没创建 _state['openai']
+     // 门控 off → 没创建 _state['openai']
     expect(CT.getAll()).toEqual({});
     const cz = CT.getCost('openai');
     expect(cz.promptTokens).toBe(0);
@@ -199,9 +207,13 @@ describe('cost-track (P2 A路·token×单价埋点 · 门控非侵入)', () => {
   // 只补测试、不动实现：在途改动还没入库，这里先钉住它的可观测契约，
   // 免得实现侧改坏（比如把 null 写成 0）没人发现。
   test('latencyP50：无样本返 null，绝不 0（0 会被 floor view 读成「零延迟」假数据）', () => {
-    CT.recordLatency('openai', 100);           // 门控默认关 ⇒ 直接返回，不进样本
+    process.env.PROXY_COST_TRACK = 'off';      // 显式 off ⇒ recordLatency 直接返回，不进样本
+    CT.recordLatency('openai', 100);
     expect(CT.latencyP50('openai')).toBeNull();
-    process.env.PROXY_COST_TRACK = '1';
+    delete process.env.PROXY_COST_TRACK;       // 默认开（OOBE 红线 2）
+    CT.reset();
+    CT.recordLatency('openai', 100);           // 默认开 ⇒ 进样本
+    expect(CT.latencyP50('openai')).toBe(100);
     CT.reset();
     expect(CT.latencyP50('openai')).toBeNull();
    });
@@ -429,7 +441,8 @@ describe('cost-track 持久账本 + 三模型字段', () => {
     expect(row.reqId).toBe('r-9');
    });
 
-  test('门控关时一切不落盘（含账本）', () => {
+  test('门控显式 off 时一切不落盘（含账本）', () => {
+    process.env.PROXY_COST_TRACK = 'off';
     expect(CT.enabled()).toBe(false);
     CT.setPricing('p', { input: 10, output: 10 });
     CT.accumulate('p', { prompt_tokens: 100, completion_tokens: 100 });
