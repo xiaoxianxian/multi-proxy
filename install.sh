@@ -219,9 +219,14 @@ install_hermes() {
     return 1
   fi
 
-  if has_python && [ -f "$dir/requirements.txt" ]; then
-    print_info "安装 Python 依赖..."
-    pip3 install -r "$dir/requirements.txt" --quiet 2>&1
+  # 优先从 requirements.lock 装（钉死含传递依赖的完整闭包）；没有 lock 的旧克隆
+  # 才退回 requirements.txt。直依赖只列 3 个，其余自由解析正是 LiteLLM 投毒事件
+  # （2026-10-21）打进来的那个洞。
+  local req="$dir/requirements.txt"
+  [ -f "$dir/requirements.lock" ] && req="$dir/requirements.lock"
+  if has_python && [ -f "$req" ]; then
+    print_info "安装 Python 依赖（$(basename "$req")）..."
+    pip3 install -r "$req" --quiet 2>&1
     print_ok "Hermes Proxy Python 依赖安装完成"
   fi
 }

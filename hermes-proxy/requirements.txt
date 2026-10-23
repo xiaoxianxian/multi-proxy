@@ -1,4 +1,17 @@
 # Python dependencies for Hermes Proxy
-Flask==3.0.0
+#
+# 这里只列**直接依赖**（人维护）。完整闭包（含传递依赖）在 requirements.lock，
+# 由 `uv pip compile` 生成，安装和 CI 都从 lock 走——直接依赖写范围、lock 钉死
+# 版本，才不会出现「CI 里 unpinned 拉包」这个洞（LiteLLM 投毒事件 2026-10-21
+# 正是从这一个洞打进来的：恶意 1.107.0 只在 PyPI 上活了 1 小时 44 分钟，任何
+# 在那期间自由解析依赖的构建都会中）。
+#
+# 版本 bumped 2026-10-23（pip-audit 报的存量漏洞，均已验证修复版干净）：
+#   Flask    3.0.0  → 3.1.3   PYSEC-2026-2151（CVE-2026-27205）
+#   requests 2.31.0 → 2.33.0  PYSEC-2026-1873 / -1872 / -2275
+#   pyyaml   6.0.1   保持      （审计干净）
+# 改完记得重新生成 lock：uv pip compile hermes-proxy/requirements.txt \
+#   --universal -o hermes-proxy/requirements.lock
+Flask==3.1.3
 pyyaml==6.0.1
-requests==2.31.0
+requests==2.33.0

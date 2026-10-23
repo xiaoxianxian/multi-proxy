@@ -65,7 +65,11 @@ jobs:
       - name: pytest
         run: |
           pip install pytest
-          pip install -r hermes-proxy/requirements.txt
+          # 从 requirements.lock 装，不从 requirements.txt 装：前者钉死含传递依赖的
+          # 完整闭包，后者只列 3 个直接依赖，其余自由解析 —— 那正是 LiteLLM 投毒事件
+          # （2026-10-21）打进来的那个洞。改直依赖后要重新生成 lock：
+          #   uv pip compile hermes-proxy/requirements.txt --universal -o hermes-proxy/requirements.lock
+          pip install -r hermes-proxy/requirements.lock
           cd hermes-proxy && python -m pytest -q
 
   l2:
@@ -164,3 +168,36 @@ jobs:
             echo "FAIL: $n file(s) missing copyright header — run: DRY_RUN=false bash scripts/add-copyright-header.sh"; exit 1
           fi
           echo "license-header OK (0 missing)"
+
+  # 依赖供应链审计棘轮闸（2026-10-23 加）。缺口来自 LiteLLM 投毒事件复盘：
+  # 那条链是「GitHub CLI OAuth token 被偷 → 改 release pipeline → 从李鬼仓库
+  # Berri-AI/litellm 构建 → PyPI 上的 1.107.0 内置 16 模块窃密器」，本仓库
+  # 当时只有功能门禁，对「CI 里 unpinned 拉包」这一环零可见。
+  #
+  # 为什么不是清零闸、也为什么不按 total 拦——都是量出来的：
+  #   全量（含 devDependencies）实测 38 / 41 / 45 条，九成在 jest/babel/
+  #   @electron/get 的 dev 树上，不进产物。按 total 拦等于第一天全红。
+  #   生产依赖（--omit=dev）实测 1 / 3 / 3 条，其中 proxy-addr 的 critical
+  #   要等 express 5 才修得掉（4.22.2 已是最新 4.x）——清零要等升级排期，
+  #   不是加个闸门能催出来的。
+  # 所以设棘轮：高于脚本里的基线即红，等于基线不拦；存量清完把基线改 0
+  # 即自动变成清零闸。完整推导见 scripts/dep-audit.py 顶部注释。
+  #
+  # 审计只读 lockfile，不 npm ci（实测 cp package*.json 到空目录即可出报告），
+  # 所以本 job 不需要 npm cache，比 codex/cursor/manager 三个 job 快一个量级。
+  dep-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # 钉版本：审计工具自身的版本也是供应链的一环
+      - name: install pip-audit (pinned)
+        run: python3 -m pip install --quiet pip-audit==2.10.1
+      - name: dependency audit (production critical+high ratchet)
+        run: python3 scripts/dep-audit.py
