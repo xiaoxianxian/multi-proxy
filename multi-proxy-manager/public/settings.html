@@ -22,6 +22,7 @@
        <button class="tab active" data-tab="appearance">外观</button>
        <button class="tab" data-tab="about">关于</button>
        <button class="tab" data-tab="update">更新与备份</button>
+      <button class="tab" data-tab="plugins">插件</button>
      </div>
 
      <!-- 外观 -->
@@ -104,6 +105,36 @@
          </div>
        </div>
      </section>
+    <!-- 插件 -->
+    <section class="tab-panel" data-panel="plugins">
+      <style>
+        #flpInstall{background:#2f6f4f;color:#fff;border:1px solid #2f6f4f}
+        #flpInstall:hover{background:#275f43}
+        #flpInstall:disabled{opacity:.5;cursor:default}
+        .flp-risks{margin:6px 0 0 18px;color:#9a3b2e;font-size:13px;line-height:1.7}
+        .flp-risks li{margin:2px 0}
+      </style>
+      <div class="card">
+        <h3 class="card-h">免费模型聚合 <span class="badge" id="flpStatus">检测中…</span></h3>
+        <p class="page-subtitle" style="margin-top:4px">把 OpenRouter / Groq / 硅基流动 / Vercel / OpenCode Zen / Kilo 匿名池 的免费模型聚合成 multi-proxy 统一入口（generic-openai-proxy 18799）。一家 429 自动切下一家。</p>
+        <div class="row">
+          <div class="row-main">
+            <div class="row-title">当前已装免费源</div>
+            <div class="row-desc" id="flpProviders">—</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="flpInstall" type="button">安装 / 刷新</button>
+          <button class="btn btn-ghost" id="flpUninstall" type="button">卸载</button>
+          <span id="flpBusy" style="display:none" class="badge badge--info">执行中…</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 class="card-h">风险提示（必读）</h3>
+        <ul class="flp-risks" id="flpRisks"><li>加载中…</li></ul>
+        <p class="row-desc" style="margin-top:8px">默认不安装。是否启用由你决定；介意上述风险的用户可始终保持卸载状态，multi-proxy 主体不受影响（18799 核心、其它 provider 均不动）。</p>
+      </div>
+    </section>
    </main>
 
    <div id="toasts" class="toasts"></div>
@@ -159,5 +190,48 @@
          });
      })();
    </script>
+  <script>
+    (function(){
+      function toast(msg, kind){
+        var box = document.getElementById('toasts');
+        if (!box) return;
+        var el = document.createElement('div');
+        el.className = 'toast' + (kind === 'info' ? ' toast--info' : '');
+        el.textContent = msg;
+        box.appendChild(el);
+        setTimeout(function(){ el.remove(); }, 3600);
+      }
+      var statusEl = document.getElementById('flpStatus');
+      var provEl = document.getElementById('flpProviders');
+      var risksEl = document.getElementById('flpRisks');
+      var installBtn = document.getElementById('flpInstall');
+      var uninstallBtn = document.getElementById('flpUninstall');
+      var busy = document.getElementById('flpBusy');
+      function setBusy(b){ if(busy) busy.style.display = b ? 'inline-block' : 'none'; if(installBtn) installBtn.disabled = b; if(uninstallBtn) uninstallBtn.disabled = b; }
+      function load(){
+        fetch('/api/free-llm-plugin/status').then(function(r){return r.json();}).then(function(j){
+          if(!j || j.error){ if(statusEl) statusEl.textContent='状态未知'; return; }
+          if(statusEl){ statusEl.textContent = j.installed ? '已安装' : '未安装'; statusEl.style.background = j.installed ? '#2f6f4f' : '#b8860b'; statusEl.style.color = '#fff'; }
+          if(provEl){ provEl.innerHTML = (j.providers && j.providers.length) ? j.providers.map(function(p){ return p.name + (p.anonymous ? '（匿名）' : ''); }).join('、') : '无（默认不安装）'; }
+          if(risksEl && j.disclaimer && j.disclaimer.length){ risksEl.innerHTML = j.disclaimer.map(function(d){ return '<li>'+d+'</li>'; }).join(''); }
+        }).catch(function(){ if(statusEl) statusEl.textContent='状态未知'; });
+      }
+      function run(action){
+        setBusy(true);
+        fetch('/api/free-llm-plugin/'+action, { method:'POST' })
+          .then(function(r){return r.json();})
+          .then(function(j){
+            var ok = j && j.success;
+            toast((ok ? (action==='install'?'安装/刷新完成':'已卸载') : '操作失败：'+((j&&j.error)||'')) + (j&&j.output?('\n'+j.output.slice(0,320)):''), ok?'info':'error');
+            load();
+          })
+          .catch(function(){ toast('操作失败：网络异常','error'); })
+          .finally(function(){ setBusy(false); });
+      }
+      if(installBtn) installBtn.addEventListener('click', function(){ run('install'); });
+      if(uninstallBtn) uninstallBtn.addEventListener('click', function(){ run('uninstall'); });
+      load();
+    })();
+  </script>
 </body>
 </html>

@@ -79,5 +79,35 @@
     ],
     "fallback": ["free-llm-openrouter:thinkingmachines/inkling:free"],
     "_note": "OpenCode Zen 免费档（②类路由厂商）：需 OpenCode 账号 key（免费注册，免费模型限时·零保留；免费账号常 IP 受限，必要时换 IP/代理）。模型 id 即 model 值；/v1/models 可拉全量（含付费），动态刷新后取其中免费者为准"
+  },
+  {
+    "id": "free-llm-kilo",
+    "name": "Kilo·匿名免费池",
+    "provider_id": "kilo",
+    "api_key": "",
+    "base_url": "https://api.kilo.ai/api/gateway",
+    "enabled": true,
+    "is_anonymous": true,
+    "_note": "Kilo AI 公共网关匿名免费池：无需账号/key，OpenAI 兼容（GET /models、POST /chat/completions）。上游可能记录 prompt 用于改进服务，敏感代码勿走；限约 200 次/小时/IP，无 SLA。清单 2026-10-23 实拉 isFree 切片，随上游变动。",
+    "models": [
+      { "id": "kilo-auto/free", "name": "Auto Free（自动路由）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "nvidia/nemotron-3.5-super-vl:free", "name": "Nemotron 3.5 Super VL（视觉·1M ctx）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "reflection/beam-free", "name": "Reflection Beam 1.0（1M ctx）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "stealth/glyph-cluster", "name": "Stealth Glyph Cluster", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "recursive/flint-v1.0:free", "name": "Recursive Flint 1.0", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "xingchen-agi/xing4.0-29b-a4b:free", "name": "XingChen Xing4.0 29B A4B", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "dots-studio/dots-3-note-preview:free", "name": "Dots3-Note Preview（512K ctx）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "liquid/lfm-2.5-2.6b:free", "name": "LiquidAI LFM2.5-2.6B", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "nvidia/nemotron-3.5-lightning:free", "name": "Nemotron 3.5 Lightning（1M ctx）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "poolside/laguna-s-2.1:free", "name": "Poolside Laguna S 2.1", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "poolside/laguna-xs-2.1:free", "name": "Poolside Laguna XS 2.1", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "cohere/north-mini-code:free", "name": "Cohere North Mini Code", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "nvidia/nemotron-3.5-content-safety:free", "name": "Nemotron 3.5 Content Safety", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "nvidia/nemotron-3-ultra-550b-a55b:free", "name": "Nemotron 3 Ultra 550B（1M ctx）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "name": "Nemotron 3 Nano Omni 30B（推理）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "nvidia/nemotron-3-super-120b-a12b:free", "name": "Nemotron 3 Super 120B", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true },
+      { "id": "openrouter/free", "name": "OpenRouter Free Router（200K ctx）", "type": "cloud", "pricing": { "input": 0, "output": 0 }, "is_free": true, "is_anonymous": true }
+    ],
+    "fallback": ["free-llm-openrouter:thinkingmachines/inkling:free", "free-llm-opencode:ling-3.1-flash-free"]
   }
 ]

@@ -181,6 +181,9 @@ app.get('/consent', (_req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/api/legal', (req, res) => {
   res.json(legalLib.legalDoc(String((req.query || {}).type || 'terms')));
 });
+// 免费模型聚合插件：安装/卸载入口（仅执行仓库内 free-llm/*.sh，无外部输入，安全）。
+// 挂在 /api wildcard 之前，避免被 :proxy 误捕获。
+app.use('/api/free-llm-plugin', require('./routes/free-llm-plugin'));
 app.use('/api', apiRoutes);
 app.get('/health', (_req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }); });
 app.use('/api', (req, res, next) => { if (req.path === '/health') return next(); next(); }, metaRoutes);

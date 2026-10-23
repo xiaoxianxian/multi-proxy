@@ -1,7 +1,14 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # free-llm · 免费模型聚合插件（multi-proxy 可选插件）
 
-> 一句话：**把 OpenRouter / Groq / 硅基流动 三家的「免费 key」灌进 multi-proxy 的
+> 一句话：**把 OpenRouter / Groq / 硅基流动 / Vercel / OpenCode Zen 的「免费 key」+ Kilo 的「匿名免费池」灌进 multi-proxy 的
 > `providers.json`，一个门口给你一堆免费模型；某家 429 就自动切下一家。**
+> Kilo 匿名池无需任何账号/key，但上游可能记录 prompt、限 ~200 次/小时/IP——敏感代码勿走。
 >
 > 这是一个**可选插件**：要就 `install`，不要就 `uninstall`，删了它 multi-proxy 主体完全不受影响。
 > 所以「免费源会不会挂、有没有 SLA」是**本插件声明过的已知限制**，不是 multi-proxy 对用户的承诺。
@@ -35,6 +42,8 @@ multi-proxy 主体（`generic-openai-proxy`，端口 **18799**）本来就是一
 | ToS / 合规 | 多数免费 key 只许**个人自用**，禁转售/禁公开服务 | 仅限自用；对外提供前逐家看 ToS |
 | key 集中 | 三家 key 都在 live `providers.json` | 该文件 0600 + 已 `.gitignore`（含 `providers.json`/`.env`/`.multi-proxy-manager/`），不进 git |
 | 地区门 | 个别免费源对部分地区不开 | 以你本机（东京）实测为准 |
+| 匿名池隐私 | Kilo 匿名池上游可能记录 prompt / 工具返回用于改进服务 | 敏感代码、私有资料只走自带 key 的源；匿名池仅用于非敏感探索 |
+| 匿名池限流 | Kilo 限约 200 次/小时/IP，无账号无申诉 | 高并发/生产请走 OpenRouter/Groq/硅基流动等自带 key 源 |
 
 ## 3. 免责条款（本插件核心立场）
 

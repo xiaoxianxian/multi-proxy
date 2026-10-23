@@ -1,6 +1,14 @@
+<!--
+multi-proxy — Copyright © 2026 xiaoxian (Jason)
+Licensed under AGPL-3.0 (source) + Commercial license (see LICENSE-COMMERCIAL.md).
+This file is part of the multi-proxy project.
+-->
+
 # free-llm · 填 key 三步走（每个用户装完照这个做）
 
 **要不要充钱？不用。** 三家都是"注册即免费"，领个免费 key 填进去就行，没有付费/充值动作。
+
+**还有一路「零账号」匿名池（Kilo）：装了就有，连 key 都不用填。** 它在 `providers.seed.json` 里是 `free-llm-kilo`（`api_key` 留空），`install.sh` 会自动并进去；风险是上游可能记录 prompt、限 ~200 次/小时/IP——敏感代码别走它。介意就别点安装，或多装那几家自带 key 的源。
 
 ## 一键向导（推荐）
 ```
