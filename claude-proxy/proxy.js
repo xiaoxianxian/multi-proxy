@@ -274,12 +274,12 @@ function findProvider(modelName) {
     if (Array.isArray(p.models) && p.models.includes(modelName)) {
       // ⚠️ anthropicBaseUrl 必须一起带出：/v1/messages 的厂商规则对自定义上游未必适用，
       // 漏了它 = 显式逃生口形同不存在（测试抓到的）。
-      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl, responsesTranslate: p.responsesTranslate, responsesTarget: p.responsesTarget };
+      return { name: p.name, baseUrl: p.base_url, apiKey: p.api_key, availableModels: p.models, anthropicBaseUrl: p.anthropicBaseUrl, responsesTranslate: p.responsesTranslate, responsesTarget: p.responsesTarget, messagesTranslate: p.messagesTranslate };
     }
   }
   const userMatch = userProviders.find(p => p.provider_id && modelName.toLowerCase().includes(String(p.provider_id).toLowerCase()));
   if (userMatch) {
-    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl, responsesTranslate: userMatch.responsesTranslate, responsesTarget: userMatch.responsesTarget };
+    return { name: userMatch.name, baseUrl: userMatch.base_url, apiKey: userMatch.api_key, availableModels: userMatch.models || [], anthropicBaseUrl: userMatch.anthropicBaseUrl, responsesTranslate: userMatch.responsesTranslate, responsesTarget: userMatch.responsesTarget, messagesTranslate: userMatch.messagesTranslate };
   }
 
   // 2. Legacy built-in env-key providers (DeepSeek / Kimi / Agnes)
@@ -887,7 +887,7 @@ app.get('/api/providers', requireAuth, (req, res) => {
 
 // POST /api/providers — create a new provider
 app.post('/api/providers', requireAuth, (req, res) => {
-  const { name, provider_id, api_key, base_url, enabled, models, responsesTranslate, responsesTarget } = req.body;
+  const { name, provider_id, api_key, base_url, enabled, models, responsesTranslate, responsesTarget, messagesTranslate } = req.body;
   if (!name || !provider_id || !api_key || !base_url) {
     return res.status(400).json({ success: false, error: 'Missing required fields: name, provider_id, api_key, base_url' });
   }
@@ -904,6 +904,7 @@ app.post('/api/providers', requireAuth, (req, res) => {
     enabled: enabled !== false,
     responsesTranslate: responsesTranslate === true,
     responsesTarget: responsesTarget === 'messages' ? 'messages' : (responsesTarget || 'chat'),
+    messagesTranslate: messagesTranslate === true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -918,7 +919,7 @@ app.put('/api/providers/:id', requireAuth, (req, res) => {
   if (idx === -1) {
     return res.status(404).json({ success: false, error: 'Provider not found' });
   }
-  const allowedFields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled', 'models', 'responsesTranslate', 'responsesTarget'];
+  const allowedFields = ['name', 'provider_id', 'api_key', 'base_url', 'enabled', 'models', 'responsesTranslate', 'responsesTarget', 'messagesTranslate'];
   const updates = {};
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
@@ -1571,6 +1572,95 @@ function anthropicMessagesUrl(provider) {
   return `${base}/messages`;
 }
 
+// ===== P9：Messages 协议翻译（Anthropic Messages ⇄ OpenAI ChatCompletions）=====
+//   Claude Code 只说 /v1/messages；免费模型池（Kilo 匿名池等）只说 /v1/chat/completions，
+//   直接透传必得上游 404。开启 provider.messagesTranslate 后走本分支：请求翻成 chat
+//   发给上游，响应（含流式 SSE）翻回 Messages。默认 false = 维持原透传（零行为变更）。
+const MT = require('../l2/messages-translate.js');
+
+async function handleTranslatedMessages(req, res, provider, upstreamSignal) {
+  // 顺序不能反：normalizeTools 按 t.type 白名单剔除工具（token-policy-bridge 的行规），
+  // 而 Anthropic 工具是 {name, description, input_schema}、**没有 type 字段** —— 若先过
+  // 规范化会被整包剔光，上游收不到任何工具定义。故先翻成 OpenAI 形态（type=function）
+  // 再交给既有规范化，能力既保留、也不绕过既定门规。
+  const pre = MT.messagesToChatCompletions(req.body);
+  const { body } = normalizeTools(pre);
+  const translated = body;
+  translated.stream = !!req.body.stream;
+
+  const upstreamUrl = `${provider.baseUrl}/chat/completions`;
+  const headers = { 'Content-Type': 'application/json' };
+  // 匿名免费池无 key：此时绝不能发 `Bearer undefined`（部分上游会直接 401）
+  if (provider.apiKey) headers.Authorization = `Bearer ${provider.apiKey}`;
+
+  const t0 = Date.now();
+  const response = await fetch(upstreamUrl, {
+    method: 'POST', headers, body: JSON.stringify(translated), signal: upstreamSignal,
+  });
+
+  if (!response.ok) {
+    feedCircuit(provider, classifyUpstreamStatus(response.status));
+    const err = await response.text();
+    console.error(`[messages-translate] upstream error (status ${response.status}): ${err.slice(0, 300)}`);
+    if (!canWrite(res)) return;
+    return res.status(response.status).json({ success: false, error: 'Upstream error', code: 'UPSTREAM_ERROR' });
+  }
+  feedCircuit(provider, 'success');
+
+  if (!translated.stream) {
+    const upstreamJson = await response.json();
+    const resp = MT.chatCompletionsToMessages(upstreamJson, req.body);
+    if (!canWrite(res)) return;
+    res.json(resp);
+    const acc = JSON.stringify(upstreamJson);
+    if (!upstreamSignal.aborted) reportUsage(acc, Date.now() - t0, detectAgent(req), req.body && req.body.model);
+    captureTrace({ req, provider, rawOrObj: upstreamJson, meta: { agent: 'claude-proxy', stream: false, translated: 'chat' } });
+    return;
+  }
+
+  // 流式：上游 SSE 逐行解析 → Anthropic Messages SSE
+  if (!canWrite(res)) return;
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  const emitter = new MT.MessagesStreamEmitter(req.body);
+  const nodeStream = Readable.fromWeb(response.body);
+  let buffer = '';
+  let acc = '';
+  let pendingUsage = null;
+  let finishReason = null;
+  const flushLine = (data) => {
+    if (data === '[DONE]') return;
+    let obj; try { obj = JSON.parse(data); } catch { return; }
+    const choice = obj.choices && obj.choices[0];
+    const delta = choice && choice.delta;
+    if (delta && delta.content) { const s = emitter.pushText(delta.content); if (s) res.write(s); }
+    if (delta && Array.isArray(delta.tool_calls)) {
+      for (const tc of delta.tool_calls) { const s = emitter.pushTool(tc.index, tc); if (s) res.write(s); }
+    }
+    if (choice && choice.finish_reason) finishReason = choice.finish_reason;
+    if (obj.usage) pendingUsage = obj.usage;
+  };
+  try {
+    for await (const chunk of nodeStream) {
+      const raw = chunk.toString();
+      acc += raw;
+      buffer += raw;
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx); buffer = buffer.slice(idx + 1);
+        const t = line.trim();
+        if (t.startsWith('data:')) flushLine(t.slice(5).trim());
+      }
+    }
+    const s = emitter.end(pendingUsage, finishReason); if (s) res.write(s);
+    res.end();
+    // 流走完才上报，半截 usage 不上报（与 L004 同纪律）
+    if (acc && !upstreamSignal.aborted) reportUsage(acc, Date.now() - t0, detectAgent(req), req.body && req.body.model);
+  } catch (e) {
+    if (canWrite(res)) { try { const s = emitter.end(pendingUsage, finishReason); res.write(s); } catch { /* noop */ } res.end(); }
+    console.error(`[messages-translate] stream error: ${e.message}`);
+  }
+}
+
 app.post('/v1/messages', requireAuth, async (req, res) => {
   let circuitProvider = null;
   try {
@@ -1587,6 +1677,14 @@ app.post('/v1/messages', requireAuth, async (req, res) => {
     if (await applyBudgetGuard(model, req, res) !== 'continue') return;
     circuitProvider = provider;
     if (!circuitAllows(provider, res)) return;
+
+    // P9：Messages 协议翻译分支（上游只说 OpenAI 协议时，如 Kilo 匿名免费池）。
+    //     门控默认关 → 下方维持原透传路径（零行为变更）。
+    if (provider.messagesTranslate) {
+      const upstreamSignal = createUpstreamSignal(req, res);
+      await handleTranslatedMessages(req, res, provider, upstreamSignal);
+      return;
+    }
 
     const upstreamUrl = anthropicMessagesUrl(provider);
     // 鉴权：Anthropic 原生认 x-api-key；Claude Code 走 ANTHROPIC_AUTH_TOKEN 时发 Bearer。
