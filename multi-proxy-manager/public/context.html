@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proxy Manager - Context</title>
+  <title>Multi-Proxy Manager - Context</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EC%3C/text%3E%3C/svg%3E" type="image/svg+xml">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./shared-styles.css">
+  <script src="./theme.js"></script>
 </head>
 <style>
   body { margin: 0; background: var(--color-bg-secondary, #f5f6f8); color: var(--color-text); font-family: var(--font-family, -apple-system, "Segoe UI", sans-serif); }
@@ -62,8 +63,8 @@
 <body>
 <div class="layout">
   <aside class="sidebar">
-    <div class="sidebar-brand"><div class="logo-icon">P</div><h1>Multi-Proxy</h1></div>
-    <nav class="sidebar-nav">
+    <div class="sidebar-brand"><div class="logo-icon">P</div><h1>Multi-Proxy Manager</h1></div>
+    <nav class="sidebar-nav" id="sidebarNav">
       <a href="dashboard.html">概览</a>
       <a href="floor.html">Floor（代理面）</a>
       <a href="context.html" class="active">Context（上下文组成）</a>
@@ -207,8 +208,17 @@
   }
 
   function load() {
+    // 注册式重试：避免 innerHTML 重绘丢失监听；首次进入在 MPStates 就绪后（见底部守卫）
+    MPStates.registerRetry('context:load', load);
+    // 加载骨架：fetch 回来前先占位，避免「白板」被误读成「没有数据」
+    ['kpi', 'stack', 'legend', 'trend', 'events'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = MPStates.skeleton({ variant: 'text', count: 3 });
+    });
+    document.getElementById('meta').textContent = '加载中…';
+
     fetch('./api/context/summary?windowMs=' + 86400000)
-      .then(function (r) { return r.json(); })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (s) {
         document.getElementById('chip-track').textContent = '观测中 · ' + nf(s.requests) + ' 请求';
         document.getElementById('chip-track').className = 'chip on';
@@ -219,11 +229,13 @@
         document.getElementById('kpi').innerHTML = kpiHtml(s);
         document.getElementById('stack').innerHTML = stackHtml(s.byCategory, total);
         document.getElementById('legend').innerHTML = legendHtml(s.byCategory, total);
-        return fetch('./api/context/recent?n=40').then(function (r) { return r.json(); }).then(function (d) {
-          var rows = d.rows || [];
-          document.getElementById('trend').innerHTML = trendHtml(rows);
-          document.getElementById('events').innerHTML = eventsHtml(rows);
-        });
+        return fetch('./api/context/recent?n=40')
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function (d) {
+            var rows = d.rows || [];
+            document.getElementById('trend').innerHTML = trendHtml(rows);
+            document.getElementById('events').innerHTML = eventsHtml(rows);
+          });
       })
       .then(function () {
         document.getElementById('note').innerHTML =
@@ -233,6 +245,16 @@
       })
       .catch(function (e) {
         document.getElementById('meta').textContent = '加载失败：' + e.message;
+        // 读失败 ≠ 没有数据：每个数据容器单独给错误态 + 重试，而不是留白
+        ['kpi', 'stack', 'legend', 'trend', 'events'].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.innerHTML = MPStates.error({
+            title: '读取失败',
+            detail: e.message,
+            hint: '上下文观测接口读不到，不代表没有上下文占用。可点重试或刷新。',
+            retryKey: 'context:load'
+          });
+        });
       });
   }
 
@@ -240,8 +262,18 @@
   document.getElementById('btn-theme').addEventListener('click', function () {
     document.documentElement.classList.toggle('dark');
   });
-  load();
+  // 轮询直到 states.js 就绪再跑 load()：底部脚本经请求拦截时，单次 setTimeout(0)
+  // 可能在 states.js 执行前触发，导致内部 MPStates.registerRetry 报「未定义」。
+  (function waitForStates(attempt) {
+    if (window.MPStates) { load(); return; }
+    if (attempt > 60) return; // ~2s 兜底，避免死循环
+    setTimeout(function () { waitForStates(attempt + 1); }, 30);
+  })(0);
 })();
 </script>
+    <script src="./icons.js"></script>
+<script src="./nav.js"></script>
+<script src="./states.js"></script>
+  <script>if(window.renderNav){renderNav(document.getElementById('sidebarNav'),{current:'context'});}</script>
 </body>
 </html>

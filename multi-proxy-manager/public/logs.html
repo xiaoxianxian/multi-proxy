@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proxy Manager - 日志</title>
+  <title>Multi-Proxy Manager - 日志</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./shared-styles.css">
   <!-- 设计系统 v1.0（2026-10-16 迁移）：新 token + 新组件层；旧两 CSS 保留作别名桥；新层最后加载＝视觉默认 -->
   <link rel="stylesheet" href="./tokens.css">
   <link rel="stylesheet" href="./components.css">
+  <script src="./theme.js"></script>
 </head>
 <style>
 /* ============================================
@@ -645,7 +646,7 @@ body {
 
 <!-- Mobile Menu Button -->
 <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-    <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
 
 <!-- Sidebar Overlay (mobile) -->
@@ -656,13 +657,13 @@ body {
   <!-- Rule 1: Unified sidebar-brand (NO .sidebar-brand) -->
   <div class="sidebar-brand">
     <div class="logo-icon">P</div>
-    <h1>Proxy Manager</h1>
+    <h1>Multi-Proxy Manager</h1>
   </div>
 
   <nav class="sidebar-nav" id="sidebarNav">
     <div class="nav-label">总览</div>
     <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
-      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
       概览
     </div>
 
@@ -671,7 +672,7 @@ body {
 
     <div class="nav-label">系统</div>
     <div class="nav-item active" data-page="logs" data-tooltip="日志" tabindex="0">
-      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+      <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
       日志
     </div>
   </nav>
@@ -681,7 +682,7 @@ body {
       v1.0.0
     </div>
     <button class="btn btn-ghost btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
-      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
     </button>
     <button class="btn-logout" onclick="handleLogout()" title="退出登录">&nbsp;&nbsp;登出&nbsp;&nbsp;</button>
   </div>
@@ -692,7 +693,7 @@ body {
 <main class="main" id="mainContent">
   <!-- Offline Banner -->
   <div class="offline-banner hidden" id="offlineBanner">
-    <span class="offline-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <span class="offline-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
     <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
   </div>
 
@@ -723,7 +724,7 @@ body {
     </div>
 
     <div class="filter-group">
-      <input type="text" id="logSearch" class="form-input" placeholder="搜索日志..." style="width:180px;" oninput="onSearchInput()">
+      <input type="text" id="logSearch" class="form-input" placeholder="搜索日志..." style="width:180px;" oninput="onSearchInput()" aria-label="搜索日志...">
     </div>
 
     <span class="time-range-label" style="font-size:12px;color:var(--color-text-tertiary);font-weight:500;margin-left:4px;">最近:</span>
@@ -735,22 +736,22 @@ body {
     <div class="filter-spacer"></div>
 
     <button class="btn btn-sm btn-outline" onclick="loadLogs()" id="refreshBtn">
-      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 刷新
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 刷新
     </button>
 
     <button class="btn btn-sm btn-outline" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
-      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 自动刷新
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="5 3 19 12 5 21 5 3"/></svg> 自动刷新
     </button>
 
-    <button class="btn btn-sm btn-outline" onclick="copyLogs()" title="复制日志"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> 复制</button>
+    <button class="btn btn-sm btn-outline" onclick="copyLogs()" title="复制日志"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> 复制</button>
 
-    <button class="btn btn-sm btn-outline" onclick="exportLogs('txt')" title="导出为 TXT"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出</button>
+    <button class="btn btn-sm btn-outline" onclick="exportLogs('txt')" title="导出为 TXT"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出</button>
     <button class="btn btn-sm btn-outline" onclick="exportLogs('csv')" title="导出为 CSV">CSV</button>
 
     <span class="log-count" id="logCount"></span>
 
     <button class="btn btn-sm btn-danger" onclick="clearLogs()">
-      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 清空
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 清空
     </button>
   </div>
 
@@ -762,13 +763,13 @@ body {
   <!-- M3 常见问题面板（折叠） -->
   <div class="error-panel" id="errorPanel">
     <div class="error-panel-header" id="errorPanelHeader" onclick="toggleErrorPanel()">
-      <span class="panel-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg></span>
+      <span class="panel-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg></span>
       <span class="panel-title">常见问题</span>
       <span class="panel-count" id="errorPanelCount">0</span>
       <span class="panel-toggle">▼ 收起</span>
     </div>
     <div class="error-panel-body" id="errorPanelBody">
-      <input type="text" class="error-search" id="errorSearch" placeholder="搜索错误（如 ETIMEDOUT、better-sqlite3）查看历史与修复..." oninput="onErrorSearchInput()">
+      <input type="text" class="error-search" id="errorSearch" placeholder="搜索错误（如 ETIMEDOUT、better-sqlite3）查看历史与修复..." oninput="onErrorSearchInput()" aria-label="搜索错误（如 ETIMEDOUT、better-sqlite3）查看历史与修复...">
       <div class="error-list" id="errorList">
         <div class="panel-empty">加载中...</div>
       </div>
@@ -785,16 +786,16 @@ body {
 
   // ===== Configuration =====
   var PROXY_CONFIGS = {
-    codex: { name: 'Codex Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>', iconClass: 'codex' },
-    hermes: { name: 'Hermes Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>', iconClass: 'hermes' },
-    cursor: { name: 'Cursor Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>', iconClass: 'cursor' },
+    codex: { name: 'Codex Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>', iconClass: 'codex' },
+    hermes: { name: 'Hermes Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>', iconClass: 'hermes' },
+    cursor: { name: 'Cursor Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>', iconClass: 'cursor' },
     // 2026-10-22 P0-1 补齐：与 lib/process-manager.js buildProxyConfigs() 同源同步。
-    claude: { name: 'Claude Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 9h16M6 4h12l-2 16H8L6 4z"/><circle cx="12" cy="9" r="1"/></svg>', iconClass: 'claude' },
-    dsh: { name: 'DSH Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="12" y1="15" x2="17" y2="15"/></svg>', iconClass: 'dsh' },
-    opencode: { name: 'OpenCode Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>', iconClass: 'opencode' },
-    generic: { name: 'Generic OpenAI Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>', iconClass: 'generic' },
-    'opencode-free': { name: 'OpenCode Free', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2l7 4v8l-7 4-7-4V6l7-4z"/><polyline points="9 12 11.5 14.5 16 9"/></svg>', iconClass: 'opencode-free' },
-    'workbuddy-shim': { name: 'WorkBuddy Shim', icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>', iconClass: 'workbuddy-shim' }
+    claude: { name: 'Claude Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9h16M6 4h12l-2 16H8L6 4z"/><circle cx="12" cy="9" r="1"/></svg>', iconClass: 'claude' },
+    dsh: { name: 'DSH Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="12" y1="15" x2="17" y2="15"/></svg>', iconClass: 'dsh' },
+    opencode: { name: 'OpenCode Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>', iconClass: 'opencode' },
+    generic: { name: 'Generic OpenAI Proxy', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>', iconClass: 'generic' },
+    'opencode-free': { name: 'OpenCode Free', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2l7 4v8l-7 4-7-4V6l7-4z"/><polyline points="9 12 11.5 14.5 16 9"/></svg>', iconClass: 'opencode-free' },
+    'workbuddy-shim': { name: 'WorkBuddy Shim', icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>', iconClass: 'workbuddy-shim' }
   };
 
   // ===== State =====
@@ -812,7 +813,7 @@ body {
     var toast = document.createElement('div');
     toast.className = 'toast ' + (type || 'info');
 
-    var icons = { success: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>', error: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>', info: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' };
+    var icons = { success: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg>', error: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>', info: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' };
     var iconSpan = document.createElement('span');
     iconSpan.innerHTML = icons[type] || '';
     var msgSpan = document.createElement('span');
@@ -1221,12 +1222,12 @@ body {
     if (autoRefreshInterval) {
       clearInterval(autoRefreshInterval);
       autoRefreshInterval = null;
-      btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 自动刷新';
+      btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="5 3 19 12 5 21 5 3"/></svg> 自动刷新';
       btn.classList.remove('active');
     } else {
       loadLogs();
       autoRefreshInterval = setInterval(loadLogs, 5000);
-      btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止刷新';
+      btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止刷新';
       btn.classList.add('active');
     }
   };
@@ -1246,7 +1247,14 @@ body {
      if (count) count.textContent = String(errorPatternsCache.length);
     } catch (e) {
      errorPatternsCache = [];
-     renderErrorPatterns([]);
+     MPStates.registerRetry('logs:errorPatterns', loadErrorPatterns);
+     var list = document.getElementById('errorList');
+     if (list) list.innerHTML = MPStates.error({
+       title: '读取失败',
+       detail: e && e.message ? e.message : '错误模式接口无响应',
+       hint: '错误模式读不到，不代表没有 error 级日志。可刷新页面重试。',
+       retryKey: 'logs:errorPatterns'
+     });
      if (count) count.textContent = '0';
     }
   }
@@ -1358,8 +1366,8 @@ body {
   function initDarkMode() {
     var toggle = document.getElementById('darkModeToggle');
     var isDark = localStorage.getItem('darkMode') === 'true';
-    var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-    var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+    var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     if (isDark) {
       document.documentElement.classList.add('dark');
       document.documentElement.classList.remove('light');
@@ -1397,7 +1405,7 @@ body {
     }
 
     container.innerHTML = proxyNames.map(function(name) {
-      var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' };
+      var config = PROXY_CONFIGS[name] || { name: name, icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' };
       return '<a href="proxy-config.html?proxy=' + name + '" class="nav-item proxy-nav-item" data-proxy="' + esc(name) + '" data-tooltip="' + esc(config.name) + '" tabindex="0">' +
         '<span class="ico nav-icon">' + config.icon + '</span>' +
         esc(config.name) +
@@ -1455,5 +1463,9 @@ body {
   init();
 })();
 </script>
+    <script src="./icons.js"></script>
+<script src="./nav.js"></script>
+<script src="./states.js"></script>
+  <script>if(window.renderNav){renderNav(document.getElementById('sidebarNav'),{current:'logs'});}</script>
 </body>
 </html>

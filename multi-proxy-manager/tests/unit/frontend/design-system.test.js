@@ -182,8 +182,11 @@ describe('Design System', () => {
     let css;
     beforeAll(() => { css = readCss('colors_and_type.css'); });
 
+    // P0-1 修复后：完整旧色板除挂在 :root.dark（= html.dark）外，还挂了 html[data-theme="dark"]
+    // 别名——各页的 data-theme 由 theme.js 统一设在 <html> 上，靠这条桥接才能让暗色真正生效。
     it('should define :root.dark selector', () => {
-      expect(css).toContain(':root.dark {');
+      expect(css).toContain(':root.dark');
+      expect(css).toContain('html[data-theme="dark"]');
     });
 
     it('should override primary color for dark mode', () => {
@@ -375,15 +378,19 @@ describe('Design System', () => {
     beforeAll(() => { css = readCss('shared-styles.css'); });
 
     it('should define :root.dark .toggle-slider', () => {
-      expect(css).toContain(':root.dark .toggle-slider');
+      // 同 P0-1：暗色覆盖同时挂 :root.dark 与 html[data-theme="dark"]
+      expect(css).toContain(':root.dark');
+      expect(css).toContain('.toggle-slider');
     });
 
     it('should define :root.dark .btn-outline', () => {
-      expect(css).toContain(':root.dark .btn-outline');
+      expect(css).toContain(':root.dark');
+      expect(css).toContain('.btn-outline');
     });
 
     it('should define :root.dark .toast', () => {
-      expect(css).toContain(':root.dark .toast');
+      expect(css).toContain(':root.dark');
+      expect(css).toContain('.toast');
     });
   });
 
@@ -501,7 +508,10 @@ describe('Design System', () => {
     const legacyCss = readCss('colors_and_type.css');
     const nextCss = readCss('tokens.css');
     const legacyLight = parseVars(extractBlock(legacyCss, ':root {'));
-    const legacyDark = parseVars(extractBlock(legacyCss, ':root.dark {'));
+    // 选择器随 P0-1 修复改过：旧色板原本只挂在 :root.dark（= html.dark）下，而各页从不设
+    // html.dark ⇒ 暗色永不生效。现在补了 data-theme 别名，故选择器变长。
+    // 必须写完整选择器：文件上方的修复说明注释里也含 ":root.dark"，只写前缀会误匹配到注释。
+    const legacyDark = parseVars(extractBlock(legacyCss, ':root.dark, html[data-theme="dark"] {'));
     const nextLight = parseVars(extractBlock(nextCss, ':root {'));
     const nextDark = parseVars(extractBlock(nextCss, 'html[data-theme="dark"]'));
 
@@ -561,7 +571,9 @@ describe('Design System', () => {
       // colors_and_type.css 底部的 v1 桥接段也定义了 --faint，而 tokens.css 后加载
       // 会覆盖它。两处若不一致，读代码看到的值和实际生效的值就对不上（漂移）。
       const bridgeLight = parseVars(extractBlock(legacyCss, '/* ===== v1 设计系统 token 桥接'));
-      const bridgeDark = parseVars(extractBlock(legacyCss, 'html[data-theme="dark"]'));
+      // 用完整选择器定位「桥接段」本身：现在文件里 html[data-theme="dark"] 出现了两处
+      // （行 73 的完整旧色板别名 + 后段独立的桥接段），只写前缀会取错块。
+      const bridgeDark = parseVars(extractBlock(legacyCss, 'html[data-theme="dark"], html.dark {'));
       expect(bridgeLight['--faint'].toLowerCase()).toBe(nextLight['--faint'].toLowerCase());
       expect(bridgeDark['--faint'].toLowerCase()).toBe(nextDark['--faint'].toLowerCase());
     });

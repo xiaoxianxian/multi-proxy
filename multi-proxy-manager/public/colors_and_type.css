@@ -65,8 +65,12 @@
   --main-padding: 32px;
 }
 
-/* ===== Dark Mode ===== */
-:root.dark {
+/* ===== Dark Mode =====
+   修复 P0-1 根因：旧系统在 :root.dark（=html.dark）下定义完整旧色板，但各页从不设
+   data-theme/dark 类，只设无效的 body.theme-dark，导致暗色永不生效。
+   此处补 html[data-theme="dark"] 选择器别名，使 theme.js 在 <html> 上设 data-theme
+   即可触发完整旧色板（与新 token 层 colors_and_type.css:131 / tokens.css:93 一致）。 */
+:root.dark, html[data-theme="dark"] {
   --color-primary: #3b82f6;
   --color-primary-hover: #60a5fa;
   --color-primary-light: #1e3a5f;

@@ -9,8 +9,10 @@
   'use strict';
 
   // ===== 图标（内联 SVG，统一描边风格；与既有 nav 视觉一致）=====
-  var ICON = {
-    overview:  '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+  // 下面是回退副本：正常情况取 icons.js 的 window.MPIcons.nav（决策 E 的全站单一图标集）。
+  // 保留副本是为了不因脚本加载顺序把整个导航搞挂；改图标请改 icons.js，两边保持同形。
+  var ICON_FALLBACK = {
+    overview:  '<svg class="icon-svg nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
     floor:     '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
     proxy:     '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
     sessions:  '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
@@ -22,13 +24,16 @@
     alerts:    '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     registry:  '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     cost:      '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-    shadow:    '<svg class="icon-svg nav-icon" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg>'
+    shadow:    '<svg class="icon-svg nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg>'
   };
 
+  var ICON = (global.MPIcons && global.MPIcons.nav) || ICON_FALLBACK;
+
   // ===== 主导航（真实页面/路由）—— 4 页一致 =====
+  // 标签去黑话 / 去内部代号（OOBE P1-1.4）：Floor 盘面·开发者 → 实时盘面（用户不需要知道是给开发者的）
   var PRIMARY = [
     { id: 'dashboard', label: '总览',     href: '/dashboard',     icon: ICON.overview },
-    { id: 'floor',     label: 'Floor 盘面', href: '/floor',        icon: ICON.floor },
+    { id: 'floor',     label: '实时盘面', href: '/floor',        icon: ICON.floor },
     { id: 'proxy',     label: '代理配置',  href: '/proxy-config',  icon: ICON.proxy },
     { id: 'sessions',  label: '任务管理',  href: '/sessions',      icon: ICON.sessions },
     { id: 'knowledge', label: '知识库',    href: '/knowledge',     icon: ICON.knowledge },
@@ -38,12 +43,13 @@
   ];
 
   // ===== dashboard 页内 SPA 子视图（仅 dashboard 渲染，保持功能不丢）=====
+  // 去黑话（OOBE P1-1.4）：Agent 注册表 → Agent 清单；影子模式 → 路由预演（加只读说明）
   var SPA_VIEWS = [
     { id: 'health',   label: '健康状态', icon: ICON.health },
     { id: 'alerts',   label: '告警中心', icon: ICON.alerts },
-    { id: 'registry', label: 'Agent 注册表', icon: ICON.registry },
+    { id: 'registry', label: 'Agent 清单', icon: ICON.registry },
     { id: 'cost',     label: '成本',     icon: ICON.cost },
-    { id: 'shadow',   label: '影子模式', icon: ICON.shadow }
+    { id: 'shadow',   label: '路由预演', icon: ICON.shadow, title: '只读模拟：只展示会怎么路由，不会真的转发' }
   ];
 
   function esc(s) {
@@ -62,7 +68,8 @@
 
   function spaItem(item, current) {
     var active = item.id === current ? ' active' : '';
-    return '<button type="button" class="nav-item' + active + '" data-page="' + esc(item.id) + '">' +
+    var title = item.title ? ' title="' + esc(item.title) + '"' : '';
+    return '<button type="button" class="nav-item' + active + '" data-page="' + esc(item.id) + '"' + title + '>' +
       item.icon + '<span>' + esc(item.label) + '</span></button>';
   }
 
@@ -95,7 +102,72 @@
     }
 
     container.innerHTML = html;
+
+    // 注入统一外壳底部：主题三态切换器 + 法务入口（P0-1/P0-2 修复）
+    renderShellFooter(container.parentElement, opts);
+
+    // 派发渲染完成事件：本文件常在文档末尾才执行，而页面的 /api/installed 可能先返回，
+    // 那时 #proxyNavItems 还不存在 —— 早到的渲染会被丢弃，导致代理列表时有时无。
+    // 事件让页面能在容器就绪的瞬间补渲染，而不是靠猜时序。
+    try {
+      document.dispatchEvent(new CustomEvent('mp-nav-rendered', { detail: { container: container } }));
+    } catch (e) {}
+  }
+
+  // 法务图标（与 PRIMARY 同一套内联 SVG 风格）
+  var ICON_LEGAL = ((global.MPIcons && global.MPIcons.nav && global.MPIcons.nav.legal) ||
+    '<svg class="icon-svg nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v18M5 7l7-3 7 3M5 7l-2 6h4zM19 7l-2 6h4z"/><path d="M8 21h8"/></svg>');
+
+  function renderShellFooter(sidebar, opts) {
+    if (!sidebar) return;
+    if (sidebar.querySelector('.mp-shell-foot')) return; // 幂等
+    var foot = document.createElement('div');
+    foot.className = 'mp-shell-foot';
+
+    // 主题三态切换器
+    var themeWrap = document.createElement('div');
+    themeWrap.className = 'mp-theme-switch';
+    themeWrap.setAttribute('role', 'group');
+    themeWrap.setAttribute('aria-label', '主题');
+    [['light', '浅色'], ['dark', '深色'], ['auto', '跟随系统']].forEach(function (p) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('data-theme-opt', p[0]);
+      b.textContent = p[1];
+      b.addEventListener('click', function () {
+        if (global.MPTheme) global.MPTheme.set(p[0]);
+        syncThemeSwitch();
+      });
+      themeWrap.appendChild(b);
+    });
+    foot.appendChild(themeWrap);
+
+    // 法务入口（推荐 C：settings 进主导航，legal 走侧栏底部常驻）
+    var legal = document.createElement('a');
+    legal.className = 'legal-link';
+    legal.href = '/legal';
+    legal.innerHTML = ICON_LEGAL + '<span>法务与许可</span>';
+    foot.appendChild(legal);
+
+    sidebar.appendChild(foot);
+    syncThemeSwitch();
+  }
+
+  function syncThemeSwitch() {
+    var cur = (global.MPTheme && global.MPTheme.get && global.MPTheme.get()) || 'auto';
+    var wrap = document.querySelector('.mp-theme-switch');
+    if (!wrap) return;
+    var btns = wrap.querySelectorAll('button[data-theme-opt]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].getAttribute('data-theme-opt') === cur);
+    }
+  }
+
+  // 主题变化时同步切换器高亮
+  if (typeof document !== 'undefined') {
+    document.addEventListener('mp-theme-change', syncThemeSwitch);
   }
 
   global.renderNav = renderNav;
+  global.syncThemeSwitch = syncThemeSwitch;
 })(window);

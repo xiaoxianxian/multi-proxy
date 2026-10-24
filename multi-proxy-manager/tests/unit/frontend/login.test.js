@@ -28,7 +28,7 @@ describe('Login Page', () => {
     it('should serve the login HTML page', () => {
       expect(html).toBeDefined();
       expect(html).toContain('<!DOCTYPE html>');
-      expect(html).toContain('Proxy Manager - Login');
+      expect(html).toContain('Multi-Proxy Manager - 登录');
     });
 
     it('should have brand section', () => {

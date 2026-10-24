@@ -29,7 +29,7 @@ describe('Dashboard Page', () => {
     it('should serve the dashboard HTML page', () => {
       expect(html).toBeDefined();
       expect(html).toContain('<!DOCTYPE html>');
-      expect(html).toContain('Proxy Manager - Dashboard');
+      expect(html).toContain('Multi-Proxy Manager - 总览');
     });
 
     it('should include shared CSS files', () => {

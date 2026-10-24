@@ -9,10 +9,15 @@
    <link rel="stylesheet" href="./shared-styles.css">
    <link rel="stylesheet" href="./tokens.css">
    <link rel="stylesheet" href="./components.css">
+   <script src="./theme.js"></script>
 </head>
-<body class="theme-dark">
+<body>
+   <aside class="sidebar" id="sidebar">
+     <div class="sidebar-brand"><div class="logo-icon">M</div><h1>Multi-Proxy Manager</h1></div>
+     <nav class="sidebar-nav" id="sidebarNav"></nav>
+   </aside>
    <div id="ui-shell" data-shell></div>
-   <main class="content">
+   <main class="content main">
      <header class="page-head">
        <h1 class="page-title">设置</h1>
        <p class="page-subtitle">外观 · 关于 · 更新与备份</p>
@@ -34,7 +39,8 @@
              <div class="row-title">暗色模式</div>
              <div class="row-desc">跟随本机外观或手动固定。状态存本机 localStorage。</div>
            </div>
-           <button class="toggle" id="appearanceDark" type="button"></button>
+           <!-- 纯图标开关：无文字内容，必须给可访问名称；状态由 theme.js 同步 aria-checked -->
+           <button class="toggle" id="appearanceDark" type="button" role="switch" aria-checked="false" aria-label="暗色模式"></button>
          </div>
        </div>
        <div class="card">
@@ -135,6 +141,7 @@
         <p class="row-desc" style="margin-top:8px">默认不安装。是否启用由你决定；介意上述风险的用户可始终保持卸载状态，multi-proxy 主体不受影响（18799 核心、其它 provider 均不动）。</p>
       </div>
     </section>
+
    </main>
 
    <div id="toasts" class="toasts"></div>
@@ -189,7 +196,11 @@
             .finally(function(){ rev.disabled = false; });
          });
      })();
-   </script>
+    </script>
+    <script src="./icons.js"></script>
+<script src="./nav.js"></script>
+<script src="./states.js"></script>
+  <script>if(window.renderNav){renderNav(document.getElementById('sidebarNav'),{current:'settings'});}</script>
   <script>
     (function(){
       function toast(msg, kind){

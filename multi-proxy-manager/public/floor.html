@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proxy Manager - Floor</title>
+  <title>Multi-Proxy Manager - 实时盘面</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./shared-styles.css">
   <!-- 设计系统 v1.0（2026-10-16 迁移）：新 token + 新组件层；旧两 CSS 保留作别名桥；新层最后加载＝视觉默认 -->
   <link rel="stylesheet" href="./tokens.css">
   <link rel="stylesheet" href="./components.css">
+  <script src="./theme.js"></script>
 </head>
 <style>
   /* 一屏 floor：一格 = 一个上游。纯 CSS/SVG 够，不引渲染引擎。 */
@@ -49,8 +50,8 @@
 <body>
 <div class="layout">
   <aside class="sidebar">
-    <div class="sidebar-brand"><div class="logo-icon">P</div><h1>Multi-Proxy</h1></div>
-    <nav class="sidebar-nav">
+    <div class="sidebar-brand"><div class="logo-icon">P</div><h1>Multi-Proxy Manager</h1></div>
+    <nav class="sidebar-nav" id="sidebarNav">
       <a href="dashboard.html">概览</a>
       <a href="floor.html" class="active">Floor（代理面）</a>
       <a href="proxy-config.html">代理配置</a>
@@ -62,7 +63,7 @@
   </aside>
   <main class="main">
     <div class="head">
-      <h2>Floor</h2>
+      <h2>实时盘面</h2>
       <span class="chip" id="chip-hook">最近命中 hook: —</span>
       <div class="toolbar">
         <button class="btn-mini" id="btn-refresh">刷新</button>
@@ -143,9 +144,16 @@
     '</div>';
   }
 
-  function load() {
+  function load(showSkeleton) {
+    // 注册式重试：避免 innerHTML 重绘丢失监听；首次进入在 MPStates 就绪后（见底部守卫）
+    MPStates.registerRetry('floor:load', load);
+    // 仅在首屏（非 5s 轮询）显示骨架，避免每次刷新闪烁
+    if (showSkeleton) {
+      grid.innerHTML = MPStates.skeleton({ variant: 'card', count: 4, height: 120 });
+      agentsBox.innerHTML = MPStates.skeleton({ variant: 'card', count: 3, height: 120 });
+    }
     fetch('/api/floor', { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (d) {
         if (!d || !d.ok) { throw new Error((d && d.error) || 'bad response'); }
         meta.innerHTML = '上游格 <b>' + d.cellCount + '</b> · 宿主 agent <b>' + (d.agents || []).length +
@@ -180,27 +188,51 @@
           recentHook: '本进程/桥还没命中过 policy（需 PROXY_FLOOR_FEED=1 且真跑过一条经桥的请求）',
         };
         var un = (d.unavailable || []);
+        // 原开头有个 🔴 emoji，换成统一图标集的 warn 图标（形状+颜色双通道，跨平台一致）。
+        // 文案本身就是「诚实标注」——不靠颜色传达等级，图标 aria-hidden 即可。
+        var warnIcon = (window.MPIcons && MPIcons.get) ? MPIcons.get('status.warn') : '';
         note.innerHTML = un.length
-          ? '🔴 诚实标注：' + un.map(function (k) { return '<code>' + esc(k) + '</code> ' + esc(reasons[k] || ''); }).join('；') +
+          ? '<span style="color:var(--color-danger,#dc2626);display:inline-flex;vertical-align:-2px;margin-right:6px;">' + warnIcon + '</span>' +
+            '诚实标注：' + un.map(function (k) { return '<code>' + esc(k) + '</code> ' + esc(reasons[k] || ''); }).join('；') +
             '。拿不到就画「—」，<b>绝不折算 0</b>。'
           : '';
       })
       .catch(function (e) {
         meta.innerHTML = '加载失败：' + esc(e.message);
-        grid.innerHTML = '';
-        agentsBox.innerHTML = '';
+        // 读失败 ≠ 没有数据：给错误态 + 重试，而不是清空历史数据
+        grid.innerHTML = MPStates.error({
+          title: '读取失败',
+          detail: e.message,
+          hint: '实时盘面接口读不到，不代表没有上游数据。可点重试或刷新。',
+          retryKey: 'floor:load'
+        });
+        agentsBox.innerHTML = MPStates.error({
+          title: '读取失败',
+          detail: e.message,
+          retryKey: 'floor:load'
+        });
       });
   }
 
-  document.getElementById('btn-refresh').addEventListener('click', load);
+  document.getElementById('btn-refresh').addEventListener('click', function () { load(false); });
   document.getElementById('btn-theme').addEventListener('click', function () {
     document.documentElement.classList.toggle('dark');
     document.documentElement.classList.toggle('light');
   });
 
-  load();
-  setInterval(load, 5000);
+  // 轮询直到 states.js 就绪再跑 load()：底部脚本经请求拦截时，单次 setTimeout(0)
+  // 可能在 states.js 执行前触发，导致内部 MPStates.registerRetry 报「未定义」。
+  (function waitForStates(attempt) {
+    if (window.MPStates) { load(true); return; }
+    if (attempt > 60) return; // ~2s 兜底，避免死循环
+    setTimeout(function () { waitForStates(attempt + 1); }, 30);
+  })(0);
+  setInterval(function () { load(false); }, 5000);
 })();
 </script>
+    <script src="./icons.js"></script>
+<script src="./nav.js"></script>
+<script src="./states.js"></script>
+  <script>if(window.renderNav){renderNav(document.getElementById('sidebarNav'),{current:'floor'});}</script>
 </body>
 </html>

@@ -3,13 +3,14 @@
 <head>
    <meta charset="UTF-8">
    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <title>Proxy Manager - 知识库</title>
+   <title>Multi-Proxy Manager - 知识库</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
    <link rel="stylesheet" href="./colors_and_type.css">
    <link rel="stylesheet" href="./shared-styles.css">
    <!-- 设计系统 v1.0（2026-10-16 迁移）：新 token + 新组件层；旧两 CSS 保留作别名桥；新层最后加载＝视觉默认 -->
    <link rel="stylesheet" href="./tokens.css">
    <link rel="stylesheet" href="./components.css">
+  <script src="./theme.js"></script>
 </head>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -80,39 +81,39 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
 </style>
 <body>
 <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-   <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+   <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
 </button>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <aside class="sidebar" id="sidebar">
    <div class="sidebar-brand">
      <div class="logo-icon">P</div>
-     <h1>Proxy Manager</h1>
+     <h1>Multi-Proxy Manager</h1>
    </div>
    <nav class="sidebar-nav" id="sidebarNav">
      <div class="nav-label">总览</div>
      <div class="nav-item" data-page="dashboard" data-tooltip="概览" tabindex="0">
-       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
        概览
      </div>
      <div class="nav-item" data-page="knowledge" data-tooltip="知识库" tabindex="0">
-       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
        知识库
      </div>
      <div class="nav-label">系统</div>
      <div class="nav-item" data-page="sessions" data-tooltip="任务" tabindex="0">
-       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
        任务
      </div>
      <div class="nav-item" data-page="logs" data-tooltip="日志" tabindex="0">
-       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+       <span class="ico nav-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
        日志
      </div>
    </nav>
    <div class="sidebar-footer">
      <div class="version-info" id="sidebarVersion">v1.0.0</div>
      <button class="btn btn-ghost btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
-       <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
+       <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 暗色模式
      </button>
      <button class="btn btn-ghost btn-sm" onclick="handleLogout()" title="退出登录" style="width:100%;margin-top:8px;">登出</button>
    </div>
@@ -128,7 +129,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
 
      <!-- 门控关时：显示开启提示（routes/knowledge-base.js 门控 PROXY_KNOWLEDGE_BASE 关 → 403） -->
      <div class="gate-closed hidden" id="gateClosedView">
-       <div class="gate-icon">🔒</div>
+       <div class="gate-icon" data-mp-icon="status.lock"></div>
        <div class="gate-title">知识库功能未开启</div>
        <div class="gate-body">
          路由 <code>/api/knowledge</code> 由门控 <code>PROXY_KNOWLEDGE_BASE</code> 控制（默认关 = 零副作用，与 skill/memory/mcp 同模式）。<br>
@@ -152,7 +153,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
            </div>
          </div>
          <div class="filter-bar">
-           <input type="text" id="queryInput" placeholder="输入检索关键词，如：NO_PROXY 铁律 / Qwen 本地部署" style="flex:2;">
+           <input type="text" id="queryInput" placeholder="输入检索关键词，如：NO_PROXY 铁律 / Qwen 本地部署" style="flex:2;" aria-label="输入检索关键词，如：NO_PROXY 铁律 / Qwen 本地部署">
            <select id="topKSelect" title="返回结果数">
              <option value="1">Top 1</option>
              <option value="3" selected>Top 3</option>
@@ -180,8 +181,8 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
            </div>
          </div>
          <div class="filter-bar" style="flex-direction:column;align-items:stretch;gap:10px;">
-           <input type="text" id="ingestId" placeholder="文档 ID（如：no-proxy-rule）">
-           <input type="text" id="ingestTitle" placeholder="标题（如：NO_PROXY 铁律）">
+           <input type="text" id="ingestId" placeholder="文档 ID（如：no-proxy-rule）" aria-label="文档 ID（如：no-proxy-rule）">
+           <input type="text" id="ingestTitle" placeholder="标题（如：NO_PROXY 铁律）" aria-label="标题（如：NO_PROXY 铁律）">
            <select id="ingestScope" title="scope">
              <option value="shared" selected>shared</option>
              <option value="codex">codex</option>
@@ -190,7 +191,7 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
            </select>
            <textarea id="ingestText" placeholder="正文（可多段，空行分隔）" rows="5"
              style="width:100%;padding:6px 12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-bg);color:var(--color-text);font-size:13px;font-family:var(--font-family);resize:vertical;"></textarea>
-           <input type="text" id="ingestTags" placeholder="标签（逗号分隔，可选）">
+           <input type="text" id="ingestTags" placeholder="标签（逗号分隔，可选）" aria-label="标签（逗号分隔，可选）">
            <div>
              <button class="btn btn-primary" id="ingestBtn">摄取</button>
            </div>
@@ -295,8 +296,15 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
      box.id = 'gateReadError';
      box.style.cssText = 'margin:12px 0 0;padding:10px 12px;border-radius:6px;' +
        'background:rgba(217,119,6,.08);color:#d97706;font-size:13px;line-height:1.6;';
-     box.textContent = '⚠ 门控状态读取失败（' + reason + '）。这不代表门控关闭——' +
-       '管理端恢复后刷新本页即可。';
+     // 原开头有个 ⚠ emoji（各平台渲染不一致）。用统一图标集的 warn 图标替掉，
+     // 但 reason 来自接口，必须走文本节点——不能整段塞 innerHTML 引入注入风险。
+     var iconSpan = document.createElement('span');
+     iconSpan.style.cssText = 'display:inline-flex;vertical-align:-2px;margin-right:6px;color:#d97706;';
+     iconSpan.innerHTML = (window.MPIcons && MPIcons.get) ? MPIcons.get('status.warn') : '';
+     box.appendChild(iconSpan);
+     box.appendChild(document.createTextNode(
+       '门控状态读取失败（' + reason + '）。这不代表门控关闭——' +
+       '管理端恢复后刷新本页即可。'));
      gateView.appendChild(box);
    }
 
@@ -327,16 +335,25 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
    // ===== 读端点（不鉴权，拉模式） =====
    function loadStat() {
      fetch('/api/knowledge/status')
-        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
         .then(function(s) {
-          if (!s) return;
+          if (!s) throw new Error('接口返回为空');
           var el = document.getElementById('kbStat');
           el.innerHTML =
              '<div class="kb-stat-item"><b>' + esc(s.docs) + '</b>文档</div>' +
              '<div class="kb-stat-item"><b>' + esc(s.chunks) + '</b>分块</div>' +
              '<div class="kb-stat-item"><b>' + (s.persisted ? '是' : '否') + '</b>落盘</div>';
         })
-        .catch(function() {});
+        .catch(function(e) {
+          MPStates.registerRetry('knowledge:stat', loadStat);
+          var el = document.getElementById('kbStat');
+          if (el) el.innerHTML = MPStates.error({
+            title: '读取失败',
+            detail: e && e.message ? e.message : '状态接口无响应',
+            hint: '知识库状态读不到，不代表没有文档。可刷新页面重试。',
+            retryKey: 'knowledge:stat'
+          });
+        });
    }
 
    function loadDocs() {
@@ -549,8 +566,8 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
    function initDarkMode() {
      var toggle = document.getElementById('darkModeToggle');
      var isDark = localStorage.getItem('darkMode') === 'true';
-     var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-     var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+     var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+     var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
      if (isDark) {
        document.documentElement.classList.add('dark');
        document.documentElement.classList.remove('light');
@@ -580,5 +597,9 @@ body { font-family: var(--font-family); background: var(--color-bg-secondary); c
    checkGate();
 })();
 </script>
+    <script src="./icons.js"></script>
+<script src="./nav.js"></script>
+<script src="./states.js"></script>
+  <script>if(window.renderNav){renderNav(document.getElementById('sidebarNav'),{current:'knowledge'});}</script>
 </body>
 </html>

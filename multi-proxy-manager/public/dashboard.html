@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proxy Manager - Dashboard</title>
+  <title>Multi-Proxy Manager - 总览</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./shared-styles.css">
   <!-- 设计系统 v1.0（2026-10-16 迁移）：新 token + 新组件层 + 统一壳。旧两 CSS 保留作别名桥（design-system.test.js 读它们，不删）；新层最后加载 = 视觉默认 -->
   <link rel="stylesheet" href="./tokens.css">
   <link rel="stylesheet" href="./components.css">
-  <script src="./nav.js"></script>
+    <script src="./icons.js"></script>
+<script src="./nav.js"></script>
+<script src="./states.js"></script>
+  <script src="./theme.js"></script>
 </head>
 <style>
 /* ============================================
@@ -393,7 +396,7 @@
 
 <!-- Mobile Menu Button -->
 <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-  <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
 </button>
 
 <!-- Sidebar Overlay (mobile) -->
@@ -403,7 +406,7 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="mark logo-icon">P</div>
-    <strong>Proxy Manager</strong>
+    <strong>Multi-Proxy Manager</strong>
   </div>
 
   <nav class="sidebar-nav" id="sidebarNav"></nav>
@@ -416,7 +419,7 @@
   <div class="sidebar-footer sidebar-foot">
     <div class="ver version-info" id="sidebarVersion">v1.0.0</div>
     <button class="btn btn-ghost btn-sm" id="darkModeToggle" style="width:100%;margin-top:8px;" title="切换暗色模式">
-      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       暗色
     </button>
     <button class="btn btn-ghost btn-sm" onclick="handleLogout()" style="width:100%;margin-top:6px;">登出</button>
@@ -428,13 +431,13 @@
 <main class="main" id="mainContent">
   <!-- Offline Banner -->
   <div class="offline-banner hidden" id="offlineBanner">
-    <span class="offline-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <span class="offline-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
     <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
   </div>
 
   <!-- API Key Banner -->
   <div class="apikey-banner hidden" id="apiKeyBanner">
-    <span class="apikey-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <span class="apikey-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
     <span>部分代理未配置 API Key，功能可能受限。请编辑各模块的 .env 文件。</span>
     <button class="apikey-banner-close" onclick="dismissApiKeyBanner()" aria-label="关闭横幅">&times;</button>
   </div>
@@ -467,7 +470,7 @@
     <div class="hig-stat-grid">
       <div class="hig-stat-card blue">
         <div class="hig-stat-icon blue">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
         </div>
         <div class="hig-stat-value" id="proxyStatusCount">
           <span class="loading-spinner"></span>
@@ -476,7 +479,7 @@
       </div>
       <div class="hig-stat-card green">
         <div class="hig-stat-icon green">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         </div>
         <div class="hig-stat-value" id="installedCount">
           <span class="loading-spinner"></span>
@@ -485,14 +488,14 @@
       </div>
       <div class="hig-stat-card orange">
         <div class="hig-stat-icon orange">
-          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </div>
         <div class="hig-stat-value" id="sessionCount">0</div>
         <div class="hig-stat-label">运行中任务</div>
       </div>
       <div class="hig-stat-card red">
         <div class="hig-stat-icon red">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </div>
         <div class="hig-stat-value" id="alertCount">0</div>
         <div class="hig-stat-label">活跃告警</div>
@@ -579,7 +582,7 @@
       <div class="hig-card-body">
         <div class="proxy-list" id="proxyStatusList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
             <div class="empty-text">正在加载代理服务状态...</div>
           </div>
         </div>
@@ -597,7 +600,7 @@
       <div class="hig-card-body">
         <div id="sessionsList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
             <div class="empty-text">暂无运行中任务</div>
           </div>
         </div>
@@ -615,7 +618,7 @@
       <div class="hig-card-body">
         <div id="phList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
             <div class="empty-text">暂无隔离 Provider</div>
           </div>
         </div>
@@ -634,28 +637,28 @@
     <div class="hig-stat-grid">
       <div class="hig-stat-card green">
         <div class="hig-stat-icon green">
-          <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
         <div class="hig-stat-value" id="healthOkCount">-</div>
         <div class="hig-stat-label">健康</div>
       </div>
       <div class="hig-stat-card orange">
         <div class="hig-stat-icon orange">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </div>
         <div class="hig-stat-value" id="healthDegradedCount">-</div>
         <div class="hig-stat-label">降级</div>
       </div>
       <div class="hig-stat-card red">
         <div class="hig-stat-icon red">
-          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
         </div>
         <div class="hig-stat-value" id="healthDownCount">-</div>
         <div class="hig-stat-label">故障</div>
       </div>
       <div class="hig-stat-card blue">
         <div class="hig-stat-icon blue">
-          <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
         <div class="hig-stat-value" id="healthHistoryCount">-</div>
         <div class="hig-stat-label">历史记录</div>
@@ -670,7 +673,7 @@
           <div class="hig-card-subtitle">实时健康检查 · 归一化状态 (ok / degraded / down)</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="loadHealthPage()">
-          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           刷新
         </button>
       </div>
@@ -683,7 +686,7 @@
         </div>
         <div id="healthProxyList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
             <div class="empty-text">正在加载健康状态...</div>
           </div>
         </div>
@@ -701,7 +704,7 @@
       <div class="hig-card-body">
         <div id="healthPagePhList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
             <div class="empty-text">所有 Provider 健康</div>
           </div>
         </div>
@@ -724,7 +727,7 @@
       <div class="hig-card-body">
         <div id="healthHistoryList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
             <div class="empty-text">暂无健康历史</div>
           </div>
         </div>
@@ -741,7 +744,7 @@
 
     <!-- Filter Bar -->
     <div class="filter-bar">
-      <input type="text" class="form-input" id="alertSearch" placeholder="搜索告警..." oninput="filterAlerts()">
+      <input type="text" class="form-input" id="alertSearch" placeholder="搜索告警..." oninput="filterAlerts()" aria-label="搜索告警...">
       <select class="form-select" id="alertSeverity" onchange="filterAlerts()">
         <option value="">全部级别</option>
         <option value="critical">严重</option>
@@ -755,7 +758,7 @@
         <option value="cost">成本</option>
       </select>
       <button class="btn btn-primary btn-sm" onclick="collectAlerts()">
-        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         立即采集
       </button>
       <button class="btn btn-outline btn-sm" onclick="loadAlertsPage()">刷新</button>
@@ -765,21 +768,21 @@
     <div class="hig-stat-grid" style="grid-template-columns: repeat(3, 1fr);">
       <div class="hig-stat-card red">
         <div class="hig-stat-icon red">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </div>
         <div class="hig-stat-value" id="alertCriticalCount">0</div>
         <div class="hig-stat-label">严重</div>
       </div>
       <div class="hig-stat-card orange">
         <div class="hig-stat-icon orange">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </div>
         <div class="hig-stat-value" id="alertWarningCount">0</div>
         <div class="hig-stat-label">警告</div>
       </div>
       <div class="hig-stat-card blue">
         <div class="hig-stat-icon blue">
-          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         </div>
         <div class="hig-stat-value" id="alertInfoCount">0</div>
         <div class="hig-stat-label">信息</div>
@@ -800,7 +803,7 @@
       <div class="hig-card-body">
         <div id="alertList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
             <div class="empty-text">暂无告警事件</div>
           </div>
         </div>
@@ -812,18 +815,18 @@
   <div class="page" id="page-registry">
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
       <div>
-        <h1 class="page-title">Agent 注册表</h1>
+        <h1 class="page-title">Agent 清单</h1>
         <p class="page-subtitle">管理 Agent Profile · 能力标签注册与查询</p>
       </div>
       <button class="btn btn-primary" onclick="showAddAgentModal()">
-        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         新增 Agent
       </button>
     </div>
 
     <!-- Filter Bar -->
     <div class="filter-bar">
-      <input type="text" class="form-input" id="registrySearch" placeholder="搜索 Agent..." oninput="filterRegistry()">
+      <input type="text" class="form-input" id="registrySearch" placeholder="搜索 Agent..." oninput="filterRegistry()" aria-label="搜索 Agent...">
       <select class="form-select" id="registryTypeFilter" onchange="filterRegistry()">
         <option value="">全部类型</option>
         <option value="codex">Codex</option>
@@ -832,7 +835,7 @@
         <option value="custom">Custom</option>
       </select>
       <button class="btn btn-outline btn-sm" onclick="loadRegistryPage()">
-        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         刷新
       </button>
     </div>
@@ -841,7 +844,7 @@
     <div class="hig-stat-grid" style="grid-template-columns: repeat(4, 1fr);">
       <div class="hig-stat-card blue">
         <div class="hig-stat-icon blue">
-          <svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <div class="hig-stat-value" id="registryTotalCount">0</div>
         <div class="hig-stat-label">总计 Agent</div>
@@ -866,7 +869,7 @@
     <!-- Registry Grid -->
     <div class="registry-grid" id="registryGrid">
       <div class="empty-state" style="grid-column:1/-1;">
-        <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+        <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
         <div class="empty-text">暂无 Agent · 点击「新增 Agent」创建</div>
       </div>
     </div>
@@ -885,14 +888,14 @@
           <div class="hig-card-subtitle">自动刷新</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="loadSessions()">
-          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           刷新
         </button>
       </div>
       <div class="hig-card-body">
         <div id="sessionsListFull">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
             <div class="empty-text">暂无运行中任务</div>
           </div>
         </div>
@@ -906,9 +909,10 @@
       <h1 class="page-title">成本</h1>
       <p class="page-subtitle">各 provider 实时余额 · 当前周期预算判级 · 本月累计（模拟值）</p>
     </div>
-    <div style="margin-bottom:16px;padding:12px 14px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--muted-foreground);">
-      本页讲的是 <b>账本主权</b>，不是「怎么切便宜模型」。我们<b>不靠绕开订阅条款省钱</b>（那是 Magpie 的灰色玩法，厂商账号风控一收紧就失灵，且踩 ToS）。multi-proxy 的「省」来自：每一笔花销<b>按 agent 归因</b>、本地模型流量<b>零成本</b>、<b>账本归你</b>——可复核、可导出、不绑架你的账号。
-    </div>
+    <details style="margin-bottom:16px;padding:8px 14px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--muted-foreground);">
+      <summary style="cursor:pointer;">为什么这样算？· 账本主权</summary>
+      <div style="margin-top:8px;">本页讲的是 <b>账本主权</b>，不是「怎么切便宜模型」。我们<b>不靠绕开订阅条款省钱</b>（那是 Magpie 的灰色玩法，厂商账号风控一收紧就失灵，且踩 ToS）。multi-proxy 的「省」来自：每一笔花销<b>按 agent 归因</b>、本地模型流量<b>零成本</b>、<b>账本归你</b>——可复核、可导出、不绑架你的账号。</div>
+    </details>
     <div class="hig-card" style="margin-bottom:20px;">
       <div class="hig-card-header">
         <div>
@@ -916,14 +920,14 @@
           <div class="hig-card-subtitle">GET /api/balances</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="loadCostPage()">
-          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           刷新
         </button>
       </div>
       <div class="hig-card-body">
         <div id="costBalanceList">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
             <div class="empty-text">暂无余额数据</div>
           </div>
         </div>
@@ -939,7 +943,7 @@
       <div class="hig-card-body">
         <div id="costBudgetInfo">
           <div class="empty-state">
-            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2l7 4v12l-7 4-7-4V6z"/></svg></div>
+            <div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2l7 4v12l-7 4-7-4V6z"/></svg></div>
             <div class="empty-text">未配置预算 · 零行为变更</div>
           </div>
         </div>
@@ -957,7 +961,7 @@
           <div class="hig-card-subtitle">GET /api/cost/watchtower · 只读，不改任何行为</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="loadWatchtower()">
-          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           刷新
         </button>
       </div>
@@ -984,7 +988,7 @@
       #page-shadow .banner-warn { background:var(--color-warning-light); color:var(--color-warning-deep); border:1px solid var(--color-warning); }
     </style>
     <div class="page-header">
-      <h1 class="page-title">影子模式 · L2 路由能力可视化</h1>
+      <h1 class="page-title">路由预演 · L2 路由能力可视化</h1>
       <p class="page-subtitle">L2 编排引擎在 shadow 姿态下「会怎么路由」——纯决策计算，不触下游、不联网、零副作用</p>
     </div>
     <div class="shadow-summary" id="shadowSummary" style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 16px;">
@@ -1013,12 +1017,12 @@
     <div id="agentModalBody">
       <div class="form-group">
         <label>Agent ID *</label>
-        <input type="text" id="agentId" placeholder="例如: my-agent">
+        <input type="text" id="agentId" placeholder="例如: my-agent" aria-label="例如: my-agent">
         <div class="hint">唯一标识符，创建后不可修改</div>
       </div>
       <div class="form-group">
         <label>Agent 名称 *</label>
-        <input type="text" id="agentName" placeholder="例如: My AI Agent">
+        <input type="text" id="agentName" placeholder="例如: My AI Agent" aria-label="例如: My AI Agent">
       </div>
       <div class="form-group">
         <label>类型 *</label>
@@ -1031,7 +1035,7 @@
       </div>
       <div class="form-group">
         <label>能力标签 (逗号分隔)</label>
-        <input type="text" id="agentTags" placeholder="例如: coding, analysis, research">
+        <input type="text" id="agentTags" placeholder="例如: coding, analysis, research" aria-label="例如: coding, analysis, research">
         <div class="hint">用于按能力路由查询</div>
       </div>
       <div class="form-group">
@@ -1044,7 +1048,7 @@
       </div>
       <div class="form-group">
         <label>描述</label>
-        <input type="text" id="agentDesc" placeholder="可选描述">
+        <input type="text" id="agentDesc" placeholder="可选描述" aria-label="可选描述">
       </div>
     </div>
     <div class="modal-actions">
@@ -1062,21 +1066,21 @@
   var PROXY_CONFIGS = {
     codex: {
       name: 'Codex Proxy',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>',
       iconClass: 'codex',
       port: 18790,
       defaultVersion: 'v1.2.0'
     },
     hermes: {
       name: 'Hermes Proxy',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
       iconClass: 'hermes',
       port: 18793,
       defaultVersion: 'v0.9.4'
     },
     cursor: {
       name: 'Cursor Proxy',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
       iconClass: 'cursor',
       port: 18794,
       defaultVersion: 'v2.1.0'
@@ -1087,42 +1091,42 @@
     // defaultVersion 取各目录 package.json 的真实 version 字段（未编造）。
     claude: {
       name: 'Claude Proxy',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 9h16M6 4h12l-2 16H8L6 4z"/><circle cx="12" cy="9" r="1"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9h16M6 4h12l-2 16H8L6 4z"/><circle cx="12" cy="9" r="1"/></svg>',
       iconClass: 'claude',
       port: 18791,
       defaultVersion: 'v1.1.0'
     },
     dsh: {
       name: 'DSH Proxy',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="12" y1="15" x2="17" y2="15"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="12" y1="15" x2="17" y2="15"/></svg>',
       iconClass: 'dsh',
       port: 18797,
       defaultVersion: 'v1.1.0'
     },
     opencode: {
       name: 'OpenCode Proxy',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
       iconClass: 'opencode',
       port: 18798,
       defaultVersion: 'v1.1.0'
     },
     generic: {
       name: 'Generic OpenAI Proxy',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>',
       iconClass: 'generic',
       port: 18799,
       defaultVersion: 'v1.1.0'
     },
     'opencode-free': {
       name: 'OpenCode Free',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2l7 4v8l-7 4-7-4V6l7-4z"/><polyline points="9 12 11.5 14.5 16 9"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2l7 4v8l-7 4-7-4V6l7-4z"/><polyline points="9 12 11.5 14.5 16 9"/></svg>',
       iconClass: 'opencode-free',
       port: 18800,
       defaultVersion: 'v0.1.0'
     },
     'workbuddy-shim': {
       name: 'WorkBuddy Shim',
-      icon: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+      icon: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
       iconClass: 'workbuddy-shim',
       port: 18789,
       defaultVersion: 'v1.0.0'
@@ -1145,9 +1149,9 @@
     toast.className = 'toast ' + (type || 'info');
 
     var icons = {
-      success: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
-      error: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-      info: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+      success: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg>',
+      error: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+      info: '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
     };
     var iconSpan = document.createElement('span');
     iconSpan.innerHTML = icons[type] || '';
@@ -1201,7 +1205,7 @@
     el.innerHTML =
       '<div class="empty-state" style="grid-column:1/-1;">' +
         '<div class="empty-icon" style="color:#d97706;">' +
-          '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+          '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
         '</div>' +
         '<div class="empty-text" style="color:#d97706;">' + esc(title || '读取失败') + '</div>' +
         '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;max-width:460px;line-height:1.6;">' +
@@ -1267,7 +1271,9 @@
       if (data.gapCount > 0 && alert) {
         alert.style.display = 'block';
         alert.className = 'banner banner-warn';
-        alert.textContent = '⚠ 存在无 adapter 承接的能力标签：' + (data.gaps || []).join(', ') + ' —— 切 reject 前必须先补 owner。';
+        // 原开头有个 ⚠ emoji：这里走 textContent（gaps 来自接口，不能改 innerHTML 引转义风险），
+        // 且容器已有 .banner-warn 承载视觉告警——emoji 只在不同平台渲染不一致，去掉更干净。
+        alert.textContent = '存在无 adapter 承接的能力标签：' + (data.gaps || []).join(', ') + ' —— 切 reject 前必须先补 owner。';
       }
       grid.innerHTML = (data.capabilities || []).map(function (c) {
         var statusClass = c.noCandidate ? 'shadow-card-bad' : (c.rejected ? 'shadow-card-warn' : 'shadow-card-ok');
@@ -1380,7 +1386,7 @@
     if (!container) return;
 
     if (proxies.length === 0) {
-      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-text">暂无代理，请先安装代理程序</div></div>';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-text">暂无代理，请先安装代理程序</div></div>';
       return;
     }
 
@@ -1394,7 +1400,7 @@
       var statusText = isRunning ? '运行中' : (isFault ? '故障熔断' : '未运行');
       var btnClass = isRunning ? 'btn-danger' : 'btn-success';
       var btnText = isRunning ? '停止' : '启动';
-      var btnIcon = isRunning ? '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>' : '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+      var btnIcon = isRunning ? '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>' : '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
 
       var statusBadge = '<span class="status-badge ' + statusClass + '"><span class="dot"></span>' + statusText + '</span>';
       var healthBadge = '';
@@ -1441,10 +1447,16 @@
     }).join('');
   }
 
+  // 与 proxy-config 同一处时序竞争：/api/status 可能先于 nav.js 建好 #proxyNavItems 返回，
+  // 早到那次若直接 return，9 个代理就时有时无。改为暂存 + 等容器就绪事件补画。
+  var pendingProxyNavEntries = null;
+
   function renderProxyNavItems(proxies) {
+    if (proxies) pendingProxyNavEntries = proxies;
     var container = document.getElementById('proxyNavItems');
     if (!container) return;
-    container.innerHTML = proxies.map(function(entry) {
+    var entries = pendingProxyNavEntries || [];
+    container.innerHTML = entries.map(function(entry) {
       var name = entry[0];
       var status = entry[1];
       var config = PROXY_CONFIGS[name] || { name: name, icon: '' };
@@ -1457,6 +1469,10 @@
         '</a>';
     }).join('');
   }
+
+  document.addEventListener('mp-nav-rendered', function () {
+    if (pendingProxyNavEntries) renderProxyNavItems(pendingProxyNavEntries);
+  });
 
   // ===== Version Info =====
   function updateVersionDisplay(versionData) {
@@ -1573,7 +1589,7 @@
         } else {
           var entries = Object.entries(proxyStatus);
           if (entries.length === 0) {
-            healthList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">暂无代理数据</div></div>';
+            healthList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">暂无代理数据</div></div>';
           } else {
           healthList.innerHTML = entries.map(function(entry) {
             var name = entry[0], status = entry[1];
@@ -1612,7 +1628,7 @@
         if (phSub) phSub.textContent = (phData.isolateEnabled ? '自动隔离已开启（live）' : 'observe 模式');
         var list = phData.isolated || [];
         if (list.length === 0) {
-          phList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">所有 Provider 健康</div></div>';
+          phList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">所有 Provider 健康</div></div>';
         } else {
           phList.innerHTML = list.map(function(p) {
             var remainMs = (p.unhealthyUntil || 0) - Date.now();
@@ -1644,7 +1660,7 @@
         } else {
         var history = historyData.history || [];
         if (history.length === 0) {
-          historyList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="empty-text">暂无健康历史</div></div>';
+          historyList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="empty-text">暂无健康历史</div></div>';
         } else {
           historyList.innerHTML = history.slice(0, 50).map(function(h) {
             var hClass = h.status === 'ok' ? 'status-badge online' : h.status === 'degraded' ? 'status-badge degraded' : 'status-badge offline';
@@ -1744,7 +1760,7 @@
     if (!container) return;
 
     if (!events || events.length === 0) {
-      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div><div class="empty-text">暂无告警事件</div></div>';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div><div class="empty-text">暂无告警事件</div></div>';
       return;
     }
 
@@ -1754,13 +1770,18 @@
 
     container.innerHTML = sorted.map(function(a) {
       var iconClass = a.severity === 'critical' ? 'critical' : a.severity === 'warning' ? 'warning' : 'info';
-      var icon = a.severity === 'critical' ? '🔴' : a.severity === 'warning' ? '🟡' : '🔵';
+      // 严重度原来用 🔴/🟡/🔵 emoji：跨平台渲染不一致，读屏器只会读出一串颜色名。
+      // 换成统一 SVG；等级同时由「形状 + 颜色 + 可读标签」三个通道传达，不靠颜色单通道。
+      var sevLabel = { critical: '严重告警', warning: '警告', info: '提示' }[iconClass] || '提示';
+      var icon = (window.MPIcons && MPIcons.severity)
+        ? MPIcons.severity(a.severity)
+        : '<svg class="icon-svg sev sev-' + iconClass + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/></svg>';
       var time = a.timestamp ? new Date(a.timestamp).toLocaleString('zh-CN') : '-';
       var title = a.rule || a.message || '告警';
       var message = a.message || a.detail || '';
 
       return '<div class="alert-item">' +
-        '<div class="alert-icon ' + iconClass + '">' + icon + '</div>' +
+        '<div class="alert-icon ' + iconClass + '" role="img" aria-label="' + sevLabel + '">' + icon + '</div>' +
         '<div class="alert-content">' +
           '<div class="alert-title">' + esc(title) + '</div>' +
           '<div class="alert-message">' + esc(message) + '</div>' +
@@ -1824,7 +1845,7 @@
         renderRegistryGrid([]);
         updateRegistryStats([]);
         showReadError('registryGrid', '读取失败', err && err.message || '未知错误',
-          'Agent 注册表读不到，不代表注册表是空的。');
+          'Agent 清单读不到，不代表清单是空的。');
         hideLoading();
       });
   }
@@ -1834,7 +1855,7 @@
     if (!grid) return;
 
     if (agents.length === 0) {
-      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div><div class="empty-text">暂无 Agent · 点击「新增 Agent」创建</div></div>';
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div><div class="empty-text">暂无 Agent · 点击「新增 Agent」创建</div></div>';
       return;
     }
 
@@ -2214,9 +2235,10 @@
               '<div style="font-size:20px;font-weight:700;color:' + (neg ? '#ef4444' : 'var(--foreground)') + ';">' + wtEsc(c.value) + '</div>' +
               '<div style="font-size:11px;color:var(--muted-foreground);margin-top:4px;">' + c.sub + '</div></div>';
           }).join('') + '</div>' +
-          '<div style="font-size:12px;line-height:1.6;color:var(--muted-foreground);padding:10px 12px;border-radius:8px;background:var(--color-bg-secondary);border:1px solid var(--color-border);">' +
-          '<b>不拼「切模型」，拼账本主权。</b>我们不做绕订阅条款省钱的灰色玩法（Magpie 那套，账号风控一收紧就失灵）。multi-proxy 的「省」来自：每一笔花销<b>按 agent 归因</b>、本地模型流量<b>零成本</b>、<b>账本归你</b>——可复核、可导出、不绑架你的账号。' +
-          '</div>';
+          '<details style="font-size:12px;line-height:1.6;color:var(--muted-foreground);padding:8px 12px;border-radius:8px;background:var(--color-bg-secondary);border:1px solid var(--color-border);">' +
+          '<summary style="cursor:pointer;">为什么这样算？· 账本主权</summary>' +
+          '<div style="margin-top:6px;"><b>不拼「切模型」，拼账本主权。</b>我们不做绕订阅条款省钱的灰色玩法（Magpie 那套，账号风控一收紧就失灵）。multi-proxy 的「省」来自：每一笔花销<b>按 agent 归因</b>、本地模型流量<b>零成本</b>、<b>账本归你</b>——可复核、可导出、不绑架你的账号。</div>' +
+          '</details>';
       })
       .catch(function() {
         body.innerHTML = '<div class="empty-state"><div class="empty-text">无法获取账本（manager 未运行或未登录）</div></div>';
@@ -2243,7 +2265,7 @@
 
     if (!sessions || sessions.length === 0) {
       var emptyText = containerId === 'sessionsListFull' ? '暂无运行中任务' : '暂无运行中任务';
-      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="empty-text">' + emptyText + '</div></div>';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="empty-text">' + emptyText + '</div></div>';
       return;
     }
 
@@ -2254,7 +2276,7 @@
       var ageStr = ageMin > 0 ? ageMin + 'm' + ageSec + 's' : ageSec + 's';
       var statusBadge = s.status === 'running' ? 'badge-success' : 'badge-warning';
       var statusText = s.status === 'running' ? '运行中' : '待处理';
-      var stepsHtml = (s.steps || []).length > 0 ? '<div class="session-steps"><svg class="icon-svg icon-svg-xs" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/></svg> ' + s.steps.length + ' 步</div>' : '';
+      var stepsHtml = (s.steps || []).length > 0 ? '<div class="session-steps"><svg class="icon-svg icon-svg-xs" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="9 11 12 14 22 4"/></svg> ' + s.steps.length + ' 步</div>' : '';
       var abortBtn = '<button class="btn btn-danger btn-sm" onclick="abortSessionFromDashboard(\'' + esc(s.sessionId) + '\')">中止</button>';
       return '<div class="session-item">' +
         '<div class="session-header">' +
@@ -2316,7 +2338,7 @@
     if (sub) sub.textContent = (isolateEnabled ? '自动隔离已开启（live）' : 'observe 模式（仅建议，不改路由）');
 
     if (!list || list.length === 0) {
-      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">所有 Provider 健康</div></div>';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="empty-text">所有 Provider 健康</div></div>';
       return;
     }
 
@@ -2355,7 +2377,15 @@
         // 总览页是用户第一眼看到的地方，在这里显示「像真的」假数据最危险：
         // 他会以为代理都在跑，直到真的调不通才发现。宁可显示「读不到」。
         if (Object.keys(proxyStatus).length === 0) {
-          updateDashboardDisplay(versionCache);
+          // 读失败 ≠ 没有代理：给独立错误态 + 重试，而不是渲染「暂无代理」空态
+          MPStates.registerRetry('dashboard:status', loadStatus);
+          var box = document.getElementById('proxyStatusList');
+          if (box) box.innerHTML = MPStates.error({
+            title: '读取失败',
+            detail: (err && err.message) || 'manager 不可达',
+            hint: '代理状态读不到，不代表没有安装代理程序。可点重试，或检查 manager 是否在运行。',
+            retryKey: 'dashboard:status'
+          });
           showOfflineBanner();
           showToast('代理状态读取失败：' + ((err && err.message) || 'manager 不可达'), 'error', 6000);
         }
@@ -2464,7 +2494,7 @@
     main.innerHTML =
       '<div class="login-required-container">' +
         '<div class="login-required-card">' +
-          '<div class="login-required-icon"><svg class="icon-svg" style="width:36px;height:36px;" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>' +
+          '<div class="login-required-icon"><svg class="icon-svg" style="width:36px;height:36px;" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>' +
           '<h2 class="login-required-title">需要登录</h2>' +
           '<p class="login-required-desc">请先配置认证密码后访问管理面板</p>' +
           '<a href="login.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;">去设置密码</a>' +
@@ -2588,8 +2618,8 @@
   function initDarkMode() {
     var toggle = document.getElementById('darkModeToggle');
     var isDark = localStorage.getItem('darkMode') === 'true';
-    var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-    var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    var sunSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+    var moonSvg = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     if (isDark) {
       document.documentElement.classList.add('dark');
       document.documentElement.classList.remove('light');

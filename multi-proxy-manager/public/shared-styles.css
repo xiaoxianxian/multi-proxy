@@ -377,47 +377,47 @@
 /* ============================================
    Dark Mode Overrides
    ============================================ */
-:root.dark .toggle-slider {
+:root.dark, html[data-theme="dark"] .toggle-slider {
   background: var(--color-border);
 }
 
-:root.dark .toggle-slider::before {
+:root.dark, html[data-theme="dark"] .toggle-slider::before {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
-:root.dark .btn-outline {
+:root.dark, html[data-theme="dark"] .btn-outline {
   border-color: var(--color-border);
 }
 
-:root.dark .btn-outline:hover {
+:root.dark, html[data-theme="dark"] .btn-outline:hover {
   background: var(--color-bg-tertiary);
 }
 
-:root.dark .form-select,
-:root.dark .form-input {
+:root.dark, html[data-theme="dark"] .form-select,
+:root.dark, html[data-theme="dark"] .form-input {
   border-color: var(--color-border);
   background: var(--color-bg);
   color: var(--color-text);
 }
 
-:root.dark .toast {
+:root.dark, html[data-theme="dark"] .toast {
   background: var(--color-bg-secondary);
   color: var(--color-text);
 }
 
-:root.dark .toast.success {
+:root.dark, html[data-theme="dark"] .toast.success {
   color: #6ee7b7;
 }
 
-:root.dark .toast.error {
+:root.dark, html[data-theme="dark"] .toast.error {
   color: #fca5a5;
 }
 
-:root.dark .toast.info {
+:root.dark, html[data-theme="dark"] .toast.info {
   color: #93c5fd;
 }
 
-:root.dark .toast.warning {
+:root.dark, html[data-theme="dark"] .toast.warning {
   color: #fcd34d;
 }
 
@@ -459,6 +459,20 @@
   width: 1.5em;
   height: 1.5em;
   vertical-align: -0.2em;
+}
+
+/* 告警严重度图标（原 🔴/🟡/🔵 emoji）：形状 + 颜色双通道，不靠颜色单通道传达等级。
+   颜色走语义令牌，暗色模式随主题走。 */
+.icon-svg.sev { width: 1em; height: 1em; vertical-align: -0.125em; }
+.icon-svg.sev-critical { color: var(--color-danger, var(--error, #dc2626)); }
+.icon-svg.sev-warning  { color: var(--color-warning, var(--warning, #d97706)); }
+.icon-svg.sev-info     { color: var(--color-info, var(--muted-foreground, #64748b)); }
+
+/* 门控占位图标（原 🔒 emoji）：容器从 font-size 驱动改为固定尺寸，SVG 才能撑满 */
+.gate-icon .icon-svg {
+  width: 40px;
+  height: 40px;
+  stroke-width: 1.5;
 }
 
 /* ============================================
@@ -925,3 +939,60 @@ body {
   color: var(--color-text-secondary);
   margin-top: 6px;
 }
+
+/* ============================================
+   统一外壳底部（主题三态切换器 + 法务入口）
+   由 nav.js 注入到 #sidebar 末尾。暗色经 theme.js 的 data-theme 驱动。
+   ============================================ */
+.mp-shell-foot {
+  margin-top: auto;
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mp-theme-switch {
+  display: flex;
+  gap: 4px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.mp-theme-switch button {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mp-theme-switch button:hover { color: var(--color-text); }
+
+.mp-theme-switch button.active {
+  background: var(--color-bg);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.mp-shell-foot .legal-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+  padding: 4px 2px;
+}
+
+.mp-shell-foot .legal-link:hover { color: var(--color-text); }
+.mp-shell-foot .legal-link svg { width: 15px; height: 15px; }

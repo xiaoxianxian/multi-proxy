@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cursor Proxy - 配置</title>
+    <title>Multi-Proxy Manager - 代理配置</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='24' font-size='20' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial,sans-serif'%3EP%3C/text%3E%3C/svg%3E" type="image/svg+xml">
     <link rel="stylesheet" href="./colors_and_type.css">
     <link rel="stylesheet" href="./shared-styles.css">
     <!-- 设计系统 v1.0（2026-10-16 迁移）：新 token + 新组件层；旧两 CSS 保留作别名桥；新层最后加载＝视觉默认 -->
     <link rel="stylesheet" href="./tokens.css">
     <link rel="stylesheet" href="./components.css">
+  <script src="./theme.js"></script>
 </head>
 <style>
 /* ============================================
@@ -504,26 +505,26 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <div class="logo-icon">P</div>
-      <h1>Proxy Manager</h1>
+      <h1>Multi-Proxy Manager</h1>
       <button class="sidebar-close" onclick="closeSidebar()" aria-label="关闭侧边栏">&times;</button>
     </div>
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" id="sidebarNav">
       <a class="nav-item" href="dashboard.html" data-tooltip="返回概览">
         <span class="icon">&#8592;</span> 返回概览
       </a>
       <div class="nav-section-label">代理服务</div>
       <a class="nav-item" href="proxy-config.html?proxy=codex" data-tooltip="Codex Proxy">
-        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg></span> Codex Proxy
+        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg></span> Codex Proxy
       </a>
       <a class="nav-item" href="proxy-config.html?proxy=hermes" data-tooltip="Hermes Proxy">
-        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Hermes Proxy
+        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Hermes Proxy
       </a>
       <a class="nav-item active" href="proxy-config.html?proxy=cursor" data-tooltip="Cursor Proxy">
-        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span> Cursor Proxy
+        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span> Cursor Proxy
       </a>
       <div class="nav-section-label">系统</div>
       <a class="nav-item" href="logs.html" data-tooltip="查看系统日志">
-        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> 日志
+        <span class="icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> 日志
       </a>
     </nav>
     <div class="sidebar-footer">
@@ -535,12 +536,12 @@
   <div class="loading-bar" id="loadingBar"></div>
   <main class="main">
     <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="打开侧边栏">
-      <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <svg class="icon-svg icon-svg-lg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
     
     <!-- Offline Banner -->
     <div class="offline-banner hidden" id="offlineBanner">
-      <span class="offline-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+      <span class="offline-banner-icon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
       <span>后端服务未运行，当前显示模拟数据。请确认 Manager 服务已启动。</span>
     </div>
     
@@ -561,10 +562,10 @@
       </div>
       <div class="proxy-header-actions">
         <button class="btn btn-primary" id="btnStartStop" onclick="toggleProxyStatus()">
-          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止
         </button>
         <button class="btn" onclick="refreshPage()">
-          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 刷新
+          <svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 刷新
         </button>
       </div>
     </div>
@@ -620,7 +621,7 @@
                   <th>名称</th>
                   <th>Provider ID</th>
                   <th>Base URL</th>
-                  <th>API Key <button class="key-toggle-btn" id="keyToggleBtn" title="显示/隐藏密钥"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button></th>
+                  <th>API Key <button class="key-toggle-btn" id="keyToggleBtn" title="显示/隐藏密钥"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button></th>
                   <th>启用</th>
                   <th>操作</th>
                 </tr>
@@ -665,7 +666,7 @@
           <div class="card-title" style="margin-bottom: 0;">切换历史</div>
           <div class="card-subtitle" style="margin-bottom: 0;">最近 20 条模型切换记录</div>
         </div>
-        <button class="btn" onclick="clearHistory()"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 清除历史</button>
+        <button class="btn" onclick="clearHistory()"><svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 清除历史</button>
       </div>
       <div class="table-wrapper" style="margin-top: 12px;">
         <table>
@@ -731,7 +732,13 @@
     // 切换历史：来自后端 /api/history（codex/hermes 内存记录）。
     // cursor 无此端点，显示空态提示。
     var switchHistory = [];
-    var historySupported = currentProxyName === 'codex' || currentProxyName === 'hermes';
+    // 切换历史：/api 前缀的代理都有 /api/history（codex/hermes + claude/dsh/opencode/generic，
+    // 2026-10-23 逐个核实源码确认）。cursor 走 /admin-api/logs，无此端点；无前缀的 2 个也没有。
+    // 旧写法只认 codex/hermes，会给新接入的 4 个同构分叉误报「不支持切换历史」。
+    // ⚠️ 不能在顶层直接求值：它依赖 PROXY_API_PREFIX（var，本文件后面才赋值）与
+    //    currentProxyName（init() 才赋值），顶层取到的是 undefined ⇒ undefined[undefined] 抛错、
+    //    整个 init() 都不执行。故先给初值，真正的判定放到 init() 里做。
+    var historySupported = false;
 
     // 2026-10-16：过去初值就是 MOCK_PROVIDERS.slice()——页面刚打开、
     // loadProviders() 还没回来时，用户先看到 4 个假 provider（OpenAI /
@@ -823,6 +830,9 @@
             providers[i].api_key = fullKeys[providers[i].id];
           }
         }
+        // 成功取到（含空列表）即重绘：空→空态、有数据→列表。此前成功路径不自绘，
+        // 依赖调用方再 renderProviders，导致 init 漏调时永远停在初始空态。
+        renderProviders();
       } catch (e) {
         // 2026-10-16：读失败过去兜底成 MOCK_PROVIDERS——4 个假 provider
         // 带 sk-test-key-xxxxx 假 key。用户会以为自己的 provider 配置还在，
@@ -837,11 +847,11 @@
       }
     }
 
-    async function addProvider(name, pid, url, key, enabled, responsesTranslate, responsesTarget) {
+    async function addProvider(name, pid, url, key, enabled, responsesTranslate, responsesTarget, messagesTranslate) {
       try {
         await fetchAdminApi('/providers', {
           method: 'POST',
-          body: JSON.stringify({ name, provider_id: pid, base_url: url, api_key: key, enabled, responsesTranslate, responsesTarget }),
+          body: JSON.stringify({ name, provider_id: pid, base_url: url, api_key: key, enabled, responsesTranslate, responsesTarget, messagesTranslate }),
         });
         await loadProviders();
         renderProviders();
@@ -858,9 +868,9 @@
       }
     }
 
-    async function updateProvider(id, name, url, key, enabled, responsesTranslate, responsesTarget) {
+    async function updateProvider(id, name, url, key, enabled, responsesTranslate, responsesTarget, messagesTranslate) {
       try {
-        const body = { name, base_url: url, enabled, responsesTranslate, responsesTarget };
+        const body = { name, base_url: url, enabled, responsesTranslate, responsesTarget, messagesTranslate };
         if (key) body.api_key = key;
         await fetchAdminApi('/providers/' + encodeURIComponent(id), {
           method: 'PUT',
@@ -964,9 +974,10 @@
 
     // 返回后端 JSON（含 success 字段）；网络/HTTP 失败时抛异常，由调用方提示
     async function switchModel(modelId) {
-      // codex & hermes 有专用 switch-model 端点：改写配置文件 + 记录切换历史 +
-      // 路由模式切到 config。cursor 无此端点，用 settings KV 持久化当前模型。
-      if (currentProxyName === 'codex' || currentProxyName === 'hermes') {
+      // /api 前缀的代理都有专用 switch-model 端点：改写配置文件 + 记录切换历史 +
+      // 路由模式切到 config（claude/dsh/opencode/generic 与 codex/hermes 同构，2026-10-23 核实）。
+      // cursor 无此端点，用 settings KV 持久化当前模型。
+      if (proxySupportsFullAdmin(currentProxyName)) {
         const prefix = PROXY_API_PREFIX[currentProxyName] || '/api';
         const fwdUrl = '/api/' + currentProxyName + prefix + '/switch-model';
         const res = await fetch(fwdUrl, {
@@ -1012,35 +1023,143 @@
       return params.get('proxy') || 'cursor';
     }
 
+    // 2026-10-23 Phase B：与 dashboard 的 PROXY_CONFIGS 同源 —— 同样的 9 个代理、同样的名称与图标。
+    // 此前这里只硬编码 3 个（codex/hermes/cursor），而 dashboard 已列 9 个 ⇒ 同一产品两处不一致（取证报告 P0-8）。
     var proxyDisplayNameMap = {
       codex: 'Codex Proxy',
       hermes: 'Hermes Proxy',
       cursor: 'Cursor Proxy',
+      claude: 'Claude Proxy',
+      dsh: 'DSH Proxy',
+      opencode: 'OpenCode Proxy',
+      generic: 'Generic OpenAI Proxy',
+      'opencode-free': 'OpenCode Free',
+      'workbuddy-shim': 'WorkBuddy Shim',
     };
 
+    // 图标与 dashboard PROXY_CONFIGS 逐一对齐（单一 SVG 图标语言，避免两套并存）
     var proxyIconMap = {
-      codex: '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>',
-      hermes: '<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
-      cursor: '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+      codex: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>',
+      hermes: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      cursor: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+      claude: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9h16M6 4h12l-2 16H8L6 4z"/><circle cx="12" cy="9" r="1"/></svg>',
+      dsh: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="12" y1="15" x2="17" y2="15"/></svg>',
+      opencode: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+      generic: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>',
+      'opencode-free': '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2l7 4v8l-7 4-7-4V6l7-4z"/><polyline points="9 12 11.5 14.5 16 9"/></svg>',
+      'workbuddy-shim': '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
     };
 
     var proxyColorMap = {
       // B: 使用令牌层定义的代理色，避免硬编码（颜色令牌化）
+      // codex/hermes 有专属代理色令牌；其余回落主色令牌（不新增硬编码）
       codex: { bg: 'var(--color-prov-codex-bg)', color: 'var(--color-prov-codex-fg)', letter: 'C' },
       hermes: { bg: 'var(--color-prov-hermes-bg)', color: 'var(--color-prov-hermes-fg)', letter: 'H' },
       cursor: { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'C' },
+      claude: { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'C' },
+      dsh: { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'D' },
+      opencode: { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'O' },
+      generic: { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'G' },
+      'opencode-free': { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'F' },
+      'workbuddy-shim': { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', letter: 'W' },
     };
 
     // Each proxy backend uses a different URL prefix for its admin API
+    // 前缀逐个核实（2026-10-23），不是猜的：
+    //   codex/claude/dsh/opencode/generic = codex-proxy 同构分叉，均暴露完整 /api/* 管理面
+    //     （config/settings/routing-mode/providers/status|CRUD/history/switch-model/test-connection/balances）
+    //   hermes = /api（服务端 routes/proxy-api.js PROXY_API_PATHS 既有定义）
+    //   cursor = /admin-api（TS 构建产物，既有定义）
     var PROXY_API_PREFIX = {
       codex: '/api',
       hermes: '/api',
       cursor: '/admin-api',
+      claude: '/api',
+      dsh: '/api',
+      opencode: '/api',
+      generic: '/api',
     };
+
+    // 不提供面板可配置管理 API 的代理（2026-10-23 实测：源码里无任何 /api/* 或 /admin-api/* 管理路由）。
+    // 这些代理只能查看与启停，不能配置 —— 面板必须给出明确「不支持」态，绝不能露出点了就 404 的假控件。
+    var PROXY_NO_ADMIN_API = ['opencode-free', 'workbuddy-shim'];
+
+    function proxyHasAdminApi(name) {
+      return PROXY_NO_ADMIN_API.indexOf(name) === -1;
+    }
+
+    // ===== 能力判断（按已核实的前缀推导，不再硬编码代理名）=====
+    // 旧代码到处写 `=== 'codex' || === 'hermes'`，导致 2026-10-23 新接入的
+    // claude / dsh / opencode / generic（同为 /api 前缀的同构分叉）被误判为「不支持」，
+    // 甚至会去取 /api/cursor/admin-api/settings 把 cursor 的模型显示成自己的。
+    // 统一改为：看前缀，不看名字。
+    function proxyPrefix(name) { return PROXY_API_PREFIX[name] || null; }
+
+    // /api 前缀的代理（codex / hermes / claude / dsh / opencode / generic）暴露完整管理面，
+    // 含 config / settings / routing-mode / providers CRUD / history / switch-model / test-connection / balances。
+    function proxySupportsFullAdmin(name) { return proxyPrefix(name) === '/api'; }
+
+    // 面板可配置 = 有管理 API 前缀（cursor 走 /admin-api，其余 /api；无前缀的 2 个不支持）
+    function proxySupportsPanel(name) { return !!proxyPrefix(name); }
+
+    // ===== 代理侧栏列表（与 dashboard 同源）=====
+    // 来源与 dashboard 的 loadInstalledProxies() 完全一致：先 /api/installed，取不到再回落本地映射的 key。
+    // 这样两边永远不会再出现「dashboard 9 个、proxy-config 3 个」的不一致。
+    var allProxyStatus = {};   // /api/status 全量状态（各代理 running），供徽标使用
+    var installedProxyNames = [];
+
+    function loadInstalledProxies() {
+      return fetch('/api/installed')
+        .then(function (res) { if (!res.ok) throw new Error(); return res.json(); })
+        .then(function (names) { if (names && names.length > 0) return names; throw new Error(); })
+        .catch(function () { return Object.keys(proxyDisplayNameMap); });
+    }
+
+    // 时序竞争修复：renderNav 在文档末尾执行，而 /api/installed 可能先返回。
+    // 早到的那次渲染不能丢 —— 先存起来，等 nav.js 派发 mp-nav-rendered 再补渲染。
+    var pendingProxyNames = null;
+
+    function renderDynamicProxyNav(proxyNames) {
+      if (proxyNames) pendingProxyNames = proxyNames;
+      var container = document.getElementById('proxyNavItems');
+      if (!container) return;   // 容器还没建好：等 mp-nav-rendered 事件来叫我们再画
+      var names = pendingProxyNames || [];
+      installedProxyNames = names;
+      var label = document.getElementById('proxySectionLabel');
+      if (label) label.style.display = names.length > 0 ? '' : 'none';
+
+      if (names.length === 0) {
+        container.innerHTML = '<div class="nav-item" style="color:var(--color-text-tertiary);font-size:12px;padding:4px 12px;">暂无代理</div>';
+        return;
+      }
+
+      container.innerHTML = names.map(function (name) {
+        var st = allProxyStatus[name];
+        var running = !!(st && st.running);
+        var isCurrent = (name === currentProxyName);
+        return '<a href="proxy-config.html?proxy=' + encodeURIComponent(name) + '" class="nav-item proxy-nav-item' +
+          (isCurrent ? ' active' : '') + '" data-proxy="' + esc(name) + '"' +
+          ' data-tooltip="' + esc(proxyDisplayNameMap[name] || name) + '" tabindex="0"' +
+          (isCurrent ? ' aria-current="page"' : '') + '>' +
+          '<span class="nav-icon">' + (proxyIconMap[name] || '') + '</span>' +
+          esc(proxyDisplayNameMap[name] || name) +
+          '<span class="nav-badge ' + (running ? 'running' : 'stopped') + '">' + (running ? 'ON' : 'OFF') + '</span>' +
+          '</a>';
+      }).join('');
+    }
+
+    // nav.js 在文档末尾才建好 #proxyNavItems。若 /api/installed 先回来了，
+    // 那次渲染只是暂存 —— 这里等容器就绪的事件一到就补画，避免代理列表时有时无。
+    document.addEventListener('mp-nav-rendered', function () {
+      if (pendingProxyNames) renderDynamicProxyNav(pendingProxyNames);
+    });
 
     // 已落地 Responses API 协议翻译（l2/responses-translate.js + 各 proxy handleTranslatedResponses）
     // 的代理集合。hermes 是 Python、cursor 是 TS 构建产物，翻译层未同步过去——不露死开关。
     var RESPONSES_TRANSLATE_PROXIES = ['codex', 'claude', 'opencode', 'generic'];
+    // Messages 协议翻译只对 claude 代理有意义：Claude Code 只说 /v1/messages，
+    // 而免费模型池只说 /v1/chat/completions。
+    var MESSAGES_TRANSLATE_PROXIES = ['claude'];
 
     var displayName;
 
@@ -1056,6 +1175,8 @@
         };
       } catch {}
       currentProxyName = getProxyFromUrl();
+      // 到这里 currentProxyName 与 PROXY_API_PREFIX 都已就绪，才能真正按能力判定
+      historySupported = proxySupportsFullAdmin(currentProxyName);
       displayName = proxyDisplayNameMap[currentProxyName] || currentProxyName;
       document.title = displayName + ' - 配置';
       applySavedDarkMode();
@@ -1076,17 +1197,39 @@
       loadHistory();
       loadConfigData();
       fetchStatus();
+      // Phase C：页面打开即拉取真实的 provider / 模型数据。此前 init 从不调用，
+      // 导致 providers 恒为空、models 恒为 8 个硬编码占位，用户看不到真实配置。
+      // 两者成功路径内部已自行重绘（空则空态、有则列表）；读失败由各自 catch 呈现。
+      loadProviders();
+      loadModelsData();
+      // 代理侧栏列表（9 个，与 dashboard 同源）：异步，等 renderNav 建好 #proxyNavItems 后再填
+      loadInstalledProxies().then(renderDynamicProxyNav);
     }
 
     // ==================== P4: Dynamic Tabs ====================
     function setupDynamicTabs() {
-      // All proxies now support providers and balances tabs
       var providersBtn = document.getElementById('tab-providers-btn');
       var balancesBtn = document.getElementById('tab-balances-btn');
+
+      // 无管理 API 的代理（opencode-free / workbuddy-shim，源码实测无任何管理路由）：
+      // 供应商 / 余额 tab 背后没有端点，启用就会变成点了 404 的假 tab —— 禁用并说明原因。
+      // 注意：必须用 <button disabled>（本页 tab 已 button 化），CSS :disabled 对 div 无效。
+      if (!proxySupportsPanel(currentProxyName)) {
+        var why = '该代理不提供面板配置接口，仅可查看与启停';
+        [providersBtn, balancesBtn].forEach(function (btn) {
+          if (!btn) return;
+          btn.disabled = true;
+          btn.setAttribute('title', why);
+          btn.style.opacity = '0.5';
+          btn.style.cursor = 'not-allowed';
+        });
+        return;
+      }
 
       if (providersBtn) {
         providersBtn.disabled = false;
         providersBtn.removeAttribute('style');
+        providersBtn.removeAttribute('title');
       }
       if (balancesBtn) {
         balancesBtn.disabled = false;
@@ -1162,6 +1305,8 @@
           for (var i = 0; i < models.length; i++) {
             MOCK_MODELS.push({ id: models[i].id || models[i].model_id || models[i], name: models[i].name || models[i].display_name || models[i] });
           }
+          // 成功取到模型（含空列表）即重绘：空→空态、有数据→下拉。
+          renderModels();
           // 2026-10-16：过去这里在列表为空时塞一个假模型 'claude-sonnet-4'。
           // 模型下拉是「选哪个模型」的唯一入口，出现一个后端不存在的模型，
           // 用户选它只会得到上游报错。空就是空，让用户看到「没读到模型」。
@@ -1204,15 +1349,18 @@
     async function loadConfigData() {
       showLoading();
       try {
-        // codex/hermes: GET /api/config 返回真实配置中的当前模型（{model: ...}）；
-        // cursor: /admin-api/settings 的 current_model KV。
+        // 【2026-10-23 修正】原分支硬编码 `codex || hermes`，其余一律走
+        //   /api/cursor/admin-api/settings —— 新接入的 claude/dsh/opencode/generic
+        //   会落进 else，把 **cursor 的模型当成自己的** 显示出来（数据串台）。
+        // 改为按前缀推导：/api → <name>/api/config（{model}）；/admin-api → <name>/admin-api/settings（settings.current_model）。
+        var prefix = proxyPrefix(currentProxyName);
+        if (!prefix) { hideLoading(); return; }   // 无管理 API 的代理：不请求，避免 404 假态
         var url, modelKey;
-        if (currentProxyName === 'codex' || currentProxyName === 'hermes') {
-          var prefix = PROXY_API_PREFIX[currentProxyName] || '/api';
-          url = '/api/' + currentProxyName + prefix + '/config';
+        if (prefix === '/api') {
+          url = '/api/' + currentProxyName + '/api/config';
           modelKey = 'model';
         } else {
-          url = '/api/cursor/admin-api/settings';
+          url = '/api/' + currentProxyName + prefix + '/settings';
           modelKey = 'current_model';
         }
         var res = await fetch(url, {
@@ -1274,6 +1422,10 @@
         if (res.ok) {
           hideOfflineBanner();
           var data = await res.json();
+          // 存全量状态（各代理 running），供侧栏 9 个代理的 ON/OFF 徽标使用；
+          // 徽标刷新一次即可，避免为 9 个代理各发一次请求。
+          allProxyStatus = data || {};
+          if (installedProxyNames.length) renderDynamicProxyNav(installedProxyNames);
           if (data[currentProxyName]) {
             var st = data[currentProxyName];
             isRunning = st.running;
@@ -1291,11 +1443,11 @@
             if (st.running) {
               badge.className = 'status-badge online';
               text.textContent = '运行中';
-              btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止';
+              btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止';
             } else {
               badge.className = 'status-badge offline';
               text.textContent = '未运行';
-              btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 启动';
+              btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="5 3 19 12 5 21 5 3"/></svg> 启动';
             }
           }
         } else {
@@ -1337,7 +1489,7 @@
             isRunning = false;
             badge.className = 'status-badge offline';
             text.textContent = '未运行';
-            btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> 启动';
+            btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polygon points="5 3 19 12 5 21 5 3"/></svg> 启动';
             showToast(displayName + ' 已停止', 'info');
             try { window.__statusChannel && window.__statusChannel.postMessage({ type: 'proxy-status-changed' }); } catch {}
             return;
@@ -1357,7 +1509,7 @@
             isRunning = true;
             badge.className = 'status-badge online';
             text.textContent = '运行中';
-            btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止';
+            btn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止';
             showToast(displayName + ' 已启动', 'success');
             try { window.__statusChannel && window.__statusChannel.postMessage({ type: 'proxy-status-changed' }); } catch {}
             return;
@@ -1405,6 +1557,15 @@
 
     function renderProviders() {
       var tbody = document.getElementById('providersBody');
+      if (!tbody) return;
+      if (providers.length === 0) {
+        // 真没有 provider（区别于「读不到」——读不到由 loadProviders 的 showReadError 单独呈现）
+        tbody.innerHTML = '<tr><td colspan="6">' + MPStates.empty({
+          title: '暂无 Provider',
+          hint: '当前代理下还没有配置任何 provider。点上方「添加 Provider」接入模型源。'
+        }) + '</td></tr>';
+        return;
+      }
       var html = '';
       for (var i = 0; i < providers.length; i++) {
         var p = providers[i];
@@ -1563,6 +1724,18 @@
       return box;
     }
 
+    function createMessagesTranslateSection(checked) {
+      var box = document.createElement('div');
+      box.className = 'form-check';
+      box.style.marginTop = '14px';
+      box.appendChild(createCheckboxField('modal-messages-translate', '开启 Messages 协议翻译（让 Claude Code 用 OpenAI 协议上游）', !!checked));
+      var hint = document.createElement('p');
+      hint.style.cssText = 'margin:8px 0 0;font-size:12px;color:var(--color-text-tertiary);line-height:1.5;';
+      hint.textContent = '仅 claude 代理生效：Claude Code 只说 /v1/messages，而免费模型池（如 Kilo 匿名池）只说 /v1/chat/completions。开启后由网关把 Messages 请求翻成 Chat Completions 发给上游，再把响应（含流式与工具调用）翻回 Messages。默认关闭 = 维持原透传。';
+      box.appendChild(hint);
+      return box;
+    }
+
     function showAddProviderModal() {
       var modal = document.createElement('div');
       modal.className = 'modal';
@@ -1584,6 +1757,9 @@
       if (RESPONSES_TRANSLATE_PROXIES.indexOf(currentProxyName) !== -1) {
         modal.appendChild(createResponsesTranslateSection(false, 'chat'));
       }
+      if (MESSAGES_TRANSLATE_PROXIES.indexOf(currentProxyName) !== -1) {
+        modal.appendChild(createMessagesTranslateSection(false));
+      }
 
       var fetchRow = document.createElement('div');
       fetchRow.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--color-border);';
@@ -1591,7 +1767,7 @@
       fetchBtn.type = 'button';
       fetchBtn.className = 'btn';
       fetchBtn.id = 'modal-fetch-models';
-      fetchBtn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
+      fetchBtn.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
       fetchBtn.disabled = true;
       fetchRow.appendChild(fetchBtn);
       modal.appendChild(fetchRow);
@@ -1634,10 +1810,12 @@
         var rtTargetEl = document.getElementById('modal-responses-target');
         var rt = rtEl ? rtEl.checked : false;
         var rtTarget = rtTargetEl ? rtTargetEl.value : 'chat';
+        var mtEl = document.getElementById('modal-messages-translate');
+        var mt = mtEl ? mtEl.checked : false;
         if (!name || !pid || !url || !key) { showToast('请填写所有必填字段', 'error'); return; }
         if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
         if (key.length < 8) { showToast('API Key 长度至少 8 个字符', 'error'); return; }
-        addProvider(name, pid, url, key, en, rt, rtTarget);
+        addProvider(name, pid, url, key, en, rt, rtTarget, mt);
         overlay.remove();
         showToast('已添加供应商 ' + name, 'success');
       };
@@ -1749,6 +1927,9 @@
       if (RESPONSES_TRANSLATE_PROXIES.indexOf(currentProxyName) !== -1) {
         modal.appendChild(createResponsesTranslateSection(provider.responsesTranslate, provider.responsesTarget));
       }
+      if (MESSAGES_TRANSLATE_PROXIES.indexOf(currentProxyName) !== -1) {
+        modal.appendChild(createMessagesTranslateSection(provider.messagesTranslate));
+      }
 
       var fetchRow2 = document.createElement('div');
       fetchRow2.style.cssText = 'display:flex;justify-content:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--color-border);';
@@ -1756,7 +1937,7 @@
       fetchBtn2.type = 'button';
       fetchBtn2.className = 'btn';
       fetchBtn2.id = 'modal-fetch-models';
-      fetchBtn2.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
+      fetchBtn2.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 拉取模型列表';
       fetchRow2.appendChild(fetchBtn2);
       modal.appendChild(fetchRow2);
 
@@ -1796,9 +1977,11 @@
         var en = enEl.checked;
         var rt = rtEl ? rtEl.checked : false;
         var rtTarget = rtTargetEl ? rtTargetEl.value : 'chat';
+        var mtEl = document.getElementById('modal-messages-translate');
+        var mt = mtEl ? mtEl.checked : false;
         if (!name || !url) { showToast('请填写所有必填字段', 'error'); return; }
         if (!/^https?:\/\/.+/.test(url)) { showToast('Base URL 必须以 http:// 或 https:// 开头', 'error'); return; }
-        updateProvider(provider.id, name, url, key, en, rt, rtTarget);
+        updateProvider(provider.id, name, url, key, en, rt, rtTarget, mt);
         overlay.remove();
         showToast('已更新 ' + name, 'success');
       };
@@ -1849,17 +2032,47 @@
 
     function renderModels() {
       var sel = document.getElementById('modelSelect');
+      if (!sel) return;
+      if (!MOCK_MODELS || MOCK_MODELS.length === 0) {
+        // 真没有可选模型（区别于「读不到」）——给占位选项 + 空态提示，而不是空白下拉
+        sel.innerHTML = '<option value="" disabled selected>无可用模型</option>';
+        var sw = sel.closest ? sel.closest('.model-switcher') : null;
+        if (sw) {
+          var ex = document.getElementById('modelEmptyState');
+          if (!ex) {
+            ex = document.createElement('div');
+            ex.id = 'modelEmptyState';
+            ex.className = 'empty-state';
+            ex.style.marginTop = '12px';
+            // 2026-10-24：插到 .model-switcher 之后（块级），而不是塞进 flex 行里被按钮挤窄
+            sw.insertAdjacentElement('afterend', ex);
+          }
+          // 无模型时禁用「切换模型」，避免点了提交空模型
+          var mb = sw.querySelector('button');
+          if (mb) mb.disabled = true;
+          ex.innerHTML = '<div class="empty-icon">' + MPStates.svg.inbox + '</div>' +
+            '<div class="empty-text">暂无可选模型</div>' +
+            '<div class="empty-hint">当前代理没有拉到模型列表。可能是模型接口暂不可用，或该代理不支持模型枚举。可刷新重试。</div>';
+        }
+        return;
+      }
       var html = '';
       for (var i = 0; i < MOCK_MODELS.length; i++) {
         var m = MOCK_MODELS[i];
         html += '<option value="' + esc(m.id) + '"' + (m.id === currentModel ? ' selected' : '') + '>' + esc(m.name) + ' (' + m.id + ')</option>';
       }
       sel.innerHTML = html;
+      var ex2 = document.getElementById('modelEmptyState');
+      if (ex2) ex2.remove();
+      // 有模型时恢复「切换模型」按钮
+      var sw2 = sel.closest ? sel.closest('.model-switcher') : null;
+      if (sw2) { var mb2 = sw2.querySelector('button'); if (mb2) mb2.disabled = false; }
     }
 
     async function switchCurrentModel() {
       var sel = document.getElementById('modelSelect');
       var nm = sel.value;
+      if (!nm) { showToast('暂无可切换的模型', 'info'); return; }
       if (nm === currentModel) { showToast('已经是当前模型', 'info'); return; }
       var oldModel = currentModel;
       currentModel = nm;
@@ -2091,7 +2304,7 @@
       title.id = 'modal-fetch-title';
 
       var titleText = document.createElement('span');
-      titleText.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg> 选择模型 (' + providerId + ')';
+      titleText.innerHTML = '<svg class="icon-svg icon-svg-sm" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg> 选择模型 (' + providerId + ')';
       title.appendChild(titleText);
 
       var ctrlBar = document.createElement('div');
@@ -2118,7 +2331,7 @@
       var modelsArea = document.createElement('div');
       modelsArea.id = 'models-area';
       modelsArea.style.cssText = 'max-height:400px;overflow-y:auto;margin-top:16px;';
-      modelsArea.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-text-tertiary);"><svg class="icon-svg" style="width:24px;height:24px;" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 正在拉取...</div>';
+      modelsArea.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-text-tertiary);"><svg class="icon-svg" style="width:24px;height:24px;" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> 正在拉取...</div>';
       modal.appendChild(modelsArea);
 
       var footer = document.createElement('div');
@@ -2223,7 +2436,15 @@
       }
     }
 
-    init();
+    // Phase C 时序守卫：states.js 在本内联脚本之后才加载（见文档末尾三行脚本），
+    // 而 init() 同步调用 renderProviders()/renderModels()，其中引用 MPStates.empty/svg。
+    // 若 states.js 未就绪会抛 ReferenceError 并中断 init（页面白屏/无数据）。
+    // 轮询等待 MPStates 就绪再跑 init，与 context/floor 页同源修复。
+    (function waitForStates(attempt) {
+      if (window.MPStates) { init(); return; }
+      if (attempt > 60) { return; }   // ~1.8s 兜底，避免无限等待
+      setTimeout(function () { waitForStates(attempt + 1); }, 30);
+    })(0);
 
     // Hash-driven tab switching: same-document fragment navigation (e.g. goto / 用户改 hash /
     // 浏览器前进后退) 不触发整页重载, on-load 的 getTabFromHash 不会重跑 → 监听 hashchange 补齐。
@@ -2286,6 +2507,15 @@
         }
       }
     });
+  </script>
+    <script src="./icons.js"></script>
+<script src="./nav.js"></script>
+<script src="./states.js"></script>
+  <script>
+    // proxyNav:true —— 渲染 #proxyNavItems 动态代理容器。
+    // 必须开：统一导航（renderNav）会接管 #sidebarNav，此前 proxy-config 自带的 3 个代理链接
+    // 会被覆盖；开了 proxyNav 后由 renderDynamicProxyNav() 回填 9 个代理（与 dashboard 同源）。
+    if(window.renderNav){renderNav(document.getElementById('sidebarNav'),{current:'proxy-config',proxyNav:true});}
   </script>
 </body>
 </html>
