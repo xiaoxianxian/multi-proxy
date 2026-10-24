@@ -1385,7 +1385,14 @@
           var sel2 = document.getElementById('routingModeSelect');
           if (sel2) sel2.value = s.routing_mode;
         }
-      } catch {} finally {
+      } catch (e) {
+        // 2026-10-24：原 catch {} 静默吞错——配置读失败时 modelSelect / 当前模型显示
+        // 停在旧值或空白，用户无从得知。现改为显式报错：toast 提示 + 当前模型标「读取失败」。
+        console.error('[proxy-config] loadConfigData failed:', e);
+        showToast('配置读取失败：' + ((e && e.message) || '未知错误'), 'error', 5000);
+        var dispCfg = document.getElementById('currentModelDisplay');
+        if (dispCfg) { dispCfg.textContent = '读取失败'; dispCfg.style.color = 'var(--subtle)'; }
+      } finally {
         hideLoading();
       }
     }
